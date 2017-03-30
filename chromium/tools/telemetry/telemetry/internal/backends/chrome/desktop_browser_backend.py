@@ -8,6 +8,7 @@ import heapq
 import logging
 import os
 import os.path
+import random
 import re
 import shutil
 import subprocess as subprocess
@@ -15,7 +16,9 @@ import sys
 import tempfile
 import time
 
-from catapult_base import support_binaries
+from catapult_base import cloud_storage
+
+from telemetry.internal.util import binary_manager
 from telemetry.core import exceptions
 from telemetry.core import util
 from telemetry.internal.backends import browser_backend
@@ -29,6 +32,23 @@ def ParseCrashpadDateTime(date_time_str):
   if len(date_time_parts) >= 3:
     date_time_str = ' '.join(date_time_parts[:2])
   return datetime.datetime.strptime(date_time_str, '%Y-%m-%d %H:%M:%S')
+
+
+def GetSymbolBinary(executable, os_name):
+  # Returns binary file where symbols are located.
+  if os_name == 'mac':
+    version_dir = os.path.join(os.path.dirname(executable),
+                               '..',
+                               'Versions')
+    for version_num in os.listdir(version_dir):
+      framework_file = os.path.join(version_dir,
+                                    version_num,
+                                    'Chromium Framework.framework',
+                                    'Chromium Framework')
+      if os.path.isfile(framework_file):
+        return framework_file
+
+  return executable
 
 
 class DesktopBrowserBackend(chrome_browser_backend.ChromeBrowserBackend):
@@ -68,8 +88,21 @@ class DesktopBrowserBackend(chrome_browser_backend.ChromeBrowserBackend):
     self._port = None
     self._tmp_minidump_dir = tempfile.mkdtemp()
     self._crash_service = None
+    if self.browser_options.enable_logging:
+      self._log_file_path = os.path.join(tempfile.mkdtemp(), 'chrome.log')
+    else:
+      self._log_file_path = None
 
     self._SetupProfile()
+
+  @property
+  def log_file_path(self):
+    return self._log_file_path
+
+  @property
+  def supports_uploading_logs(self):
+    return (self.browser_options.logs_cloud_bucket and self.log_file_path and
+            os.path.isfile(self.log_file_path))
 
   def _SetupProfile(self):
     if not self.browser_options.dont_override_profile:
@@ -87,40 +120,57 @@ class DesktopBrowserBackend(chrome_browser_backend.ChromeBrowserBackend):
         logging.info("Using profile directory:'%s'." % profile_dir)
         shutil.rmtree(self._tmp_profile_dir)
         shutil.copytree(profile_dir, self._tmp_profile_dir)
-    if self.browser_options.use_devtools_active_port:
-      # No matter whether we're using an existing profile directory or
-      # creating a new one, always delete the well-known file containing
-      # the active DevTools port number.
-      port_file = self._GetDevToolsActivePortPath()
-      if os.path.isfile(port_file):
-        try:
-          os.remove(port_file)
-        except Exception as e:
-          logging.critical('Unable to remove DevToolsActivePort file: %s' % e)
-          sys.exit(1)
+    # No matter whether we're using an existing profile directory or
+    # creating a new one, always delete the well-known file containing
+    # the active DevTools port number.
+    port_file = self._GetDevToolsActivePortPath()
+    if os.path.isfile(port_file):
+      try:
+        os.remove(port_file)
+      except Exception as e:
+        logging.critical('Unable to remove DevToolsActivePort file: %s' % e)
+        sys.exit(1)
 
   def _GetDevToolsActivePortPath(self):
     return os.path.join(self.profile_directory, 'DevToolsActivePort')
 
   def _GetCrashServicePipeName(self):
     # Ensure a unique pipe name by using the name of the temp dir.
-    return r'\\.\pipe\%s_service' % os.path.basename(self._tmp_minidump_dir)
+    pipe = r'\\.\pipe\%s_service' % os.path.basename(self._tmp_minidump_dir)
+    return pipe
 
   def _StartCrashService(self):
     os_name = self.browser.platform.GetOSName()
     if os_name != 'win':
       return None
     arch_name = self.browser.platform.GetArchName()
-    command = support_binaries.FindPath('crash_service', arch_name, os_name)
+    command = binary_manager.FetchPath('crash_service', arch_name, os_name)
     if not command:
       logging.warning('crash_service.exe not found for %s %s',
                       arch_name, os_name)
       return None
-    return subprocess.Popen([
-        command,
-        '--no-window',
-        '--dumps-dir=%s' % self._tmp_minidump_dir,
-        '--pipe-name=%s' % self._GetCrashServicePipeName()])
+    if not os.path.exists(command):
+      logging.warning('crash_service.exe not found for %s %s',
+                      arch_name, os_name)
+      return None
+
+    try:
+      crash_service = subprocess.Popen([
+          command,
+          '--no-window',
+          '--dumps-dir=%s' % self._tmp_minidump_dir,
+          '--pipe-name=%s' % self._GetCrashServicePipeName()])
+    except Exception:
+      logging.error(
+          'Failed to run %s --no-window --dump-dir=%s --pip-name=%s' % (
+            command, self._tmp_minidump_dir, self._GetCrashServicePipeName()))
+      logging.error('Running on platform: %s and arch: %s.', os_name, arch_name)
+      wmic_stdout, _ = subprocess.Popen(
+        ['wmic', 'process', 'get', 'CommandLine,Name,ProcessId,ParentProcessId',
+        '/format:csv'], stdout=subprocess.PIPE).communicate()
+      logging.error('Current running processes:\n%s' % wmic_stdout)
+      raise
+    return crash_service
 
   def _GetCdbPath(self):
     possible_paths = (
@@ -147,37 +197,32 @@ class DesktopBrowserBackend(chrome_browser_backend.ChromeBrowserBackend):
     if not self.IsBrowserRunning():
       raise exceptions.ProcessGoneException(
           "Return code: %d" % self._proc.returncode)
-    if self.browser_options.use_devtools_active_port:
-      # The Telemetry user selected the new code path to start DevTools on
-      # an ephemeral port. Wait for the well-known file containing the port
-      # number to exist.
-      port_file = self._GetDevToolsActivePortPath()
-      if not os.path.isfile(port_file):
-        # File isn't ready yet. Return false. Will retry.
-        return False
-      # Attempt to avoid reading the file until it's populated.
-      got_port = False
-      try:
-        if os.stat(port_file).st_size > 0:
-          with open(port_file) as f:
-            port_string = f.read()
-            self._port = int(port_string)
-            logging.info('Discovered ephemeral port %s' % self._port)
-            got_port = True
-      except Exception:
-        # Both stat and open can throw exceptions.
-        pass
-      if not got_port:
-        # File isn't ready yet. Return false. Will retry.
-        return False
+    # Start DevTools on an ephemeral port and wait for the well-known file
+    # containing the port number to exist.
+    port_file = self._GetDevToolsActivePortPath()
+    if not os.path.isfile(port_file):
+      # File isn't ready yet. Return false. Will retry.
+      return False
+    # Attempt to avoid reading the file until it's populated.
+    got_port = False
+    try:
+      if os.stat(port_file).st_size > 0:
+        with open(port_file) as f:
+          port_string = f.read()
+          self._port = int(port_string)
+          logging.info('Discovered ephemeral port %s' % self._port)
+          got_port = True
+    except Exception:
+      # Both stat and open can throw exceptions.
+      pass
+    if not got_port:
+      # File isn't ready yet. Return false. Will retry.
+      return False
     return super(DesktopBrowserBackend, self).HasBrowserFinishedLaunching()
 
   def GetBrowserStartupArgs(self):
     args = super(DesktopBrowserBackend, self).GetBrowserStartupArgs()
-    if self.browser_options.use_devtools_active_port:
-      self._port = 0
-    else:
-      self._port = util.GetUnreservedAvailableLocalPort()
+    self._port = 0
     logging.info('Requested remote debugging port: %d' % self._port)
     args.append('--remote-debugging-port=%i' % self._port)
     args.append('--enable-crash-reporter-for-testing')
@@ -187,6 +232,13 @@ class DesktopBrowserBackend(chrome_browser_backend.ChromeBrowserBackend):
         args.append('--ppapi-flash-path=%s' % self._flash_path)
       if not self.browser_options.dont_override_profile:
         args.append('--user-data-dir=%s' % self._tmp_profile_dir)
+    else:
+      args.append('--data-path=%s' % self._tmp_profile_dir)
+
+    trace_config_file = (self.platform_backend.tracing_controller_backend
+                         .GetChromeTraceConfigFile())
+    if trace_config_file:
+      args.append('--trace-config-file=%s' % trace_config_file)
     return args
 
   def Start(self):
@@ -200,8 +252,12 @@ class DesktopBrowserBackend(chrome_browser_backend.ChromeBrowserBackend):
     env['CHROME_HEADLESS'] = '1'  # Don't upload minidumps.
     env['BREAKPAD_DUMP_LOCATION'] = self._tmp_minidump_dir
     env['CHROME_BREAKPAD_PIPE_NAME'] = self._GetCrashServicePipeName()
+    if self.browser_options.enable_logging:
+      sys.stderr.write(
+        'Chrome log file will be saved in %s\n' % self.log_file_path)
+      env['CHROME_LOG_FILE'] = self.log_file_path
     self._crash_service = self._StartCrashService()
-    logging.debug('Starting Chrome %s', args)
+    logging.info('Starting Chrome %s', args)
     if not self.browser_options.show_stdout:
       self._tmp_output_file = tempfile.NamedTemporaryFile('w', 0)
       self._proc = subprocess.Popen(
@@ -211,6 +267,11 @@ class DesktopBrowserBackend(chrome_browser_backend.ChromeBrowserBackend):
 
     try:
       self._WaitForBrowserToComeUp()
+      # browser is foregrounded by default on Windows and Linux, but not Mac.
+      if self.browser.platform.GetOSName() == 'mac':
+        subprocess.Popen([
+          'osascript', '-e', ('tell application "%s" to activate' %
+                              self._executable)])
       self._InitDevtoolsClientBackend()
       if self._supports_extensions:
         self._WaitForExtensionsToLoad()
@@ -253,7 +314,7 @@ class DesktopBrowserBackend(chrome_browser_backend.ChromeBrowserBackend):
   def _GetMostRecentCrashpadMinidump(self):
     os_name = self.browser.platform.GetOSName()
     arch_name = self.browser.platform.GetArchName()
-    crashpad_database_util = support_binaries.FindPath(
+    crashpad_database_util = binary_manager.FetchPath(
         'crashpad_database_util', arch_name, os_name)
     if not crashpad_database_util:
       return None
@@ -327,7 +388,14 @@ class DesktopBrowserBackend(chrome_browser_backend.ChromeBrowserBackend):
 
   def _IsExecutableStripped(self):
     if self.browser.platform.GetOSName() == 'mac':
-      symbols = subprocess.check_output(['/usr/bin/nm', self._executable])
+      try:
+        symbols = subprocess.check_output(['/usr/bin/nm', self._executable])
+      except subprocess.CalledProcessError as err:
+        logging.warning('Error when checking whether executable is stripped: %s'
+                        % err.output)
+        # Just assume that binary is stripped to skip breakpad symbol generation
+        # if this check failed.
+        return True
       num_symbols = len(symbols.splitlines())
       # We assume that if there are more than 10 symbols the executable is not
       # stripped.
@@ -355,7 +423,7 @@ class DesktopBrowserBackend(chrome_browser_backend.ChromeBrowserBackend):
       return output[stack_start:stack_end]
 
     arch_name = self.browser.platform.GetArchName()
-    stackwalk = support_binaries.FindPath(
+    stackwalk = binary_manager.FetchPath(
         'minidump_stackwalk', arch_name, os_name)
     if not stackwalk:
       logging.warning('minidump_stackwalk binary not found.')
@@ -394,13 +462,16 @@ class DesktopBrowserBackend(chrome_browser_backend.ChromeBrowserBackend):
         return
 
       logging.info('Dumping breakpad symbols.')
-      generate_breakpad_symbols_path = os.path.join(
-          util.GetChromiumSrcDir(), "components", "crash",
-          "tools", "generate_breakpad_symbols.py")
+      generate_breakpad_symbols_command = binary_manager.FetchPath(
+          'generate_breakpad_symbols', arch_name, os_name)
+      if generate_breakpad_symbols_command is None:
+        return
+
       cmd = [
           sys.executable,
-          generate_breakpad_symbols_path,
-          '--binary=%s' % self._executable,
+          generate_breakpad_symbols_command,
+          '--binary=%s' % GetSymbolBinary(self._executable,
+                                          self.browser.platform.GetOSName()),
           '--symbols-dir=%s' % symbols_path,
           '--build-dir=%s' % self._browser_directory,
           ]
@@ -409,23 +480,35 @@ class DesktopBrowserBackend(chrome_browser_backend.ChromeBrowserBackend):
         subprocess.check_output(cmd, stderr=open(os.devnull, 'w'))
       except subprocess.CalledProcessError:
         logging.warning('Failed to execute "%s"' % ' '.join(cmd))
-        return None
+        return
 
     return subprocess.check_output([stackwalk, minidump, symbols_path],
                                    stderr=open(os.devnull, 'w'))
 
+  def _UploadMinidumpToCloudStorage(self, minidump_path):
+    """ Upload minidump_path to cloud storage and return the cloud storage url.
+    """
+    remote_path = ('minidump-%s-%i.dmp' %
+                   (datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S'),
+                    random.randint(0, 1000000)))
+    try:
+      return cloud_storage.Insert(cloud_storage.TELEMETRY_OUTPUT, remote_path,
+                                  minidump_path)
+    except cloud_storage.CloudStorageError as err:
+      logging.error('Cloud storage error while trying to upload dump: %s' %
+                    repr(err))
+      return '<Missing link>'
+
   def GetStackTrace(self):
     most_recent_dump = self._GetMostRecentMinidump()
     if not most_recent_dump:
-      return 'No crash dump found. Returning browser stdout:\n' + (
-          self.GetStandardOutput())
-
-    logging.info('minidump found: %s' % most_recent_dump)
+      return 'No crash dump found.'
+    logging.info('Minidump found: %s' % most_recent_dump)
     stack = self._GetStackFromMinidump(most_recent_dump)
     if not stack:
-      return 'Failed to symbolize minidump. Returning browser stdout:\n' + (
-          self.GetStandardOutput())
-
+      cloud_storage_link = self._UploadMinidumpToCloudStorage(most_recent_dump)
+      return ('Failed to symbolize minidump. Raw stack is uploaded to cloud '
+              'storage: %s.' % cloud_storage_link)
     return stack
 
   def __del__(self):

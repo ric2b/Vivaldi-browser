@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_THEME_HELPER_MAC_H_
 #define CONTENT_BROWSER_THEME_HELPER_MAC_H_
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -22,15 +23,8 @@ class ThemeHelperMac : public NotificationObserver {
   // as the blink enum value.
   static blink::ScrollerStyle GetPreferredScrollerStyle();
 
-  static void SendThemeChangeToAllRenderers(
-      float initial_button_delay,
-      float autoscroll_button_delay,
-      bool jump_on_track_click,
-      blink::ScrollerStyle preferred_scroller_style,
-      bool redraw);
-
  private:
-  friend struct DefaultSingletonTraits<ThemeHelperMac>;
+  friend struct base::DefaultSingletonTraits<ThemeHelperMac>;
 
   ThemeHelperMac();
   ~ThemeHelperMac() override;

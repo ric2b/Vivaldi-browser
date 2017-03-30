@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/webui/options/preferences_browsertest.h"
 
+#include <stddef.h>
+
 #include <iostream>
 #include <sstream>
 
@@ -13,6 +15,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_service.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -201,7 +204,7 @@ void PreferencesBrowserTest::SetUserPolicies(
   policy::PolicyMap map;
   for (size_t i = 0; i < names.size(); ++i) {
     map.Set(names[i], level, policy::POLICY_SCOPE_USER,
-            values[i]->DeepCopy(), NULL);
+            policy::POLICY_SOURCE_CLOUD, values[i]->DeepCopy(), nullptr);
   }
   policy_provider_.UpdateChromePolicy(map);
 }
@@ -478,13 +481,7 @@ void PreferencesBrowserTest::UseDefaultTestPrefs(bool includeListPref) {
 
 // Verifies that initializing the JavaScript Preferences class fires the correct
 // notifications in JavaScript.
-// TODO(vivaldi) Reenable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_FetchPrefs DISABLED_FetchPrefs
-#else
-#define MAYBE_FetchPrefs FetchPrefs
-#endif
-IN_PROC_BROWSER_TEST_F(PreferencesBrowserTest, MAYBE_FetchPrefs) {
+IN_PROC_BROWSER_TEST_F(PreferencesBrowserTest, FetchPrefs) {
   UseDefaultTestPrefs(true);
   std::string observed_json;
 
@@ -523,13 +520,7 @@ IN_PROC_BROWSER_TEST_F(PreferencesBrowserTest, MAYBE_FetchPrefs) {
 // Verifies that setting a user-modified pref value through the JavaScript
 // Preferences class fires the correct notification in JavaScript and causes the
 // change to be committed to the C++ backend.
-// TODO(vivaldi) Reenable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_SetPrefs DISABLED_SetPrefs
-#else
-#define MAYBE_SetPrefs SetPrefs
-#endif
-IN_PROC_BROWSER_TEST_F(PreferencesBrowserTest, MAYBE_SetPrefs) {
+IN_PROC_BROWSER_TEST_F(PreferencesBrowserTest, SetPrefs) {
   UseDefaultTestPrefs(false);
 
   ASSERT_NO_FATAL_FAILURE(SetupJavaScriptTestEnvironment(pref_names_, NULL));
@@ -557,13 +548,7 @@ IN_PROC_BROWSER_TEST_F(PreferencesBrowserTest, ClearPrefs) {
 // change then committed through the JavaScript Preferences class, the correct
 // notifications fire and a commit to the C++ backend occurs in the latter step
 // only.
-// TODO(vivaldi) Reenable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_DialogPrefsSetCommit DISABLED_DialogPrefsSetCommit
-#else
-#define MAYBE_DialogPrefsSetCommit DialogPrefsSetCommit
-#endif
-IN_PROC_BROWSER_TEST_F(PreferencesBrowserTest, MAYBE_DialogPrefsSetCommit) {
+IN_PROC_BROWSER_TEST_F(PreferencesBrowserTest, DialogPrefsSetCommit) {
   UseDefaultTestPrefs(false);
 
   ASSERT_NO_FATAL_FAILURE(SetupJavaScriptTestEnvironment(pref_names_, NULL));
@@ -576,13 +561,7 @@ IN_PROC_BROWSER_TEST_F(PreferencesBrowserTest, MAYBE_DialogPrefsSetCommit) {
 // Verifies that when the user-modified value of a dialog pref is set and the
 // change then rolled back through the JavaScript Preferences class, the correct
 // notifications fire and no commit to the C++ backend occurs.
-// TODO(vivaldi) Reenable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_DialogPrefsSetRollback DISABLED_DialogPrefsSetRollback
-#else
-#define MAYBE_DialogPrefsSetRollback DialogPrefsSetRollback
-#endif
-IN_PROC_BROWSER_TEST_F(PreferencesBrowserTest, MAYBE_DialogPrefsSetRollback) {
+IN_PROC_BROWSER_TEST_F(PreferencesBrowserTest, DialogPrefsSetRollback) {
   UseDefaultTestPrefs(false);
 
   // Verify behavior when default values are in effect.
@@ -637,13 +616,7 @@ IN_PROC_BROWSER_TEST_F(PreferencesBrowserTest, DialogPrefsClearRollback) {
 
 // Verifies that when preference values change in the C++ backend, the correct
 // notifications fire in JavaScript.
-// TODO(vivaldi) Reenable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_NotificationsOnBackendChanges DISABLED_NotificationsOnBackendChanges
-#else
-#define MAYBE_NotificationsOnBackendChanges NotificationsOnBackendChanges
-#endif
-IN_PROC_BROWSER_TEST_F(PreferencesBrowserTest, MAYBE_NotificationsOnBackendChanges) {
+IN_PROC_BROWSER_TEST_F(PreferencesBrowserTest, NotificationsOnBackendChanges) {
   UseDefaultTestPrefs(false);
   std::string observed_json;
 
@@ -908,6 +881,7 @@ class ProxyPreferencesBrowserTest : public PreferencesBrowserTest {
     map.Set(policy_name,
             policy::POLICY_LEVEL_MANDATORY,
             scope,
+            policy::POLICY_SOURCE_CLOUD,
             new base::StringValue(onc_policy),
             NULL);
     policy_provider_.UpdateChromePolicy(map);

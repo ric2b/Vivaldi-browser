@@ -5,6 +5,7 @@
 #ifndef CONTENT_TEST_WEB_LAYER_TREE_VIEW_IMPL_FOR_TESTING_H_
 #define CONTENT_TEST_WEB_LAYER_TREE_VIEW_IMPL_FOR_TESTING_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "cc/test/test_task_graph_runner.h"
 #include "cc/trees/layer_tree_host_client.h"
@@ -15,60 +16,64 @@ namespace cc {
 class LayerTreeHost;
 }
 
-namespace blink { class WebLayer; }
+namespace blink {
+class WebCompositorAnimationTimeline;
+class WebLayer;
+}
 
 namespace content {
 
+// Dummy WeblayerTeeView that does not support any actual compositing.
 class WebLayerTreeViewImplForTesting
     : public blink::WebLayerTreeView,
       public cc::LayerTreeHostClient,
       public cc::LayerTreeHostSingleThreadClient {
  public:
   WebLayerTreeViewImplForTesting();
-  virtual ~WebLayerTreeViewImplForTesting();
+  ~WebLayerTreeViewImplForTesting() override;
 
   void Initialize();
 
   // blink::WebLayerTreeView implementation.
-  virtual void setRootLayer(const blink::WebLayer& layer);
-  virtual void clearRootLayer();
+  void setRootLayer(const blink::WebLayer& layer) override;
+  void clearRootLayer() override;
+  void attachCompositorAnimationTimeline(
+      blink::WebCompositorAnimationTimeline*) override;
+  void detachCompositorAnimationTimeline(
+      blink::WebCompositorAnimationTimeline*) override;
   virtual void setViewportSize(const blink::WebSize& unused_deprecated,
                                const blink::WebSize& device_viewport_size);
-  virtual void setViewportSize(const blink::WebSize& device_viewport_size);
-  virtual blink::WebSize layoutViewportSize() const;
-  virtual blink::WebSize deviceViewportSize() const;
-  virtual void setDeviceScaleFactor(float scale_factor);
-  virtual float deviceScaleFactor() const;
-  virtual void setBackgroundColor(blink::WebColor);
-  virtual void setHasTransparentBackground(bool transparent);
-  virtual void setVisible(bool visible);
-  virtual void setPageScaleFactorAndLimits(float page_scale_factor,
-                                           float minimum,
-                                           float maximum);
-  virtual void startPageScaleAnimation(const blink::WebPoint& destination,
-                                       bool use_anchor,
-                                       float new_page_scale,
-                                       double duration_sec);
-  virtual void setNeedsAnimate();
-  virtual void didStopFlinging();
-  virtual void finishAllRendering();
-  virtual void setDeferCommits(bool defer_commits);
-  virtual void registerForAnimations(blink::WebLayer* layer);
-  virtual void registerViewportLayers(
+  void setViewportSize(const blink::WebSize& device_viewport_size) override;
+  void setDeviceScaleFactor(float scale_factor) override;
+  void setBackgroundColor(blink::WebColor) override;
+  void setHasTransparentBackground(bool transparent) override;
+  void setVisible(bool visible) override;
+  void setPageScaleFactorAndLimits(float page_scale_factor,
+                                   float minimum,
+                                   float maximum) override;
+  void startPageScaleAnimation(const blink::WebPoint& destination,
+                               bool use_anchor,
+                               float new_page_scale,
+                               double duration_sec) override;
+  void setNeedsAnimate() override;
+  void didStopFlinging() override;
+  void setDeferCommits(bool defer_commits) override;
+  void registerForAnimations(blink::WebLayer* layer) override;
+  void registerViewportLayers(
       const blink::WebLayer* overscrollElasticityLayer,
       const blink::WebLayer* pageScaleLayerLayer,
       const blink::WebLayer* innerViewportScrollLayer,
       const blink::WebLayer* outerViewportScrollLayer) override;
-  virtual void clearViewportLayers() override;
-  virtual void registerSelection(const blink::WebSelection& selection) override;
-  virtual void clearSelection() override;
+  void clearViewportLayers() override;
+  void registerSelection(const blink::WebSelection& selection) override;
+  void clearSelection() override;
 
   // cc::LayerTreeHostClient implementation.
   void WillBeginMainFrame() override {}
   void DidBeginMainFrame() override {}
   void BeginMainFrame(const cc::BeginFrameArgs& args) override {}
   void BeginMainFrameNotExpectedSoon() override {}
-  void Layout() override;
+  void UpdateLayerTreeHost() override;
   void ApplyViewportDeltas(const gfx::Vector2dF& inner_delta,
                            const gfx::Vector2dF& outer_delta,
                            const gfx::Vector2dF& elastic_overscroll_delta,

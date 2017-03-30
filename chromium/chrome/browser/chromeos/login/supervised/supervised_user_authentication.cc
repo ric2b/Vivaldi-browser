@@ -40,9 +40,8 @@ const int kMasterKeySize = 32;
 std::string CreateSalt() {
     char result[kSaltSize];
     crypto::RandBytes(&result, sizeof(result));
-    return base::StringToLowerASCII(base::HexEncode(
-        reinterpret_cast<const void*>(result),
-        sizeof(result)));
+    return base::ToLowerASCII(
+        base::HexEncode(reinterpret_cast<const void*>(result), sizeof(result)));
 }
 
 std::string BuildRawHMACKey() {
@@ -59,8 +58,8 @@ base::DictionaryValue* LoadPasswordData(base::FilePath profile_dir) {
       profile_dir.Append(kPasswordUpdateFile));
   std::string error_message;
   int error_code = JSONFileValueDeserializer::JSON_NO_ERROR;
-  scoped_ptr<base::Value> value(
-      deserializer.Deserialize(&error_code, &error_message));
+  scoped_ptr<base::Value> value =
+      deserializer.Deserialize(&error_code, &error_message);
   if (JSONFileValueDeserializer::JSON_NO_ERROR != error_code) {
     LOG(ERROR) << "Could not deserialize password data, error = " << error_code
                << " / " << error_message;
@@ -105,14 +104,15 @@ SupervisedUserAuthentication::GetStableSchema() {
 UserContext SupervisedUserAuthentication::TransformKey(
     const UserContext& context) {
   UserContext result = context;
-  int user_schema = GetPasswordSchema(context.GetUserID());
+  int user_schema = GetPasswordSchema(context.GetAccountId().GetUserEmail());
   if (user_schema == SCHEMA_PLAIN)
     return result;
 
   if (user_schema == SCHEMA_SALT_HASHED) {
     base::DictionaryValue holder;
     std::string salt;
-    owner_->GetPasswordInformation(context.GetUserID(), &holder);
+    owner_->GetPasswordInformation(context.GetAccountId().GetUserEmail(),
+                                   &holder);
     holder.GetStringWithoutPathExpansion(kSalt, &salt);
     DCHECK(!salt.empty());
     Key* const key = result.GetKey();
@@ -121,7 +121,8 @@ UserContext SupervisedUserAuthentication::TransformKey(
     result.SetIsUsingOAuth(false);
     return result;
   }
-  NOTREACHED() << "Unknown password schema for " << context.GetUserID();
+  NOTREACHED() << "Unknown password schema for "
+               << context.GetAccountId().GetUserEmail();
   return context;
 }
 
@@ -164,7 +165,7 @@ bool SupervisedUserAuthentication::FillDataForNewUser(
 std::string SupervisedUserAuthentication::GenerateMasterKey() {
   char master_key_bytes[kMasterKeySize];
   crypto::RandBytes(&master_key_bytes, sizeof(master_key_bytes));
-  return base::StringToLowerASCII(
+  return base::ToLowerASCII(
       base::HexEncode(reinterpret_cast<const void*>(master_key_bytes),
                       sizeof(master_key_bytes)));
 }
@@ -224,8 +225,8 @@ bool SupervisedUserAuthentication::NeedPasswordChange(
 void SupervisedUserAuthentication::ScheduleSupervisedPasswordChange(
     const std::string& supervised_user_id,
     const base::DictionaryValue* password_data) {
-  const user_manager::User* user =
-      user_manager::UserManager::Get()->FindUser(supervised_user_id);
+  const user_manager::User* user = user_manager::UserManager::Get()->FindUser(
+      AccountId::FromUserEmail(supervised_user_id));
   base::FilePath profile_path = ProfileHelper::GetProfilePathByUserIdHash(
       user->username_hash());
   JSONFileValueSerializer serializer(profile_path.Append(kPasswordUpdateFile));
@@ -282,8 +283,8 @@ void SupervisedUserAuthentication::LoadPasswordUpdateData(
     const std::string& user_id,
     const PasswordDataCallback& success_callback,
     const base::Closure& failure_callback) {
-  const user_manager::User* user =
-      user_manager::UserManager::Get()->FindUser(user_id);
+  const user_manager::User* user = user_manager::UserManager::Get()->FindUser(
+      AccountId::FromUserEmail(user_id));
   base::FilePath profile_path =
       ProfileHelper::GetProfilePathByUserIdHash(user->username_hash());
   PostTaskAndReplyWithResult(

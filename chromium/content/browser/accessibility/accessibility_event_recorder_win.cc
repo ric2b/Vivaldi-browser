@@ -5,10 +5,12 @@
 #include "content/browser/accessibility/accessibility_event_recorder.h"
 
 #include <oleacc.h>
+#include <stdint.h>
 
 #include <string>
 
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -57,12 +59,14 @@ std::string BstrToUTF8(BSTR bstr) {
   // children, with an "embedded object character" for each non-text child.
   // Pretty-print the embedded object character as <obj> so that test output
   // is human-readable.
-  base::ReplaceChars(str16, L"\xfffc", L"<obj>", &str16);
+  base::StringPiece16 embedded_character(
+      &BrowserAccessibilityWin::kEmbeddedCharacter, 1);
+  base::ReplaceChars(str16, embedded_character, L"<obj>", &str16);
 
   return base::UTF16ToUTF8(str16);
 }
 
-std::string AccessibilityEventToStringUTF8(int32 event_id) {
+std::string AccessibilityEventToStringUTF8(int32_t event_id) {
   return base::UTF16ToUTF8(AccessibilityEventToString(event_id));
 }
 

@@ -6,7 +6,7 @@ import("//build/config/ui.gni")
 
 config("mesa_headers_config") {
   include_dirs = [ "src/include" ]
-  if (use_x11) {
+  if (!use_x11) {
     defines = [ "MESA_EGL_NO_X11_HEADERS" ]
   }
 }
@@ -79,10 +79,7 @@ config("mesa_internal_config") {
   ]
 
   if (is_android) {
-    defines += [
-      "__GLIBC__",
-      "_GNU_SOURCE",
-    ]
+    defines += [ "_GNU_SOURCE" ]
   }
 
   if (is_linux) {
@@ -125,6 +122,9 @@ config("mesa_internal_warnings") {
     cflags += [
       "-Wno-tautological-constant-out-of-range-compare",
       "-Wno-mismatched-tags",  # Fixed upstream.
+
+      # mesa's STATIC_ASSERT() macro expands to an ununused typedef.
+      "-Wno-unused-local-typedef",
     ]
   }
   if (is_win) {
@@ -132,6 +132,7 @@ config("mesa_internal_warnings") {
     # Mesa is ever rolled and the warnings are fixed.
     cflags += [
       "/wd4005",  # Macro defined twice.
+      "/wd4018",  # Signed/unsigned mismatch in comparison.
       "/wd4065",  # Switch statement contains 'default' but no 'case' labels.
       "/wd4090",  # 'Operation' : different 'modifier' qualifiers
       "/wd4099",  # Type name struct-vs-class doesn't match.
@@ -140,6 +141,16 @@ config("mesa_internal_warnings") {
       "/wd4305",  # Truncation from int to float.
       "/wd4334",  # Result of 32-bit shift implicitly converted to 64 bits.
       "/wd4345",  # POD-type default initializers.
+      "/wd4311",  # Pointer truncation TODO(brucedawson): http://crbug.com/554200
+    ]
+  }
+}
+
+config("mesa_libglslcommon_warnings") {
+  if (is_clang) {
+    cflags = [
+      # https://bugs.freedesktop.org/show_bug.cgi?id=91645:
+      "-Wno-overloaded-virtual",
     ]
   }
 }
@@ -252,8 +263,10 @@ static_library("mesa_libglslcommon") {
   configs += [ "//build/config/compiler:no_chromium_code" ]
   previous_configs = configs
   configs = []
-  configs = [ ":mesa_internal_config" ] + previous_configs +
-            [ ":mesa_internal_warnings" ]
+  configs = [ ":mesa_internal_config" ] + previous_configs + [
+              ":mesa_internal_warnings",
+              ":mesa_libglslcommon_warnings",
+            ]
 
   if (is_clang) {
     # Mesa triggers some of these Clang warnings.
@@ -664,60 +677,79 @@ static_library("mesa") {
   ]
 }
 
-if (!is_android) {  # TODO(GYP) enable for Android.
-  # Building this target will hide the native OpenGL shared library and
-  # replace it with a slow software renderer.
-  # TODO(GYP) http://crbug.com/380327 need support for loadable_module.
-  #loadable_module("osmesa") {
-  shared_library("osmesa") {
+# Building this target will hide the native OpenGL shared library and
+# replace it with a slow software renderer.
+#
+# Note: on x64 Windows this target gives warnings to the effect of:
+#   osmesa.osmesa.obj : warning LNK4197: export 'OSMesaGetIntegerv' specified
+#   multiple times; using first specification
+# This also happens with the GYP build.
+loadable_module("osmesa") {
+  sources = [
+    "src/src/mesa/drivers/common/driverfuncs.c",
+    "src/src/mesa/drivers/common/driverfuncs.h",
+    "src/src/mesa/drivers/common/meta.c",
+    "src/src/mesa/drivers/common/meta.h",
+    "src/src/mesa/drivers/osmesa/osmesa.c",
+  ]
+
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [
+    ":mesa_headers_config",
+    "//build/config/compiler:no_chromium_code",
+  ]
+  previous_configs = configs
+  configs = []
+  configs = [ ":mesa_internal_config" ] + previous_configs +
+            [ ":mesa_internal_warnings" ]
+
+  include_dirs = [ "src/src/mesa/drivers" ]
+
+  if (is_clang) {
+    # Mesa triggers some of these Clang warnings.
+    configs -= [ "//build/config/clang:extra_warnings" ]
+  }
+
+  if (is_win) {
+    ldflags = [ "/DEF:" + rebase_path("src/src/mesa/drivers/osmesa/osmesa.def",
+                                      root_build_dir) ]
+  }
+
+  deps = [
+    ":mesa",
+    ":mesa_headers",
+    ":mesa_libglslcommon",
+    "//build/config/sanitizers:deps",
+  ]
+
+  if (is_win) {
+    defines = [
+      "BUILD_GL32",
+      "KEYWORD1=GLAPI",
+      "KEYWORD2=GLAPIENTRY",
+    ]
+  }
+}
+
+if (is_linux) {
+  config("wayland_drm_protocol_config") {
+    include_dirs = [ "$generated_src_dir/egl/wayland/wayland-drm" ]
+  }
+
+  source_set("wayland_drm_protocol") {
     sources = [
-      "src/src/mesa/drivers/common/driverfuncs.c",
-      "src/src/mesa/drivers/common/driverfuncs.h",
-      "src/src/mesa/drivers/common/meta.c",
-      "src/src/mesa/drivers/common/meta.h",
-      "src/src/mesa/drivers/osmesa/osmesa.c",
+      "$generated_src_dir/egl/wayland/wayland-drm/wayland-drm-client-protocol.h",
+      "$generated_src_dir/egl/wayland/wayland-drm/wayland-drm-protocol.c",
+      "$generated_src_dir/egl/wayland/wayland-drm/wayland-drm-server-protocol.h",
+    ]
+
+    deps = [
+      "//third_party/wayland:wayland_util",
     ]
 
     configs -= [ "//build/config/compiler:chromium_code" ]
-    configs += [
-      ":mesa_headers_config",
-      "//build/config/compiler:no_chromium_code",
-    ]
-    previous_configs = configs
-    configs = []
-    configs = [ ":mesa_internal_config" ] + previous_configs +
-              [ ":mesa_internal_warnings" ]
+    configs += [ "//build/config/compiler:no_chromium_code" ]
 
-    include_dirs = [ "src/src/mesa/drivers" ]
-
-    if (is_clang) {
-      # Mesa triggers some of these Clang warnings.
-      configs -= [ "//build/config/clang:extra_warnings" ]
-    }
-
-    if (is_win) {
-      ldflags =
-          [ "/DEF:" + rebase_path("src/src/mesa/drivers/osmesa/osmesa.def",
-                                  root_build_dir) ]
-    }
-
-    deps = [
-      ":mesa_headers",
-      ":mesa",
-      ":mesa_libglslcommon",
-    ]
-
-    if (is_win) {
-      defines = [
-        "BUILD_GL32",
-        "KEYWORD1=GLAPI",
-        "KEYWORD2=GLAPIENTRY",
-      ]
-    }
+    public_configs = [ ":wayland_drm_protocol_config" ]
   }
-} else {
-  #  Placeholder to allow targets to unconditionally depend on this.
-  group("osmesa") {
-  }
-}  # !is_android
-# TODO(GYP) Android osmesa_in_lib_dir target.
+}

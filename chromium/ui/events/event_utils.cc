@@ -6,7 +6,6 @@
 
 #include <vector>
 
-#include "ui/events/event.h"
 #include "ui/gfx/display.h"
 #include "ui/gfx/screen.h"
 
@@ -54,7 +53,7 @@ scoped_ptr<Event> EventFromNative(const base::NativeEvent& native_event) {
     default:
       break;
   }
-  return event.Pass();
+  return event;
 }
 
 int RegisterCustomEventType() {

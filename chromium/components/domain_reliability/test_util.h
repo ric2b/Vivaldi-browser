@@ -12,6 +12,7 @@
 #include "components/domain_reliability/uploader.h"
 #include "components/domain_reliability/util.h"
 #include "net/base/host_port_pair.h"
+#include "url/gurl.h"
 
 namespace net {
 class URLRequestStatus;
@@ -40,6 +41,7 @@ class TestCallback {
 class MockUploader : public DomainReliabilityUploader {
  public:
   typedef base::Callback<void(const std::string& report_json,
+                              int max_upload_depth,
                               const GURL& upload_url,
                               const UploadCallback& upload_callback)>
       UploadRequestCallback;
@@ -52,6 +54,7 @@ class MockUploader : public DomainReliabilityUploader {
 
   // DomainReliabilityUploader implementation:
   void UploadReport(const std::string& report_json,
+                    int max_upload_depth,
                     const GURL& upload_url,
                     const UploadCallback& callback) override;
 
@@ -119,9 +122,9 @@ class MockTime : public MockableTime {
   TaskMap tasks_;
 };
 
-scoped_ptr<const DomainReliabilityConfig> MakeTestConfig();
-scoped_ptr<const DomainReliabilityConfig> MakeTestConfigWithDomain(
-    const std::string& domain);
+scoped_ptr<DomainReliabilityConfig> MakeTestConfig();
+scoped_ptr<DomainReliabilityConfig> MakeTestConfigWithOrigin(
+    const GURL& origin);
 DomainReliabilityScheduler::Params MakeTestSchedulerParams();
 
 }  // namespace domain_reliability

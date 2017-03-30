@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_NACL_HOST_NACL_INFOBAR_DELEGATE_H_
 #define CHROME_BROWSER_NACL_HOST_NACL_INFOBAR_DELEGATE_H_
 
+#include "base/macros.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
 
 class NaClInfoBarDelegate : public ConfirmInfoBarDelegate {
@@ -17,10 +18,11 @@ class NaClInfoBarDelegate : public ConfirmInfoBarDelegate {
   NaClInfoBarDelegate();
   ~NaClInfoBarDelegate() override;
 
+  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
   base::string16 GetMessageText() const override;
   int GetButtons() const override;
   base::string16 GetLinkText() const override;
-  bool LinkClicked(WindowOpenDisposition disposition) override;
+  GURL GetLinkURL() const override;
 
   DISALLOW_COPY_AND_ASSIGN(NaClInfoBarDelegate);
 };

@@ -59,14 +59,7 @@
     }],
     ['OS=="win"', {
       'dependencies': [
-        'content_startup_helper_win',
-      ],
-    }],
-    ['OS=="ios"', {
-      'sources!': [
-        'app/content_main.cc',
-        'app/mojo/mojo_init.cc',
-        'app/mojo/mojo_init.h',
+        'content.gyp:sandbox_helper_win',
       ],
     }],
   ],

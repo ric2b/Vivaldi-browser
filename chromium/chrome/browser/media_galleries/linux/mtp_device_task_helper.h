@@ -5,10 +5,14 @@
 #ifndef CHROME_BROWSER_MEDIA_GALLERIES_LINUX_MTP_DEVICE_TASK_HELPER_H_
 #define CHROME_BROWSER_MEDIA_GALLERIES_LINUX_MTP_DEVICE_TASK_HELPER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/media_galleries/fileapi/mtp_device_async_delegate.h"
@@ -26,6 +30,16 @@ struct SnapshotRequestInfo;
 // MTP device storage.
 class MTPDeviceTaskHelper {
  public:
+  struct MTPEntry {
+    MTPEntry();
+
+    uint32_t file_id;
+    std::string name;
+    base::File::Info file_info;
+  };
+
+  typedef std::vector<MTPEntry> MTPEntries;
+
   typedef base::Callback<void(bool succeeded)> OpenStorageCallback;
 
   typedef MTPDeviceAsyncDelegate::GetFileInfoSuccessCallback
@@ -33,10 +47,8 @@ class MTPDeviceTaskHelper {
 
   typedef base::Closure CreateDirectorySuccessCallback;
 
-  // NOTE: The file names in the entry list have their file id appended at the
-  // end. e.g. foo.jpg with file id 45 becomes foo.jpg,45.
-  typedef base::Callback<void(const storage::AsyncFileUtil::EntryList& entries,
-                              bool has_more)> ReadDirectorySuccessCallback;
+  typedef base::Callback<void(const MTPEntries& entries, bool has_more)>
+      ReadDirectorySuccessCallback;
 
   typedef base::Closure RenameObjectSuccessCallback;
 
@@ -68,12 +80,12 @@ class MTPDeviceTaskHelper {
   //
   // If there is an error, |error_callback| is invoked on the IO thread to
   // notify the caller about the file error.
-  void GetFileInfo(uint32 file_id,
+  void GetFileInfo(uint32_t file_id,
                    const GetFileInfoSuccessCallback& success_callback,
                    const ErrorCallback& error_callback);
 
   // Forwards CreateDirectory request to the MediaTransferProtocolManager.
-  void CreateDirectory(const uint32 parent_id,
+  void CreateDirectory(const uint32_t parent_id,
                        const std::string& directory_name,
                        const CreateDirectorySuccessCallback& success_callback,
                        const ErrorCallback& error_callback);
@@ -90,7 +102,7 @@ class MTPDeviceTaskHelper {
   //
   // If there is an error, |error_callback| is invoked on the IO thread to
   // notify the caller about the file error.
-  void ReadDirectory(const uint32 directory_id,
+  void ReadDirectory(const uint32_t directory_id,
                      const size_t max_size,
                      const ReadDirectorySuccessCallback& success_callback,
                      const ErrorCallback& error_callback);
@@ -112,7 +124,7 @@ class MTPDeviceTaskHelper {
   void ReadBytes(const MTPDeviceAsyncDelegate::ReadBytesRequest& request);
 
   // Forwards RenameObject request to the MediaTransferProtocolManager.
-  void RenameObject(const uint32 object_id,
+  void RenameObject(const uint32_t object_id,
                     const std::string& new_name,
                     const RenameObjectSuccessCallback& success_callback,
                     const ErrorCallback& error_callback);
@@ -121,13 +133,13 @@ class MTPDeviceTaskHelper {
   void CopyFileFromLocal(
       const std::string& storage_name,
       const int source_file_descriptor,
-      const uint32 parent_id,
+      const uint32_t parent_id,
       const std::string& file_name,
       const CopyFileFromLocalSuccessCallback& success_callback,
       const ErrorCallback& error_callback);
 
   // Forwards DeleteObject request to the MediaTransferProtocolManager.
-  void DeleteObject(const uint32 object_id,
+  void DeleteObject(const uint32_t object_id,
                     const DeleteObjectSuccessCallback& success_callback,
                     const ErrorCallback& error_callback);
 

@@ -54,6 +54,7 @@
         # size.
         # http://crbug.com/314387
         'SK_DEFAULT_FONT_CACHE_COUNT_LIMIT=256',
+        'GR_GL_FUNCTION_TYPE=__stdcall',
       ],
     }],
     [ 'desktop_linux == 0 and chromeos == 0', {
@@ -68,7 +69,6 @@
       'defines': [
         'SK_GAMMA_EXPONENT=1.2',
         'SK_GAMMA_CONTRAST=0.2',
-        'SK_HIGH_QUALITY_IS_LANCZOS',
       ],
     }],
     ['OS == "android"', {
@@ -82,14 +82,12 @@
       'defines': [
         'SK_GAMMA_SRGB',
         'SK_GAMMA_CONTRAST=0.5',
-        'SK_HIGH_QUALITY_IS_LANCZOS',
       ],
     }],
     ['OS == "mac"', {
       'defines': [
         'SK_GAMMA_SRGB',
         'SK_GAMMA_CONTRAST=0.0',
-        'SK_HIGH_QUALITY_IS_LANCZOS',
       ],
     }],
 

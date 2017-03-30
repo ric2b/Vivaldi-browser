@@ -51,10 +51,6 @@ class NativeAppWindow : public ui::BaseWindow,
   // window is restored to the default shape.
   virtual void UpdateShape(scoped_ptr<SkRegion> region) = 0;
 
-  // Set whether the window should receive all keyboard events including task
-  // switching keys.
-  virtual void SetInterceptAllKeys(bool want_all_keys) = 0;
-
   // Allows the window to handle unhandled keyboard messages coming back from
   // the renderer.
   virtual void HandleKeyboardEvent(
@@ -78,10 +74,6 @@ class NativeAppWindow : public ui::BaseWindow,
   // called via the AppWindow javascript API.
   virtual void ShowWithApp() = 0;
   virtual void HideWithApp() = 0;
-
-  // Updates custom entries for the context menu of the app's taskbar/dock/shelf
-  // icon.
-  virtual void UpdateShelfMenu() = 0;
 
   // Returns the minimum size constraints of the content.
   virtual gfx::Size GetContentMinimumSize() const = 0;

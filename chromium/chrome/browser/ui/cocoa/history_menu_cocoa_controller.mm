@@ -4,19 +4,19 @@
 
 #import "chrome/browser/ui/cocoa/history_menu_cocoa_controller.h"
 
-#include "base/memory/scoped_vector.h"
 #include "chrome/app/chrome_command_ids.h"  // IDC_HISTORY_MENU
 #import "chrome/browser/app_controller_mac.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/sessions/tab_restore_service.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/browser_live_tab_context.h"
 #include "chrome/browser/ui/browser_navigator.h"
-#include "chrome/browser/ui/browser_tab_restore_service_delegate.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/host_desktop.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_types.h"
+#include "components/sessions/core/tab_restore_service.h"
 #import "ui/base/cocoa/cocoa_base_utils.h"
 #include "ui/base/window_open_disposition.h"
 
@@ -42,14 +42,14 @@ using content::Referrer;
 - (void)openURLForItem:(const HistoryMenuBridge::HistoryItem*)node {
   // If this item can be restored using TabRestoreService, do so. Otherwise,
   // just load the URL.
-  TabRestoreService* service =
+  sessions::TabRestoreService* service =
       TabRestoreServiceFactory::GetForProfile(bridge_->profile());
   if (node->session_id && service) {
     Browser* browser = chrome::FindTabbedBrowser(bridge_->profile(), false,
         chrome::HOST_DESKTOP_TYPE_NATIVE);
-    BrowserTabRestoreServiceDelegate* delegate = browser ?
-        browser->tab_restore_service_delegate() : NULL;
-    service->RestoreEntryById(delegate, node->session_id,
+    BrowserLiveTabContext* context =
+        browser ? browser->live_tab_context() : NULL;
+    service->RestoreEntryById(context, node->session_id,
         chrome::HOST_DESKTOP_TYPE_NATIVE, UNKNOWN);
   } else {
     DCHECK(node->url.is_valid());

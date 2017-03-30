@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_UI_TOOLBAR_TOOLBAR_ACTIONS_BAR_DELEGATE_H_
 #define CHROME_BROWSER_UI_TOOLBAR_TOOLBAR_ACTIONS_BAR_DELEGATE_H_
 
+#include <stddef.h>
+
 #include "base/memory/scoped_ptr.h"
 #include "ui/gfx/animation/tween.h"
 #include "ui/gfx/geometry/size.h"
@@ -19,6 +21,11 @@ class ExtensionMessageBubbleController;
 // ToolbarActionsBar.
 class ToolbarActionsBarDelegate {
  public:
+  enum GetWidthTime {
+    GET_WIDTH_CURRENT,          // Returns the current width.
+    GET_WIDTH_AFTER_ANIMATION,  // Returns the width after a running animation.
+  };
+
   virtual ~ToolbarActionsBarDelegate() {}
 
   // Adds a view for the given |action| at |index|.
@@ -45,8 +52,8 @@ class ToolbarActionsBarDelegate {
   // Sets the overflow chevron's visibility.
   virtual void SetChevronVisibility(bool chevron_visible) = 0;
 
-  // Returns the current width of the view.
-  virtual int GetWidth() const = 0;
+  // Returns the width of the view according to |get_width_time|.
+  virtual int GetWidth(GetWidthTime get_width_time) const = 0;
 
   // Returns true if the view is animating.
   virtual bool IsAnimating() const = 0;
@@ -56,11 +63,6 @@ class ToolbarActionsBarDelegate {
 
   // Returns the width (including padding) for the overflow chevron.
   virtual int GetChevronWidth() const = 0;
-
-  // Notifies the delegate that the value of whether or not any overflowed
-  // action wants to run has changed.
-  virtual void OnOverflowedActionWantsToRunChanged(
-      bool overflowed_action_wants_to_run) = 0;
 
   // Displays the bubble for the passed ExtensionMessageBubbleController,
   // anchored to |anchor_action|. If |anchor_action| is null, it should be

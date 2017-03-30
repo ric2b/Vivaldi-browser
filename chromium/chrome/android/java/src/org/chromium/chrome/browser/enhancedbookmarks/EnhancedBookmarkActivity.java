@@ -4,13 +4,17 @@
 
 package org.chromium.chrome.browser.enhancedbookmarks;
 
-import android.os.Build;
+import android.content.Intent;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.view.WindowManager;
 
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.UrlConstants;
+import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarManageable;
+import org.chromium.components.bookmarks.BookmarkId;
 
 /**
  * The activity that wraps all enhanced bookmark UI on the phone. It keeps a
@@ -23,27 +27,44 @@ public class EnhancedBookmarkActivity extends EnhancedBookmarkActivityBase imple
 
     private EnhancedBookmarkManager mBookmarkManager;
     private SnackbarManager mSnackbarManager;
+    static final int EDIT_BOOKMARK_REQUEST_CODE = 14;
+    public static final String INTENT_VISIT_BOOKMARK_ID =
+            "EnhancedBookmarkEditActivity.VisitBookmarkId";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-        }
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
         mSnackbarManager = new SnackbarManager(getWindow());
         mBookmarkManager = new EnhancedBookmarkManager(this);
+        String url = getIntent().getDataString();
+        if (TextUtils.isEmpty(url)) url = UrlConstants.BOOKMARKS_URL;
+        mBookmarkManager.updateForUrl(url);
+
         setContentView(mBookmarkManager.getView());
-        EnhancedBookmarkUtils.setTaskDescriptionInDocumentMode(this, getString(R.string.bookmarks));
+        EnhancedBookmarkUtils.setTaskDescriptionInDocumentMode(
+                this, getString(OfflinePageUtils.getStringId(R.string.bookmarks)));
 
         // Hack to work around inferred theme false lint error: http://crbug.com/445633
         assert (R.layout.eb_main_content != 0);
     }
 
     @Override
+    protected void onStart() {
+        super.onStart();
+        mSnackbarManager.onStart();
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        mSnackbarManager.onStop();
+    }
+
+    @Override
     protected void onDestroy() {
         super.onDestroy();
         mBookmarkManager.destroy();
-        mSnackbarManager.dismissSnackbar(false);
     }
 
     @Override
@@ -54,5 +75,15 @@ public class EnhancedBookmarkActivity extends EnhancedBookmarkActivityBase imple
     @Override
     public void onBackPressed() {
         if (!mBookmarkManager.onBackPressed()) super.onBackPressed();
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == EDIT_BOOKMARK_REQUEST_CODE && resultCode == RESULT_OK) {
+            BookmarkId bookmarkId = BookmarkId.getBookmarkIdFromString(data.getStringExtra(
+                    INTENT_VISIT_BOOKMARK_ID));
+            mBookmarkManager.openBookmark(bookmarkId, LaunchLocation.BOOKMARK_EDITOR);
+        }
     }
 }

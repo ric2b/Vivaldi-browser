@@ -4,6 +4,7 @@
 
 #include "chrome/browser/net/chrome_network_delegate.h"
 
+#include <stddef.h>
 #include <stdlib.h>
 
 #include <vector>
@@ -14,6 +15,8 @@
 #include "base/debug/dump_without_crashing.h"
 #include "base/debug/stack_trace.h"
 #include "base/logging.h"
+#include "base/macros.h"
+#include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/metrics/user_metrics.h"
@@ -24,6 +27,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
@@ -33,9 +37,12 @@
 #include "chrome/browser/net/request_source_bandwidth_histograms.h"
 #include "chrome/browser/net/safe_search_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/task_manager/task_manager.h"
+#include "chrome/browser/task_management/task_manager_interface.h"
+#include "chrome/common/chrome_constants.h"
+#include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
+#include "components/data_usage/core/data_use_aggregator.h"
 #include "components/domain_reliability/monitor.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
@@ -54,7 +61,7 @@
 #include "net/log/net_log.h"
 #include "net/url_request/url_request.h"
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(ANDROID_JAVA_UI)
 #include "chrome/browser/io_thread.h"
 #include "chrome/browser/precache/precache_manager_factory.h"
 #include "components/precache/content/precache_manager.h"
@@ -72,6 +79,9 @@
 #if defined(ENABLE_EXTENSIONS)
 #include "extensions/common/constants.h"
 #endif
+
+#include "app/vivaldi_apptools.h"
+#include "extensions/tools/vivaldi_tools.h"
 
 using content::BrowserThread;
 using content::RenderViewHost;
@@ -104,27 +114,30 @@ void ForceGoogleSafeSearchCallbackWrapper(
   callback.Run(rv);
 }
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(ANDROID_JAVA_UI)
 void RecordPrecacheStatsOnUIThread(const GURL& url,
-                                   const base::Time& fetch_time, int64 size,
-                                   bool was_cached, void* profile_id) {
+                                   const GURL& referrer,
+                                   base::TimeDelta latency,
+                                   const base::Time& fetch_time,
+                                   int64_t size,
+                                   bool was_cached,
+                                   void* profile_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  Profile* profile = reinterpret_cast<Profile*>(profile_id);
-  if (!g_browser_process->profile_manager()->IsValidProfile(profile)) {
+  if (!g_browser_process->profile_manager()->IsValidProfile(profile_id))
     return;
-  }
+  Profile* profile = reinterpret_cast<Profile*>(profile_id);
 
   precache::PrecacheManager* precache_manager =
       precache::PrecacheManagerFactory::GetForBrowserContext(profile);
-  if (!precache_manager || !precache_manager->IsPrecachingAllowed()) {
-    // |precache_manager| could be NULL if the profile is off the record.
+  // |precache_manager| could be NULL if the profile is off the record.
+  if (!precache_manager || !precache_manager->IsPrecachingAllowed())
     return;
-  }
 
-  precache_manager->RecordStatsForFetch(url, fetch_time, size, was_cached);
+  precache_manager->RecordStatsForFetch(url, referrer, latency, fetch_time,
+                                        size, was_cached);
 }
-#endif  // defined(OS_ANDROID)
+#endif  // BUILDFLAG(ANDROID_JAVA_UI)
 
 void ReportInvalidReferrerSendOnUI() {
   base::RecordAction(
@@ -266,7 +279,7 @@ void RecordCacheStateStats(const net::URLRequest* request) {
                               CACHE_STATE_MAX);
   }
 
-  int64 size = request->received_response_content_length();
+  int64_t size = request->received_response_content_length();
   if (size >= 0 && state == CACHE_STATE_NO_LONGER_VALID) {
     UMA_HISTOGRAM_COUNTS("Net.CacheState.AllBytes", size);
     if (CanRequestBeDeltaEncoded(request)) {
@@ -290,8 +303,10 @@ ChromeNetworkDelegate::ChromeNetworkDelegate(
 #endif
       domain_reliability_monitor_(NULL),
       experimental_web_platform_features_enabled_(
-          base::CommandLine::ForCurrentProcess()->HasSwitch(
-              switches::kEnableExperimentalWebPlatformFeatures)) {
+          base::CommandLine::ForCurrentProcess()
+              ->HasSwitch(switches::kEnableExperimentalWebPlatformFeatures)),
+      data_use_aggregator_(nullptr),
+      is_data_usage_off_the_record_(true) {
   DCHECK(enable_referrers);
   extensions_delegate_.reset(
       ChromeExtensionsNetworkDelegate::Create(event_router));
@@ -318,6 +333,13 @@ void ChromeNetworkDelegate::set_predictor(
     chrome_browser_net::Predictor* predictor) {
   connect_interceptor_.reset(
       new chrome_browser_net::ConnectInterceptor(predictor));
+}
+
+void ChromeNetworkDelegate::set_data_use_aggregator(
+    data_usage::DataUseAggregator* data_use_aggregator,
+    bool is_data_usage_off_the_record) {
+  data_use_aggregator_ = data_use_aggregator;
+  is_data_usage_off_the_record_ = is_data_usage_off_the_record;
 }
 
 // static
@@ -440,6 +462,13 @@ int ChromeNetworkDelegate::OnBeforeSendHeaders(
   if (force_youtube_safety_mode_ && force_youtube_safety_mode_->GetValue())
     safe_search_util::ForceYouTubeSafetyMode(request, headers);
 
+  // NOTE(jarle@vivaldi.com): For the WhatsApp domain, provide a
+  // Vivaldi-free useragent. This is a temp. workaround until WhatsApp
+  // recognizes Vivaldi as a valid browser or the ua spoofing works for
+  // appcached content, ref. VB-2752.
+  if (vivaldi::IsVivaldiRunning())
+    vivaldi::spoof::ForceWhatsappMode(request, headers);
+
   return extensions_delegate_->OnBeforeSendHeaders(request, callback, headers);
 }
 
@@ -465,6 +494,10 @@ int ChromeNetworkDelegate::OnHeadersReceived(
 
 void ChromeNetworkDelegate::OnBeforeRedirect(net::URLRequest* request,
                                              const GURL& new_location) {
+// Recording data use of request on redirects.
+#if !defined(OS_IOS)
+  data_use_measurement_.ReportDataUseUMA(request);
+#endif
   if (domain_reliability_monitor_)
     domain_reliability_monitor_->OnBeforeRedirect(request);
   extensions_delegate_->OnBeforeRedirect(request, new_location);
@@ -475,18 +508,30 @@ void ChromeNetworkDelegate::OnResponseStarted(net::URLRequest* request) {
   extensions_delegate_->OnResponseStarted(request);
 }
 
-void ChromeNetworkDelegate::OnRawBytesRead(const net::URLRequest& request,
-                                           int bytes_read) {
+void ChromeNetworkDelegate::OnNetworkBytesReceived(net::URLRequest* request,
+                                                   int64_t bytes_received) {
 #if defined(ENABLE_TASK_MANAGER)
-  // This is not completely accurate, but as a first approximation ignore
-  // requests that are served from the cache. See bug 330931 for more info.
-  if (!request.was_cached())
-    TaskManager::GetInstance()->model()->NotifyBytesRead(request, bytes_read);
+  // Note: Currently, OnNetworkBytesReceived is only implemented for HTTP jobs,
+  // not FTP or other types, so those kinds of bytes will not be reported here.
+  task_management::TaskManagerInterface::OnRawBytesRead(*request,
+                                                        bytes_received);
 #endif  // defined(ENABLE_TASK_MANAGER)
+
+  ReportDataUsageStats(request, 0 /* tx_bytes */, bytes_received);
+}
+
+void ChromeNetworkDelegate::OnNetworkBytesSent(net::URLRequest* request,
+                                               int64_t bytes_sent) {
+  ReportDataUsageStats(request, bytes_sent, 0 /* rx_bytes */);
 }
 
 void ChromeNetworkDelegate::OnCompleted(net::URLRequest* request,
                                         bool started) {
+#if !defined(OS_IOS)
+  // TODO(amohammadkhan): Verify that there is no double recording in data use
+  // of redirected requests.
+  data_use_measurement_.ReportDataUseUMA(request);
+#endif
   RecordNetworkErrorHistograms(request);
   if (started) {
     // Only call in for requests that were started, to obey the precondition
@@ -496,22 +541,22 @@ void ChromeNetworkDelegate::OnCompleted(net::URLRequest* request,
   }
 
   if (request->status().status() == net::URLRequestStatus::SUCCESS) {
-#if defined(OS_ANDROID)
+#if BUILDFLAG(ANDROID_JAVA_UI)
     // For better accuracy, we use the actual bytes read instead of the length
     // specified with the Content-Length header, which may be inaccurate,
     // or missing, as is the case with chunked encoding.
-    int64 received_content_length = request->received_response_content_length();
+    int64_t received_content_length =
+        request->received_response_content_length();
+    base::TimeDelta latency = base::TimeTicks::Now() - request->creation_time();
 
-    if (precache::PrecacheManager::IsPrecachingEnabled()) {
-      // Record precache metrics when a fetch is completed successfully, if
-      // precaching is enabled.
-      BrowserThread::PostTask(
-          BrowserThread::UI, FROM_HERE,
-          base::Bind(&RecordPrecacheStatsOnUIThread, request->url(),
-                     base::Time::Now(), received_content_length,
-                     request->was_cached(), profile_));
-    }
-#endif  // defined(OS_ANDROID)
+    // Record precache metrics when a fetch is completed successfully, if
+    // precaching is allowed.
+    BrowserThread::PostTask(
+        BrowserThread::UI, FROM_HERE,
+        base::Bind(&RecordPrecacheStatsOnUIThread, request->url(),
+                   GURL(request->referrer()), latency, base::Time::Now(),
+                   received_content_length, request->was_cached(), profile_));
+#endif  // BUILDFLAG(ANDROID_JAVA_UI)
     extensions_delegate_->OnCompleted(request, started);
   } else if (request->status().status() == net::URLRequestStatus::FAILED ||
              request->status().status() == net::URLRequestStatus::CANCELED) {
@@ -646,6 +691,15 @@ bool ChromeNetworkDelegate::OnCanAccessFile(const net::URLRequest& request,
   if (external_storage_path.IsParent(path))
     return true;
 
+  // Allow to load offline pages, which are stored in the $PROFILE_PATH/Offline
+  // Pages/archives.
+  if (!profile_path_.empty()) {
+    const base::FilePath offline_page_archives =
+        profile_path_.Append(chrome::kOfflinePageArchviesDirname);
+    if (offline_page_archives.IsParent(path))
+      return true;
+  }
+
   // Whitelist of other allowed directories.
   static const char* const kLocalAccessWhiteList[] = {
       "/sdcard",
@@ -682,8 +736,16 @@ bool ChromeNetworkDelegate::OnCanEnablePrivacyMode(
   return privacy_mode;
 }
 
-bool ChromeNetworkDelegate::OnFirstPartyOnlyCookieExperimentEnabled() const {
+bool ChromeNetworkDelegate::OnAreExperimentalCookieFeaturesEnabled() const {
   return experimental_web_platform_features_enabled_;
+}
+
+bool ChromeNetworkDelegate::OnAreStrictSecureCookiesEnabled() const {
+  const std::string enforce_strict_secure_group =
+      base::FieldTrialList::FindFullName("StrictSecureCookies");
+  return experimental_web_platform_features_enabled_ ||
+         base::StartsWith(enforce_strict_secure_group, "Enabled",
+                          base::CompareCase::INSENSITIVE_ASCII);
 }
 
 bool ChromeNetworkDelegate::OnCancelURLRequestWithPolicyViolatingReferrerHeader(
@@ -692,4 +754,18 @@ bool ChromeNetworkDelegate::OnCancelURLRequestWithPolicyViolatingReferrerHeader(
     const GURL& referrer_url) const {
   ReportInvalidReferrerSend(target_url, referrer_url);
   return true;
+}
+
+void ChromeNetworkDelegate::ReportDataUsageStats(net::URLRequest* request,
+                                                 int64_t tx_bytes,
+                                                 int64_t rx_bytes) {
+  if (!data_use_aggregator_)
+    return;
+
+  if (is_data_usage_off_the_record_) {
+    data_use_aggregator_->ReportOffTheRecordDataUse(tx_bytes, rx_bytes);
+    return;
+  }
+
+  data_use_aggregator_->ReportDataUse(request, tx_bytes, rx_bytes);
 }

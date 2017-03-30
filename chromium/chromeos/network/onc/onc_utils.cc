@@ -4,9 +4,13 @@
 
 #include "chromeos/network/onc/onc_utils.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/base64.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -48,15 +52,15 @@ const char kEmptyUnencryptedConfiguration[] =
 scoped_ptr<base::DictionaryValue> ReadDictionaryFromJson(
     const std::string& json) {
   std::string error;
-  base::Value* root = base::JSONReader::DeprecatedReadAndReturnError(
+  scoped_ptr<base::Value> root = base::JSONReader::ReadAndReturnError(
       json, base::JSON_ALLOW_TRAILING_COMMAS, nullptr, &error);
 
   base::DictionaryValue* dict_ptr = nullptr;
   if (!root || !root->GetAsDictionary(&dict_ptr)) {
     NET_LOG(ERROR) << "Invalid JSON Dictionary: " << error;
-    delete root;
+    return nullptr;
   }
-
+  ignore_result(root.release());
   return make_scoped_ptr(dict_ptr);
 }
 
@@ -159,7 +163,7 @@ scoped_ptr<base::DictionaryValue> Decrypt(const std::string& passphrase,
     return nullptr;
   }
 
-  return new_root.Pass();
+  return new_root;
 }
 
 std::string GetSourceAsString(ONCSource source) {
@@ -767,7 +771,7 @@ net::ProxyServer ConvertOncProxyLocationToHostPort(
   return net::ProxyServer(
       proxy_server.scheme(),
       net::HostPortPair(proxy_server.host_port_pair().host(),
-                        static_cast<uint16>(port)));
+                        static_cast<uint16_t>(port)));
 }
 
 void AppendProxyServerForScheme(const base::DictionaryValue& onc_manual,
@@ -908,7 +912,7 @@ scoped_ptr<base::DictionaryValue> ConvertOncProxySettingsToProxyConfig(
   } else {
     NOTREACHED();
   }
-  return proxy_dict.Pass();
+  return proxy_dict;
 }
 
 scoped_ptr<base::DictionaryValue> ConvertProxyConfigToOncProxySettings(
@@ -981,7 +985,7 @@ scoped_ptr<base::DictionaryValue> ConvertProxyConfigToOncProxySettings(
       return nullptr;
     }
   }
-  return proxy_settings.Pass();
+  return proxy_settings;
 }
 
 }  // namespace onc

@@ -4,15 +4,17 @@
 
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 
+#include <stddef.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params_test_utils.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_switches.h"
-#include "components/data_reduction_proxy/proto/client_config.pb.h"
 #include "components/variations/variations_associated_data.h"
 #include "net/proxy/proxy_server.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -331,23 +333,97 @@ TEST_F(DataReductionProxyParamsTest, SecureProxyCheckDefault) {
   }
 }
 
-TEST_F(DataReductionProxyParamsTest, PopulateConfigResponse) {
-  DataReductionProxyParams params(DataReductionProxyParams::kAllowed |
-                                  DataReductionProxyParams::kFallbackAllowed);
-  ClientConfig config;
-  params.PopulateConfigResponse(&config);
-  EXPECT_TRUE(config.has_proxy_config());
-  EXPECT_EQ(2, config.proxy_config().http_proxy_servers_size());
-  const std::vector<net::ProxyServer>& proxies_for_http =
-      params.proxies_for_http();
-  EXPECT_EQ(proxies_for_http[0].host_port_pair().host(),
-            config.proxy_config().http_proxy_servers(0).host());
-  EXPECT_EQ(proxies_for_http[0].host_port_pair().host(),
-            config.proxy_config().http_proxy_servers(0).host());
-  EXPECT_EQ(proxies_for_http[1].host_port_pair().host(),
-            config.proxy_config().http_proxy_servers(1).host());
-  EXPECT_EQ(proxies_for_http[1].host_port_pair().host(),
-            config.proxy_config().http_proxy_servers(1).host());
+// Tests if Lo-Fi field trial is set correctly.
+TEST_F(DataReductionProxyParamsTest, LoFiEnabledFieldTrial) {
+  const struct {
+    std::string trial_group_name;
+    bool expected_enabled;
+    bool expected_control;
+    bool expected_preview_enabled;
+  } tests[] = {
+      {"Enabled", true, false, false},
+      {"Enabled_Control", true, false, false},
+      {"Disabled", false, false, false},
+      {"enabled", false, false, false},
+  };
+
+  for (const auto& test : tests) {
+    base::FieldTrialList field_trial_list(nullptr);
+
+    ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial(
+        params::GetLoFiFieldTrialName(), test.trial_group_name));
+    EXPECT_EQ(test.expected_enabled,
+              params::IsIncludedInLoFiEnabledFieldTrial())
+        << test.trial_group_name;
+    EXPECT_EQ(test.expected_control,
+              params::IsIncludedInLoFiControlFieldTrial())
+        << test.trial_group_name;
+    EXPECT_EQ(test.expected_preview_enabled,
+              params::IsIncludedInLoFiPreviewFieldTrial())
+        << test.trial_group_name;
+  }
+}
+
+// Tests if Lo-Fi field trial is set correctly.
+TEST_F(DataReductionProxyParamsTest, LoFiControlFieldTrial) {
+  const struct {
+    std::string trial_group_name;
+    bool expected_enabled;
+    bool expected_control;
+    bool expected_preview_enabled;
+  } tests[] = {
+      {"Control", false, true, false},
+      {"Control_Enabled", false, true, false},
+      {"Disabled", false, false, false},
+      {"control", false, false, false},
+  };
+
+  for (const auto& test : tests) {
+    base::FieldTrialList field_trial_list(nullptr);
+
+    ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial(
+        params::GetLoFiFieldTrialName(), test.trial_group_name));
+    EXPECT_EQ(test.expected_enabled,
+              params::IsIncludedInLoFiEnabledFieldTrial())
+        << test.trial_group_name;
+    EXPECT_EQ(test.expected_control,
+              params::IsIncludedInLoFiControlFieldTrial())
+        << test.trial_group_name;
+    EXPECT_EQ(test.expected_preview_enabled,
+              params::IsIncludedInLoFiPreviewFieldTrial())
+        << test.trial_group_name;
+  }
+}
+
+// Tests if Lo-Fi field trial is set correctly.
+TEST_F(DataReductionProxyParamsTest, LoFiPreviewFieldTrial) {
+  const struct {
+    std::string trial_group_name;
+    bool expected_enabled;
+    bool expected_control;
+    bool expected_preview_enabled;
+  } tests[] = {
+      {"Enabled_Preview", true, false, true},
+      {"Enabled_Preview_Control", true, false, true},
+      {"Disabled", false, false, false},
+      {"enabled_Preview", false, false, false},
+  };
+
+  for (const auto& test : tests) {
+    base::FieldTrialList field_trial_list(nullptr);
+
+    ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial(
+        params::GetLoFiFieldTrialName(), test.trial_group_name));
+    EXPECT_EQ(test.expected_enabled,
+              params::IsIncludedInLoFiEnabledFieldTrial())
+        << test.trial_group_name;
+    EXPECT_EQ(test.expected_control,
+              params::IsIncludedInLoFiControlFieldTrial())
+        << test.trial_group_name;
+    EXPECT_EQ(test.expected_preview_enabled,
+              params::IsIncludedInLoFiPreviewFieldTrial())
+        << test.trial_group_name;
+  }
 }
 
 TEST_F(DataReductionProxyParamsTest, GetConfigServiceURL) {
@@ -421,6 +497,22 @@ TEST_F(DataReductionProxyParamsTest, GetConfigServiceURL) {
     }
     EXPECT_EQ(test.expected, params::GetConfigServiceURL()) << test.test_case;
   }
+}
+
+TEST(DataReductionProxyParamsStandaloneTest, OverrideProxiesForHttp) {
+  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+      switches::kDataReductionProxyHttpProxies,
+      "http://override-first.net;http://override-second.net");
+  DataReductionProxyParams params(
+      DataReductionProxyParams::kAllowAllProxyConfigurations);
+
+  std::vector<net::ProxyServer> expected_override_proxies_for_http;
+  expected_override_proxies_for_http.push_back(net::ProxyServer::FromURI(
+      "http://override-first.net", net::ProxyServer::SCHEME_HTTP));
+  expected_override_proxies_for_http.push_back(net::ProxyServer::FromURI(
+      "http://override-second.net", net::ProxyServer::SCHEME_HTTP));
+
+  EXPECT_EQ(expected_override_proxies_for_http, params.proxies_for_http());
 }
 
 }  // namespace data_reduction_proxy

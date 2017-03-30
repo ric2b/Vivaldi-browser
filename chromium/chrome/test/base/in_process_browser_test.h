@@ -9,6 +9,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_base.h"
@@ -51,8 +52,8 @@ class ContentRendererClient;
 //   state changes you'll need to run the message loop from your test method.
 //   For example, if you need to wait till a find bar has completely been shown
 //   you'll need to invoke content::RunMessageLoop. When the message bar is
-//   shown, invoke MessageLoop::current()->Quit() to return control back to your
-//   test method.
+//   shown, invoke MessageLoop::current()->QuitWhenIdle() to return control back
+//   to your test method.
 // . If you subclass and override SetUp, be sure and invoke
 //   InProcessBrowserTest::SetUp. (But see also SetUpOnMainThread,
 //   SetUpInProcessBrowserTestFixture and other related hook methods for a
@@ -142,6 +143,15 @@ class InProcessBrowserTest : public content::BrowserTestBase {
 
   // BrowserTestBase:
   void RunTestOnMainThreadLoop() override;
+
+  // Ensures that no devtools are open, and then opens the devtools.
+  void OpenDevToolsWindow(content::WebContents* web_contents);
+
+  // Opens |url| in an incognito browser window with the incognito profile of
+  // |profile|, blocking until the navigation finishes. This will create a new
+  // browser if a browser with the incognito profile does not exist. Returns the
+  // incognito window Browser.
+  Browser* OpenURLOffTheRecord(Profile* profile, const GURL& url);
 
   // Creates a browser with a single tab (about:blank), waits for the tab to
   // finish loading and shows the browser.

@@ -7,12 +7,16 @@
 #ifndef CHROME_BROWSER_CHROMEOS_EXTENSIONS_FILE_MANAGER_PRIVATE_API_FILE_SYSTEM_H_
 #define CHROME_BROWSER_CHROMEOS_EXTENSIONS_FILE_MANAGER_PRIVATE_API_FILE_SYSTEM_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 
-#include "chrome/browser/chromeos/drive/file_errors.h"
+#include "base/macros.h"
 #include "chrome/browser/chromeos/extensions/file_manager/private_api_base.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/extensions/chrome_extension_function_details.h"
+#include "components/drive/file_errors.h"
 #include "device/media_transfer_protocol/mtp_storage_info.pb.h"
 #include "extensions/browser/extension_function.h"
 #include "storage/browser/fileapi/file_system_url.h"
@@ -151,26 +155,31 @@ class FileManagerPrivateGetSizeStatsFunction
   bool RunAsync() override;
 
  private:
-  void GetDriveAvailableSpaceCallback(drive::FileError error,
-                                      int64 bytes_total,
-                                      int64 bytes_used);
+  void OnGetLocalSpace(uint64_t* total_size,
+                       uint64_t* remaining_size,
+                       bool is_download);
 
-  void GetMtpAvailableSpaceCallback(const MtpStorageInfo& mtp_storage_info,
-                                    const bool error);
+  void OnGetDriveAvailableSpace(drive::FileError error,
+                                int64_t bytes_total,
+                                int64_t bytes_used);
 
-  void GetSizeStatsCallback(const uint64* total_size,
-                            const uint64* remaining_size);
+  void OnGetMtpAvailableSpace(const MtpStorageInfo& mtp_storage_info,
+                              const bool error);
+
+  void OnGetSizeStats(const uint64_t* total_size,
+                      const uint64_t* remaining_size);
 };
 
 // Implements the chrome.fileManagerPrivate.validatePathNameLength method.
-class FileManagerPrivateValidatePathNameLengthFunction
+class FileManagerPrivateInternalValidatePathNameLengthFunction
     : public LoggedAsyncExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("fileManagerPrivate.validatePathNameLength",
-                             FILEMANAGERPRIVATE_VALIDATEPATHNAMELENGTH)
+  DECLARE_EXTENSION_FUNCTION(
+      "fileManagerPrivateInternal.validatePathNameLength",
+      FILEMANAGERPRIVATEINTERNAL_VALIDATEPATHNAMELENGTH)
 
  protected:
-  ~FileManagerPrivateValidatePathNameLengthFunction() override {}
+  ~FileManagerPrivateInternalValidatePathNameLengthFunction() override {}
 
   void OnFilePathLimitRetrieved(size_t current_length, size_t max_length);
 
@@ -194,14 +203,14 @@ class FileManagerPrivateFormatVolumeFunction
 };
 
 // Implements the chrome.fileManagerPrivate.startCopy method.
-class FileManagerPrivateStartCopyFunction
+class FileManagerPrivateInternalStartCopyFunction
     : public LoggedAsyncExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("fileManagerPrivate.startCopy",
-                             FILEMANAGERPRIVATE_STARTCOPY)
+  DECLARE_EXTENSION_FUNCTION("fileManagerPrivateInternal.startCopy",
+                             FILEMANAGERPRIVATEINTERNAL_STARTCOPY)
 
  protected:
-  ~FileManagerPrivateStartCopyFunction() override {}
+  ~FileManagerPrivateInternalStartCopyFunction() override {}
 
   // AsyncExtensionFunction overrides.
   bool RunAsync() override;
@@ -255,16 +264,16 @@ class FileManagerPrivateInternalResolveIsolatedEntriesFunction
       file_manager::util::EntryDefinitionList> entry_definition_list);
 };
 
-class FileManagerPrivateComputeChecksumFunction
+class FileManagerPrivateInternalComputeChecksumFunction
     : public LoggedAsyncExtensionFunction {
  public:
-  FileManagerPrivateComputeChecksumFunction();
+  FileManagerPrivateInternalComputeChecksumFunction();
 
-  DECLARE_EXTENSION_FUNCTION("fileManagerPrivate.computeChecksum",
-                             FILEMANAGERPRIVATE_COMPUTECHECKSUM)
+  DECLARE_EXTENSION_FUNCTION("fileManagerPrivateInternal.computeChecksum",
+                             FILEMANAGERPRIVATEINTERNAL_COMPUTECHECKSUM)
 
  protected:
-  ~FileManagerPrivateComputeChecksumFunction() override;
+  ~FileManagerPrivateInternalComputeChecksumFunction() override;
 
   // AsyncExtensionFunction overrides.
   bool RunAsync() override;
@@ -311,13 +320,14 @@ class FileManagerPrivateIsUMAEnabledFunction
 };
 
 // Implements the chrome.fileManagerPrivate.setEntryTag method.
-class FileManagerPrivateSetEntryTagFunction : public UIThreadExtensionFunction {
+class FileManagerPrivateInternalSetEntryTagFunction
+    : public UIThreadExtensionFunction {
  public:
-  FileManagerPrivateSetEntryTagFunction();
-  DECLARE_EXTENSION_FUNCTION("fileManagerPrivate.setEntryTag",
-                             FILEMANAGERPRIVATE_SETENTRYTAG)
+  FileManagerPrivateInternalSetEntryTagFunction();
+  DECLARE_EXTENSION_FUNCTION("fileManagerPrivateInternal.setEntryTag",
+                             FILEMANAGERPRIVATEINTERNAL_SETENTRYTAG)
  protected:
-  ~FileManagerPrivateSetEntryTagFunction() override {}
+  ~FileManagerPrivateInternalSetEntryTagFunction() override {}
 
  private:
   const ChromeExtensionFunctionDetails chrome_details_;
@@ -326,7 +336,7 @@ class FileManagerPrivateSetEntryTagFunction : public UIThreadExtensionFunction {
   void OnSetEntryPropertyCompleted(drive::FileError result);
 
   ExtensionFunction::ResponseAction Run() override;
-  DISALLOW_COPY_AND_ASSIGN(FileManagerPrivateSetEntryTagFunction);
+  DISALLOW_COPY_AND_ASSIGN(FileManagerPrivateInternalSetEntryTagFunction);
 };
 
 }  // namespace extensions

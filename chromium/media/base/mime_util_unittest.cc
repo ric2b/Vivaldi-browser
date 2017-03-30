@@ -2,10 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/strings/string_split.h"
 #include "build/build_config.h"
 #include "media/base/mime_util.h"
+#include "media/media_features.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if defined(OS_MACOSX)
@@ -17,37 +20,6 @@
 #endif
 
 namespace media {
-
-TEST(MimeUtilTest, StrictMediaMimeType) {
-  EXPECT_TRUE(IsStrictMediaMimeType("video/webm"));
-  EXPECT_TRUE(IsStrictMediaMimeType("Video/WEBM"));
-  EXPECT_TRUE(IsStrictMediaMimeType("audio/webm"));
-
-  EXPECT_TRUE(IsStrictMediaMimeType("audio/wav"));
-  EXPECT_TRUE(IsStrictMediaMimeType("audio/x-wav"));
-
-  EXPECT_TRUE(IsStrictMediaMimeType("video/ogg"));
-  EXPECT_TRUE(IsStrictMediaMimeType("audio/ogg"));
-  EXPECT_TRUE(IsStrictMediaMimeType("application/ogg"));
-
-  EXPECT_TRUE(IsStrictMediaMimeType("audio/mpeg"));
-  EXPECT_TRUE(IsStrictMediaMimeType("audio/mp3"));
-  EXPECT_TRUE(IsStrictMediaMimeType("audio/x-mp3"));
-
-  EXPECT_TRUE(IsStrictMediaMimeType("video/mp4"));
-  EXPECT_TRUE(IsStrictMediaMimeType("video/x-m4v"));
-  EXPECT_TRUE(IsStrictMediaMimeType("audio/mp4"));
-  EXPECT_TRUE(IsStrictMediaMimeType("audio/x-m4a"));
-
-  EXPECT_TRUE(IsStrictMediaMimeType("application/x-mpegurl"));
-  EXPECT_TRUE(IsStrictMediaMimeType("application/vnd.apple.mpegurl"));
-
-  EXPECT_FALSE(IsStrictMediaMimeType("video/unknown"));
-  EXPECT_FALSE(IsStrictMediaMimeType("Video/UNKNOWN"));
-  EXPECT_FALSE(IsStrictMediaMimeType("audio/unknown"));
-  EXPECT_FALSE(IsStrictMediaMimeType("application/unknown"));
-  EXPECT_FALSE(IsStrictMediaMimeType("unknown/unknown"));
-}
 
 TEST(MimeUtilTest, CommonMediaMimeType) {
   EXPECT_TRUE(IsSupportedMediaMimeType("audio/webm"));
@@ -78,7 +50,7 @@ TEST(MimeUtilTest, CommonMediaMimeType) {
       "application/vnd.apple.mpegurl"));
 
 #if !defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#if !defined(OS_LINUX) && defined(USE_PROPRIETARY_CODECS)
+#if defined(USE_PROPRIETARY_CODECS)
   EXPECT_TRUE(IsSupportedMediaMimeType("audio/mp4"));
   EXPECT_TRUE(IsSupportedMediaMimeType("audio/x-m4a"));
   EXPECT_TRUE(IsSupportedMediaMimeType("video/mp4"));
@@ -89,7 +61,7 @@ TEST(MimeUtilTest, CommonMediaMimeType) {
   EXPECT_TRUE(IsSupportedMediaMimeType("audio/mpeg"));
   EXPECT_TRUE(IsSupportedMediaMimeType("audio/aac"));
 
-#if defined(ENABLE_MPEG2TS_STREAM_PARSER)
+#if BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER)
   EXPECT_TRUE(IsSupportedMediaMimeType("video/mp2t"));
 #else
   EXPECT_FALSE(IsSupportedMediaMimeType("video/mp2t"));

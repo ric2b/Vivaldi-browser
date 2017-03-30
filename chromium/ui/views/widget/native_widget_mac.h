@@ -5,8 +5,15 @@
 #ifndef UI_VIEWS_WIDGET_NATIVE_WIDGET_MAC_H_
 #define UI_VIEWS_WIDGET_NATIVE_WIDGET_MAC_H_
 
+#include "base/macros.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/views/widget/native_widget_private.h"
+
+#if defined(__OBJC__)
+@class NativeWidgetMacNSWindow;
+#else
+class NativeWidgetMacNSWindow;
+#endif
 
 namespace views {
 namespace test {
@@ -36,8 +43,13 @@ class VIEWS_EXPORT NativeWidgetMac : public internal::NativeWidgetPrivate {
   // override this method for an early hook into the native window teardown.
   virtual void OnWindowWillClose();
 
+  // Returns the vertical position that sheets should be anchored, in pixels
+  // from the bottom of the window.
+  virtual int SheetPositionY();
+
   // internal::NativeWidgetPrivate:
   void InitNativeWidget(const Widget::InitParams& params) override;
+  void OnWidgetInitDone() override;
   NonClientFrameView* CreateNonClientFrameView() override;
   bool ShouldUseNativeFrame() const override;
   bool ShouldWindowContentsBeTransparent() const override;
@@ -125,7 +137,8 @@ class VIEWS_EXPORT NativeWidgetMac : public internal::NativeWidgetPrivate {
  protected:
   // Creates the NSWindow that will be passed to the BridgedNativeWidget.
   // Called by InitNativeWidget. The return value will be autoreleased.
-  virtual gfx::NativeWindow CreateNSWindow(const Widget::InitParams& params);
+  virtual NativeWidgetMacNSWindow* CreateNSWindow(
+      const Widget::InitParams& params);
 
   internal::NativeWidgetDelegate* delegate() { return delegate_; }
 

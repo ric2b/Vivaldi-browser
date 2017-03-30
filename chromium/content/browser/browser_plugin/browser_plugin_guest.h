@@ -18,13 +18,17 @@
 #ifndef CONTENT_BROWSER_BROWSER_PLUGIN_BROWSER_PLUGIN_GUEST_H_
 #define CONTENT_BROWSER_BROWSER_PLUGIN_BROWSER_PLUGIN_GUEST_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <queue>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "content/common/edit_command.h"
 #include "content/common/webplugin_geometry.h"
 #include "content/common/input/input_event_ack_state.h"
@@ -45,6 +49,7 @@ struct BrowserPluginHostMsg_Attach_Params;
 struct FrameHostMsg_CompositorFrameSwappedACK_Params;
 struct FrameHostMsg_ReclaimCompositorResources_Params;
 struct FrameMsg_CompositorFrameSwapped_Params;
+struct ViewHostMsg_TextInputState_Params;
 
 #if defined(OS_MACOSX)
 struct FrameHostMsg_ShowPopup_Params;
@@ -175,6 +180,8 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
       ui::PageTransition transition_type) override;
 
   void RenderViewReady() override;
+  void RenderViewDeleted(RenderViewHost* render_view_host) override;
+
   void RenderProcessGone(base::TerminationStatus status) override;
   bool OnMessageReceived(const IPC::Message& message) override;
   bool OnMessageReceived(const IPC::Message& message,
@@ -183,6 +190,7 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   // GuestHost implementation.
   int LoadURLWithParams(
       const NavigationController::LoadURLParams& load_params) override;
+  void GuestResizeDueToAutoResize(const gfx::Size& new_size) override;
   void SizeContents(const gfx::Size& new_size) override;
   void WillDestroy() override;
 
@@ -190,6 +198,17 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   WebContentsImpl* GetWebContents() const;
 
   gfx::Point GetScreenCoordinates(const gfx::Point& relative_position) const;
+
+  // This method is called by the RenderWidgetHostViewGuest to inform the
+  // BrowserPlugin of the potential location of the context menu event (to
+  // come). The need for this (hack) is that the input events when passed on to
+  // the BrowserPlugin are modified by any CSS transforms applied on the plugin.
+  // Therefore, the coordinates of the context menu event with respect to the
+  // container window are modifed with the guest renderer process beiung unaware
+  // of the change. Then eventually, when the context menu event arrives at the
+  // browser, it contains the wrong coordinates (BUG=470087).
+  // TODO(ekaramad): Find a more fundamental solution and remove this later.
+  void SetContextMenuPosition(const gfx::Point& position);
 
   // Helper to send messages to embedder. If this guest is not yet attached,
   // then IPCs will be queued until attachment.
@@ -211,9 +230,6 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   void Attach(int browser_plugin_instance_id,
               WebContentsImpl* embedder_web_contents,
               const BrowserPluginHostMsg_Attach_Params& params);
-
-  // Detach the browser plugin from the embedder.
-  void Detach();
 
   // Returns whether BrowserPluginGuest is interested in receiving the given
   // |message|.
@@ -244,10 +260,8 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
 
   gfx::Rect guest_window_rect(){return guest_window_rect_;}
 
-  // The next three functions are virtual for test purposes.
-  virtual void UpdateGuestSizeIfNecessary(const gfx::Size& frame_size,
-                                          float scale_factor);
-  virtual void SwapCompositorFrame(uint32 output_surface_id,
+  // The next two functions are virtual for test purposes.
+  virtual void SwapCompositorFrame(uint32_t output_surface_id,
                                    int host_process_id,
                                    int host_routing_id,
                                    scoped_ptr<cc::CompositorFrame> frame);
@@ -256,14 +270,14 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
                                     float scale_factor,
                                     const cc::SurfaceSequence& sequence);
 
-  void SetContentsOpaque(bool opaque);
-
   // Find the given |search_text| in the page. Returns true if the find request
   // is handled by this browser plugin guest.
-  bool Find(int request_id,
-            const base::string16& search_text,
-            const blink::WebFindOptions& options);
-  bool StopFinding(StopFindAction action);
+  bool HandleFindForEmbedder(int request_id,
+                             const base::string16& search_text,
+                             const blink::WebFindOptions& options);
+  bool HandleStopFindingForEmbedder(StopFindAction action);
+
+  void ResendEventToEmbedder(const blink::WebInputEvent& event);
 
  protected:
 
@@ -288,8 +302,6 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
 
   void InitInternal(const BrowserPluginHostMsg_Attach_Params& params,
                     WebContentsImpl* owner_web_contents);
-
-  bool InAutoSizeBounds(const gfx::Size& size) const;
 
   void OnSatisfySequence(int instance_id, const cc::SurfaceSequence& sequence);
   void OnRequireSequence(int instance_id,
@@ -354,10 +366,8 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   void OnUnlockMouseAck(int instance_id);
   void OnUpdateGeometry(int instance_id, const gfx::Rect& view_rect);
 
-  void OnTextInputTypeChanged(ui::TextInputType type,
-                              ui::TextInputMode input_mode,
-                              bool can_compose_inline,
-                              int flags);
+  void OnTextInputStateChanged(
+      const ViewHostMsg_TextInputState_Params& params);
   void OnImeSetComposition(
       int instance_id,
       const std::string& text,
@@ -396,6 +406,12 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   // Called when WillAttach is complete.
   void OnWillAttachComplete(WebContentsImpl* embedder_web_contents,
                             const BrowserPluginHostMsg_Attach_Params& params);
+
+  // Returns identical message with current browser_plugin_instance_id() if
+  // the input was created with browser_plugin::kInstanceIdNone, else it returns
+  // the input message unmodified. If no current browser_plugin_instance_id()
+  // is set, or anything goes wrong, the input message is returned.
+  IPC::Message* UpdateInstanceIdIfNecessary(IPC::Message* msg) const;
 
   // Forwards all messages from the |pending_messages_| queue to the embedder.
   void SendQueuedMessages();
@@ -438,6 +454,12 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   // maintains a JavaScript reference to its opener.
   bool has_render_view_;
 
+  // Note(andre@vivaldi.com):
+  // If BrowserPluginGuest::Init specified |has_render_view| true use this. This
+  // will never happen for webviews that share WebContents with a tabstrip.
+  // This fixes setting visibility hidden on <webviews>
+  bool got_renderview_on_init_;
+
   // Last seen size of guest contents (by SwapCompositorFrame).
   gfx::Size last_seen_view_size_;
 
@@ -448,10 +470,8 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   bool initialized_;
 
   // Text input type states.
-  ui::TextInputType last_text_input_type_;
-  ui::TextInputMode last_input_mode_;
-  int last_input_flags_;
-  bool last_can_compose_inline_;
+  // Using scoped_ptr to avoid including the header file: view_messages.h.
+  scoped_ptr<const ViewHostMsg_TextInputState_Params> last_text_input_state_;
 
   // The is the routing ID for a swapped out RenderView for the guest
   // WebContents in the embedder's process.

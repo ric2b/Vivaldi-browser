@@ -2,12 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_util.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/policy/device_policy_builder.h"
 #include "chrome/browser/chromeos/policy/device_policy_cros_browser_test.h"
 #include "chrome/browser/chromeos/policy/proto/chrome_device_policy.pb.h"
-#include "chrome/browser/metrics/variations/variations_service.h"
+#include "chrome/browser/metrics/variations/chrome_variations_service_client.h"
 #include "chrome/test/base/testing_browser_process.h"
+#include "components/variations/service/variations_service.h"
 #include "net/base/url_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -38,11 +42,17 @@ class VariationsServiceDevicePolicyTest : public DevicePolicyCrosBrowserTest {
 
 IN_PROC_BROWSER_TEST_F(VariationsServiceDevicePolicyTest, VariationsURLValid) {
   const std::string default_variations_url =
-      chrome_variations::VariationsService::
-          GetDefaultVariationsServerURLForTesting();
+      variations::VariationsService::GetDefaultVariationsServerURLForTesting();
+
+  // g_browser_process->variations_service() is null by default in Chromium
+  // builds, so construct a VariationsService locally instead.
+  scoped_ptr<variations::VariationsService> service =
+      variations::VariationsService::CreateForTesting(
+          make_scoped_ptr(new ChromeVariationsServiceClient()),
+          g_browser_process->local_state());
 
   // Device policy has updated the cros settings.
-  const GURL url = chrome_variations::VariationsService::GetVariationsServerURL(
+  const GURL url = service->GetVariationsServerURL(
       g_browser_process->local_state(), std::string());
   EXPECT_TRUE(base::StartsWith(url.spec(), default_variations_url,
                                base::CompareCase::SENSITIVE));

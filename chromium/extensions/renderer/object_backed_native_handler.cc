@@ -4,6 +4,8 @@
 
 #include "extensions/renderer/object_backed_native_handler.h"
 
+#include <stddef.h>
+
 #include "base/logging.h"
 #include "base/memory/linked_ptr.h"
 #include "extensions/renderer/console.h"
@@ -37,21 +39,24 @@ v8::Local<v8::Object> ObjectBackedNativeHandler::NewInstance() {
 // static
 void ObjectBackedNativeHandler::Router(
     const v8::FunctionCallbackInfo<v8::Value>& args) {
-  v8::HandleScope handle_scope(args.GetIsolate());
+  v8::Isolate* isolate = args.GetIsolate();
+  v8::HandleScope handle_scope(isolate);
   v8::Local<v8::Object> data = args.Data().As<v8::Object>();
+  v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
-  v8::Local<v8::Value> handler_function_value =
-      data->Get(v8::String::NewFromUtf8(args.GetIsolate(), kHandlerFunction));
+  v8::Local<v8::Value> handler_function_value;
   // See comment in header file for why we do this.
-  if (handler_function_value.IsEmpty() ||
+  if (!GetPrivate(context, data, kHandlerFunction, &handler_function_value) ||
       handler_function_value->IsUndefined()) {
-    ScriptContext* script_context = ScriptContextSet::GetContextByV8Context(
-        args.GetIsolate()->GetCallingContext());
+    ScriptContext* script_context =
+        ScriptContextSet::GetContextByV8Context(context);
     console::Error(script_context ? script_context->GetRenderFrame() : nullptr,
                    "Extension view no longer exists");
     return;
   }
-  DCHECK(handler_function_value->IsExternal());
+  // This CHECK is *important*. Otherwise, we'll go around happily executing
+  // something random.  See crbug.com/548273.
+  CHECK(handler_function_value->IsExternal());
   static_cast<HandlerFunction*>(
       handler_function_value.As<v8::External>()->Value())->Run(args);
 }
@@ -64,9 +69,8 @@ void ObjectBackedNativeHandler::RouteFunction(
   v8::Context::Scope context_scope(context_->v8_context());
 
   v8::Local<v8::Object> data = v8::Object::New(isolate);
-  data->Set(
-      v8::String::NewFromUtf8(isolate, kHandlerFunction),
-      v8::External::New(isolate, new HandlerFunction(handler_function)));
+  SetPrivate(data, kHandlerFunction,
+             v8::External::New(isolate, new HandlerFunction(handler_function)));
   v8::Local<v8::FunctionTemplate> function_template =
       v8::FunctionTemplate::New(isolate, Router, data);
   v8::Local<v8::ObjectTemplate>::New(isolate, object_template_)
@@ -85,18 +89,69 @@ void ObjectBackedNativeHandler::Invalidate() {
 
   for (size_t i = 0; i < router_data_.Size(); i++) {
     v8::Local<v8::Object> data = router_data_.Get(i);
-    v8::Local<v8::Value> handler_function_value =
-        data->Get(v8::String::NewFromUtf8(isolate, kHandlerFunction));
-    CHECK(!handler_function_value.IsEmpty());
+    v8::Local<v8::Value> handler_function_value;
+    CHECK(GetPrivate(data, kHandlerFunction, &handler_function_value));
     delete static_cast<HandlerFunction*>(
         handler_function_value.As<v8::External>()->Value());
-    data->Delete(v8::String::NewFromUtf8(isolate, kHandlerFunction));
+    DeletePrivate(data, kHandlerFunction);
   }
 
   router_data_.Clear();
   object_template_.Reset();
 
   NativeHandler::Invalidate();
+}
+
+void ObjectBackedNativeHandler::SetPrivate(v8::Local<v8::Object> obj,
+                                           const char* key,
+                                           v8::Local<v8::Value> value) {
+  SetPrivate(context_->v8_context(), obj, key, value);
+}
+
+// static
+void ObjectBackedNativeHandler::SetPrivate(v8::Local<v8::Context> context,
+                                           v8::Local<v8::Object> obj,
+                                           const char* key,
+                                           v8::Local<v8::Value> value) {
+  obj->SetPrivate(context, v8::Private::ForApi(context->GetIsolate(),
+                                               v8::String::NewFromUtf8(
+                                                   context->GetIsolate(), key)),
+                  value)
+      .FromJust();
+}
+
+bool ObjectBackedNativeHandler::GetPrivate(v8::Local<v8::Object> obj,
+                                           const char* key,
+                                           v8::Local<v8::Value>* result) {
+  return GetPrivate(context_->v8_context(), obj, key, result);
+}
+
+// static
+bool ObjectBackedNativeHandler::GetPrivate(v8::Local<v8::Context> context,
+                                           v8::Local<v8::Object> obj,
+                                           const char* key,
+                                           v8::Local<v8::Value>* result) {
+  return obj->GetPrivate(context,
+                         v8::Private::ForApi(context->GetIsolate(),
+                                             v8::String::NewFromUtf8(
+                                                 context->GetIsolate(), key)))
+      .ToLocal(result);
+}
+
+void ObjectBackedNativeHandler::DeletePrivate(v8::Local<v8::Object> obj,
+                                              const char* key) {
+  DeletePrivate(context_->v8_context(), obj, key);
+}
+
+// static
+void ObjectBackedNativeHandler::DeletePrivate(v8::Local<v8::Context> context,
+                                              v8::Local<v8::Object> obj,
+                                              const char* key) {
+  obj->DeletePrivate(context,
+                     v8::Private::ForApi(
+                         context->GetIsolate(),
+                         v8::String::NewFromUtf8(context->GetIsolate(), key)))
+      .FromJust();
 }
 
 }  // namespace extensions

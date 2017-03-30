@@ -4,6 +4,8 @@
 
 #include "device/usb/usb_device_filter.h"
 
+#include <utility>
+
 #include "base/values.h"
 #include "device/usb/usb_descriptors.h"
 #include "device/usb/usb_device.h"
@@ -31,27 +33,27 @@ UsbDeviceFilter::UsbDeviceFilter()
 UsbDeviceFilter::~UsbDeviceFilter() {
 }
 
-void UsbDeviceFilter::SetVendorId(uint16 vendor_id) {
+void UsbDeviceFilter::SetVendorId(uint16_t vendor_id) {
   vendor_id_set_ = true;
   vendor_id_ = vendor_id;
 }
 
-void UsbDeviceFilter::SetProductId(uint16 product_id) {
+void UsbDeviceFilter::SetProductId(uint16_t product_id) {
   product_id_set_ = true;
   product_id_ = product_id;
 }
 
-void UsbDeviceFilter::SetInterfaceClass(uint8 interface_class) {
+void UsbDeviceFilter::SetInterfaceClass(uint8_t interface_class) {
   interface_class_set_ = true;
   interface_class_ = interface_class;
 }
 
-void UsbDeviceFilter::SetInterfaceSubclass(uint8 interface_subclass) {
+void UsbDeviceFilter::SetInterfaceSubclass(uint8_t interface_subclass) {
   interface_subclass_set_ = true;
   interface_subclass_ = interface_subclass;
 }
 
-void UsbDeviceFilter::SetInterfaceProtocol(uint8 interface_protocol) {
+void UsbDeviceFilter::SetInterfaceProtocol(uint8_t interface_protocol) {
   interface_protocol_set_ = true;
   interface_protocol_ = interface_protocol;
 }
@@ -68,29 +70,19 @@ bool UsbDeviceFilter::Matches(scoped_refptr<UsbDevice> device) const {
   }
 
   if (interface_class_set_) {
-    const UsbConfigDescriptor* config = device->GetConfiguration();
-    if (!config) {
-      return false;
-    }
-
-    // TODO(reillyg): Check device configuration if the class is not defined at
-    // a per-interface level. This is not really important because most devices
-    // have per-interface classes. The only counter-examples I know of are hubs.
-
-    bool foundMatch = false;
-    for (const UsbInterfaceDescriptor& iface : config->interfaces) {
-      if (iface.interface_class == interface_class_ &&
-          (!interface_subclass_set_ ||
-           (iface.interface_subclass == interface_subclass_ &&
-            (!interface_protocol_set_ ||
-             iface.interface_protocol == interface_protocol_)))) {
-        foundMatch = true;
+    for (const UsbConfigDescriptor& config : device->configurations()) {
+      for (const UsbInterfaceDescriptor& iface : config.interfaces) {
+        if (iface.interface_class == interface_class_ &&
+            (!interface_subclass_set_ ||
+             (iface.interface_subclass == interface_subclass_ &&
+              (!interface_protocol_set_ ||
+               iface.interface_protocol == interface_protocol_)))) {
+          return true;
+        }
       }
     }
 
-    if (!foundMatch) {
-      return false;
-    }
+    return false;
   }
 
   return true;
@@ -116,7 +108,7 @@ scoped_ptr<base::Value> UsbDeviceFilter::ToValue() const {
     }
   }
 
-  return obj.Pass();
+  return std::move(obj);
 }
 
 // static

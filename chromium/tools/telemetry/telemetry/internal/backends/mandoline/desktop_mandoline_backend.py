@@ -4,6 +4,7 @@
 
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -15,10 +16,10 @@ from telemetry.internal.backends.mandoline import mandoline_browser_backend
 
 class DesktopMandolineBackend(
     mandoline_browser_backend.MandolineBrowserBackend):
-  """The backend for controlling a locally-executed browser instance, on Linux
+  '''The backend for controlling a locally-executed browser instance, on Linux
   or Windows.
-  """
-  # It is OK to have abstract methods. pylint: disable=W0223
+  '''
+  # It is OK to have abstract methods. pylint: disable=abstract-method
 
   def __init__(self, desktop_platform_backend, browser_options, executable,
                browser_directory):
@@ -29,6 +30,11 @@ class DesktopMandolineBackend(
     # Initialize fields so that an explosion during init doesn't break in Close.
     self._proc = None
     self._tmp_output_file = None
+
+    self._tmp_profile_dir = None
+    if not self.browser_options.profile_dir:
+      self._tmp_profile_dir = tempfile.mkdtemp()
+    logging.info('Using profile directory: %s' % self.profile_directory)
 
     self._executable = executable
     if not self._executable:
@@ -41,17 +47,15 @@ class DesktopMandolineBackend(
     # check if the browser process is still alive.
     if not self.IsBrowserRunning():
       raise exceptions.ProcessGoneException(
-          "Return code: %d" % self._proc.returncode)
+          'Return code: %d' % self._proc.returncode)
     return super(DesktopMandolineBackend, self).HasBrowserFinishedLaunching()
 
   def GetBrowserStartupArgs(self):
     args = super(DesktopMandolineBackend, self).GetBrowserStartupArgs()
-    if self.browser_options.use_devtools_active_port:
-      raise NotImplementedError()
-    else:
-      self._port = util.GetUnreservedAvailableLocalPort()
+    self._port = util.GetUnreservedAvailableLocalPort()
     logging.info('Requested remote debugging port: %d' % self._port)
     args.append('--remote-debugging-port=%i' % self._port)
+    args.append('--user-data-dir=%s' % self.profile_directory)
     return args
 
   def Start(self):
@@ -60,9 +64,7 @@ class DesktopMandolineBackend(
     args = [self._executable]
     args.extend(self.GetBrowserStartupArgs())
     if self.browser_options.startup_url:
-      # TODO(yzshen): For now "about:blank" is not supported yet.
-      if self.browser_options.startup_url != "about:blank":
-        args.append(self.browser_options.startup_url)
+      args.append(self.browser_options.startup_url)
     env = os.environ.copy()
     logging.debug('Starting Mandoline %s', args)
 
@@ -100,7 +102,7 @@ class DesktopMandolineBackend(
 
   @property
   def profile_directory(self):
-    raise NotImplementedError()
+    return self.browser_options.profile_dir or self._tmp_profile_dir
 
   def IsBrowserRunning(self):
     return self._proc and self._proc.poll() == None
@@ -111,7 +113,7 @@ class DesktopMandolineBackend(
         # This can happen in the case that loading the mandoline binary fails.
         # We print rather than using logging here, because that makes a
         # recursive call to this function.
-        print >> sys.stderr, "Can't get standard output with --show-stdout"
+        print >> sys.stderr, 'Can\'t get standard output with --show-stdout'
       return ''
     try:
       self._tmp_output_file.flush()
@@ -127,22 +129,21 @@ class DesktopMandolineBackend(
   def __del__(self):
     self.Close()
 
-  def _TryCooperativeShutdown(self):
-    if self.browser.platform.IsCooperativeShutdownSupported():
-      if self.browser.platform.CooperativelyShutdown(self._proc, "mandoline"):
-        try:
-          util.WaitFor(lambda: not self.IsBrowserRunning(), timeout=5)
-          logging.info('Successfully shut down browser cooperatively')
-        except exceptions.TimeoutException as e:
-          logging.warning('Failed to cooperatively shutdown. ' +
-                          'Proceeding to terminate: ' + str(e))
-
   def Close(self):
     super(DesktopMandolineBackend, self).Close()
 
-    if self.IsBrowserRunning():
-      self._TryCooperativeShutdown()
-
+    # Cooperative shutdown does not work with mandoline. Its HWNDs are owned by
+    # subprocesses of mandoline.exe, so its pid won't match pids of HWND owners.
     if self.IsBrowserRunning():
       self._proc.kill()
+      util.WaitFor(lambda: not self.IsBrowserRunning(), timeout=10)
+      if self.IsBrowserRunning():
+        logging.warning('Failed to kill the browser process cleanly.')
     self._proc = None
+
+    if self._tmp_profile_dir and os.path.exists(self._tmp_profile_dir):
+      try:
+        shutil.rmtree(self._tmp_profile_dir)
+      except Exception as e:
+        logging.warning('Leaking temp dir: %s\n%s' % (self._tmp_profile_dir, e))
+      self._tmp_profile_dir = None

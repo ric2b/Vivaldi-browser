@@ -5,17 +5,19 @@
 #ifndef IOS_PUBLIC_PROVIDER_CHROME_BROWSER_BROWSER_STATE_CHROME_BROWSER_STATE_MANAGER_H_
 #define IOS_PUBLIC_PROVIDER_CHROME_BROWSER_BROWSER_STATE_CHROME_BROWSER_STATE_MANAGER_H_
 
-#include "base/basictypes.h"
+#include <vector>
+
 #include "base/compiler_specific.h"
-#include "base/memory/scoped_vector.h"
+#include "base/macros.h"
 
 namespace base {
 class FilePath;
 }
 
+class BrowserStateInfoCache;
+
 namespace ios {
 
-class BrowserStateInfoCache;
 class ChromeBrowserState;
 
 // Provides methods that allow for various ways of creating non-incognito
@@ -30,11 +32,13 @@ class ChromeBrowserStateManager {
 
   // Returns the ChromeBrowserState associated with |path|, creating one if
   // necessary.
-  virtual ChromeBrowserState* GetChromeBrowserState(
-      const base::FilePath& path) = 0;
+  virtual ChromeBrowserState* GetBrowserState(const base::FilePath& path) = 0;
 
   // Returns the BrowserStateInfoCache associated with this manager.
   virtual BrowserStateInfoCache* GetBrowserStateInfoCache() = 0;
+
+  // Returns the list of loaded ChromeBrowserStates.
+  virtual std::vector<ChromeBrowserState*> GetLoadedBrowserStates() = 0;
 
  protected:
   ChromeBrowserStateManager() {}

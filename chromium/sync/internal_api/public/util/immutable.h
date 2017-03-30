@@ -61,13 +61,13 @@
 // with forward-declared types.  See comments on traits below for
 // details.
 
-#ifndef SYNC_UTIL_IMMUTABLE_H_
-#define SYNC_UTIL_IMMUTABLE_H_
+#ifndef SYNC_INTERNAL_API_PUBLIC_UTIL_IMMUTABLE_H_
+#define SYNC_INTERNAL_API_PUBLIC_UTIL_IMMUTABLE_H_
 
 // For std::swap().
 #include <algorithm>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 
 namespace syncer {
@@ -97,10 +97,11 @@ class ImmutableCore
   }
 
  private:
+  friend class base::RefCountedThreadSafe<ImmutableCore<T, Traits>>;
+
   ~ImmutableCore() {
     Traits::DestroyWrapper(&wrapper_);
   }
-  friend class base::RefCountedThreadSafe<ImmutableCore<T, Traits> >;
 
   // This is semantically const, but we can't mark it a such as we
   // modify it in the constructor.
@@ -257,4 +258,4 @@ Immutable<T> MakeImmutable(T* t) {
 
 }  // namespace syncer
 
-#endif  // SYNC_UTIL_IMMUTABLE_H_
+#endif  // SYNC_INTERNAL_API_PUBLIC_UTIL_IMMUTABLE_H_

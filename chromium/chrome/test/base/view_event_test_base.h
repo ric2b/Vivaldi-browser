@@ -13,9 +13,11 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/views/test/test_views_delegate.h"
@@ -85,6 +87,11 @@ class ViewEventTestBase : public views::WidgetDelegate,
   // Destroys the window.
   void TearDown() override;
 
+  // Returns an empty Size. Subclasses that want a preferred size other than
+  // that of the View returned by CreateContentsView should override this
+  // appropriately.
+  virtual gfx::Size GetPreferredSize() const;
+
   // Overridden from views::WidgetDelegate:
   bool CanResize() const override;
   views::View* GetContentsView() override;
@@ -107,11 +114,6 @@ class ViewEventTestBase : public views::WidgetDelegate,
   // Invoke from test main. Shows the window, starts the message loop and
   // schedules a task that invokes DoTestOnMessageLoop.
   void StartMessageLoopAndRunTest();
-
-  // Returns an empty Size. Subclasses that want a preferred size other than
-  // that of the View returned by CreateContentsView should override this
-  // appropriately.
-  virtual gfx::Size GetPreferredSize() const;
 
   // Creates a task that calls the specified method back. The specified
   // method is called in such a way that if there are any test failures

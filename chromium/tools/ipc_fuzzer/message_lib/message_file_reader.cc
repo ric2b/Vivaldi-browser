@@ -3,10 +3,13 @@
 // found in the LICENSE file.
 
 #include <limits.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include "base/files/file_path.h"
 #include "base/files/memory_mapped_file.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_piece.h"
 #include "ipc/ipc_message.h"
 #include "tools/ipc_fuzzer/message_lib/message_cracker.h"
@@ -108,13 +111,15 @@ bool Reader::ReadMessages() {
   for (size_t i = 0; i < header_->message_count; ++i) {
     const char* begin = file_data_.begin();
     const char* end = file_data_.end();
-    const char* message_tail = IPC::Message::FindNext(begin, end);
-    if (!message_tail) {
+    IPC::Message::NextMessageInfo info;
+    IPC::Message::FindNext(begin, end, &info);
+    if (!info.message_found) {
       LOG(ERROR) << "Failed to parse message.";
       return false;
     }
 
-    size_t msglen = message_tail - begin;
+    CHECK_EQ(info.message_end, info.pickle_end);
+    size_t msglen = info.message_end - begin;
     if (msglen > INT_MAX) {
       LOG(ERROR) << "Message too large.";
       return false;
@@ -169,7 +174,7 @@ bool Reader::ReadNameTable() {
 bool Reader::RemoveUnknownMessages() {
   MessageVector::iterator it = messages_->begin();
   while (it != messages_->end()) {
-    uint32 type = (*it)->type();
+    uint32_t type = (*it)->type();
     if (!name_map_.TypeExists(type)) {
       LOG(ERROR) << "Missing name table entry for type " << type;
       return false;
@@ -192,9 +197,9 @@ bool Reader::RemoveUnknownMessages() {
 void Reader::FixMessageTypes() {
   for (MessageVector::iterator it = messages_->begin();
        it != messages_->end(); ++it) {
-    uint32 type = (*it)->type();
+    uint32_t type = (*it)->type();
     const std::string& name = name_map_.TypeToName(type);
-    uint32 correct_type = MessageNames::GetInstance()->NameToType(name);
+    uint32_t correct_type = MessageNames::GetInstance()->NameToType(name);
     if (type != correct_type)
       MessageCracker::SetMessageType(*it, correct_type);
   }

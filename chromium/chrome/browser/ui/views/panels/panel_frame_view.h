@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_PANELS_PANEL_FRAME_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_PANELS_PANEL_FRAME_VIEW_H_
 
+#include "base/macros.h"
 #include "chrome/browser/ui/panels/panel_constants.h"
 #include "chrome/browser/ui/views/tab_icon_view_model.h"
 #include "ui/views/controls/button/button.h"
@@ -20,7 +21,7 @@ class Label;
 
 class PanelFrameView : public views::NonClientFrameView,
                        public views::ButtonListener,
-                       public chrome::TabIconViewModel {
+                       public TabIconViewModel {
  public:
   enum PaintState {
     PAINT_AS_INACTIVE,
@@ -81,7 +82,7 @@ class PanelFrameView : public views::NonClientFrameView,
   // Overridden from views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
-  // Overridden from chrome::TabIconViewModel:
+  // Overridden from TabIconViewModel:
   bool ShouldTabIconViewAnimate() const override;
   gfx::ImageSkia GetFaviconForTabIconView() override;
 

@@ -4,6 +4,7 @@
 
 #include "base/files/file_path.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "extensions/common/feature_switch.h"
@@ -30,9 +31,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionOptionsApiTest,
   ASSERT_TRUE(RunExtensionSubtest("extension_options/embed_self", "test.html"));
 }
 
-// tomas@vivaldi.com - disabled test (VB-7468)
 IN_PROC_BROWSER_TEST_F(ExtensionOptionsApiTest,
-                       DISABLED_ShouldNotEmbedOtherExtensionsOptions) {
+                       ShouldNotEmbedOtherExtensionsOptions) {
   base::FilePath dir = test_data_dir_.AppendASCII("extension_options")
                            .AppendASCII("embed_other");
 
@@ -57,9 +57,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionOptionsApiTest,
   ASSERT_TRUE(catcher.GetNextResult());
 }
 
-// tomas@vivaldi.com - disabled test (VB-7468)
 IN_PROC_BROWSER_TEST_F(ExtensionOptionsApiTest,
-                       DISABLED_CannotEmbedUsingInvalidExtensionIds) {
+                       CannotEmbedUsingInvalidExtensionIds) {
   ASSERT_TRUE(InstallExtension(test_data_dir_.AppendASCII("extension_options")
                                    .AppendASCII("embed_invalid"),
                                1));

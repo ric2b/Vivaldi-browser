@@ -5,10 +5,13 @@
 #ifndef CHROME_BROWSER_UI_AUTOFILL_AUTOFILL_POPUP_CONTROLLER_IMPL_H_
 #define CHROME_BROWSER_UI_AUTOFILL_AUTOFILL_POPUP_CONTROLLER_IMPL_H_
 
+#include <stddef.h>
+
 #include "base/gtest_prod_util.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/autofill/autofill_popup_controller.h"
 #include "chrome/browser/ui/autofill/popup_controller_common.h"
 #include "ui/gfx/font_list.h"
@@ -57,8 +60,6 @@ class AutofillPopupControllerImpl : public AutofillPopupController {
   void set_hide_on_outside_click(bool hide_on_outside_click);
 
  protected:
-  FRIEND_TEST_ALL_PREFIXES(AutofillExternalDelegateBrowserTest,
-                           CloseWidgetAndNoLeaking);
   FRIEND_TEST_ALL_PREFIXES(AutofillPopupControllerUnitTest,
                            ProperlyResetController);
 
@@ -78,7 +79,6 @@ class AutofillPopupControllerImpl : public AutofillPopupController {
   int GetIconResourceID(const base::string16& resource_name) const override;
   bool IsWarning(size_t index) const override;
   gfx::Rect GetRowBounds(size_t index) override;
-  void SetPopupBounds(const gfx::Rect& bounds) override;
   const gfx::Rect& popup_bounds() const override;
   gfx::NativeView container_view() override;
   const gfx::RectF& element_bounds() const override;

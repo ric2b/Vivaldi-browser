@@ -11,11 +11,10 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
-import android.support.v7.app.ActionBarActivity;
 import android.text.TextUtils;
 import android.util.Base64;
-import android.util.Log;
 
+import org.chromium.base.Log;
 import org.chromium.base.SecureRandomInitializer;
 
 import java.io.IOException;
@@ -33,6 +32,8 @@ public class ThirdPartyTokenFetcher {
     public interface Callback {
         void onTokenFetched(String code, String accessToken);
     }
+
+    private static final String TAG = "Chromoting";
 
     /** The path of the Redirect URI. */
     private static final String REDIRECT_URI_PATH = "/oauthredirect/";
@@ -112,7 +113,6 @@ public class ThirdPartyTokenFetcher {
 
         Uri uri = buildRequestUri(tokenUrl, clientId, scope);
         Intent intent = new Intent(Intent.ACTION_VIEW, uri);
-        Log.i("ThirdPartyAuth", "fetchToken() url:" + uri);
         OAuthRedirectActivity.setEnabled(mContext, true);
 
         try {
@@ -161,7 +161,7 @@ public class ThirdPartyTokenFetcher {
         assert intent != null;
 
         if (!isValidIntent(intent)) {
-            Log.w("ThirdPartyAuth", "Ignoring unmatched intent.");
+            Log.w(TAG, "Ignoring unmatched intent.");
             return false;
         }
 
@@ -179,14 +179,13 @@ public class ThirdPartyTokenFetcher {
             return false;
         }
 
-        Log.i("ThirdPartyAuth", "handleTokenFetched().");
         mCallback.onTokenFetched(code, accessToken);
         OAuthRedirectActivity.setEnabled(mContext, false);
         return true;
     }
 
     private void failFetchToken(String errorMessage) {
-        Log.e("ThirdPartyAuth", errorMessage);
+        Log.e(TAG, "failFetchToken(): %s", errorMessage);
         mCallback.onTokenFetched("", "");
         OAuthRedirectActivity.setEnabled(mContext, false);
     }
@@ -216,7 +215,7 @@ public class ThirdPartyTokenFetcher {
      * together with its intent filter, by default. |OAuthRedirectActivity| is only enabled when
      * there is a pending token fetch request.
      */
-    public static class OAuthRedirectActivity extends ActionBarActivity {
+    public static class OAuthRedirectActivity extends Activity {
         @Override
         public void onStart() {
             super.onStart();

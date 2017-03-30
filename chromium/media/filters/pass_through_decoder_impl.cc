@@ -27,8 +27,9 @@ void BufferHolder(const scoped_refptr<DecoderBuffer>& buffer) {
 }
 
 const PlatformVideoConfig::Plane* GetPlanes(const VideoDecoderConfig& config) {
+  DCHECK(!config.extra_data().empty());
   return reinterpret_cast<const PlatformVideoConfig::Plane*>(
-      config.extra_data());
+      &config.extra_data().front());
 }
 
 scoped_refptr<VideoFrame> GetVideoFrameFromMemory(
@@ -36,8 +37,8 @@ scoped_refptr<VideoFrame> GetVideoFrameFromMemory(
     const VideoDecoderConfig& config) {
   const PlatformVideoConfig::Plane* planes = GetPlanes(config);
 
-  for (size_t i = 0; i < VideoFrame::NumPlanes(VideoFrame::YV12); ++i) {
-    if (planes[i].offset + planes[i].size > buffer->data_size()) {
+  for (size_t i = 0; i < VideoFrame::NumPlanes(PIXEL_FORMAT_YV12); ++i) {
+    if (planes[i].offset + planes[i].size > int(buffer->data_size())) {
       DLOG(ERROR) << "Buffer doesn't match video format";
       return nullptr;
     }
@@ -50,9 +51,9 @@ scoped_refptr<VideoFrame> GetVideoFrameFromMemory(
       config.format(), config.coded_size(), config.visible_rect(),
       config.natural_size(), planes[VideoFrame::kYPlane].stride,
       planes[VideoFrame::kUPlane].stride, planes[VideoFrame::kVPlane].stride,
-      const_cast<uint8*>(buffer->data() + planes[VideoFrame::kYPlane].offset),
-      const_cast<uint8*>(buffer->data() + planes[VideoFrame::kUPlane].offset),
-      const_cast<uint8*>(buffer->data() + planes[VideoFrame::kVPlane].offset),
+      const_cast<uint8_t*>(buffer->data() + planes[VideoFrame::kYPlane].offset),
+      const_cast<uint8_t*>(buffer->data() + planes[VideoFrame::kUPlane].offset),
+      const_cast<uint8_t*>(buffer->data() + planes[VideoFrame::kVPlane].offset),
       buffer->timestamp());
   frame->AddDestructionObserver(base::Bind(&BufferHolder, buffer));
   return frame;
@@ -63,7 +64,7 @@ scoped_refptr<VideoFrame> GetVideoFrameFromTexture(
     const VideoDecoderConfig& config,
     scoped_ptr<media::PassThroughDecoderTexture> texture) {
   DCHECK(texture);
-  return VideoFrame::WrapNativeTexture(VideoFrame::ARGB,
+  return VideoFrame::WrapNativeTexture(PIXEL_FORMAT_ARGB,
       *texture->mailbox_holder, texture->mailbox_holder_release_cb,
       config.coded_size(), config.visible_rect(), config.natural_size(),
       buffer->timestamp());
@@ -139,8 +140,8 @@ bool PassThroughDecoderImpl<DemuxerStream::AUDIO>::IsValidConfig(
 template <>
 bool PassThroughDecoderImpl<DemuxerStream::VIDEO>::IsValidConfig(
     const DecoderConfig& config) {
-  return config.codec() == kCodecH264 && config.extra_data() &&
-         config.extra_data_size() == sizeof(PlatformVideoConfig().planes);
+  return config.codec() == kCodecH264 &&
+         config.extra_data().size() == sizeof(PlatformVideoConfig().planes);
 }
 
 template <>

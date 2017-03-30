@@ -79,12 +79,8 @@ void IOSurfaceLayerImpl::AppendQuads(
 
   IOSurfaceDrawQuad* quad =
       render_pass->CreateAndAppendDrawQuad<IOSurfaceDrawQuad>();
-  quad->SetNew(shared_quad_state,
-               quad_rect,
-               opaque_rect,
-               visible_quad_rect,
-               io_surface_size_,
-               io_surface_resource_id_,
+  quad->SetNew(shared_quad_state, quad_rect, opaque_rect, visible_quad_rect,
+               io_surface_size_, io_surface_resource_id_,
                IOSurfaceDrawQuad::FLIPPED);
   ValidateQuadResources(quad);
 }

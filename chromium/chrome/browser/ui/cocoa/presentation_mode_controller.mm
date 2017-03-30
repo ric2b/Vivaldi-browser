@@ -434,7 +434,10 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
   if (trackingArea == trackingArea_) {
     // The tracking area shouldn't be active during animation.
     DCHECK(!currentAnimation_);
-    [self scheduleShowForMouse];
+
+    // Don't show anything if the style is set to OMNIBOX_TABS_NONE.
+    if (self.slidingStyle != fullscreen_mac::OMNIBOX_TABS_NONE)
+      [self scheduleShowForMouse];
   }
 }
 
@@ -455,7 +458,8 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
       return;
     }
 
-    [self scheduleHideForMouse];
+    if (self.slidingStyle != fullscreen_mac::OMNIBOX_TABS_NONE)
+      [self scheduleHideForMouse];
   }
 }
 
@@ -531,7 +535,7 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
 
 - (BOOL)isWindowOnPrimaryScreen {
   NSScreen* screen = [[browserController_ window] screen];
-  NSScreen* primaryScreen = [[NSScreen screens] objectAtIndex:0];
+  NSScreen* primaryScreen = [[NSScreen screens] firstObject];
   return (screen == primaryScreen);
 }
 

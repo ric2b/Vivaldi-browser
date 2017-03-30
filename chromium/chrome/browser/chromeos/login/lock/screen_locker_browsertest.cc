@@ -6,10 +6,12 @@
 
 #include "ash/wm/window_state.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/login/lock/screen_locker_tester.h"
+#include "chrome/browser/chromeos/login/ui/user_adding_screen.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -61,7 +63,7 @@ class Waiter : public content::NotificationObserver {
     DCHECK(type == chrome::NOTIFICATION_SCREEN_LOCK_STATE_CHANGED ||
            type == chrome::NOTIFICATION_FULLSCREEN_CHANGED);
     if (running_)
-      base::MessageLoop::current()->Quit();
+      base::MessageLoop::current()->QuitWhenIdle();
   }
 
   // Wait until the two conditions are met.
@@ -154,7 +156,7 @@ IN_PROC_BROWSER_TEST_F(ScreenLockerTest, TestBasic) {
   EXPECT_GT(lock_bounds.width(), 10);
   EXPECT_GT(lock_bounds.height(), 10);
 
-  UserContext user_context(chromeos::login::kStubUser);
+  UserContext user_context(login::StubAccountId());
   user_context.SetKey(Key("pass"));
   tester->InjectStubUserContext(user_context);
   EXPECT_TRUE(tester->IsLocked());
@@ -171,6 +173,14 @@ IN_PROC_BROWSER_TEST_F(ScreenLockerTest, TestBasic) {
       fake_session_manager_client_->notify_lock_screen_shown_call_count());
 
   EXPECT_TRUE(VerifyLockScreenDismissed());
+}
+
+// Makes sure Chrome doesn't crash if we lock the screen during an add-user
+// flow. Regression test for crbug.com/467111.
+IN_PROC_BROWSER_TEST_F(ScreenLockerTest, LockScreenWhileAddingUser) {
+  UserAddingScreen::Get()->Start();
+  content::RunAllPendingInMessageLoop();
+  ScreenLocker::HandleLockScreenRequest();
 }
 
 // Test how locking the screen affects an active fullscreen window.
@@ -203,7 +213,7 @@ IN_PROC_BROWSER_TEST_F(ScreenLockerTest, TestFullscreenExit) {
     EXPECT_FALSE(window_state->hide_shelf_when_fullscreen());
     EXPECT_TRUE(tester->IsLocked());
   }
-  UserContext user_context(chromeos::login::kStubUser);
+  UserContext user_context(login::StubAccountId());
   user_context.SetKey(Key("pass"));
   tester->InjectStubUserContext(user_context);
   tester->EnterPassword("pass");

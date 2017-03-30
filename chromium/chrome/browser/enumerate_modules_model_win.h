@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/singleton.h"
 #include "base/strings/string16.h"
@@ -310,7 +311,7 @@ class EnumerateModulesModel {
   GURL GetFirstNotableConflict();
 
  private:
-  friend struct DefaultSingletonTraits<EnumerateModulesModel>;
+  friend struct base::DefaultSingletonTraits<EnumerateModulesModel>;
   friend class ModuleEnumerator;
 
   EnumerateModulesModel();
@@ -333,7 +334,7 @@ class EnumerateModulesModel {
 
   // When this singleton object is constructed we go and fire off this timer to
   // start scanning for modules after a certain amount of time has passed.
-  base::OneShotTimer<EnumerateModulesModel> check_modules_timer_;
+  base::OneShotTimer check_modules_timer_;
 
   // While normally |false|, this mode can be set to indicate that the scanning
   // process should not rely on certain services normally available to Chrome,

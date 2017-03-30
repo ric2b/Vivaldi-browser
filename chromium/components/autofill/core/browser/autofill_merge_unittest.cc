@@ -2,17 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <map>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/autofill_type.h"
+#include "components/autofill/core/browser/country_names.h"
 #include "components/autofill/core/browser/data_driven_test.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
@@ -155,6 +158,7 @@ class AutofillMergeTest : public testing::Test,
 };
 
 AutofillMergeTest::AutofillMergeTest() : DataDrivenTest(GetTestDataDir()) {
+  CountryNames::SetLocaleString("en-US");
   for (size_t i = NO_SERVER_DATA; i < MAX_VALID_FIELD_TYPE; ++i) {
     ServerFieldType field_type = static_cast<ServerFieldType>(i);
     string_to_field_type_map_[AutofillType(field_type).ToString()] = field_type;
@@ -183,7 +187,6 @@ void AutofillMergeTest::MergeProfiles(const std::string& profiles,
   form.name = base::ASCIIToUTF16("MyTestForm");
   form.origin = GURL("https://www.example.com/origin.html");
   form.action = GURL("https://www.example.com/action.html");
-  form.user_submitted = true;
 
   // Parse the input line by line.
   std::vector<std::string> lines = base::SplitString(
@@ -225,8 +228,9 @@ void AutofillMergeTest::MergeProfiles(const std::string& profiles,
 
       // Import the profile.
       scoped_ptr<CreditCard> imported_credit_card;
-      personal_data_.ImportFormData(form_structure, &imported_credit_card);
-      EXPECT_EQ(static_cast<CreditCard*>(NULL), imported_credit_card.get());
+      personal_data_.ImportFormData(form_structure, false,
+                                    &imported_credit_card);
+      EXPECT_FALSE(imported_credit_card);
 
       // Clear the |form| to start a new profile.
       form.fields.clear();

@@ -5,20 +5,17 @@
 #ifndef CHROME_BROWSER_METRICS_CHROME_STABILITY_METRICS_PROVIDER_H_
 #define CHROME_BROWSER_METRICS_CHROME_STABILITY_METRICS_PROVIDER_H_
 
-#include "base/basictypes.h"
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/process/kill.h"
 #include "components/metrics/metrics_provider.h"
+#include "components/metrics/stability_metrics_helper.h"
 #include "content/public/browser/browser_child_process_observer.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 
-class PrefRegistrySimple;
-
-namespace content {
-class RenderProcessHost;
-class WebContents;
-}
+class PrefService;
 
 // ChromeStabilityMetricsProvider gathers and logs Chrome-specific stability-
 // related metrics.
@@ -27,7 +24,7 @@ class ChromeStabilityMetricsProvider
       public content::BrowserChildProcessObserver,
       public content::NotificationObserver {
  public:
-  ChromeStabilityMetricsProvider();
+  explicit ChromeStabilityMetricsProvider(PrefService* local_state);
   ~ChromeStabilityMetricsProvider() override;
 
   // metrics::MetricsDataProvider:
@@ -37,10 +34,12 @@ class ChromeStabilityMetricsProvider
       metrics::SystemProfileProto* system_profile_proto) override;
   void ClearSavedStabilityMetrics() override;
 
-  // Registers local state prefs used by this class.
-  static void RegisterPrefs(PrefRegistrySimple* registry);
-
  private:
+  FRIEND_TEST_ALL_PREFIXES(ChromeStabilityMetricsProviderTest,
+                           BrowserChildProcessObserver);
+  FRIEND_TEST_ALL_PREFIXES(ChromeStabilityMetricsProviderTest,
+                           NotificationObserver);
+
   // content::NotificationObserver:
   void Observe(int type,
                const content::NotificationSource& source,
@@ -51,17 +50,7 @@ class ChromeStabilityMetricsProvider
       const content::ChildProcessData& data,
       int exit_code) override;
 
-  // Logs the initiation of a page load and uses |web_contents| to do
-  // additional logging of the type of page loaded.
-  void LogLoadStarted(content::WebContents* web_contents);
-
-  // Records a renderer process crash.
-  void LogRendererCrash(content::RenderProcessHost* host,
-                        base::TerminationStatus status,
-                        int exit_code);
-
-  // Records a renderer process hang.
-  void LogRendererHang();
+  metrics::StabilityMetricsHelper helper_;
 
   // Registrar for receiving stability-related notifications.
   content::NotificationRegistrar registrar_;

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ssl/chrome_ssl_host_state_delegate_factory.h"
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
@@ -41,7 +42,7 @@ ChromeSSLHostStateDelegate* ChromeSSLHostStateDelegateFactory::GetForProfile(
 // static
 ChromeSSLHostStateDelegateFactory*
 ChromeSSLHostStateDelegateFactory::GetInstance() {
-  return Singleton<ChromeSSLHostStateDelegateFactory>::get();
+  return base::Singleton<ChromeSSLHostStateDelegateFactory>::get();
 }
 
 ChromeSSLHostStateDelegateFactory::ChromeSSLHostStateDelegateFactory()

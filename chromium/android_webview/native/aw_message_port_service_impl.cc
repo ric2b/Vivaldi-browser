@@ -25,7 +25,7 @@ using base::android::ToJavaIntArray;
 using content::BrowserThread;
 using content::MessagePortProvider;
 
-//static
+// static
 AwMessagePortServiceImpl* AwMessagePortServiceImpl::GetInstance() {
   return static_cast<AwMessagePortServiceImpl*>(
       AwBrowserContext::GetDefault()->GetMessagePortService());
@@ -122,8 +122,12 @@ void AwMessagePortServiceImpl::OnMessagePortMessageFilterClosing(
   }
 }
 
-void AwMessagePortServiceImpl::PostAppToWebMessage(JNIEnv* env, jobject obj,
-    int sender_id, jstring message, jintArray sent_ports) {
+void AwMessagePortServiceImpl::PostAppToWebMessage(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    int sender_id,
+    const JavaParamRef<jstring>& message,
+    const JavaParamRef<jintArray>& sent_ports) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   base::string16* j_message = new base::string16;
   ConvertJavaStringToUTF16(env, message, j_message);
@@ -145,8 +149,9 @@ void AwMessagePortServiceImpl::PostAppToWebMessage(JNIEnv* env, jobject obj,
 // it is possible that messages are still queued in the renderer process
 // waiting for a conversion. Instead, it sends a special message with
 // a flag which indicates that this message port should be closed.
-void AwMessagePortServiceImpl::ClosePort(JNIEnv* env, jobject obj,
-    int message_port_id) {
+void AwMessagePortServiceImpl::ClosePort(JNIEnv* env,
+                                         const JavaParamRef<jobject>& obj,
+                                         int message_port_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   BrowserThread::PostTask(
       BrowserThread::IO,
@@ -156,8 +161,9 @@ void AwMessagePortServiceImpl::ClosePort(JNIEnv* env, jobject obj,
                  message_port_id));
 }
 
-void AwMessagePortServiceImpl::ReleaseMessages(JNIEnv* env, jobject obj,
-    int message_port_id) {
+void AwMessagePortServiceImpl::ReleaseMessages(JNIEnv* env,
+                                               const JavaParamRef<jobject>& obj,
+                                               int message_port_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   BrowserThread::PostTask(
       BrowserThread::IO,
@@ -231,7 +237,7 @@ bool RegisterAwMessagePortService(JNIEnv* env) {
 }
 
 // static
-jlong InitAwMessagePortService(JNIEnv* env, jobject obj) {
+jlong InitAwMessagePortService(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   AwMessagePortServiceImpl* service = AwMessagePortServiceImpl::GetInstance();
   service->Init(env, obj);
   return reinterpret_cast<intptr_t>(service);

@@ -16,8 +16,8 @@
 #include <set>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/singleton.h"
 #include "base/synchronization/waitable_event_watcher.h"
@@ -157,7 +157,7 @@ class CONTENT_EXPORT PluginServiceImpl
   void RegisterPluginCrash(const base::FilePath& plugin_path);
 
  private:
-  friend struct DefaultSingletonTraits<PluginServiceImpl>;
+  friend struct base::DefaultSingletonTraits<PluginServiceImpl>;
 
   // Creates the PluginServiceImpl object, but doesn't actually build the plugin
   // list yet.  It's generated lazily.

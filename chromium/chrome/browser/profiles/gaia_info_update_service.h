@@ -7,6 +7,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/profiles/profile_downloader.h"
@@ -62,7 +63,7 @@ class GAIAInfoUpdateService : public KeyedService,
   Profile* profile_;
   scoped_ptr<ProfileDownloader> profile_image_downloader_;
   base::Time last_updated_;
-  base::OneShotTimer<GAIAInfoUpdateService> timer_;
+  base::OneShotTimer timer_;
 
   DISALLOW_COPY_AND_ASSIGN(GAIAInfoUpdateService);
 };

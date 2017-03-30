@@ -420,7 +420,7 @@ class MenuDelegate : public ui::SimpleMenuModel::Delegate {
 
 - (void)updateTitleColor {
   NSColor* titleColor = nil;
-  ui::ThemeProvider* theme = [[[self view] window] themeProvider];
+  const ui::ThemeProvider* theme = [[[self view] window] themeProvider];
   if (theme && ![self selected])
     titleColor = theme->GetNSColor(ThemeProperties::COLOR_BACKGROUND_TAB_TEXT);
   // Default to the selected text color unless told otherwise.
@@ -440,12 +440,6 @@ class MenuDelegate : public ui::SimpleMenuModel::Delegate {
         YES : NO;
   }
   return NO;
-}
-
-// The following methods are invoked from the TabView and are forwarded to the
-// TabStripDragController.
-- (BOOL)tabCanBeDragged:(TabController*)controller {
-  return [[target_ dragController] tabCanBeDragged:controller];
 }
 
 - (void)maybeStartDrag:(NSEvent*)event forTab:(TabController*)tab {

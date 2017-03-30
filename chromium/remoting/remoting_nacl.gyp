@@ -106,7 +106,7 @@
         '../third_party/expat/expat_nacl.gyp:expat_nacl',
         '../third_party/khronos/khronos.gyp:khronos_headers',
         '../third_party/libjingle/libjingle_nacl.gyp:libjingle_nacl',
-        '../third_party/libvpx/libvpx_nacl.gyp:libvpx_nacl',
+        '../third_party/libvpx_new/libvpx_nacl.gyp:libvpx_nacl',
         '../third_party/libyuv/libyuv_nacl.gyp:libyuv_nacl',
         '../third_party/opus/opus_nacl.gyp:opus_nacl',
         'remoting_proto_nacl',
@@ -119,19 +119,20 @@
         '<@(remoting_client_plugin_sources)',
         '<@(remoting_client_sources)',
         '<@(remoting_protocol_sources)',
+        '<@(remoting_signaling_sources)',
       ],
       'sources!': [
         'base/url_request_context_getter.cc',
-        'protocol/chromium_socket_factory.cc',
       ],
 
-      # Include normalizing_input_filter_mac.cc excluded by the filename
+      # Include normalizing_input_filter_*.cc excluded by the filename
       # exclusion rules. Must be in target_conditions to make sure it's
       # evaluated after the filename rules.
       'target_conditions': [
         ['1==1', {
           'sources/': [
-            [ 'include', 'client/plugin/normalizing_input_filter_mac.cc' ],
+            [ 'include', 'client/normalizing_input_filter_mac.cc' ],
+            [ 'include', 'client/normalizing_input_filter_win.cc' ],
           ],
         }],
       ],
@@ -156,7 +157,6 @@
           '>(tc_lib_dir_pnacl_newlib)/libicuuc_nacl.a',
           '>(tc_lib_dir_pnacl_newlib)/libjingle_nacl.a',
           '>(tc_lib_dir_pnacl_newlib)/libjingle_p2p_constants_nacl.a',
-          '>(tc_lib_dir_pnacl_newlib)/libmedia_yuv_nacl.a',
           '>(tc_lib_dir_pnacl_newlib)/libmodp_b64_nacl.a',
           '>(tc_lib_dir_pnacl_newlib)/libboringssl_nacl.a',
           '>(tc_lib_dir_pnacl_newlib)/libopus_nacl.a',
@@ -178,7 +178,6 @@
         '../base/base_nacl.gyp:base_nacl',
         '../crypto/crypto_nacl.gyp:crypto_nacl',
         '../jingle/jingle_nacl.gyp:jingle_glue_nacl',
-        '../media/media_nacl.gyp:media_yuv_nacl',
         '../native_client_sdk/native_client_sdk_untrusted.gyp:nacl_io_untrusted',
         '../net/net_nacl.gyp:net_nacl',
         '../ppapi/native_client/native_client.gyp:ppapi_lib',
@@ -205,7 +204,6 @@
 
         # Chromium libraries.
         '-ljingle_glue_nacl',
-        '-lmedia_yuv_nacl',
         '-lnet_nacl',
         '-lcrypto_nacl',
         '-lbase_i18n_nacl',

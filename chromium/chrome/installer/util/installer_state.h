@@ -5,16 +5,20 @@
 #ifndef CHROME_INSTALLER_UTIL_INSTALLER_STATE_H_
 #define CHROME_INSTALLER_UTIL_INSTALLER_STATE_H_
 
+#include <stdint.h>
+
 #include <set>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
+#include "base/strings/string16.h"
 #include "base/version.h"
+#include "build/build_config.h"
 #include "chrome/installer/util/browser_distribution.h"
 #include "chrome/installer/util/product.h"
 #include "chrome/installer/util/util_constants.h"
@@ -29,7 +33,6 @@ class CommandLine;
 
 namespace installer {
 
-class ChannelInfo;
 class InstallationState;
 class MasterPreferences;
 
@@ -108,11 +111,9 @@ class InstallerState {
   Operation operation() const { return operation_; }
 
   // A convenience method returning level() == SYSTEM_LEVEL.
-  // TODO(grt): Eradicate the bool in favor of the enum.
   bool system_install() const;
 
   // A convenience method returning package_type() == MULTI_PACKAGE.
-  // TODO(grt): Eradicate the bool in favor of the enum.
   bool is_multi_install() const;
 
   // The full path to the place where the operand resides.
@@ -143,7 +144,7 @@ class InstallerState {
 #endif
 
   // The ClientState key by which we interact with Google Update.
-  const std::wstring& state_key() const { return state_key_; }
+  const base::string16& state_key() const { return state_key_; }
 
   // Convenience method to return the type of the BrowserDistribution associated
   // with the ClientState key we will be interacting with.
@@ -241,7 +242,7 @@ class InstallerState {
   // Returns true if any file corresponding to a bit in |file_bits| (from the
   // enum above) for the currently installed version exists and is in use.
   bool AnyExistsAndIsInUse(const InstallationState& machine_state,
-                           uint32 file_bits) const;
+                           uint32_t file_bits) const;
   base::FilePath GetDefaultProductInstallPath(BrowserDistribution* dist) const;
   bool CanAddProduct(const Product& product,
                      const base::FilePath* product_dir) const;
@@ -268,7 +269,7 @@ class InstallerState {
 
   Operation operation_;
   base::FilePath target_path_;
-  std::wstring state_key_;
+  base::string16 state_key_;
   BrowserDistribution::Type state_type_;
   ScopedVector<Product> products_;
   BrowserDistribution* multi_package_distribution_;

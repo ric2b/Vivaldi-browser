@@ -6,9 +6,10 @@
 #define ASH_DISPLAY_MOUSE_CURSOR_EVENT_FILTER_H
 
 #include "ash/ash_export.h"
-#include "ash/display/display_controller.h"
+#include "ash/display/window_tree_host_manager.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "ui/events/event_handler.h"
 #include "ui/gfx/geometry/rect.h"
@@ -23,8 +24,9 @@ class DisplayEdgeController;
 
 // An event filter that controls mouse location in extended desktop
 // environment.
-class ASH_EXPORT MouseCursorEventFilter : public ui::EventHandler,
-                                          public DisplayController::Observer {
+class ASH_EXPORT MouseCursorEventFilter
+    : public ui::EventHandler,
+      public WindowTreeHostManager::Observer {
  public:
   MouseCursorEventFilter();
   ~MouseCursorEventFilter() override;
@@ -36,7 +38,7 @@ class ASH_EXPORT MouseCursorEventFilter : public ui::EventHandler,
   void ShowSharedEdgeIndicator(aura::Window* from);
   void HideSharedEdgeIndicator();
 
-  // DisplayController::Observer:
+  // WindowTreeHostManager::Observer:
   void OnDisplaysInitialized() override;
   void OnDisplayConfigurationChanged() override;
 

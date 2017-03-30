@@ -8,15 +8,14 @@
 
 #include <vector>
 
-#include "base/allocator/allocator_extension.h"
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/sparse_histogram.h"
-#include "base/process/process_metrics.h"
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
@@ -27,19 +26,20 @@
 #include "base/sys_info.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/platform_thread.h"
+#include "base/threading/thread.h"
 #include "base/time/time.h"
 #include "base/trace_event/memory_allocator_dump_guid.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event.h"
 #include "blink/public/resources/grit/blink_image_resources.h"
 #include "blink/public/resources/grit/blink_resources.h"
+#include "build/build_config.h"
 #include "components/mime_util/mime_util.h"
+#include "components/scheduler/child/web_task_runner_impl.h"
 #include "components/scheduler/child/webthread_impl_for_worker_scheduler.h"
 #include "content/app/resources/grit/content_resources.h"
 #include "content/app/strings/grit/content_strings.h"
 #include "content/child/background_sync/background_sync_provider.h"
-#include "content/child/background_sync/background_sync_provider_thread_proxy.h"
-#include "content/child/bluetooth/web_bluetooth_impl.h"
 #include "content/child/child_thread_impl.h"
 #include "content/child/content_child_helpers.h"
 #include "content/child/geofencing/web_geofencing_provider_impl.h"
@@ -57,12 +57,12 @@
 #include "content/child/web_url_loader_impl.h"
 #include "content/child/web_url_request_util.h"
 #include "content/child/websocket_bridge.h"
-#include "content/child/worker_task_runner.h"
+#include "content/child/worker_thread_registry.h"
 #include "content/public/common/content_client.h"
 #include "net/base/data_url.h"
 #include "net/base/ip_address_number.h"
 #include "net/base/net_errors.h"
-#include "net/base/net_util.h"
+#include "net/base/port_util.h"
 #include "third_party/WebKit/public/platform/WebConvertableToTraceFormat.h"
 #include "third_party/WebKit/public/platform/WebData.h"
 #include "third_party/WebKit/public/platform/WebFloatPoint.h"
@@ -83,6 +83,7 @@ using blink::WebThemeEngine;
 using blink::WebURL;
 using blink::WebURLError;
 using blink::WebURLLoader;
+using scheduler::WebThreadImplForWorkerScheduler;
 
 namespace content {
 
@@ -95,11 +96,11 @@ class WebWaitableEventImpl : public blink::WebWaitableEvent {
     bool initially_signaled = state == InitialState::Signaled;
     impl_.reset(new base::WaitableEvent(manual_reset, initially_signaled));
   }
-  virtual ~WebWaitableEventImpl() {}
+  ~WebWaitableEventImpl() override {}
 
-  virtual void reset() { impl_->Reset(); }
-  virtual void wait() { impl_->Wait(); }
-  virtual void signal() { impl_->Signal(); }
+  void reset() override { impl_->Reset(); }
+  void wait() override { impl_->Wait(); }
+  void signal() override { impl_->Signal(); }
 
   base::WaitableEvent* impl() {
     return impl_.get();
@@ -115,7 +116,7 @@ class MemoryUsageCache {
  public:
   // Retrieves the Singleton.
   static MemoryUsageCache* GetInstance() {
-    return Singleton<MemoryUsageCache>::get();
+    return base::Singleton<MemoryUsageCache>::get();
   }
 
   MemoryUsageCache() : memory_value_(0) { Init(); }
@@ -435,6 +436,22 @@ static int ToMessageID(WebLocalizedString::Name name) {
   return -1;
 }
 
+class TraceLogObserverAdapter
+    : public base::trace_event::TraceLog::EnabledStateObserver {
+ public:
+  TraceLogObserverAdapter(
+      blink::Platform::TraceLogEnabledStateObserver* observer)
+      : observer_(observer) {}
+
+  void OnTraceLogEnabled() override { observer_->onTraceLogEnabled(); }
+
+  void OnTraceLogDisabled() override { observer_->onTraceLogDisabled(); }
+
+ private:
+  blink::Platform::TraceLogEnabledStateObserver* observer_;
+  DISALLOW_COPY_AND_ASSIGN(TraceLogObserverAdapter);
+};
+
 // TODO(skyostil): Ensure that we always have an active task runner when
 // constructing the platform.
 BlinkPlatformImpl::BlinkPlatformImpl()
@@ -445,7 +462,8 @@ BlinkPlatformImpl::BlinkPlatformImpl()
 
 BlinkPlatformImpl::BlinkPlatformImpl(
     scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner)
-    : main_thread_task_runner_(main_thread_task_runner) {
+    : main_thread_task_runner_(main_thread_task_runner),
+      compositor_thread_(nullptr) {
   InternalInit();
 }
 
@@ -454,22 +472,32 @@ void BlinkPlatformImpl::InternalInit() {
   if (ChildThreadImpl::current()) {
     geofencing_provider_.reset(new WebGeofencingProviderImpl(
         ChildThreadImpl::current()->thread_safe_sender()));
-    bluetooth_.reset(
-        new WebBluetoothImpl(ChildThreadImpl::current()->thread_safe_sender()));
     thread_safe_sender_ = ChildThreadImpl::current()->thread_safe_sender();
     notification_dispatcher_ =
         ChildThreadImpl::current()->notification_dispatcher();
     push_dispatcher_ = ChildThreadImpl::current()->push_dispatcher();
     permission_client_.reset(new PermissionDispatcher(
         ChildThreadImpl::current()->service_registry()));
-    sync_provider_.reset(new BackgroundSyncProvider(
-        ChildThreadImpl::current()->service_registry()));
+    main_thread_sync_provider_.reset(
+        new BackgroundSyncProvider(main_thread_task_runner_.get()));
   }
 }
 
-void BlinkPlatformImpl::UpdateWebThreadTLS(blink::WebThread* thread) {
+void BlinkPlatformImpl::WaitUntilWebThreadTLSUpdate(
+    scheduler::WebThreadBase* thread) {
+  base::WaitableEvent event(false, false);
+  thread->TaskRunner()->PostTask(
+      FROM_HERE,
+      base::Bind(&BlinkPlatformImpl::UpdateWebThreadTLS, base::Unretained(this),
+                 base::Unretained(thread), base::Unretained(&event)));
+  event.Wait();
+}
+
+void BlinkPlatformImpl::UpdateWebThreadTLS(blink::WebThread* thread,
+                                           base::WaitableEvent* event) {
   DCHECK(!current_thread_slot_.Get());
   current_thread_slot_.Set(thread);
+  event->Signal();
 }
 
 BlinkPlatformImpl::~BlinkPlatformImpl() {
@@ -481,7 +509,8 @@ WebURLLoader* BlinkPlatformImpl::createURLLoader() {
   // data URLs to bypass the ResourceDispatcher.
   return new WebURLLoaderImpl(
       child_thread ? child_thread->resource_dispatcher() : NULL,
-      MainTaskRunnerForCurrentThread());
+      make_scoped_ptr(new scheduler::WebTaskRunnerImpl(
+            base::ThreadTaskRunnerHandle::Get())));
 }
 
 blink::WebSocketHandle* BlinkPlatformImpl::createWebSocketHandle() {
@@ -489,7 +518,12 @@ blink::WebSocketHandle* BlinkPlatformImpl::createWebSocketHandle() {
 }
 
 WebString BlinkPlatformImpl::userAgent() {
-  return WebString::fromUTF8(GetContentClient()->GetUserAgent());
+  CR_DEFINE_STATIC_LOCAL(
+      blink::WebString, user_agent,
+      (blink::WebString::fromUTF8(GetContentClient()->GetUserAgent())));
+  DCHECK(user_agent ==
+         blink::WebString::fromUTF8(GetContentClient()->GetUserAgent()));
+  return user_agent;
 }
 
 WebData BlinkPlatformImpl::parseDataURL(const WebURL& url,
@@ -528,12 +562,18 @@ bool BlinkPlatformImpl::portAllowed(const blink::WebURL& url) const {
 }
 
 blink::WebThread* BlinkPlatformImpl::createThread(const char* name) {
-  scheduler::WebThreadImplForWorkerScheduler* thread =
-      new scheduler::WebThreadImplForWorkerScheduler(name);
-  thread->TaskRunner()->PostTask(
-      FROM_HERE, base::Bind(&BlinkPlatformImpl::UpdateWebThreadTLS,
-                            base::Unretained(this), thread));
-  return thread;
+  scoped_ptr<WebThreadImplForWorkerScheduler> thread(
+      new WebThreadImplForWorkerScheduler(name));
+  thread->Init();
+  WaitUntilWebThreadTLSUpdate(thread.get());
+  return thread.release();
+}
+
+void BlinkPlatformImpl::SetCompositorThread(
+    scheduler::WebThreadBase* compositor_thread) {
+  compositor_thread_ = compositor_thread;
+  if (compositor_thread_)
+    WaitUntilWebThreadTLSUpdate(compositor_thread_);
 }
 
 blink::WebThread* BlinkPlatformImpl::currentThread() {
@@ -555,8 +595,7 @@ blink::WebWaitableEvent* BlinkPlatformImpl::waitMultipleEvents(
   std::vector<base::WaitableEvent*> events;
   for (size_t i = 0; i < web_events.size(); ++i)
     events.push_back(static_cast<WebWaitableEventImpl*>(web_events[i])->impl());
-  size_t idx = base::WaitableEvent::WaitMany(
-      vector_as_array(&events), events.size());
+  size_t idx = base::WaitableEvent::WaitMany(events.data(), events.size());
   DCHECK_LT(idx, web_events.size());
   return web_events[idx];
 }
@@ -628,37 +667,14 @@ blink::Platform::TraceEventHandle BlinkPlatformImpl::addTraceEvent(
     const unsigned char* category_group_enabled,
     const char* name,
     unsigned long long id,
-    double timestamp,
-    int num_args,
-    const char** arg_names,
-    const unsigned char* arg_types,
-    const unsigned long long* arg_values,
-    unsigned char flags) {
-  base::TraceTicks timestamp_tt =
-      base::TraceTicks() + base::TimeDelta::FromSecondsD(timestamp);
-  base::trace_event::TraceEventHandle handle =
-      TRACE_EVENT_API_ADD_TRACE_EVENT_WITH_THREAD_ID_AND_TIMESTAMP(
-          phase, category_group_enabled, name, id,
-          base::PlatformThread::CurrentId(),
-          timestamp_tt,
-          num_args, arg_names, arg_types, arg_values, NULL, flags);
-  blink::Platform::TraceEventHandle result;
-  memcpy(&result, &handle, sizeof(result));
-  return result;
-}
-
-blink::Platform::TraceEventHandle BlinkPlatformImpl::addTraceEvent(
-    char phase,
-    const unsigned char* category_group_enabled,
-    const char* name,
-    unsigned long long id,
+    unsigned long long bind_id,
     double timestamp,
     int num_args,
     const char** arg_names,
     const unsigned char* arg_types,
     const unsigned long long* arg_values,
     blink::WebConvertableToTraceFormat* convertable_values,
-    unsigned char flags) {
+    unsigned int flags) {
   scoped_refptr<base::trace_event::ConvertableToTraceFormat>
       convertable_wrappers[2];
   if (convertable_values) {
@@ -671,21 +687,13 @@ blink::Platform::TraceEventHandle BlinkPlatformImpl::addTraceEvent(
       }
     }
   }
-  base::TraceTicks timestamp_tt =
-      base::TraceTicks() + base::TimeDelta::FromSecondsD(timestamp);
+  base::TimeTicks timestamp_tt =
+      base::TimeTicks() + base::TimeDelta::FromSecondsD(timestamp);
   base::trace_event::TraceEventHandle handle =
-      TRACE_EVENT_API_ADD_TRACE_EVENT_WITH_THREAD_ID_AND_TIMESTAMP(phase,
-                                      category_group_enabled,
-                                      name,
-                                      id,
-                                      base::PlatformThread::CurrentId(),
-                                      timestamp_tt,
-                                      num_args,
-                                      arg_names,
-                                      arg_types,
-                                      arg_values,
-                                      convertable_wrappers,
-                                      flags);
+      TRACE_EVENT_API_ADD_TRACE_EVENT_WITH_THREAD_ID_AND_TIMESTAMP(
+          phase, category_group_enabled, name, id, bind_id,
+          base::PlatformThread::CurrentId(), timestamp_tt, num_args, arg_names,
+          arg_types, arg_values, convertable_wrappers, flags);
   blink::Platform::TraceEventHandle result;
   memcpy(&result, &handle, sizeof(result));
   return result;
@@ -702,7 +710,7 @@ void BlinkPlatformImpl::updateTraceEventDuration(
 }
 
 void BlinkPlatformImpl::registerMemoryDumpProvider(
-    blink::WebMemoryDumpProvider* wmdp) {
+    blink::WebMemoryDumpProvider* wmdp, const char* name) {
   WebMemoryDumpProviderAdapter* wmdp_adapter =
       new WebMemoryDumpProviderAdapter(wmdp);
   bool did_insert =
@@ -711,7 +719,7 @@ void BlinkPlatformImpl::registerMemoryDumpProvider(
     return;
   wmdp_adapter->set_is_registered(true);
   base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
-      wmdp_adapter, base::ThreadTaskRunnerHandle::Get());
+      wmdp_adapter, name, base::ThreadTaskRunnerHandle::Get());
 }
 
 void BlinkPlatformImpl::unregisterMemoryDumpProvider(
@@ -733,6 +741,26 @@ blink::Platform::WebMemoryAllocatorDumpGuid
 BlinkPlatformImpl::createWebMemoryAllocatorDumpGuid(
     const blink::WebString& guidStr) {
   return base::trace_event::MemoryAllocatorDumpGuid(guidStr.utf8()).ToUint64();
+}
+
+void BlinkPlatformImpl::addTraceLogEnabledStateObserver(
+    TraceLogEnabledStateObserver* observer) {
+  TraceLogObserverAdapter* adapter = new TraceLogObserverAdapter(observer);
+  bool did_insert =
+      trace_log_observers_.add(observer, make_scoped_ptr(adapter)).second;
+  DCHECK(did_insert);
+  base::trace_event::TraceLog::GetInstance()->AddEnabledStateObserver(adapter);
+}
+
+void BlinkPlatformImpl::removeTraceLogEnabledStateObserver(
+    TraceLogEnabledStateObserver* observer) {
+  scoped_ptr<TraceLogObserverAdapter> adapter =
+      trace_log_observers_.take_and_erase(observer);
+  DCHECK(adapter);
+  DCHECK(base::trace_event::TraceLog::GetInstance()->HasEnabledStateObserver(
+      adapter.get()));
+  base::trace_event::TraceLog::GetInstance()->RemoveEnabledStateObserver(
+      adapter.get());
 }
 
 namespace {
@@ -807,21 +835,9 @@ const DataResource kDataResources[] = {
     {"mediaplayerPauseNew",
      IDR_MEDIAPLAYER_PAUSE_BUTTON_NEW,
      ui::SCALE_FACTOR_100P},
-    {"mediaplayerPauseHover",
-     IDR_MEDIAPLAYER_PAUSE_BUTTON_HOVER,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerPauseDown",
-     IDR_MEDIAPLAYER_PAUSE_BUTTON_DOWN,
-     ui::SCALE_FACTOR_100P},
     {"mediaplayerPlay", IDR_MEDIAPLAYER_PLAY_BUTTON, ui::SCALE_FACTOR_100P},
     {"mediaplayerPlayNew",
      IDR_MEDIAPLAYER_PLAY_BUTTON_NEW,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerPlayHover",
-     IDR_MEDIAPLAYER_PLAY_BUTTON_HOVER,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerPlayDown",
-     IDR_MEDIAPLAYER_PLAY_BUTTON_DOWN,
      ui::SCALE_FACTOR_100P},
     {"mediaplayerPlayDisabled",
      IDR_MEDIAPLAYER_PLAY_BUTTON_DISABLED,
@@ -832,41 +848,17 @@ const DataResource kDataResources[] = {
     {"mediaplayerSoundLevel3New",
      IDR_MEDIAPLAYER_SOUND_LEVEL3_BUTTON_NEW,
      ui::SCALE_FACTOR_100P},
-    {"mediaplayerSoundLevel3Hover",
-     IDR_MEDIAPLAYER_SOUND_LEVEL3_BUTTON_HOVER,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerSoundLevel3Down",
-     IDR_MEDIAPLAYER_SOUND_LEVEL3_BUTTON_DOWN,
-     ui::SCALE_FACTOR_100P},
     {"mediaplayerSoundLevel2",
      IDR_MEDIAPLAYER_SOUND_LEVEL2_BUTTON,
      ui::SCALE_FACTOR_100P},
-    {"mediaplayerSoundLevel2Hover",
-     IDR_MEDIAPLAYER_SOUND_LEVEL2_BUTTON_HOVER,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerSoundLevel2Down",
-     IDR_MEDIAPLAYER_SOUND_LEVEL2_BUTTON_DOWN,
-     ui::SCALE_FACTOR_100P},
     {"mediaplayerSoundLevel1",
      IDR_MEDIAPLAYER_SOUND_LEVEL1_BUTTON,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerSoundLevel1Hover",
-     IDR_MEDIAPLAYER_SOUND_LEVEL1_BUTTON_HOVER,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerSoundLevel1Down",
-     IDR_MEDIAPLAYER_SOUND_LEVEL1_BUTTON_DOWN,
      ui::SCALE_FACTOR_100P},
     {"mediaplayerSoundLevel0",
      IDR_MEDIAPLAYER_SOUND_LEVEL0_BUTTON,
      ui::SCALE_FACTOR_100P},
     {"mediaplayerSoundLevel0New",
      IDR_MEDIAPLAYER_SOUND_LEVEL0_BUTTON_NEW,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerSoundLevel0Hover",
-     IDR_MEDIAPLAYER_SOUND_LEVEL0_BUTTON_HOVER,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerSoundLevel0Down",
-     IDR_MEDIAPLAYER_SOUND_LEVEL0_BUTTON_DOWN,
      ui::SCALE_FACTOR_100P},
     {"mediaplayerSoundDisabled",
      IDR_MEDIAPLAYER_SOUND_DISABLED,
@@ -877,23 +869,11 @@ const DataResource kDataResources[] = {
     {"mediaplayerSliderThumbNew",
      IDR_MEDIAPLAYER_SLIDER_THUMB_NEW,
      ui::SCALE_FACTOR_100P},
-    {"mediaplayerSliderThumbHover",
-     IDR_MEDIAPLAYER_SLIDER_THUMB_HOVER,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerSliderThumbDown",
-     IDR_MEDIAPLAYER_SLIDER_THUMB_DOWN,
-     ui::SCALE_FACTOR_100P},
     {"mediaplayerVolumeSliderThumb",
      IDR_MEDIAPLAYER_VOLUME_SLIDER_THUMB,
      ui::SCALE_FACTOR_100P},
     {"mediaplayerVolumeSliderThumbNew",
      IDR_MEDIAPLAYER_VOLUME_SLIDER_THUMB_NEW,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerVolumeSliderThumbHover",
-     IDR_MEDIAPLAYER_VOLUME_SLIDER_THUMB_HOVER,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerVolumeSliderThumbDown",
-     IDR_MEDIAPLAYER_VOLUME_SLIDER_THUMB_DOWN,
      ui::SCALE_FACTOR_100P},
     {"mediaplayerVolumeSliderThumbDisabled",
      IDR_MEDIAPLAYER_VOLUME_SLIDER_THUMB_DISABLED,
@@ -903,12 +883,6 @@ const DataResource kDataResources[] = {
      ui::SCALE_FACTOR_100P},
     {"mediaplayerClosedCaptionNew",
      IDR_MEDIAPLAYER_CLOSEDCAPTION_BUTTON_NEW,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerClosedCaptionHover",
-     IDR_MEDIAPLAYER_CLOSEDCAPTION_BUTTON_HOVER,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerClosedCaptionDown",
-     IDR_MEDIAPLAYER_CLOSEDCAPTION_BUTTON_DOWN,
      ui::SCALE_FACTOR_100P},
     {"mediaplayerClosedCaptionDisabled",
      IDR_MEDIAPLAYER_CLOSEDCAPTION_BUTTON_DISABLED,
@@ -924,12 +898,6 @@ const DataResource kDataResources[] = {
      ui::SCALE_FACTOR_100P},
     {"mediaplayerFullscreen",
      IDR_MEDIAPLAYER_FULLSCREEN_BUTTON,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerFullscreenHover",
-     IDR_MEDIAPLAYER_FULLSCREEN_BUTTON_HOVER,
-     ui::SCALE_FACTOR_100P},
-    {"mediaplayerFullscreenDown",
-     IDR_MEDIAPLAYER_FULLSCREEN_BUTTON_DOWN,
      ui::SCALE_FACTOR_100P},
     {"mediaplayerCastOff",
      IDR_MEDIAPLAYER_CAST_BUTTON_OFF,
@@ -973,9 +941,6 @@ const DataResource kDataResources[] = {
     {"html.css", IDR_UASTYLE_HTML_CSS, ui::SCALE_FACTOR_NONE},
     {"quirks.css", IDR_UASTYLE_QUIRKS_CSS, ui::SCALE_FACTOR_NONE},
     {"view-source.css", IDR_UASTYLE_VIEW_SOURCE_CSS, ui::SCALE_FACTOR_NONE},
-    {"themeChromium.css",
-     IDR_UASTYLE_THEME_CHROMIUM_CSS,
-     ui::SCALE_FACTOR_NONE},
 #if defined(OS_ANDROID)
     {"themeChromiumAndroid.css",
      IDR_UASTYLE_THEME_CHROMIUM_ANDROID_CSS,
@@ -992,9 +957,6 @@ const DataResource kDataResources[] = {
      IDR_UASTYLE_THEME_CHROMIUM_LINUX_CSS,
      ui::SCALE_FACTOR_NONE},
 #endif
-    {"themeChromiumSkia.css",
-     IDR_UASTYLE_THEME_CHROMIUM_SKIA_CSS,
-     ui::SCALE_FACTOR_NONE},
     {"themeInputMultipleFields.css",
      IDR_UASTYLE_THEME_INPUT_MULTIPLE_FIELDS_CSS,
      ui::SCALE_FACTOR_NONE},
@@ -1039,9 +1001,6 @@ const DataResource kDataResources[] = {
     {"HTMLMarqueeElement.js",
      IDR_PRIVATE_SCRIPT_HTMLMARQUEEELEMENT_JS,
      ui::SCALE_FACTOR_NONE},
-    {"PluginPlaceholderElement.js",
-     IDR_PRIVATE_SCRIPT_PLUGINPLACEHOLDERELEMENT_JS,
-     ui::SCALE_FACTOR_NONE},
     {"PrivateScriptRunner.js",
      IDR_PRIVATE_SCRIPT_PRIVATESCRIPTRUNNER_JS,
      ui::SCALE_FACTOR_NONE},
@@ -1074,8 +1033,8 @@ WebData BlinkPlatformImpl::loadResource(const char* name) {
     return WebData();
 
   // Check the name prefix to see if it's an audio resource.
-  if (base::StartsWithASCII(name, "IRC_Composite", true) ||
-      base::StartsWithASCII(name, "Composite", true))
+  if (base::StartsWith(name, "IRC_Composite", base::CompareCase::SENSITIVE) ||
+      base::StartsWith(name, "Composite", base::CompareCase::SENSITIVE))
     return loadAudioSpatializationResource(name);
 
   // TODO(flackr): We should use a better than linear search here, a trie would
@@ -1110,8 +1069,8 @@ WebString BlinkPlatformImpl::queryLocalizedString(
   int message_id = ToMessageID(name);
   if (message_id < 0)
     return WebString();
-  return ReplaceStringPlaceholders(GetContentClient()->GetLocalizedString(
-      message_id), value, NULL);
+  return base::ReplaceStringPlaceholders(
+      GetContentClient()->GetLocalizedString(message_id), value, NULL);
 }
 
 WebString BlinkPlatformImpl::queryLocalizedString(
@@ -1125,26 +1084,21 @@ WebString BlinkPlatformImpl::queryLocalizedString(
   values.reserve(2);
   values.push_back(value1);
   values.push_back(value2);
-  return ReplaceStringPlaceholders(
+  return base::ReplaceStringPlaceholders(
       GetContentClient()->GetLocalizedString(message_id), values, NULL);
 }
 
-double BlinkPlatformImpl::currentTime() {
+double BlinkPlatformImpl::currentTimeSeconds() {
   return base::Time::Now().ToDoubleT();
 }
 
-double BlinkPlatformImpl::monotonicallyIncreasingTime() {
+double BlinkPlatformImpl::monotonicallyIncreasingTimeSeconds() {
   return base::TimeTicks::Now().ToInternalValue() /
       static_cast<double>(base::Time::kMicrosecondsPerSecond);
 }
 
-double BlinkPlatformImpl::systemTraceTime() {
-  return (base::TraceTicks::Now() - base::TraceTicks()).InSecondsF();
-}
-
-void BlinkPlatformImpl::cryptographicallyRandomValues(
-    unsigned char* buffer, size_t length) {
-  base::RandBytes(buffer, length);
+blink::WebThread* BlinkPlatformImpl::compositorThread() const {
+  return compositor_thread_;
 }
 
 blink::WebGestureCurve* BlinkPlatformImpl::createFlingAnimationCurve(
@@ -1157,14 +1111,12 @@ blink::WebGestureCurve* BlinkPlatformImpl::createFlingAnimationCurve(
              IsMainThread()).release();
 }
 
-void BlinkPlatformImpl::didStartWorkerRunLoop() {
-  WorkerTaskRunner* worker_task_runner = WorkerTaskRunner::Instance();
-  worker_task_runner->OnWorkerRunLoopStarted();
+void BlinkPlatformImpl::didStartWorkerThread() {
+  WorkerThreadRegistry::Instance()->DidStartCurrentWorkerThread();
 }
 
-void BlinkPlatformImpl::didStopWorkerRunLoop() {
-  WorkerTaskRunner* worker_task_runner = WorkerTaskRunner::Instance();
-  worker_task_runner->OnWorkerRunLoopStopped();
+void BlinkPlatformImpl::willStopWorkerThread() {
+  WorkerThreadRegistry::Instance()->WillStopCurrentWorkerThread();
 }
 
 blink::WebCrypto* BlinkPlatformImpl::crypto() {
@@ -1173,10 +1125,6 @@ blink::WebCrypto* BlinkPlatformImpl::crypto() {
 
 blink::WebGeofencingProvider* BlinkPlatformImpl::geofencingProvider() {
   return geofencing_provider_.get();
-}
-
-blink::WebBluetooth* BlinkPlatformImpl::bluetooth() {
-  return bluetooth_.get();
 }
 
 blink::WebNotificationManager*
@@ -1215,14 +1163,11 @@ blink::WebPermissionClient* BlinkPlatformImpl::permissionClient() {
 }
 
 blink::WebSyncProvider* BlinkPlatformImpl::backgroundSyncProvider() {
-  if (!sync_provider_.get())
-    return nullptr;
-
   if (IsMainThread())
-    return sync_provider_.get();
+    return main_thread_sync_provider_.get();
 
-  return BackgroundSyncProviderThreadProxy::GetThreadInstance(
-      main_thread_task_runner_.get(), sync_provider_.get());
+  return BackgroundSyncProvider::GetOrCreateThreadSpecificInstance(
+      main_thread_task_runner_.get());
 }
 
 WebThemeEngine* BlinkPlatformImpl::themeEngine() {
@@ -1270,22 +1215,9 @@ bool BlinkPlatformImpl::databaseSetFileSize(
 blink::WebString BlinkPlatformImpl::signedPublicKeyAndChallengeString(
     unsigned key_size_index,
     const blink::WebString& challenge,
-    const blink::WebURL& url) {
+    const blink::WebURL& url,
+    const blink::WebURL& top_origin) {
   return blink::WebString("");
-}
-
-static scoped_ptr<base::ProcessMetrics> CurrentProcessMetrics() {
-  using base::ProcessMetrics;
-#if defined(OS_MACOSX)
-  return scoped_ptr<ProcessMetrics>(
-      // The default port provider is sufficient to get data for the current
-      // process.
-      ProcessMetrics::CreateProcessMetrics(base::GetCurrentProcessHandle(),
-                                           NULL));
-#else
-  return scoped_ptr<ProcessMetrics>(
-      ProcessMetrics::CreateProcessMetrics(base::GetCurrentProcessHandle()));
-#endif
 }
 
 static size_t getMemoryUsageMB(bool bypass_cache) {
@@ -1320,16 +1252,6 @@ size_t BlinkPlatformImpl::numberOfProcessors() {
   return static_cast<size_t>(base::SysInfo::NumberOfProcessors());
 }
 
-bool BlinkPlatformImpl::processMemorySizesInBytes(
-    size_t* private_bytes,
-    size_t* shared_bytes) {
-  return CurrentProcessMetrics()->GetMemoryBytes(private_bytes, shared_bytes);
-}
-
-bool BlinkPlatformImpl::memoryAllocatorWasteInBytes(size_t* size) {
-  return base::allocator::GetAllocatorWasteSize(size);
-}
-
 blink::WebDiscardableMemory*
 BlinkPlatformImpl::allocateAndLockDiscardableMemory(size_t bytes) {
   return content::WebDiscardableMemoryImpl::CreateLockedMemory(bytes).release();
@@ -1361,16 +1283,6 @@ uint32_t BlinkPlatformImpl::getUniqueIdForProcess() {
   return base::trace_event::TraceLog::GetInstance()->process_id();
 }
 
-scoped_refptr<base::SingleThreadTaskRunner>
-BlinkPlatformImpl::MainTaskRunnerForCurrentThread() {
-  if (main_thread_task_runner_.get() &&
-      main_thread_task_runner_->BelongsToCurrentThread()) {
-    return main_thread_task_runner_;
-  } else {
-    return base::ThreadTaskRunnerHandle::Get();
-  }
-}
-
 bool BlinkPlatformImpl::IsMainThread() const {
   return main_thread_task_runner_.get() &&
          main_thread_task_runner_->BelongsToCurrentThread();
@@ -1383,7 +1295,17 @@ WebString BlinkPlatformImpl::domCodeStringFromEnum(int dom_code) {
 
 int BlinkPlatformImpl::domEnumFromCodeString(const WebString& code) {
   return static_cast<int>(ui::KeycodeConverter::CodeStringToDomCode(
-      code.utf8().data()));
+      code.utf8()));
+}
+
+WebString BlinkPlatformImpl::domKeyStringFromEnum(int dom_key) {
+  return WebString::fromUTF8(ui::KeycodeConverter::DomKeyToKeyString(
+      static_cast<ui::DomKey>(dom_key)));
+}
+
+int BlinkPlatformImpl::domKeyEnumFromString(const WebString& key_string) {
+  return static_cast<int>(
+      ui::KeycodeConverter::KeyStringToDomKey(key_string.utf8()));
 }
 
 }  // namespace content

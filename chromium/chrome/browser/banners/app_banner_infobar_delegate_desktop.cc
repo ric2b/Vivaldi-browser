@@ -4,6 +4,7 @@
 
 #include "chrome/browser/banners/app_banner_infobar_delegate_desktop.h"
 
+#include "build/build_config.h"
 #include "chrome/browser/banners/app_banner_data_fetcher_desktop.h"
 #include "chrome/browser/banners/app_banner_metrics.h"
 #include "chrome/browser/banners/app_banner_settings_helper.h"
@@ -16,6 +17,7 @@
 #include "content/public/browser/web_contents.h"
 #include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/gfx/vector_icons_public.h"
 
 namespace banners {
 
@@ -56,8 +58,16 @@ AppBannerInfoBarDelegateDesktop::GetInfoBarType() const {
   return PAGE_ACTION_TYPE;
 }
 
-int AppBannerInfoBarDelegateDesktop::GetIconID() const {
+int AppBannerInfoBarDelegateDesktop::GetIconId() const {
   return IDR_INFOBAR_APP_BANNER;
+}
+
+gfx::VectorIconId AppBannerInfoBarDelegateDesktop::GetVectorIconId() const {
+#if defined(OS_MACOSX)
+  return gfx::VectorIconId::VECTOR_ICON_NONE;
+#else
+  return gfx::VectorIconId::APPS;
+#endif
 }
 
 base::string16 AppBannerInfoBarDelegateDesktop::GetMessageText() const {
@@ -82,6 +92,11 @@ bool AppBannerInfoBarDelegateDesktop::Accept() {
                  fetcher_),
       web_manifest_);
   return true;
+}
+
+infobars::InfoBarDelegate::InfoBarIdentifier
+AppBannerInfoBarDelegateDesktop::GetIdentifier() const {
+  return APP_BANNER_INFOBAR_DELEGATE_DESKTOP;
 }
 
 void AppBannerInfoBarDelegateDesktop::InfoBarDismissed() {

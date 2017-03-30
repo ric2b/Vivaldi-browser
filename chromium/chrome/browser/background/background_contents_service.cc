@@ -5,11 +5,11 @@
 #include "chrome/browser/background/background_contents_service.h"
 
 #include "apps/app_load_service.h"
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/prefs/pref_service.h"
@@ -24,7 +24,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/extension_service.h"
-#include "chrome/browser/notifications/desktop_notification_service.h"
 #include "chrome/browser/notifications/notification.h"
 #include "chrome/browser/notifications/notification_delegate.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
@@ -59,6 +58,8 @@
 
 #if defined(ENABLE_NOTIFICATIONS)
 #include "ui/message_center/message_center.h"
+#include "ui/message_center/notification_types.h"
+#include "ui/message_center/notifier_settings.h"
 #endif
 
 using content::SiteInstance;
@@ -70,6 +71,7 @@ using extensions::UnloadedExtensionInfo;
 namespace {
 
 const char kNotificationPrefix[] = "app.background.crashed.";
+const char kNotifierId[] = "app.background.crashed";
 bool g_disable_close_balloon_for_testing = false;
 
 void CloseBalloon(const std::string& balloon_id, ProfileID profile_id) {
@@ -171,12 +173,17 @@ void NotificationImageReady(
   // Origin URL must be different from the crashed extension to avoid the
   // conflict. NotificationSystemObserver will cancel all notifications from
   // the same origin when NOTIFICATION_EXTENSION_UNLOADED_DEPRECATED.
-  Notification notification(GURL("chrome://extension-crash"),
+  Notification notification(message_center::NOTIFICATION_TYPE_SIMPLE,
                             base::string16(),
                             message,
                             notification_icon,
+                            message_center::NotifierId(
+                                message_center::NotifierId::SYSTEM_COMPONENT,
+                                kNotifierId),
                             base::string16(),
+                            GURL("chrome://extension-crash"),
                             delegate->id(),
+                            message_center::RichNotificationData(),
                             delegate.get());
 
   g_browser_process->notification_ui_manager()->Add(notification, profile);
@@ -471,6 +478,7 @@ void BackgroundContentsService::OnExtensionUnloaded(
     case UnloadedExtensionInfo::REASON_UNINSTALL:  // Fall through.
     case UnloadedExtensionInfo::REASON_BLACKLIST:  // Fall through.
     case UnloadedExtensionInfo::REASON_LOCK_ALL:   // Fall through.
+    case UnloadedExtensionInfo::REASON_MIGRATED_TO_COMPONENT:  // Fall through.
     case UnloadedExtensionInfo::REASON_PROFILE_SHUTDOWN:
       ShutdownAssociatedBackgroundContents(base::ASCIIToUTF16(extension->id()));
       SendChangeNotification(Profile::FromBrowserContext(browser_context));
@@ -633,30 +641,26 @@ void BackgroundContentsService::LoadBackgroundContents(
   DVLOG(1) << "Loading background content url: " << url;
 
   BackgroundContents* contents = CreateBackgroundContents(
-      SiteInstance::CreateForURL(profile, url),
-      MSG_ROUTING_NONE,
-      MSG_ROUTING_NONE,
-      profile,
-      frame_name,
-      application_id,
-      std::string(),
-      NULL);
+      SiteInstance::CreateForURL(profile, url), MSG_ROUTING_NONE,
+      MSG_ROUTING_NONE, MSG_ROUTING_NONE, profile, frame_name, application_id,
+      std::string(), NULL);
 
   contents->CreateRenderViewSoon(url);
 }
 
 BackgroundContents* BackgroundContentsService::CreateBackgroundContents(
     SiteInstance* site,
-    int routing_id,
-    int main_frame_route_id,
+    int32_t routing_id,
+    int32_t main_frame_route_id,
+    int32_t main_frame_widget_route_id,
     Profile* profile,
     const std::string& frame_name,
     const base::string16& application_id,
     const std::string& partition_id,
     content::SessionStorageNamespace* session_storage_namespace) {
   BackgroundContents* contents = new BackgroundContents(
-      site, routing_id, main_frame_route_id, this, partition_id,
-      session_storage_namespace);
+      site, routing_id, main_frame_route_id, main_frame_widget_route_id, this,
+      partition_id, session_storage_namespace);
 
   // Register the BackgroundContents internally, then send out a notification
   // to external listeners.

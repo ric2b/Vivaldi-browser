@@ -50,7 +50,6 @@ STRING_IDS = [
   'IDS_PRODUCT_APP_LAUNCHER_NAME',  # Used in App Launcher registry.
   'IDS_PRODUCT_BINARIES_NAME',
   'IDS_PRODUCT_DESCRIPTION',
-  'IDS_UNINSTALL_CHROME',
   'IDS_ABOUT_VERSION_COMPANY_NAME',
   'IDS_INSTALL_HIGHER_VERSION',
   'IDS_INSTALL_FAILED',
@@ -64,7 +63,6 @@ STRING_IDS = [
   'IDS_INSTALL_INSUFFICIENT_RIGHTS',
   'IDS_INSTALL_NO_PRODUCTS_TO_UPDATE',
   'IDS_INSTALL_MULTI_INSTALLATION_EXISTS',
-  'IDS_OEM_MAIN_SHORTCUT_NAME',
   'IDS_SHORTCUT_TOOLTIP',
   'IDS_SHORTCUT_NEW_WINDOW',
   'IDS_APP_LIST_SHORTCUT_NAME',
@@ -161,14 +159,14 @@ class XtbHandler(sax.handler.ContentHandler):
 
     Args:
       translation_ids: a mapping of translation ids to their string
-        identifiers for the translations to be extracted.
+        identifiers list for the translations to be extracted.
     """
     sax.handler.ContentHandler.__init__(self)
     self.lang = None
     self.translations = None
     self.__translation_ids = translation_ids
     self.__element_stack = []
-    self.__string_id = None
+    self.__string_ids = None
     self.__text_scraps = []
     self.__characters_callback = None
 
@@ -200,9 +198,9 @@ class XtbHandler(sax.handler.ContentHandler):
     self.lang = lang.replace('-', '_').upper()
 
   def __OnOpenTranslation(self, translation_id):
-    assert self.__string_id is None
-    self.__string_id = self.__translation_ids.get(translation_id)
-    if self.__string_id is not None:
+    assert self.__string_ids is None
+    self.__string_ids = self.__translation_ids.get(translation_id)
+    if self.__string_ids:
       self.__characters_callback = self.__OnTranslationText
 
   def __OnTranslationText(self, containing_element, message_text):
@@ -210,9 +208,11 @@ class XtbHandler(sax.handler.ContentHandler):
       self.__text_scraps.append(message_text)
 
   def __OnCloseTranslation(self):
-    if self.__string_id is not None:
-      self.translations[self.__string_id] = ''.join(self.__text_scraps).strip()
-      self.__string_id = None
+    if self.__string_ids:
+      translated_string = ''.join(self.__text_scraps).strip()
+      for string_id in self.__string_ids:
+        self.translations[string_id] = translated_string
+      self.__string_ids = None
       self.__text_scraps = []
       self.__characters_callback = None
 
@@ -294,11 +294,13 @@ class StringRcMaker(object):
                                                        message_text))
 
     # Generate the message ID for each source string to correlate it with its
-    # translations in the .xtb files.
-    translation_ids = {
-      tclib.GenerateMessageId(message_text): string_id
-      for (string_id, message_text) in source_strings.iteritems()
-    }
+    # translations in the .xtb files. Multiple source strings may have the same
+    # message text; hence the message id is mapped to a list of string ids
+    # instead of a single value.
+    translation_ids = {}
+    for (string_id, message_text) in source_strings.iteritems():
+      message_id = tclib.GenerateMessageId(message_text)
+      translation_ids.setdefault(message_id, []).append(string_id);
 
     # Gather the translated strings from the .xtb files. Use the en-US string
     # for any message lacking a translation.

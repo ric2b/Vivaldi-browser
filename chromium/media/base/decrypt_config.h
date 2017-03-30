@@ -5,10 +5,13 @@
 #ifndef MEDIA_BASE_DECRYPT_CONFIG_H_
 #define MEDIA_BASE_DECRYPT_CONFIG_H_
 
+#include <stdint.h>
+
+#include <iosfwd>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "media/base/media_export.h"
 
@@ -25,10 +28,10 @@ namespace media {
 // position of the corresponding encrypted byte.
 struct SubsampleEntry {
   SubsampleEntry() : clear_bytes(0), cypher_bytes(0) {}
-  SubsampleEntry(uint32 clear_bytes, uint32 cypher_bytes)
+  SubsampleEntry(uint32_t clear_bytes, uint32_t cypher_bytes)
       : clear_bytes(clear_bytes), cypher_bytes(cypher_bytes) {}
-  uint32 clear_bytes;
-  uint32 cypher_bytes;
+  uint32_t clear_bytes;
+  uint32_t cypher_bytes;
 };
 
 // Contains all information that a decryptor needs to decrypt a media sample.
@@ -56,6 +59,9 @@ class MEDIA_EXPORT DecryptConfig {
   // Returns true if all fields in |config| match this config.
   bool Matches(const DecryptConfig& config) const;
 
+  // Prints to std::ostream.
+  std::ostream& Print(std::ostream& os) const;
+
  private:
   const std::string key_id_;
 
@@ -70,5 +76,10 @@ class MEDIA_EXPORT DecryptConfig {
 };
 
 }  // namespace media
+
+inline std::ostream& operator<<(std::ostream& os,
+                                const media::DecryptConfig& obj) {
+  return obj.Print(os);
+}
 
 #endif  // MEDIA_BASE_DECRYPT_CONFIG_H_

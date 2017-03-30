@@ -8,14 +8,16 @@
 #include <map>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "ui/base/ui_base_export.h"
 #include "ui/gfx/x/x11_types.h"
 
 // A process wide singleton for selecting events on X windows which were not
 // created by Chrome.
+namespace base {
 template <typename T> struct DefaultSingletonTraits;
+}
 
 namespace ui {
 
@@ -39,7 +41,7 @@ class UI_BASE_EXPORT XForeignWindowManager {
   void OnWindowDestroyed(XID xid);
 
  private:
-  friend struct DefaultSingletonTraits<XForeignWindowManager>;
+  friend struct base::DefaultSingletonTraits<XForeignWindowManager>;
 
   struct Request {
     Request(int request_id, long entry_event_mask);

@@ -9,6 +9,7 @@
 
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
+#include "base/macros.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
@@ -22,18 +23,23 @@ class EmbeddedTestServerAndroid {
   EmbeddedTestServerAndroid(JNIEnv* env, jobject obj);
   ~EmbeddedTestServerAndroid();
 
-  void Destroy(JNIEnv* env, jobject obj);
+  void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
 
-  jboolean InitializeAndWaitUntilReady(JNIEnv* env, jobject jobj);
+  jboolean Start(JNIEnv* env, const base::android::JavaParamRef<jobject>& jobj);
 
-  jboolean ShutdownAndWaitUntilComplete(JNIEnv* env, jobject jobj);
+  jboolean ShutdownAndWaitUntilComplete(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& jobj);
 
-  base::android::ScopedJavaLocalRef<jstring>
-  GetURL(JNIEnv* jenv, jobject jobj, jstring jrelative_url) const;
+  base::android::ScopedJavaLocalRef<jstring> GetURL(
+      JNIEnv* jenv,
+      const base::android::JavaParamRef<jobject>& jobj,
+      const base::android::JavaParamRef<jstring>& jrelative_url) const;
 
-  void ServeFilesFromDirectory(JNIEnv* env,
-                               jobject jobj,
-                               jstring jdirectory_path);
+  void ServeFilesFromDirectory(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& jobj,
+      const base::android::JavaParamRef<jstring>& jdirectory_path);
 
   static bool RegisterEmbeddedTestServerAndroid(JNIEnv* env);
 

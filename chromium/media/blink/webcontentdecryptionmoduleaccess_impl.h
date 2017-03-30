@@ -5,6 +5,7 @@
 #ifndef MEDIA_BLINK_WEBCONTENTDECRYPTIONMODULEACCESS_IMPL_H_
 #define MEDIA_BLINK_WEBCONTENTDECRYPTIONMODULEACCESS_IMPL_H_
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "media/base/cdm_config.h"
 #include "third_party/WebKit/public/platform/WebContentDecryptionModuleAccess.h"
@@ -26,12 +27,12 @@ class WebContentDecryptionModuleAccessImpl
       const blink::WebMediaKeySystemConfiguration& configuration,
       const CdmConfig& cdm_config,
       const base::WeakPtr<WebEncryptedMediaClientImpl>& client);
-  virtual ~WebContentDecryptionModuleAccessImpl();
+  ~WebContentDecryptionModuleAccessImpl() override;
 
   // blink::WebContentDecryptionModuleAccess interface.
-  virtual blink::WebMediaKeySystemConfiguration getConfiguration();
-  virtual void createContentDecryptionModule(
-      blink::WebContentDecryptionModuleResult result);
+  blink::WebMediaKeySystemConfiguration getConfiguration() override;
+  void createContentDecryptionModule(
+      blink::WebContentDecryptionModuleResult result) override;
 
  private:
   WebContentDecryptionModuleAccessImpl(

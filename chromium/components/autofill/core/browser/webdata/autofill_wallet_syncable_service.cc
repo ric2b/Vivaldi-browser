@@ -4,7 +4,9 @@
 
 #include "components/autofill/core/browser/webdata/autofill_wallet_syncable_service.h"
 
+#include <stddef.h>
 #include <set>
+#include <utility>
 
 #include "base/logging.h"
 #include "base/strings/string_util.h"
@@ -82,7 +84,7 @@ AutofillProfile ProfileFromSpecifics(
   std::vector<std::string> street_address(address.street_address().begin(),
                                           address.street_address().end());
   profile.SetRawInfo(ADDRESS_HOME_STREET_ADDRESS,
-                     base::UTF8ToUTF16(JoinString(street_address, '\n')));
+                     base::UTF8ToUTF16(base::JoinString(street_address, "\n")));
 
   profile.SetRawInfo(COMPANY_NAME, base::UTF8ToUTF16(address.company_name()));
   profile.SetRawInfo(ADDRESS_HOME_STATE,
@@ -194,7 +196,7 @@ AutofillWalletSyncableService::MergeDataAndStartSyncing(
     scoped_ptr<syncer::SyncChangeProcessor> sync_processor,
     scoped_ptr<syncer::SyncErrorFactory> sync_error_factory) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  sync_processor_ = sync_processor.Pass();
+  sync_processor_ = std::move(sync_processor);
   return SetSyncData(initial_sync_data);
 }
 

@@ -8,13 +8,15 @@
 
 #include "net/websockets/websocket_basic_stream.h"
 
+#include <stddef.h>
 #include <stdint.h>
 #include <string.h>  // for memcpy() and memset().
-
 #include <string>
+#include <utility>
+#include <vector>
 
-#include "base/basictypes.h"
 #include "base/big_endian.h"
+#include "base/macros.h"
 #include "net/base/test_completion_callback.h"
 #include "net/log/test_net_log.h"
 #include "net/socket/socket_test_util.h"
@@ -132,7 +134,7 @@ class WebSocketBasicStreamSocketTest : public WebSocketBasicStreamTest {
                            CompletionCallback(),
                            &pool_,
                            bound_net_log_.bound());
-    return transport_socket.Pass();
+    return transport_socket;
   }
 
   void SetHttpReadBuffer(const char* data, size_t size) {
@@ -165,7 +167,7 @@ class WebSocketBasicStreamSocketTest : public WebSocketBasicStreamTest {
   MockClientSocketFactory factory_;
   MockTransportClientSocketPool pool_;
   BoundTestNetLog(bound_net_log_);
-  ScopedVector<WebSocketFrame> frames_;
+  std::vector<scoped_ptr<WebSocketFrame>> frames_;
   TestCompletionCallback cb_;
   scoped_refptr<GrowableIOBuffer> http_read_buffer_;
   std::string sub_protocol_;
@@ -253,7 +255,7 @@ class WebSocketBasicStreamSocketWriteTest
     header.final = true;
     header.masked = true;
     header.payload_length = payload_size;
-    frames_.push_back(frame.Pass());
+    frames_.push_back(std::move(frame));
   }
 
   // Creates a stream that expects the listed writes.
@@ -795,7 +797,7 @@ TEST_F(WebSocketBasicStreamSocketChunkedReadTest, OneMegFrame) {
   // This should be equal to the definition of kReadBufferSize in
   // websocket_basic_stream.cc.
   const int kReadBufferSize = 32 * 1024;
-  const uint64 kPayloadSize = 1 << 20;
+  const uint64_t kPayloadSize = 1 << 20;
   const size_t kWireSize = kPayloadSize + kLargeFrameHeaderSize;
   const size_t kExpectedFrameCount =
       (kWireSize + kReadBufferSize - 1) / kReadBufferSize;
@@ -895,8 +897,8 @@ TEST_F(WebSocketBasicStreamSocketWriteTest, WriteNullPong) {
   header.final = true;
   header.masked = true;
   header.payload_length = 0;
-  ScopedVector<WebSocketFrame> frames;
-  frames.push_back(frame.Pass());
+  std::vector<scoped_ptr<WebSocketFrame>> frames;
+  frames.push_back(std::move(frame));
   EXPECT_EQ(OK, stream_->WriteFrames(&frames, cb_.callback()));
 }
 
@@ -920,7 +922,7 @@ TEST_F(WebSocketBasicStreamSocketTest, WriteNonNulMask) {
   header.final = true;
   header.masked = true;
   header.payload_length = payload_size;
-  frames_.push_back(frame.Pass());
+  frames_.push_back(std::move(frame));
 
   EXPECT_EQ(OK, stream_->WriteFrames(&frames_, cb_.callback()));
 }

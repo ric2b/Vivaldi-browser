@@ -23,7 +23,6 @@ const char kHelpSwitchName[] = "help";
 const char kLoggingLevelSwitchName[] = "verbosity";
 const char kRefreshTokenFileSwitchName[] = "refresh-token-file";
 const char kReleaseHostsAfterTestingSwitchName[] = "release-hosts-after-tests";
-const char kServiceEnvironmentSwitchName[] = "environment";
 const char kShowHostAvailabilitySwitchName[] = "show-host-availability";
 const char kSingleProcessTestsSwitchName[] = "single-process-tests";
 const char kUserNameSwitchName[] = "username";
@@ -75,8 +74,6 @@ void PrintUsage() {
          switches::kRefreshTokenFileSwitchName);
   printf("  %s: Displays additional usage information\n",
          switches::kHelpSwitchName);
-  printf("  %s: Specifies the service api to use (dev|test) [default: dev]\n",
-         switches::kServiceEnvironmentSwitchName);
   printf(
       "  %s: Retrieves and displays the connection status for all known "
       "hosts, no tests will be run\n",
@@ -146,26 +143,11 @@ void PrintJsonFileInfo() {
          switches::kRefreshTokenFileSwitchName);
 }
 
-// This class exists so that we can create a test suite which does not create
-// its own AtExitManager.  The problem we are working around occurs when
-// the test suite does not create an AtExitManager (e.g. if no tests are run)
-// and the environment object destroys its MessageLoop, then a crash will occur.
-class NoAtExitBaseTestSuite : public base::TestSuite {
- public:
-  NoAtExitBaseTestSuite(int argc, char** argv)
-      : base::TestSuite(argc, argv, false) {}
-
-  static int RunTestSuite(int argc, char** argv) {
-    return NoAtExitBaseTestSuite(argc, argv).Run();
-  }
-};
-
 }  // namespace
 
 int main(int argc, char** argv) {
-  base::AtExitManager at_exit;
+  base::TestSuite test_suite(argc, argv);
   base::MessageLoopForIO message_loop;
-  testing::InitGoogleTest(&argc, argv);
 
   if (!base::CommandLine::InitializedForCurrentProcess()) {
     if (!base::CommandLine::Init(argc, argv)) {
@@ -200,7 +182,7 @@ int main(int argc, char** argv) {
     PrintAuthCodeInfo();
     return base::LaunchUnitTestsSerially(
         argc, argv,
-        base::Bind(&NoAtExitBaseTestSuite::RunTestSuite, argc, argv));
+        base::Bind(&base::TestSuite::Run, base::Unretained(&test_suite)));
   }
 
   remoting::test::AppRemotingTestDriverEnvironment::EnvironmentOptions options;
@@ -226,26 +208,8 @@ int main(int argc, char** argv) {
   options.release_hosts_when_done =
       command_line->HasSwitch(switches::kReleaseHostsAfterTestingSwitchName);
 
-  // If the user passed in a service environment, use it, otherwise set a
-  // default value.
-  std::string service_environment_switch(command_line->GetSwitchValueASCII(
-      switches::kServiceEnvironmentSwitchName));
-  if (service_environment_switch.empty() ||
-      service_environment_switch == "dev") {
-    options.service_environment =
+  options.service_environment =
         remoting::test::ServiceEnvironment::kDeveloperEnvironment;
-  } else if (service_environment_switch == "test") {
-    options.service_environment =
-        remoting::test::ServiceEnvironment::kTestingEnvironment;
-  } else if (service_environment_switch == "staging") {
-    options.service_environment =
-        remoting::test::ServiceEnvironment::kStagingEnvironment;
-  } else {
-    LOG(ERROR) << "Invalid " << switches::kServiceEnvironmentSwitchName
-               << " argument passed in.";
-    PrintUsage();
-    return -1;
-  }
 
   // Update the logging verbosity level is user specified one.
   std::string verbosity_level(
@@ -264,7 +228,7 @@ int main(int argc, char** argv) {
   // The GTest framework will own the lifetime of this object once
   // it is registered below.
   scoped_ptr<remoting::test::AppRemotingTestDriverEnvironment> shared_data(
-      new remoting::test::AppRemotingTestDriverEnvironment(options));
+      remoting::test::CreateAppRemotingTestDriverEnvironment(options));
 
   if (!shared_data->Initialize(auth_code)) {
     // If we failed to initialize our shared data object, then bail.
@@ -286,5 +250,6 @@ int main(int argc, char** argv) {
   // Because many tests may access the same remoting host(s), we need to run
   // the tests sequentially so they do not interfere with each other.
   return base::LaunchUnitTestsSerially(
-      argc, argv, base::Bind(&NoAtExitBaseTestSuite::RunTestSuite, argc, argv));
+      argc, argv,
+      base::Bind(&base::TestSuite::Run, base::Unretained(&test_suite)));
 }

@@ -6,6 +6,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <stdint.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -14,6 +15,7 @@
 #include "base/posix/eintr_wrapper.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
+#include "build/build_config.h"
 
 #if defined(OS_ANDROID)
 #include "base/os_compat_android.h"
@@ -22,19 +24,19 @@
 namespace base {
 
 // Make sure our Whence mappings match the system headers.
-COMPILE_ASSERT(File::FROM_BEGIN   == SEEK_SET &&
-               File::FROM_CURRENT == SEEK_CUR &&
-               File::FROM_END     == SEEK_END, whence_matches_system);
+static_assert(File::FROM_BEGIN == SEEK_SET && File::FROM_CURRENT == SEEK_CUR &&
+                  File::FROM_END == SEEK_END,
+              "whence mapping must match the system headers");
 
 namespace {
 
 #if defined(OS_BSD) || defined(OS_MACOSX) || defined(OS_NACL)
-static int CallFstat(int fd, stat_wrapper_t *sb) {
+int CallFstat(int fd, stat_wrapper_t *sb) {
   ThreadRestrictions::AssertIOAllowed();
   return fstat(fd, sb);
 }
 #else
-static int CallFstat(int fd, stat_wrapper_t *sb) {
+int CallFstat(int fd, stat_wrapper_t *sb) {
   ThreadRestrictions::AssertIOAllowed();
   return fstat64(fd, sb);
 }
@@ -43,15 +45,15 @@ static int CallFstat(int fd, stat_wrapper_t *sb) {
 // NaCl doesn't provide the following system calls, so either simulate them or
 // wrap them in order to minimize the number of #ifdef's in this file.
 #if !defined(OS_NACL)
-static bool IsOpenAppend(PlatformFile file) {
+bool IsOpenAppend(PlatformFile file) {
   return (fcntl(file, F_GETFL) & O_APPEND) != 0;
 }
 
-static int CallFtruncate(PlatformFile file, int64 length) {
+int CallFtruncate(PlatformFile file, int64_t length) {
   return HANDLE_EINTR(ftruncate(file, length));
 }
 
-static int CallFutimes(PlatformFile file, const struct timeval times[2]) {
+int CallFutimes(PlatformFile file, const struct timeval times[2]) {
 #ifdef __USE_XOPEN2K8
   // futimens should be available, but futimes might not be
   // http://pubs.opengroup.org/onlinepubs/9699919799/
@@ -68,36 +70,36 @@ static int CallFutimes(PlatformFile file, const struct timeval times[2]) {
 #endif
 }
 
-static File::Error CallFctnlFlock(PlatformFile file, bool do_lock) {
+File::Error CallFcntlFlock(PlatformFile file, bool do_lock) {
   struct flock lock;
-  lock.l_type = F_WRLCK;
+  lock.l_type = do_lock ? F_WRLCK : F_UNLCK;
   lock.l_whence = SEEK_SET;
   lock.l_start = 0;
   lock.l_len = 0;  // Lock entire file.
-  if (HANDLE_EINTR(fcntl(file, do_lock ? F_SETLK : F_UNLCK, &lock)) == -1)
+  if (HANDLE_EINTR(fcntl(file, F_SETLK, &lock)) == -1)
     return File::OSErrorToFileError(errno);
   return File::FILE_OK;
 }
 #else  // defined(OS_NACL)
 
-static bool IsOpenAppend(PlatformFile file) {
+bool IsOpenAppend(PlatformFile file) {
   // NaCl doesn't implement fcntl. Since NaCl's write conforms to the POSIX
   // standard and always appends if the file is opened with O_APPEND, just
   // return false here.
   return false;
 }
 
-static int CallFtruncate(PlatformFile file, int64 length) {
+int CallFtruncate(PlatformFile file, int64_t length) {
   NOTIMPLEMENTED();  // NaCl doesn't implement ftruncate.
   return 0;
 }
 
-static int CallFutimes(PlatformFile file, const struct timeval times[2]) {
+int CallFutimes(PlatformFile file, const struct timeval times[2]) {
   NOTIMPLEMENTED();  // NaCl doesn't implement futimes.
   return 0;
 }
 
-static File::Error CallFctnlFlock(PlatformFile file, bool do_lock) {
+File::Error CallFcntlFlock(PlatformFile file, bool do_lock) {
   NOTIMPLEMENTED();  // NaCl doesn't implement flock struct.
   return File::FILE_ERROR_INVALID_OPERATION;
 }
@@ -112,32 +114,32 @@ void File::Info::FromStat(const stat_wrapper_t& stat_info) {
 
 #if defined(OS_LINUX)
   time_t last_modified_sec = stat_info.st_mtim.tv_sec;
-  int64 last_modified_nsec = stat_info.st_mtim.tv_nsec;
+  int64_t last_modified_nsec = stat_info.st_mtim.tv_nsec;
   time_t last_accessed_sec = stat_info.st_atim.tv_sec;
-  int64 last_accessed_nsec = stat_info.st_atim.tv_nsec;
+  int64_t last_accessed_nsec = stat_info.st_atim.tv_nsec;
   time_t creation_time_sec = stat_info.st_ctim.tv_sec;
-  int64 creation_time_nsec = stat_info.st_ctim.tv_nsec;
+  int64_t creation_time_nsec = stat_info.st_ctim.tv_nsec;
 #elif defined(OS_ANDROID)
   time_t last_modified_sec = stat_info.st_mtime;
-  int64 last_modified_nsec = stat_info.st_mtime_nsec;
+  int64_t last_modified_nsec = stat_info.st_mtime_nsec;
   time_t last_accessed_sec = stat_info.st_atime;
-  int64 last_accessed_nsec = stat_info.st_atime_nsec;
+  int64_t last_accessed_nsec = stat_info.st_atime_nsec;
   time_t creation_time_sec = stat_info.st_ctime;
-  int64 creation_time_nsec = stat_info.st_ctime_nsec;
+  int64_t creation_time_nsec = stat_info.st_ctime_nsec;
 #elif defined(OS_MACOSX) || defined(OS_IOS) || defined(OS_BSD)
   time_t last_modified_sec = stat_info.st_mtimespec.tv_sec;
-  int64 last_modified_nsec = stat_info.st_mtimespec.tv_nsec;
+  int64_t last_modified_nsec = stat_info.st_mtimespec.tv_nsec;
   time_t last_accessed_sec = stat_info.st_atimespec.tv_sec;
-  int64 last_accessed_nsec = stat_info.st_atimespec.tv_nsec;
+  int64_t last_accessed_nsec = stat_info.st_atimespec.tv_nsec;
   time_t creation_time_sec = stat_info.st_ctimespec.tv_sec;
-  int64 creation_time_nsec = stat_info.st_ctimespec.tv_nsec;
+  int64_t creation_time_nsec = stat_info.st_ctimespec.tv_nsec;
 #else
   time_t last_modified_sec = stat_info.st_mtime;
-  int64 last_modified_nsec = 0;
+  int64_t last_modified_nsec = 0;
   time_t last_accessed_sec = stat_info.st_atime;
-  int64 last_accessed_nsec = 0;
+  int64_t last_accessed_nsec = 0;
   time_t creation_time_sec = stat_info.st_ctime;
-  int64 creation_time_nsec = 0;
+  int64_t creation_time_nsec = 0;
 #endif
 
   last_modified =
@@ -177,24 +179,24 @@ void File::Close() {
   file_.reset();
 }
 
-int64 File::Seek(Whence whence, int64 offset) {
+int64_t File::Seek(Whence whence, int64_t offset) {
   ThreadRestrictions::AssertIOAllowed();
   DCHECK(IsValid());
 
   SCOPED_FILE_TRACE_WITH_SIZE("Seek", offset);
 
 #if defined(OS_ANDROID)
-  COMPILE_ASSERT(sizeof(int64) == sizeof(off64_t), off64_t_64_bit);
+  static_assert(sizeof(int64_t) == sizeof(off64_t), "off64_t must be 64 bits");
   return lseek64(file_.get(), static_cast<off64_t>(offset),
                  static_cast<int>(whence));
 #else
-  COMPILE_ASSERT(sizeof(int64) == sizeof(off_t), off_t_64_bit);
+  static_assert(sizeof(int64_t) == sizeof(off_t), "off_t must be 64 bits");
   return lseek(file_.get(), static_cast<off_t>(offset),
                static_cast<int>(whence));
 #endif
 }
 
-int File::Read(int64 offset, char* data, int size) {
+int File::Read(int64_t offset, char* data, int size) {
   ThreadRestrictions::AssertIOAllowed();
   DCHECK(IsValid());
   if (size < 0)
@@ -237,7 +239,7 @@ int File::ReadAtCurrentPos(char* data, int size) {
   return bytes_read ? bytes_read : rv;
 }
 
-int File::ReadNoBestEffort(int64 offset, char* data, int size) {
+int File::ReadNoBestEffort(int64_t offset, char* data, int size) {
   ThreadRestrictions::AssertIOAllowed();
   DCHECK(IsValid());
   SCOPED_FILE_TRACE_WITH_SIZE("ReadNoBestEffort", size);
@@ -254,7 +256,7 @@ int File::ReadAtCurrentPosNoBestEffort(char* data, int size) {
   return HANDLE_EINTR(read(file_.get(), data, size));
 }
 
-int File::Write(int64 offset, const char* data, int size) {
+int File::Write(int64_t offset, const char* data, int size) {
   ThreadRestrictions::AssertIOAllowed();
 
   if (IsOpenAppend(file_.get()))
@@ -312,7 +314,7 @@ int File::WriteAtCurrentPosNoBestEffort(const char* data, int size) {
   return HANDLE_EINTR(write(file_.get(), data, size));
 }
 
-int64 File::GetLength() {
+int64_t File::GetLength() {
   DCHECK(IsValid());
 
   SCOPED_FILE_TRACE("GetLength");
@@ -324,7 +326,7 @@ int64 File::GetLength() {
   return file_info.st_size;
 }
 
-bool File::SetLength(int64 length) {
+bool File::SetLength(int64_t length) {
   ThreadRestrictions::AssertIOAllowed();
   DCHECK(IsValid());
 
@@ -360,12 +362,12 @@ bool File::GetInfo(Info* info) {
 
 File::Error File::Lock() {
   SCOPED_FILE_TRACE("Lock");
-  return CallFctnlFlock(file_.get(), true);
+  return CallFcntlFlock(file_.get(), true);
 }
 
 File::Error File::Unlock() {
   SCOPED_FILE_TRACE("Unlock");
-  return CallFctnlFlock(file_.get(), false);
+  return CallFcntlFlock(file_.get(), false);
 }
 
 File File::Duplicate() {
@@ -381,7 +383,7 @@ File File::Duplicate() {
   File other(other_fd);
   if (async())
     other.async_ = true;
-  return other.Pass();
+  return other;
 }
 
 // Static.
@@ -420,53 +422,10 @@ File::Error File::OSErrorToFileError(int saved_errno) {
   }
 }
 
-File::MemoryCheckingScopedFD::MemoryCheckingScopedFD() {
-  UpdateChecksum();
-}
-
-File::MemoryCheckingScopedFD::MemoryCheckingScopedFD(int fd) : file_(fd) {
-  UpdateChecksum();
-}
-
-File::MemoryCheckingScopedFD::~MemoryCheckingScopedFD() {}
-
-// static
-void File::MemoryCheckingScopedFD::ComputeMemoryChecksum(
-    unsigned int* out_checksum) const {
-  // Use a single iteration of a linear congruentional generator (lcg) to
-  // provide a cheap checksum unlikely to be accidentally matched by a random
-  // memory corruption.
-
-  // By choosing constants that satisfy the Hull-Duebell Theorem on lcg cycle
-  // length, we insure that each distinct fd value maps to a distinct checksum,
-  // which maximises the utility of our checksum.
-
-  // This code uses "unsigned int" throughout for its defined modular semantics,
-  // which implicitly gives us a divisor that is a power of two.
-
-  const unsigned int kMultiplier = 13035 * 4 + 1;
-  COMPILE_ASSERT(((kMultiplier - 1) & 3) == 0, pred_must_be_multiple_of_four);
-  const unsigned int kIncrement = 1595649551;
-  COMPILE_ASSERT(kIncrement & 1, must_be_coprime_to_powers_of_two);
-
-  *out_checksum =
-      static_cast<unsigned int>(file_.get()) * kMultiplier + kIncrement;
-}
-
-void File::MemoryCheckingScopedFD::Check() const {
-  unsigned int computed_checksum;
-  ComputeMemoryChecksum(&computed_checksum);
-  CHECK_EQ(file_memory_checksum_, computed_checksum) << "corrupted fd memory";
-}
-
-void File::MemoryCheckingScopedFD::UpdateChecksum() {
-  ComputeMemoryChecksum(&file_memory_checksum_);
-}
-
 // NaCl doesn't implement system calls to open files directly.
 #if !defined(OS_NACL)
 // TODO(erikkay): does it make sense to support FLAG_EXCLUSIVE_* here?
-void File::DoInitialize(const FilePath& path, uint32 flags) {
+void File::DoInitialize(const FilePath& path, uint32_t flags) {
   ThreadRestrictions::AssertIOAllowed();
   DCHECK(!IsValid());
 
@@ -514,7 +473,7 @@ void File::DoInitialize(const FilePath& path, uint32 flags) {
   else if (flags & FLAG_APPEND)
     open_flags |= O_APPEND | O_WRONLY;
 
-  COMPILE_ASSERT(O_RDONLY == 0, O_RDONLY_must_equal_zero);
+  static_assert(O_RDONLY == 0, "O_RDONLY must equal zero");
 
   int mode = S_IRUSR | S_IWUSR;
 #if defined(OS_CHROMEOS)

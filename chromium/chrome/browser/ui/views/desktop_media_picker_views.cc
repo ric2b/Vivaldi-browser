@@ -4,18 +4,22 @@
 
 #include "chrome/browser/ui/views/desktop_media_picker_views.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/media/desktop_media_list.h"
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/constrained_window/constrained_window_views.h"
-#include "components/web_modal/popup_manager.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents_delegate.h"
+#include "grit/components_strings.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/event_constants.h"
@@ -203,15 +207,14 @@ void DesktopMediaSourceView::OnGestureEvent(ui::GestureEvent* event) {
 DesktopMediaListView::DesktopMediaListView(
     DesktopMediaPickerDialogView* parent,
     scoped_ptr<DesktopMediaList> media_list)
-    : parent_(parent),
-      media_list_(media_list.Pass()),
-      weak_factory_(this) {
+    : parent_(parent), media_list_(std::move(media_list)), weak_factory_(this) {
   media_list_->SetThumbnailSize(gfx::Size(kThumbnailWidth, kThumbnailHeight));
+  SetFocusable(true);
 }
 
 DesktopMediaListView::~DesktopMediaListView() {}
 
-void DesktopMediaListView::StartUpdating(DesktopMediaID::Id dialog_window_id) {
+void DesktopMediaListView::StartUpdating(DesktopMediaID dialog_window_id) {
   media_list_->SetViewDialogWindowId(dialog_window_id);
   media_list_->StartUpdating(this);
 }
@@ -390,7 +393,7 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
       app_name_(app_name),
       label_(new views::Label()),
       scroll_view_(views::ScrollView::CreateScrollViewWithBorder()),
-      list_view_(new DesktopMediaListView(this, media_list.Pass())) {
+      list_view_(new DesktopMediaListView(this, std::move(media_list))) {
   if (app_name == target_name) {
     label_->SetText(
         l10n_util::GetStringFUTF16(IDS_DESKTOP_MEDIA_PICKER_TEXT, app_name));
@@ -426,18 +429,19 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
   // in its own top-level window, so in that case it needs to be filtered out of
   // the list of top-level windows available for capture, and to achieve that
   // the Id is passed to DesktopMediaList.
-  DesktopMediaID::Id dialog_window_id = 0;
+  DesktopMediaID dialog_window_id;
   if (!modal_dialog) {
+    dialog_window_id = DesktopMediaID::RegisterAuraWindow(
+        DesktopMediaID::TYPE_WINDOW, widget->GetNativeWindow());
+
+    bool is_ash_window = false;
 #if defined(USE_ASH)
-    if (chrome::IsNativeWindowInAsh(widget->GetNativeWindow())) {
-      dialog_window_id =
-          DesktopMediaID::RegisterAuraWindow(widget->GetNativeWindow()).id;
-      DCHECK_NE(dialog_window_id, 0);
-    }
+    is_ash_window = chrome::IsNativeWindowInAsh(widget->GetNativeWindow());
 #endif
 
-    if (dialog_window_id == 0) {
-      dialog_window_id = AcceleratedWidgetToDesktopMediaId(
+    // Set native window ID if the windows is outside Ash.
+    if (!is_ash_window) {
+      dialog_window_id.id = AcceleratedWidgetToDesktopMediaId(
           widget->GetNativeWindow()->GetHost()->GetAcceleratedWidget());
     }
   }
@@ -495,6 +499,10 @@ bool DesktopMediaPickerDialogView::IsDialogButtonEnabled(
   return true;
 }
 
+views::View* DesktopMediaPickerDialogView::GetInitiallyFocusedView() {
+  return list_view_;
+}
+
 base::string16 DesktopMediaPickerDialogView::GetDialogButtonLabel(
     ui::DialogButton button) const {
   return l10n_util::GetStringUTF16(button == ui::DIALOG_BUTTON_OK ?
@@ -543,6 +551,11 @@ void DesktopMediaPickerDialogView::OnMediaListRowsChanged() {
   GetWidget()->CenterWindow(gfx::Size(widget_bound.width(), new_height));
 }
 
+DesktopMediaListView* DesktopMediaPickerDialogView::GetMediaListViewForTesting()
+    const {
+  return list_view_;
+}
+
 DesktopMediaSourceView*
 DesktopMediaPickerDialogView::GetMediaSourceViewForTesting(int index) const {
   if (list_view_->child_count() <= index)
@@ -569,8 +582,9 @@ void DesktopMediaPickerViews::Show(content::WebContents* web_contents,
                                    scoped_ptr<DesktopMediaList> media_list,
                                    const DoneCallback& done_callback) {
   callback_ = done_callback;
-  dialog_ = new DesktopMediaPickerDialogView(
-      web_contents, context, this, app_name, target_name, media_list.Pass());
+  dialog_ =
+      new DesktopMediaPickerDialogView(web_contents, context, this, app_name,
+                                       target_name, std::move(media_list));
 }
 
 void DesktopMediaPickerViews::NotifyDialogResult(DesktopMediaID source) {

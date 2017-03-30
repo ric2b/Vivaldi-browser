@@ -10,6 +10,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/test/test_timeouts.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/common/chrome_paths.h"
@@ -29,13 +30,16 @@ const base::FilePath::CharType kY4mFileExtension[] = FILE_PATH_LITERAL("y4m");
 
 // This message describes how to modify your .gclient to get the reference
 // video files downloaded for you.
-static const char kAdviseOnGclientSolution[] =
-    "You need to add this solution to your .gclient to run this test:\n"
+const char kAdviseOnGclientSolution[] =
+    "To run this test, you must run download_from_google_storage --config\n"
+    "and follow the instructions (use 'browser' for project id)\n"
+    "You also need to add this solution to your .gclient:\n"
     "{\n"
     "  \"name\"        : \"webrtc.DEPS\",\n"
     "  \"url\"         : \"https://chromium.googlesource.com/chromium/deps/"
     "webrtc/webrtc.DEPS\",\n"
-    "}";
+    "}\n"
+    "and run gclient sync. This will download the required ref files.";
 
 const int kDefaultPollIntervalMsec = 250;
 

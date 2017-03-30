@@ -5,13 +5,15 @@
 #ifndef CHROME_BROWSER_UI_SEARCH_INSTANT_CONTROLLER_H_
 #define CHROME_BROWSER_UI_SEARCH_INSTANT_CONTROLLER_H_
 
+#include <stdint.h>
+
 #include <list>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/ui/search/instant_page.h"
@@ -73,7 +75,7 @@ class InstantController : public InstantPage::Delegate {
   void ClearDebugEvents();
 
   // See comments for |debug_events_| below.
-  const std::list<std::pair<int64, std::string> >& debug_events() {
+  const std::list<std::pair<int64_t, std::string>>& debug_events() {
     return debug_events_;
   }
 
@@ -101,8 +103,6 @@ class InstantController : public InstantPage::Delegate {
   FRIEND_TEST_ALL_PREFIXES(InstantExtendedTest, AcceptingJSSearchDoesNotRunJS);
   FRIEND_TEST_ALL_PREFIXES(InstantExtendedTest,
                            ReloadSearchAfterBackReloadsCorrectQuery);
-  FRIEND_TEST_ALL_PREFIXES(InstantExtendedFirstTabTest,
-                           RedirectToLocalOnLoadFailure);
   FRIEND_TEST_ALL_PREFIXES(InstantExtendedTest, KeyboardTogglesVoiceSearch);
   FRIEND_TEST_ALL_PREFIXES(InstantExtendedTest, HomeButtonAffectsMargin);
   FRIEND_TEST_ALL_PREFIXES(InstantExtendedTest, SearchReusesInstantTab);
@@ -147,7 +147,7 @@ class InstantController : public InstantPage::Delegate {
   SearchMode search_mode_;
 
   // List of events and their timestamps, useful in debugging Instant behaviour.
-  mutable std::list<std::pair<int64, std::string> > debug_events_;
+  mutable std::list<std::pair<int64_t, std::string>> debug_events_;
 
   DISALLOW_COPY_AND_ASSIGN(InstantController);
 };

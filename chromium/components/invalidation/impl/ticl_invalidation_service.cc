@@ -4,7 +4,11 @@
 
 #include "components/invalidation/impl/ticl_invalidation_service.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "components/gcm_driver/gcm_driver.h"
 #include "components/invalidation/impl/gcm_invalidation_bridge.h"
@@ -59,8 +63,8 @@ TiclInvalidationService::TiclInvalidationService(
     const scoped_refptr<net::URLRequestContextGetter>& request_context)
     : OAuth2TokenService::Consumer("ticl_invalidation"),
       user_agent_(user_agent),
-      identity_provider_(identity_provider.Pass()),
-      settings_provider_(settings_provider.Pass()),
+      identity_provider_(std::move(identity_provider)),
+      settings_provider_(std::move(settings_provider)),
       invalidator_registrar_(new syncer::InvalidatorRegistrar()),
       request_access_token_backoff_(&kRequestAccessTokenBackoffPolicy),
       network_channel_type_(GCM_NETWORK_CHANNEL),
@@ -70,6 +74,8 @@ TiclInvalidationService::TiclInvalidationService(
 
 TiclInvalidationService::~TiclInvalidationService() {
   DCHECK(CalledOnValidThread());
+  invalidator_registrar_->UpdateInvalidatorState(
+      syncer::INVALIDATOR_SHUTTING_DOWN);
   settings_provider_->RemoveObserver(this);
   identity_provider_->RemoveActiveAccountRefreshTokenObserver(this);
   identity_provider_->RemoveObserver(this);
@@ -81,7 +87,7 @@ TiclInvalidationService::~TiclInvalidationService() {
 void TiclInvalidationService::Init(
     scoped_ptr<syncer::InvalidationStateTracker> invalidation_state_tracker) {
   DCHECK(CalledOnValidThread());
-  invalidation_state_tracker_ = invalidation_state_tracker.Pass();
+  invalidation_state_tracker_ = std::move(invalidation_state_tracker);
 
   if (invalidation_state_tracker_->GetInvalidatorClientId().empty()) {
     invalidation_state_tracker_->ClearAndSetNewClientId(
@@ -104,7 +110,7 @@ void TiclInvalidationService::InitForTest(
   // Here we perform the equivalent of Init() and StartInvalidator(), but with
   // some minor changes to account for the fact that we're injecting the
   // invalidator.
-  invalidation_state_tracker_ = invalidation_state_tracker.Pass();
+  invalidation_state_tracker_ = std::move(invalidation_state_tracker);
   invalidator_.reset(invalidator);
 
   invalidator_->RegisterHandler(this);
@@ -203,7 +209,7 @@ void TiclInvalidationService::OnGetTokenSuccess(
     const OAuth2TokenService::Request* request,
     const std::string& access_token,
     const base::Time& expiration_time) {
-  DCHECK_EQ(access_token_request_, request);
+  DCHECK_EQ(access_token_request_.get(), request);
   access_token_request_.reset();
   // Reset backoff time after successful response.
   request_access_token_backoff_.Reset();
@@ -218,7 +224,7 @@ void TiclInvalidationService::OnGetTokenSuccess(
 void TiclInvalidationService::OnGetTokenFailure(
     const OAuth2TokenService::Request* request,
     const GoogleServiceAuthError& error) {
-  DCHECK_EQ(access_token_request_, request);
+  DCHECK_EQ(access_token_request_.get(), request);
   DCHECK_NE(error.state(), GoogleServiceAuthError::NONE);
   access_token_request_.reset();
   switch (error.state()) {
@@ -378,8 +384,7 @@ void TiclInvalidationService::StartInvalidator(
           gcm_driver_, identity_provider_.get()));
       network_channel_creator =
           syncer::NonBlockingInvalidator::MakeGCMNetworkChannelCreator(
-              request_context_,
-              gcm_invalidation_bridge_->CreateDelegate().Pass());
+              request_context_, gcm_invalidation_bridge_->CreateDelegate());
       break;
     }
     default: {

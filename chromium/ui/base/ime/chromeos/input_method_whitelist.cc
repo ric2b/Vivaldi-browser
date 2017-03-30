@@ -4,8 +4,11 @@
 
 #include "ui/base/ime/chromeos/input_method_whitelist.h"
 
+#include <stddef.h>
+
 #include <vector>
 
+#include "base/macros.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "chromeos/ime/input_methods.h"
@@ -56,7 +59,7 @@ InputMethodWhitelist::GetSupportedInputMethods() const {
         GURL() // input view page url.
         ));
   }
-  return input_methods.Pass();
+  return input_methods;
 }
 
 }  // namespace input_method

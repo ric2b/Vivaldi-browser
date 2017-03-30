@@ -4,13 +4,16 @@
 
 #include "components/network_time/network_time_tracker.h"
 
-#include "base/basictypes.h"
+#include <stdint.h>
+#include <utility>
+
 #include "base/i18n/time_formatting.h"
 #include "base/logging.h"
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/tick_clock.h"
+#include "build/build_config.h"
 #include "components/network_time/network_time_pref_names.h"
 
 namespace network_time {
@@ -19,9 +22,9 @@ namespace {
 
 // Clock resolution is platform dependent.
 #if defined(OS_WIN)
-const int64 kTicksResolutionMs = base::Time::kMinLowResolutionThresholdMs;
+const int64_t kTicksResolutionMs = base::Time::kMinLowResolutionThresholdMs;
 #else
-const int64 kTicksResolutionMs = 1;  // Assume 1ms for non-windows platforms.
+const int64_t kTicksResolutionMs = 1;  // Assume 1ms for non-windows platforms.
 #endif
 
 // Number of time measurements performed in a given network time calculation.
@@ -37,7 +40,7 @@ void NetworkTimeTracker::RegisterPrefs(PrefRegistrySimple* registry) {
 
 NetworkTimeTracker::NetworkTimeTracker(scoped_ptr<base::TickClock> tick_clock,
                                        PrefService* pref_service)
-    : tick_clock_(tick_clock.Pass()),
+    : tick_clock_(std::move(tick_clock)),
       pref_service_(pref_service),
       received_network_time_(false) {
   const base::DictionaryValue* time_mapping =

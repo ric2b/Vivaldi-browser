@@ -8,21 +8,24 @@
 #include <cstdlib>
 
 #include "ash/ash_switches.h"
+#include "ash/desktop_background/desktop_background_view.h"
 #include "ash/desktop_background/desktop_background_widget_controller.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/shell_window_ids.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/test/display_manager_test_api.h"
 #include "ash/test/test_user_wallpaper_delegate.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
+#include "base/strings/stringprintf.h"
 #include "base/threading/sequenced_worker_pool.h"
-#include "content/public/test/test_utils.h"
+#include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/compositor/test/layer_animator_test_controller.h"
+#include "ui/gfx/canvas.h"
 
 using aura::RootWindow;
 using aura::Window;
@@ -66,6 +69,40 @@ void RunAnimationForWidget(views::Widget* widget) {
   }
 }
 
+// Monitors if any task is processed by the message loop.
+class TaskObserver : public base::MessageLoop::TaskObserver {
+ public:
+  TaskObserver() : processed_(false) {}
+  ~TaskObserver() override {}
+
+  // MessageLoop::TaskObserver overrides.
+  void WillProcessTask(const base::PendingTask& pending_task) override {}
+  void DidProcessTask(const base::PendingTask& pending_task) override {
+    processed_ = true;
+  }
+
+  // Returns true if any task was processed.
+  bool processed() const { return processed_; }
+
+ private:
+  bool processed_;
+  DISALLOW_COPY_AND_ASSIGN(TaskObserver);
+};
+
+void RunAllBlockingPoolTasksUntilIdle(base::SequencedWorkerPool* pool) {
+  while (true) {
+    pool->FlushForTesting();
+
+    TaskObserver task_observer;
+    base::MessageLoop::current()->AddTaskObserver(&task_observer);
+    base::RunLoop().RunUntilIdle();
+    base::MessageLoop::current()->RemoveTaskObserver(&task_observer);
+
+    if (!task_observer.processed())
+      break;
+  }
+}
+
 }  // namespace
 
 class DesktopBackgroundControllerTest : public test::AshTestBase {
@@ -90,6 +127,16 @@ class DesktopBackgroundControllerTest : public test::AshTestBase {
     controller_->set_wallpaper_reload_delay_for_test(0);
   }
 
+  DesktopBackgroundView* desktop_background_view() {
+    DesktopBackgroundWidgetController* controller =
+        Shell::GetPrimaryRootWindowController()
+            ->animating_wallpaper_controller()
+            ->GetController(false);
+    EXPECT_TRUE(controller);
+    return static_cast<DesktopBackgroundView*>(
+        controller->widget()->GetContentsView()->child_at(0));
+  }
+
  protected:
   // A color that can be passed to CreateImage(). Specifically chosen to not
   // conflict with any of the default wallpaper colors.
@@ -102,6 +149,37 @@ class DesktopBackgroundControllerTest : public test::AshTestBase {
     bitmap.eraseColor(color);
     gfx::ImageSkia image = gfx::ImageSkia::CreateFrom1xBitmap(bitmap);
     return image;
+  }
+
+  // Helper function that tests the wallpaper is always fitted to the native
+  // display resolution when the layout is WALLPAPER_LAYOUT_CENTER.
+  void WallpaperFitToNativeResolution(DesktopBackgroundView* view,
+                                      float device_scale_factor,
+                                      int image_width,
+                                      int image_height,
+                                      SkColor color) {
+    gfx::Size size = view->bounds().size();
+    gfx::Canvas canvas(size, device_scale_factor, true);
+    view->OnPaint(&canvas);
+
+    int canvas_width = canvas.sk_canvas()->imageInfo().width();
+    int canvas_height = canvas.sk_canvas()->imageInfo().height();
+    SkBitmap bitmap;
+    bitmap.allocN32Pixels(canvas_width, canvas_height);
+    canvas.sk_canvas()->readPixels(&bitmap, 0, 0);
+
+    for (int i = 0; i < canvas_width; i++) {
+      for (int j = 0; j < canvas_height; j++) {
+        if (i >= (canvas_width - image_width) / 2 &&
+            i < (canvas_width + image_width) / 2 &&
+            j >= (canvas_height - image_height) / 2 &&
+            j < (canvas_height + image_height) / 2) {
+          EXPECT_EQ(color, bitmap.getColor(i, j));
+        } else {
+          EXPECT_EQ(SK_ColorBLACK, bitmap.getColor(i, j));
+        }
+      }
+    }
   }
 
   // Runs kAnimatingDesktopController's animation to completion.
@@ -284,9 +362,7 @@ TEST_F(DesktopBackgroundControllerTest, ResizeCustomWallpaper) {
   if (!SupportsMultipleDisplays())
     return;
 
-  test::DisplayManagerTestApi display_manager_test_api(
-      Shell::GetInstance()->display_manager());
-  display_manager_test_api.UpdateDisplay("320x200");
+  UpdateDisplay("320x200");
 
   gfx::ImageSkia image = CreateImage(640, 480, kCustomWallpaperColor);
 
@@ -294,7 +370,7 @@ TEST_F(DesktopBackgroundControllerTest, ResizeCustomWallpaper) {
   // that the resized image is the expected size.
   controller_->SetWallpaperImage(image, WALLPAPER_LAYOUT_STRETCH);
   EXPECT_TRUE(image.BackedBySameObjectAs(controller_->GetWallpaper()));
-  content::RunAllBlockingPoolTasksUntilIdle();
+  RunAllBlockingPoolTasksUntilIdle(Shell::GetInstance()->blocking_pool());
   gfx::ImageSkia resized_image = controller_->GetWallpaper();
   EXPECT_FALSE(image.BackedBySameObjectAs(resized_image));
   EXPECT_EQ(gfx::Size(320, 200).ToString(), resized_image.size().ToString());
@@ -303,7 +379,7 @@ TEST_F(DesktopBackgroundControllerTest, ResizeCustomWallpaper) {
   // previously-resized image instead of doing another resize
   // (http://crbug.com/321402).
   controller_->SetWallpaperImage(image, WALLPAPER_LAYOUT_STRETCH);
-  content::RunAllBlockingPoolTasksUntilIdle();
+  RunAllBlockingPoolTasksUntilIdle(Shell::GetInstance()->blocking_pool());
   EXPECT_TRUE(resized_image.BackedBySameObjectAs(controller_->GetWallpaper()));
 }
 
@@ -348,5 +424,70 @@ TEST_F(DesktopBackgroundControllerTest, GetMaxDisplaySize) {
       DesktopBackgroundController::GetMaxDisplaySizeInNative().ToString());
 }
 
+// Test that the wallpaper is always fitted to the native display resolution
+// when the layout is WALLPAPER_LAYOUT_CENTER to prevent blurry images.
+TEST_F(DesktopBackgroundControllerTest, DontSacleWallpaperWithCenterLayout) {
+  // We cannot short-circuit animations for this test.
+  ui::ScopedAnimationDurationScaleMode test_duration_mode(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+
+  const gfx::Size high_resolution(3600, 2400);
+  const gfx::Size low_resolution(360, 240);
+  const float high_dsf = 2.0f;
+  const float low_dsf = 1.0f;
+
+  gfx::ImageSkia image_high_res = CreateImage(
+      high_resolution.width(), high_resolution.height(), kCustomWallpaperColor);
+  gfx::ImageSkia image_low_res = CreateImage(
+      low_resolution.width(), low_resolution.height(), kCustomWallpaperColor);
+
+  UpdateDisplay("1200x600*2");
+  {
+    SCOPED_TRACE(base::StringPrintf("1200x600*2 high resolution"));
+    controller_->SetWallpaperImage(image_high_res, WALLPAPER_LAYOUT_CENTER);
+    WallpaperFitToNativeResolution(
+        desktop_background_view(), high_dsf, high_resolution.width(),
+        high_resolution.height(), kCustomWallpaperColor);
+  }
+  {
+    SCOPED_TRACE(base::StringPrintf("1200x600*2 low resolution"));
+    controller_->SetWallpaperImage(image_low_res, WALLPAPER_LAYOUT_CENTER);
+    WallpaperFitToNativeResolution(
+        desktop_background_view(), high_dsf, low_resolution.width(),
+        low_resolution.height(), kCustomWallpaperColor);
+  }
+
+  UpdateDisplay("1200x600");
+  {
+    SCOPED_TRACE(base::StringPrintf("1200x600 high resolution"));
+    controller_->SetWallpaperImage(image_high_res, WALLPAPER_LAYOUT_CENTER);
+    WallpaperFitToNativeResolution(
+        desktop_background_view(), low_dsf, high_resolution.width(),
+        high_resolution.height(), kCustomWallpaperColor);
+  }
+  {
+    SCOPED_TRACE(base::StringPrintf("1200x600 low resolution"));
+    controller_->SetWallpaperImage(image_low_res, WALLPAPER_LAYOUT_CENTER);
+    WallpaperFitToNativeResolution(
+        desktop_background_view(), low_dsf, low_resolution.width(),
+        low_resolution.height(), kCustomWallpaperColor);
+  }
+
+  UpdateDisplay("1200x600/u@1.5");  // 1.5 ui scale
+  {
+    SCOPED_TRACE(base::StringPrintf("1200x600/u@1.5 high resolution"));
+    controller_->SetWallpaperImage(image_high_res, WALLPAPER_LAYOUT_CENTER);
+    WallpaperFitToNativeResolution(
+        desktop_background_view(), low_dsf, high_resolution.width(),
+        high_resolution.height(), kCustomWallpaperColor);
+  }
+  {
+    SCOPED_TRACE(base::StringPrintf("1200x600/u@1.5 low resolution"));
+    controller_->SetWallpaperImage(image_low_res, WALLPAPER_LAYOUT_CENTER);
+    WallpaperFitToNativeResolution(
+        desktop_background_view(), low_dsf, low_resolution.width(),
+        low_resolution.height(), kCustomWallpaperColor);
+  }
+}
 
 }  // namespace ash

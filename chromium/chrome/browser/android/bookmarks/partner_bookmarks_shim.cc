@@ -4,6 +4,8 @@
 
 #include "chrome/browser/android/bookmarks/partner_bookmarks_shim.h"
 
+#include <tuple>
+
 #include "base/lazy_instance.h"
 #include "base/prefs/pref_service.h"
 #include "base/values.h"
@@ -36,15 +38,15 @@ struct PartnerModelKeeper {
 base::LazyInstance<PartnerModelKeeper> g_partner_model_keeper =
     LAZY_INSTANCE_INITIALIZER;
 
-const void* kPartnerBookmarksShimUserDataKey =
+const void* const kPartnerBookmarksShimUserDataKey =
     &kPartnerBookmarksShimUserDataKey;
 
 // Dictionary keys for entries in the kPartnerBookmarksMapping pref.
-static const char kMappingUrl[] = "url";
-static const char kMappingProviderTitle[] = "provider_title";
-static const char kMappingTitle[] = "mapped_title";
+const char kMappingUrl[] = "url";
+const char kMappingProviderTitle[] = "provider_title";
+const char kMappingTitle[] = "mapped_title";
 
-static bool g_disable_partner_bookmarks_editing = false;
+bool g_disable_partner_bookmarks_editing = false;
 
 }  // namespace
 
@@ -135,7 +137,7 @@ void PartnerBookmarksShim::RemoveObserver(
   observers_.RemoveObserver(observer);
 }
 
-const BookmarkNode* PartnerBookmarksShim::GetNodeByID(int64 id) const {
+const BookmarkNode* PartnerBookmarksShim::GetNodeByID(int64_t id) const {
   DCHECK(IsLoaded());
   if (!HasPartnerBookmarks())
     return NULL;
@@ -189,8 +191,8 @@ PartnerBookmarksShim::NodeRenamingMapKey::~NodeRenamingMapKey() {}
 
 bool operator<(const PartnerBookmarksShim::NodeRenamingMapKey& a,
                const PartnerBookmarksShim::NodeRenamingMapKey& b) {
-  return (a.url_ < b.url_) ||
-      (a.url_ == b.url_ && a.provider_title_ < b.provider_title_);
+  return std::tie(a.url_, a.provider_title_) <
+         std::tie(b.url_, b.provider_title_);
 }
 
 // static
@@ -223,7 +225,8 @@ PartnerBookmarksShim::~PartnerBookmarksShim() {
 }
 
 const BookmarkNode* PartnerBookmarksShim::GetNodeByID(
-    const BookmarkNode* parent, int64 id) const {
+    const BookmarkNode* parent,
+    int64_t id) const {
   if (parent->id() == id)
     return parent;
   for (int i = 0, child_count = parent->child_count(); i < child_count; ++i) {

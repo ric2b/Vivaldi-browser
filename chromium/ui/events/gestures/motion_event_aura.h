@@ -5,8 +5,11 @@
 #ifndef UI_EVENTS_GESTURE_DETECTION_UI_MOTION_EVENT_H_
 #define UI_EVENTS_GESTURE_DETECTION_UI_MOTION_EVENT_H_
 
+#include <stddef.h>
+
 #include <map>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "ui/events/event.h"
@@ -35,7 +38,7 @@ class EVENTS_EXPORT MotionEventAura : public MotionEventGeneric {
   void CleanupRemovedTouchPoints(const TouchEvent& event);
 
  private:
-  void AddTouch(const TouchEvent& touch);
+  bool AddTouch(const TouchEvent& touch);
   void UpdateTouch(const TouchEvent& touch);
   void UpdateCachedAction(const TouchEvent& touch);
   int GetIndexFromId(int id) const;

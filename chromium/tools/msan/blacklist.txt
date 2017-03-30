@@ -1,6 +1,5 @@
-# The rules in this file are only applied at compile time.
-# Because the Chrome buildsystem does not automatically touch the files
-# mentioned here, changing this file requires clobbering all MSan bots.
+# The rules in this file are only applied at compile time. If you can modify the
+# source in question, consider function attributes to disable instrumentation.
 #
 # Please think twice before you add or remove these rules.
 
@@ -22,7 +21,7 @@ fun:unpack_RGB888
 
 # False positives due to use of linux_syscall_support. http://crbug.com/394028
 src:*/breakpad/src/*
-src:*/components/crash/app/breakpad_linux.cc
+src:*/components/crash/content/app/breakpad_linux.cc
 
 # False positives due to an MSan bug. http://crbug.com/418986
 fun:*SchedGetParamThread*

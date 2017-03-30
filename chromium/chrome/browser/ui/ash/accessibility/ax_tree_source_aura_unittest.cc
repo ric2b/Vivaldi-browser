@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "ash/test/ash_test_base.h"
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/aura/accessibility/ax_tree_source_aura.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -25,6 +28,10 @@ using views::AXAuraObjWrapper;
 using views::Textfield;
 using views::View;
 using views::Widget;
+
+using AuraAXTreeSerializer = ui::AXTreeSerializer<views::AXAuraObjWrapper*,
+                                                  ui::AXNodeData,
+                                                  ui::AXTreeData>;
 
 // Helper to count the number of nodes in a tree.
 size_t GetSize(AXAuraObjWrapper* tree) {
@@ -130,7 +137,7 @@ TEST_F(AXTreeSourceAuraTest, Focus) {
 
 TEST_F(AXTreeSourceAuraTest, Serialize) {
   AXTreeSourceAura ax_tree;
-  ui::AXTreeSerializer<AXAuraObjWrapper*> ax_serializer(&ax_tree);
+  AuraAXTreeSerializer ax_serializer(&ax_tree);
   ui::AXTreeUpdate out_update;
 
   // This is the initial serialization.

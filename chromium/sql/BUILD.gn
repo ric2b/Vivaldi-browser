@@ -8,15 +8,17 @@ component("sql") {
   sources = [
     "connection.cc",
     "connection.h",
+    "connection_memory_dump_provider.cc",
+    "connection_memory_dump_provider.h",
     "error_delegate_util.cc",
     "error_delegate_util.h",
     "init_status.h",
     "meta_table.cc",
     "meta_table.h",
-    "proxy.cc",
-    "proxy.h",
     "recovery.cc",
     "recovery.h",
+    "sql_memory_dump_provider.cc",
+    "sql_memory_dump_provider.h",
     "statement.cc",
     "statement.h",
     "transaction.cc",
@@ -30,8 +32,8 @@ component("sql") {
 
   deps = [
     "//base",
-    "//third_party/sqlite",
     "//base/third_party/dynamic_annotations",
+    "//third_party/sqlite",
   ]
 }
 
@@ -46,8 +48,10 @@ source_set("test_support") {
     "test/test_helpers.h",
   ]
 
-  deps = [
+  public_deps = [
     ":sql",
+  ]
+  deps = [
     "//base",
     "//testing/gtest",
     "//third_party/sqlite",
@@ -65,11 +69,21 @@ source_set("redirection_header") {
   ]
 }
 
+# TODO(GYP): Delete this after we've converted everything to GN.
+# The _run targets exist only for compatibility w/ GYP.
+group("sql_unittests_run") {
+  testonly = true
+  deps = [
+    ":sql_unittests",
+  ]
+}
+
 test("sql_unittests") {
   sources = [
     "connection_unittest.cc",
     "meta_table_unittest.cc",
     "recovery_unittest.cc",
+    "sql_memory_dump_provider_unittest.cc",
     "sqlite_features_unittest.cc",
     "statement_unittest.cc",
     "test/paths.cc",
@@ -82,12 +96,16 @@ test("sql_unittests") {
     "transaction_unittest.cc",
   ]
 
+  data = [
+    "test/data/",
+  ]
+
   # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
 
   deps = [
-    ":sql",
     ":redirection_header",
+    ":sql",
     ":test_support",
     "//base/allocator",
     "//base/test:test_support",

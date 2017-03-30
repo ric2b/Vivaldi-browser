@@ -2,17 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef MOJO_EDK_SYSTEM_WAITER_H_
-#define MOJO_EDK_SYSTEM_WAITER_H_
+#ifndef THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_WAITER_H_
+#define THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_WAITER_H_
 
 #include <stdint.h>
 
 #include "base/synchronization/condition_variable.h"
 #include "base/synchronization/lock.h"
-#include "mojo/edk/system/awakable.h"
-#include "mojo/edk/system/system_impl_export.h"
 #include "mojo/public/c/system/types.h"
 #include "mojo/public/cpp/system/macros.h"
+#include "third_party/mojo/src/mojo/edk/system/awakable.h"
+#include "third_party/mojo/src/mojo/edk/system/system_impl_export.h"
 
 namespace mojo {
 namespace system {
@@ -54,7 +54,7 @@ class MOJO_SYSTEM_IMPL_EXPORT Waiter final : public Awakable {
   //     |MojoWait()|/|MojoWaitMany()| cannot or can no longer be satisfied by
   //     the corresponding handle (e.g., if the other end of a message or data
   //     pipe is closed).
-  MojoResult Wait(MojoDeadline deadline, uint32_t* context);
+  MojoResult Wait(MojoDeadline deadline, uintptr_t* context);
 
   // Wake the waiter up with the given result and context (or no-op if it's been
   // woken up already).
@@ -76,4 +76,4 @@ class MOJO_SYSTEM_IMPL_EXPORT Waiter final : public Awakable {
 }  // namespace system
 }  // namespace mojo
 
-#endif  // MOJO_EDK_SYSTEM_WAITER_H_
+#endif  // THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_WAITER_H_

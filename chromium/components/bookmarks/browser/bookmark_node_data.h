@@ -5,6 +5,9 @@
 #ifndef COMPONENTS_BOOKMARKS_BROWSER_BOOKMARK_NODE_DATA_H_
 #define COMPONENTS_BOOKMARKS_BROWSER_BOOKMARK_NODE_DATA_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/files/file_path.h"
@@ -15,13 +18,19 @@
 #include "url/gurl.h"
 
 #if defined(TOOLKIT_VIEWS)
-#include "ui/base/dragdrop/os_exchange_data.h"
+#include "ui/base/clipboard/clipboard.h"
 #endif
 
 namespace base {
 class Pickle;
 class PickleIterator;
 }
+
+#if defined(TOOLKIT_VIEWS)
+namespace ui {
+class OSExchangeData;
+}
+#endif
 
 namespace bookmarks {
 
@@ -88,7 +97,7 @@ struct BookmarkNodeData {
     // Meta info for the bookmark node.
     BookmarkNode::MetaInfoMap meta_info_map;
 
-    int64 id() const { return id_; }
+    int64_t id() const { return id_; }
 
    private:
     friend struct BookmarkNodeData;
@@ -98,11 +107,11 @@ struct BookmarkNodeData {
     bool ReadFromPickle(base::PickleIterator* iterator);
 
     // ID of the node.
-    int64 id_;
+    int64_t id_;
   };
 
   // The MIME type for the clipboard format for BookmarkNodeData.
-  static const char* kClipboardFormatString;
+  static const char kClipboardFormatString[];
 
   BookmarkNodeData();
 
@@ -113,7 +122,7 @@ struct BookmarkNodeData {
   ~BookmarkNodeData();
 
 #if defined(TOOLKIT_VIEWS)
-  static const ui::OSExchangeData::CustomFormat& GetBookmarkCustomFormat();
+  static const ui::Clipboard::FormatType& GetBookmarkFormatType();
 #endif
 
   static bool ClipboardContainsBookmarks();

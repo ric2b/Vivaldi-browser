@@ -4,6 +4,9 @@
 
 #include "chromeos/network/onc/onc_validator.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 
 #include "base/json/json_writer.h"
@@ -93,7 +96,7 @@ scoped_ptr<base::Value> Validator::MapValue(const OncValueSignature& signature,
       Mapper::MapValue(signature, onc_value, error);
   if (repaired)
     CHECK_EQ(repaired->GetType(), signature.onc_type);
-  return repaired.Pass();
+  return repaired;
 }
 
 scoped_ptr<base::DictionaryValue> Validator::MapObject(
@@ -128,6 +131,8 @@ scoped_ptr<base::DictionaryValue> Validator::MapObject(
       valid = ValidateVerifyX509(repaired.get());
     } else if (&signature == &kCertificatePatternSignature) {
       valid = ValidateCertificatePattern(repaired.get());
+    } else if (&signature == &kGlobalNetworkConfigurationSignature) {
+      valid = ValidateGlobalNetworkConfiguration(repaired.get());
     } else if (&signature == &kProxySettingsSignature) {
       valid = ValidateProxySettings(repaired.get());
     } else if (&signature == &kProxyLocationSignature) {
@@ -140,7 +145,7 @@ scoped_ptr<base::DictionaryValue> Validator::MapObject(
   }
 
   if (valid) {
-    return repaired.Pass();
+    return repaired;
   } else {
     DCHECK(error_or_warning_found_);
     error_or_warning_found_ = *error = true;
@@ -172,7 +177,7 @@ scoped_ptr<base::Value> Validator::MapField(
       LOG(WARNING) << message;
   }
 
-  return result.Pass();
+  return result;
 }
 
 scoped_ptr<base::ListValue> Validator::MapArray(
@@ -190,7 +195,7 @@ scoped_ptr<base::ListValue> Validator::MapArray(
       &array_signature != &kCertificateListSignature) {
     *nested_error = nested_error_in_current_array;
   }
-  return result.Pass();
+  return result;
 }
 
 scoped_ptr<base::Value> Validator::MapEntry(int index,
@@ -203,7 +208,7 @@ scoped_ptr<base::Value> Validator::MapEntry(int index,
       Mapper::MapEntry(index, signature, onc_value, error);
   DCHECK_EQ(str, path_.back());
   path_.pop_back();
-  return result.Pass();
+  return result;
 }
 
 bool Validator::ValidateObjectDefault(const OncValueSignature& signature,
@@ -325,10 +330,24 @@ std::string JoinStringRange(const std::vector<const char*>& strings,
                             const std::string& separator) {
   std::vector<std::string> string_vector;
   std::copy(strings.begin(), strings.end(), std::back_inserter(string_vector));
-  return JoinString(string_vector, separator);
+  return base::JoinString(string_vector, separator);
 }
 
 }  // namespace
+
+bool Validator::IsValidValue(const std::string& field_value,
+                             const std::vector<const char*>& valid_values) {
+  for (const char* it : valid_values) {
+    if (field_value == it)
+      return true;
+  }
+  error_or_warning_found_ = true;
+  const std::string valid_values_str =
+      "[" + JoinStringRange(valid_values, ", ") + "]";
+  LOG(ERROR) << MessageHeader() << "Found value '" << field_value
+             << "', but expected one of the values " << valid_values_str;
+  return false;
+}
 
 bool Validator::FieldExistsAndHasNoValidValue(
     const base::DictionaryValue& object,
@@ -338,20 +357,10 @@ bool Validator::FieldExistsAndHasNoValidValue(
   if (!object.GetStringWithoutPathExpansion(field_name, &actual_value))
     return false;
 
-  for (std::vector<const char*>::const_iterator it = valid_values.begin();
-       it != valid_values.end();
-       ++it) {
-    if (actual_value == *it)
-      return false;
-  }
-  error_or_warning_found_ = true;
-  std::string valid_values_str =
-      "[" + JoinStringRange(valid_values, ", ") + "]";
   path_.push_back(field_name);
-  LOG(ERROR) << MessageHeader() << "Found value '" << actual_value <<
-      "', but expected one of the values " << valid_values_str;
+  const bool valid = IsValidValue(actual_value, valid_values);
   path_.pop_back();
-  return true;
+  return !valid;
 }
 
 bool Validator::FieldExistsAndIsNotInRange(const base::DictionaryValue& object,
@@ -399,6 +408,29 @@ bool Validator::FieldExistsAndIsEmpty(const base::DictionaryValue& object,
   return true;
 }
 
+bool Validator::ListFieldContainsValidValues(
+    const base::DictionaryValue& object,
+    const std::string& field_name,
+    const std::vector<const char*>& valid_values) {
+  const base::ListValue* list = NULL;
+  if (object.GetListWithoutPathExpansion(field_name, &list)) {
+    path_.push_back(field_name);
+    for (const base::Value* entry : *list) {
+      std::string value;
+      if (!entry->GetAsString(&value)) {
+        NOTREACHED();  // The types of field values are already verified.
+        continue;
+      }
+      if (!IsValidValue(value, valid_values)) {
+        path_.pop_back();
+        return false;
+      }
+    }
+    path_.pop_back();
+  }
+  return true;
+}
+
 bool Validator::ValidateSSIDAndHexSSID(base::DictionaryValue* object) {
   // Check SSID validity.
   std::string ssid_string;
@@ -423,7 +455,7 @@ bool Validator::ValidateSSIDAndHexSSID(base::DictionaryValue* object) {
   std::string hex_ssid_string;
   if (object->GetStringWithoutPathExpansion(::onc::wifi::kHexSSID,
                                             &hex_ssid_string)) {
-    std::vector<uint8> decoded_ssid;
+    std::vector<uint8_t> decoded_ssid;
     if (!base::HexStringToBytes(hex_ssid_string, &decoded_ssid)) {
       LOG(ERROR) << MessageHeader() << "Field " << ::onc::wifi::kHexSSID
                  << " is not a valid hex representation: \"" << hex_ssid_string
@@ -849,6 +881,47 @@ bool Validator::ValidateCertificatePattern(base::DictionaryValue* result) {
   return !error_on_missing_field_ || all_required_exist;
 }
 
+bool Validator::ValidateGlobalNetworkConfiguration(
+    base::DictionaryValue* result) {
+  using namespace ::onc::global_network_config;
+  using namespace ::onc::network_config;
+
+  // Validate kDisableNetworkTypes field.
+  const base::ListValue* disabled_network_types = NULL;
+  if (result->GetListWithoutPathExpansion(kDisableNetworkTypes,
+                                          &disabled_network_types)) {
+    // The kDisableNetworkTypes field is only allowed in device policy.
+    if (!disabled_network_types->empty() &&
+        onc_source_ != ::onc::ONC_SOURCE_DEVICE_POLICY) {
+      error_or_warning_found_ = true;
+      LOG(ERROR) << "Disabled network types only allowed in device policy.";
+      return false;
+    }
+  }
+
+  if (result->HasKey(kAllowOnlyPolicyNetworksToConnect)) {
+    // The kAllowOnlyPolicyNetworksToConnect field is only allowed in device
+    // policy.
+    if (onc_source_ != ::onc::ONC_SOURCE_DEVICE_POLICY) {
+      error_or_warning_found_ = true;
+      LOG(ERROR)
+          << "AllowOnlyPolicyNetworksToConnect only allowed in device policy.";
+      return false;
+    }
+  }
+
+  // Ensure the list contains only legitimate network type identifiers.
+  const char* const kValidNetworkTypeValues[] = {kCellular, kEthernet, kWiFi,
+                                                 kWimax};
+  const std::vector<const char*> valid_network_type_values(
+      toVector(kValidNetworkTypeValues));
+  if (!ListFieldContainsValidValues(*result, kDisableNetworkTypes,
+                                    valid_network_type_values)) {
+    return false;
+  }
+  return true;
+}
+
 bool Validator::ValidateProxySettings(base::DictionaryValue* result) {
   using namespace ::onc::proxy;
 
@@ -939,20 +1012,25 @@ bool Validator::ValidateCertificate(base::DictionaryValue* result) {
 
   bool remove = false;
   result->GetBooleanWithoutPathExpansion(::onc::kRemove, &remove);
-  if (!remove) {
-    all_required_exist &= RequireField(*result, kType);
-
-    if (type == kClient)
-      all_required_exist &= RequireField(*result, kPKCS12);
-    else if (type == kServer || type == kAuthority)
-      all_required_exist &= RequireField(*result, kX509);
+  if (remove) {
+    error_or_warning_found_ = true;
+    LOG(ERROR) << MessageHeader()
+               << "Removal of certificates is not supported.";
+    return false;
   }
+
+  all_required_exist &= RequireField(*result, kType);
+
+  if (type == kClient)
+    all_required_exist &= RequireField(*result, kPKCS12);
+  else if (type == kServer || type == kAuthority)
+    all_required_exist &= RequireField(*result, kX509);
 
   return !error_on_missing_field_ || all_required_exist;
 }
 
 std::string Validator::MessageHeader() {
-  std::string path = path_.empty() ? "toplevel" : JoinString(path_, ".");
+  std::string path = path_.empty() ? "toplevel" : base::JoinString(path_, ".");
   std::string message = "At " + path + ": ";
   return message;
 }

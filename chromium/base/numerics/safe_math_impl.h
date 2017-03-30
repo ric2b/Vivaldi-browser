@@ -5,11 +5,13 @@
 #ifndef BASE_NUMERICS_SAFE_MATH_IMPL_H_
 #define BASE_NUMERICS_SAFE_MATH_IMPL_H_
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include <cmath>
 #include <cstdlib>
 #include <limits>
+#include <type_traits>
 
 #include "base/numerics/safe_conversions.h"
 #include "base/template_util.h"
@@ -63,21 +65,21 @@ struct IntegerForSizeAndSign<8, false> {
 
 template <typename Integer>
 struct UnsignedIntegerForSize {
-  typedef typename enable_if<
+  typedef typename std::enable_if<
       std::numeric_limits<Integer>::is_integer,
       typename IntegerForSizeAndSign<sizeof(Integer), false>::type>::type type;
 };
 
 template <typename Integer>
 struct SignedIntegerForSize {
-  typedef typename enable_if<
+  typedef typename std::enable_if<
       std::numeric_limits<Integer>::is_integer,
       typename IntegerForSizeAndSign<sizeof(Integer), true>::type>::type type;
 };
 
 template <typename Integer>
 struct TwiceWiderInteger {
-  typedef typename enable_if<
+  typedef typename std::enable_if<
       std::numeric_limits<Integer>::is_integer,
       typename IntegerForSizeAndSign<
           sizeof(Integer) * 2,
@@ -86,8 +88,28 @@ struct TwiceWiderInteger {
 
 template <typename Integer>
 struct PositionOfSignBit {
-  static const typename enable_if<std::numeric_limits<Integer>::is_integer,
-                                  size_t>::type value = 8 * sizeof(Integer) - 1;
+  static const typename std::enable_if<std::numeric_limits<Integer>::is_integer,
+                                       size_t>::type value =
+      8 * sizeof(Integer) - 1;
+};
+
+// This is used for UnsignedAbs, where we need to support floating-point
+// template instantiations even though we don't actually support the operations.
+// However, there is no corresponding implementation of e.g. CheckedUnsignedAbs,
+// so the float versions will not compile.
+template <typename Numeric,
+          bool IsInteger = std::numeric_limits<Numeric>::is_integer,
+          bool IsFloat = std::numeric_limits<Numeric>::is_iec559>
+struct UnsignedOrFloatForSize;
+
+template <typename Numeric>
+struct UnsignedOrFloatForSize<Numeric, true, false> {
+  typedef typename UnsignedIntegerForSize<Numeric>::type type;
+};
+
+template <typename Numeric>
+struct UnsignedOrFloatForSize<Numeric, false, true> {
+  typedef Numeric type;
 };
 
 // Helper templates for integer manipulations.
@@ -110,7 +132,7 @@ T BinaryComplement(T x) {
 // way to coalesce things into the CheckedNumericState specializations below.
 
 template <typename T>
-typename enable_if<std::numeric_limits<T>::is_integer, T>::type
+typename std::enable_if<std::numeric_limits<T>::is_integer, T>::type
 CheckedAdd(T x, T y, RangeConstraint* validity) {
   // Since the value of x+y is undefined if we have a signed type, we compute
   // it using the unsigned type of the same size.
@@ -133,7 +155,7 @@ CheckedAdd(T x, T y, RangeConstraint* validity) {
 }
 
 template <typename T>
-typename enable_if<std::numeric_limits<T>::is_integer, T>::type
+typename std::enable_if<std::numeric_limits<T>::is_integer, T>::type
 CheckedSub(T x, T y, RangeConstraint* validity) {
   // Since the value of x+y is undefined if we have a signed type, we compute
   // it using the unsigned type of the same size.
@@ -160,9 +182,9 @@ CheckedSub(T x, T y, RangeConstraint* validity) {
 // slow case we need to manually check that the result won't be truncated by
 // checking with division against the appropriate bound.
 template <typename T>
-typename enable_if<
-    std::numeric_limits<T>::is_integer && sizeof(T) * 2 <= sizeof(uintmax_t),
-    T>::type
+typename std::enable_if<std::numeric_limits<T>::is_integer &&
+                            sizeof(T) * 2 <= sizeof(uintmax_t),
+                        T>::type
 CheckedMul(T x, T y, RangeConstraint* validity) {
   typedef typename TwiceWiderInteger<T>::type IntermediateType;
   IntermediateType tmp =
@@ -172,9 +194,10 @@ CheckedMul(T x, T y, RangeConstraint* validity) {
 }
 
 template <typename T>
-typename enable_if<std::numeric_limits<T>::is_integer&& std::numeric_limits<
-                       T>::is_signed&&(sizeof(T) * 2 > sizeof(uintmax_t)),
-                   T>::type
+typename std::enable_if<std::numeric_limits<T>::is_integer &&
+                            std::numeric_limits<T>::is_signed &&
+                            (sizeof(T) * 2 > sizeof(uintmax_t)),
+                        T>::type
 CheckedMul(T x, T y, RangeConstraint* validity) {
   // If either side is zero then the result will be zero.
   if (!x || !y) {
@@ -201,10 +224,10 @@ CheckedMul(T x, T y, RangeConstraint* validity) {
 }
 
 template <typename T>
-typename enable_if<std::numeric_limits<T>::is_integer &&
-                       !std::numeric_limits<T>::is_signed &&
-                       (sizeof(T) * 2 > sizeof(uintmax_t)),
-                   T>::type
+typename std::enable_if<std::numeric_limits<T>::is_integer &&
+                            !std::numeric_limits<T>::is_signed &&
+                            (sizeof(T) * 2 > sizeof(uintmax_t)),
+                        T>::type
 CheckedMul(T x, T y, RangeConstraint* validity) {
   *validity = (y == 0 || x <= std::numeric_limits<T>::max() / y)
                   ? RANGE_VALID
@@ -214,11 +237,11 @@ CheckedMul(T x, T y, RangeConstraint* validity) {
 
 // Division just requires a check for an invalid negation on signed min/-1.
 template <typename T>
-T CheckedDiv(
-    T x,
-    T y,
-    RangeConstraint* validity,
-    typename enable_if<std::numeric_limits<T>::is_integer, int>::type = 0) {
+T CheckedDiv(T x,
+             T y,
+             RangeConstraint* validity,
+             typename std::enable_if<std::numeric_limits<T>::is_integer,
+                                     int>::type = 0) {
   if (std::numeric_limits<T>::is_signed && x == std::numeric_limits<T>::min() &&
       y == static_cast<T>(-1)) {
     *validity = RANGE_OVERFLOW;
@@ -230,27 +253,27 @@ T CheckedDiv(
 }
 
 template <typename T>
-typename enable_if<
-    std::numeric_limits<T>::is_integer&& std::numeric_limits<T>::is_signed,
-    T>::type
+typename std::enable_if<std::numeric_limits<T>::is_integer &&
+                            std::numeric_limits<T>::is_signed,
+                        T>::type
 CheckedMod(T x, T y, RangeConstraint* validity) {
   *validity = y > 0 ? RANGE_VALID : RANGE_INVALID;
   return x % y;
 }
 
 template <typename T>
-typename enable_if<
-    std::numeric_limits<T>::is_integer && !std::numeric_limits<T>::is_signed,
-    T>::type
+typename std::enable_if<std::numeric_limits<T>::is_integer &&
+                            !std::numeric_limits<T>::is_signed,
+                        T>::type
 CheckedMod(T x, T y, RangeConstraint* validity) {
   *validity = RANGE_VALID;
   return x % y;
 }
 
 template <typename T>
-typename enable_if<
-    std::numeric_limits<T>::is_integer&& std::numeric_limits<T>::is_signed,
-    T>::type
+typename std::enable_if<std::numeric_limits<T>::is_integer &&
+                            std::numeric_limits<T>::is_signed,
+                        T>::type
 CheckedNeg(T value, RangeConstraint* validity) {
   *validity =
       value != std::numeric_limits<T>::min() ? RANGE_VALID : RANGE_OVERFLOW;
@@ -259,9 +282,9 @@ CheckedNeg(T value, RangeConstraint* validity) {
 }
 
 template <typename T>
-typename enable_if<
-    std::numeric_limits<T>::is_integer && !std::numeric_limits<T>::is_signed,
-    T>::type
+typename std::enable_if<std::numeric_limits<T>::is_integer &&
+                            !std::numeric_limits<T>::is_signed,
+                        T>::type
 CheckedNeg(T value, RangeConstraint* validity) {
   // The only legal unsigned negation is zero.
   *validity = value ? RANGE_UNDERFLOW : RANGE_VALID;
@@ -270,9 +293,9 @@ CheckedNeg(T value, RangeConstraint* validity) {
 }
 
 template <typename T>
-typename enable_if<
-    std::numeric_limits<T>::is_integer&& std::numeric_limits<T>::is_signed,
-    T>::type
+typename std::enable_if<std::numeric_limits<T>::is_integer &&
+                            std::numeric_limits<T>::is_signed,
+                        T>::type
 CheckedAbs(T value, RangeConstraint* validity) {
   *validity =
       value != std::numeric_limits<T>::min() ? RANGE_VALID : RANGE_OVERFLOW;
@@ -280,23 +303,43 @@ CheckedAbs(T value, RangeConstraint* validity) {
 }
 
 template <typename T>
-typename enable_if<
-    std::numeric_limits<T>::is_integer && !std::numeric_limits<T>::is_signed,
-    T>::type
+typename std::enable_if<std::numeric_limits<T>::is_integer &&
+                            !std::numeric_limits<T>::is_signed,
+                        T>::type
 CheckedAbs(T value, RangeConstraint* validity) {
-  // Absolute value of a positive is just its identiy.
+  // T is unsigned, so |value| must already be positive.
   *validity = RANGE_VALID;
+  return value;
+}
+
+template <typename T>
+typename std::enable_if<std::numeric_limits<T>::is_integer &&
+                            std::numeric_limits<T>::is_signed,
+                        typename UnsignedIntegerForSize<T>::type>::type
+CheckedUnsignedAbs(T value) {
+  typedef typename UnsignedIntegerForSize<T>::type UnsignedT;
+  return value == std::numeric_limits<T>::min()
+             ? static_cast<UnsignedT>(std::numeric_limits<T>::max()) + 1
+             : static_cast<UnsignedT>(std::abs(value));
+}
+
+template <typename T>
+typename std::enable_if<std::numeric_limits<T>::is_integer &&
+                            !std::numeric_limits<T>::is_signed,
+                        T>::type
+CheckedUnsignedAbs(T value) {
+  // T is unsigned, so |value| must already be positive.
   return value;
 }
 
 // These are the floating point stubs that the compiler needs to see. Only the
 // negation operation is ever called.
-#define BASE_FLOAT_ARITHMETIC_STUBS(NAME)                        \
-  template <typename T>                                          \
-  typename enable_if<std::numeric_limits<T>::is_iec559, T>::type \
-  Checked##NAME(T, T, RangeConstraint*) {                        \
-    NOTREACHED();                                                \
-    return 0;                                                    \
+#define BASE_FLOAT_ARITHMETIC_STUBS(NAME)                             \
+  template <typename T>                                               \
+  typename std::enable_if<std::numeric_limits<T>::is_iec559, T>::type \
+      Checked##NAME(T, T, RangeConstraint*) {                         \
+    NOTREACHED();                                                     \
+    return 0;                                                         \
   }
 
 BASE_FLOAT_ARITHMETIC_STUBS(Add)
@@ -308,14 +351,14 @@ BASE_FLOAT_ARITHMETIC_STUBS(Mod)
 #undef BASE_FLOAT_ARITHMETIC_STUBS
 
 template <typename T>
-typename enable_if<std::numeric_limits<T>::is_iec559, T>::type CheckedNeg(
+typename std::enable_if<std::numeric_limits<T>::is_iec559, T>::type CheckedNeg(
     T value,
     RangeConstraint*) {
   return -value;
 }
 
 template <typename T>
-typename enable_if<std::numeric_limits<T>::is_iec559, T>::type CheckedAbs(
+typename std::enable_if<std::numeric_limits<T>::is_iec559, T>::type CheckedAbs(
     T value,
     RangeConstraint*) {
   return std::abs(value);
@@ -375,8 +418,8 @@ class CheckedNumericState<T, NUMERIC_INTEGER> {
   template <typename Src>
   explicit CheckedNumericState(
       Src value,
-      typename enable_if<std::numeric_limits<Src>::is_specialized, int>::type =
-          0)
+      typename std::enable_if<std::numeric_limits<Src>::is_specialized,
+                              int>::type = 0)
       : value_(static_cast<T>(value)),
         validity_(DstRangeRelationToSrcRange<T>(value)) {}
 
@@ -400,7 +443,8 @@ class CheckedNumericState<T, NUMERIC_FLOATING> {
   CheckedNumericState(
       Src value,
       RangeConstraint validity,
-      typename enable_if<std::numeric_limits<Src>::is_integer, int>::type = 0) {
+      typename std::enable_if<std::numeric_limits<Src>::is_integer, int>::type =
+          0) {
     switch (DstRangeRelationToSrcRange<T>(value)) {
       case RANGE_VALID:
         value_ = static_cast<T>(value);
@@ -426,8 +470,8 @@ class CheckedNumericState<T, NUMERIC_FLOATING> {
   template <typename Src>
   explicit CheckedNumericState(
       Src value,
-      typename enable_if<std::numeric_limits<Src>::is_specialized, int>::type =
-          0)
+      typename std::enable_if<std::numeric_limits<Src>::is_specialized,
+                              int>::type = 0)
       : value_(static_cast<T>(value)) {}
 
   // Copy constructor.

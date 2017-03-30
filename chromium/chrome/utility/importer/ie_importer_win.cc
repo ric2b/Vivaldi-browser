@@ -7,6 +7,7 @@
 #include <ole2.h>
 #include <intshcut.h>
 #include <shlobj.h>
+#include <stddef.h>
 #include <urlhist.h>
 #include <wininet.h>
 
@@ -18,6 +19,7 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -29,6 +31,7 @@
 #include "base/win/scoped_handle.h"
 #include "base/win/scoped_propvariant.h"
 #include "base/win/windows_version.h"
+#include "chrome/common/importer/edge_importer_utils_win.h"
 #include "chrome/common/importer/ie_importer_utils_win.h"
 #include "chrome/common/importer/imported_bookmark_entry.h"
 #include "chrome/common/importer/importer_bridge.h"
@@ -79,8 +82,8 @@ base::Time GetFileCreationTime(const base::string16& file) {
 }
 
 // Safely read an object of type T from a raw sequence of bytes.
-template<typename T>
-bool BinaryRead(T* data, size_t offset, const std::vector<uint8>& blob) {
+template <typename T>
+bool BinaryRead(T* data, size_t offset, const std::vector<uint8_t>& blob) {
   if (offset + sizeof(T) > blob.size())
     return false;
   memcpy(data, &blob[offset], sizeof(T));
@@ -93,8 +96,9 @@ bool BinaryRead(T* data, size_t offset, const std::vector<uint8>& blob) {
 // .cb = 0. Here, before simply casting &blob[offset] to LPITEMIDLIST,
 // we verify that the list structure is not overrunning the boundary of
 // the binary blob.
-LPCITEMIDLIST BinaryReadItemIDList(size_t offset, size_t idlist_size,
-                                   const std::vector<uint8>& blob) {
+LPCITEMIDLIST BinaryReadItemIDList(size_t offset,
+                                   size_t idlist_size,
+                                   const std::vector<uint8_t>& blob) {
   size_t head = 0;
   while (true) {
     // Use a USHORT instead of SHITEMID to avoid buffer over read.
@@ -113,7 +117,7 @@ LPCITEMIDLIST BinaryReadItemIDList(size_t offset, size_t idlist_size,
 struct IEOrderBookmarkComparator {
   bool operator()(const ImportedBookmarkEntry& lhs,
                   const ImportedBookmarkEntry& rhs) const {
-    static const uint32 kNotSorted = 0xfffffffb;  // IE uses this magic value.
+    static const uint32_t kNotSorted = 0xfffffffb;  // IE uses this magic value.
     base::FilePath lhs_prefix;
     base::FilePath rhs_prefix;
     for (size_t i = 0; i <= lhs.path.size() && i <= rhs.path.size(); ++i) {
@@ -126,14 +130,14 @@ struct IEOrderBookmarkComparator {
       if (lhs_i == rhs_i)
         continue;
       // The first path element that differs between the two.
-      std::map<base::FilePath, uint32>::const_iterator lhs_iter =
-        sort_index_->find(lhs_prefix);
-      std::map<base::FilePath, uint32>::const_iterator rhs_iter =
-        sort_index_->find(rhs_prefix);
-      uint32 lhs_sort_index = (lhs_iter == sort_index_->end() ? kNotSorted
-        : lhs_iter->second);
-      uint32 rhs_sort_index = (rhs_iter == sort_index_->end() ? kNotSorted
-        : rhs_iter->second);
+      std::map<base::FilePath, uint32_t>::const_iterator lhs_iter =
+          sort_index_->find(lhs_prefix);
+      std::map<base::FilePath, uint32_t>::const_iterator rhs_iter =
+          sort_index_->find(rhs_prefix);
+      uint32_t lhs_sort_index =
+          (lhs_iter == sort_index_->end() ? kNotSorted : lhs_iter->second);
+      uint32_t rhs_sort_index =
+          (rhs_iter == sort_index_->end() ? kNotSorted : rhs_iter->second);
       if (lhs_sort_index != rhs_sort_index)
         return lhs_sort_index < rhs_sort_index;
       // If they have the same sort order, sort alphabetically.
@@ -141,7 +145,7 @@ struct IEOrderBookmarkComparator {
     }
     return lhs.path.size() < rhs.path.size();
   }
-  const std::map<base::FilePath, uint32>* sort_index_;
+  const std::map<base::FilePath, uint32_t>* sort_index_;
 };
 
 // IE stores the order of the Favorites menu in registry under:
@@ -154,41 +158,51 @@ struct IEOrderBookmarkComparator {
 // The content of the "Order" value is a raw binary dump of an array of the
 // following data structure
 //   struct {
-//     uint32 size;  // Note that ITEMIDLIST is variably-sized.
-//     uint32 sort_index;  // 0 means this is the first item, 1 the second, ...
+//     uint32_t size;  // Note that ITEMIDLIST is variably-sized.
+//     uint32_t sort_index;  // 0 means this is the first item, 1 the second,
+//     ...
 //     ITEMIDLIST item_id;
 //   };
 // where each item_id should correspond to a favorites link file (*.url) in
 // the current folder.
-bool ParseFavoritesOrderBlob(
-    const Importer* importer,
-    const std::vector<uint8>& blob,
-    const base::FilePath& path,
-    std::map<base::FilePath, uint32>* sort_index) WARN_UNUSED_RESULT {
+// gcc, in its infinite wisdom, only allows WARN_UNUSED_RESULT for prototypes.
+// Clang, to be compatible with gcc, warns if WARN_UNUSED_RESULT is used in a
+// non-gcc compatible manner (-Wgcc-compat). So even though gcc isn't used to
+// build on Windows, declare some prototypes anyway to satisfy Clang's gcc
+// compatibility warnings.
+bool ParseFavoritesOrderBlob(const Importer* importer,
+                             const std::vector<uint8_t>& blob,
+                             const base::FilePath& path,
+                             std::map<base::FilePath, uint32_t>* sort_index)
+    WARN_UNUSED_RESULT;
+bool ParseFavoritesOrderBlob(const Importer* importer,
+                             const std::vector<uint8_t>& blob,
+                             const base::FilePath& path,
+                             std::map<base::FilePath, uint32_t>* sort_index) {
   static const int kItemCountOffset = 16;
   static const int kItemListStartOffset = 20;
 
   // Read the number of items.
-  uint32 item_count = 0;
+  uint32_t item_count = 0;
   if (!BinaryRead(&item_count, kItemCountOffset, blob))
     return false;
 
   // Traverse over the items.
   size_t base_offset = kItemListStartOffset;
-  for (uint32 i = 0; i < item_count && !importer->cancelled(); ++i) {
+  for (uint32_t i = 0; i < item_count && !importer->cancelled(); ++i) {
     static const int kSizeOffset = 0;
     static const int kSortIndexOffset = 4;
     static const int kItemIDListOffset = 8;
 
     // Read the size (number of bytes) of the current item.
-    uint32 item_size = 0;
+    uint32_t item_size = 0;
     if (!BinaryRead(&item_size, base_offset + kSizeOffset, blob) ||
         base_offset + item_size <= base_offset ||  // checking overflow
         base_offset + item_size > blob.size())
       return false;
 
     // Read the sort index of the current item.
-    uint32 item_sort_index = 0;
+    uint32_t item_sort_index = 0;
     if (!BinaryRead(&item_sort_index, base_offset + kSortIndexOffset, blob))
       return false;
 
@@ -212,11 +226,16 @@ bool ParseFavoritesOrderRegistryTree(
     const Importer* importer,
     const base::win::RegKey& key,
     const base::FilePath& path,
-    std::map<base::FilePath, uint32>* sort_index) WARN_UNUSED_RESULT {
+    std::map<base::FilePath, uint32_t>* sort_index) WARN_UNUSED_RESULT;
+bool ParseFavoritesOrderRegistryTree(
+    const Importer* importer,
+    const base::win::RegKey& key,
+    const base::FilePath& path,
+    std::map<base::FilePath, uint32_t>* sort_index) {
   // Parse the order information of the current folder.
   DWORD blob_length = 0;
   if (key.ReadValue(L"Order", NULL, &blob_length, NULL) == ERROR_SUCCESS) {
-    std::vector<uint8> blob(blob_length);
+    std::vector<uint8_t> blob(blob_length);
     if (blob_length > 0 &&
         key.ReadValue(L"Order", reinterpret_cast<DWORD*>(&blob[0]),
                       &blob_length, NULL) == ERROR_SUCCESS) {
@@ -241,9 +260,11 @@ bool ParseFavoritesOrderRegistryTree(
   return true;
 }
 
-bool ParseFavoritesOrderInfo(
-    const Importer* importer,
-    std::map<base::FilePath, uint32>* sort_index) WARN_UNUSED_RESULT {
+bool ParseFavoritesOrderInfo(const Importer* importer,
+                             std::map<base::FilePath, uint32_t>* sort_index)
+    WARN_UNUSED_RESULT;
+bool ParseFavoritesOrderInfo(const Importer* importer,
+                             std::map<base::FilePath, uint32_t>* sort_index) {
   base::string16 key_path(importer::GetIEFavoritesOrderKey());
   base::win::RegKey key(HKEY_CURRENT_USER, key_path.c_str(), KEY_READ);
   if (!key.Valid())
@@ -257,7 +278,7 @@ bool ParseFavoritesOrderInfo(
 void SortBookmarksInIEOrder(
     const Importer* importer,
     std::vector<ImportedBookmarkEntry>* bookmarks) {
-  std::map<base::FilePath, uint32> sort_index;
+  std::map<base::FilePath, uint32_t> sort_index;
   if (!ParseFavoritesOrderInfo(importer, &sort_index))
     return;
   IEOrderBookmarkComparator compare = {&sort_index};
@@ -404,13 +425,20 @@ const GUID IEImporter::kUnittestGUID = {
     { 0xb8, 0x7, 0x3d, 0x46, 0xab, 0x15, 0x45, 0xdf }
 };
 
-IEImporter::IEImporter() {
-}
+IEImporter::IEImporter() : edge_import_mode_(false) {}
 
 void IEImporter::StartImport(const importer::SourceProfile& source_profile,
-                             uint16 items,
+                             uint16_t items,
                              ImporterBridge* bridge) {
+  edge_import_mode_ = source_profile.importer_type == importer::TYPE_EDGE;
   bridge_ = bridge;
+
+  if (edge_import_mode_) {
+    // When using for Edge imports we only support Favorites.
+    DCHECK_EQ(items, importer::FAVORITES);
+    // As coming from untrusted source ensure items is correct.
+    items = importer::FAVORITES;
+  }
   source_path_ = source_profile.source_path;
 
   bridge_->NotifyStarted();
@@ -462,7 +490,10 @@ void IEImporter::ImportFavorites() {
 
   if (!bookmarks.empty() && !cancelled()) {
     const base::string16& first_folder_name =
-        l10n_util::GetStringUTF16(IDS_BOOKMARK_GROUP_FROM_IE);
+        edge_import_mode_
+            ? l10n_util::GetStringUTF16(IDS_BOOKMARK_GROUP_FROM_EDGE)
+            : l10n_util::GetStringUTF16(IDS_BOOKMARK_GROUP_FROM_IE);
+
     bridge_->AddBookmarks(bookmarks, first_folder_name);
   }
   if (!favicons.empty() && !cancelled())
@@ -596,7 +627,9 @@ void IEImporter::ImportPasswordsIE6() {
         ac.key.erase(i);
         ac.is_url = (ac.key.find(L"://") != base::string16::npos);
         ac_list.push_back(ac);
-        base::SplitString(data, L'\0', &ac_list[ac_list.size() - 1].data);
+        ac_list[ac_list.size() - 1].data = base::SplitString(
+            data, base::string16(1, '\0'),
+            base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
       }
       CoTaskMemFree(buffer);
     }
@@ -764,7 +797,7 @@ void IEImporter::ImportHomepage() {
 
 bool IEImporter::GetFavoritesInfo(IEImporter::FavoritesInfo* info) {
   if (!source_path_.empty()) {
-    // Source path exists during testing.
+    // Source path exists during testing as well as when importing from Edge.
     info->path = source_path_;
     info->path = info->path.AppendASCII("Favorites");
     info->links_folder = L"Links";
@@ -870,8 +903,10 @@ void IEImporter::ParseFavoritesFolder(
     bookmarks->push_back(entry);
   }
 
-  // Reflect the menu order in IE.
-  SortBookmarksInIEOrder(this, bookmarks);
+  if (!edge_import_mode_) {
+    // Reflect the menu order in IE.
+    SortBookmarksInIEOrder(this, bookmarks);
+  }
 
   // Record favicon data.
   for (FaviconMap::iterator iter = favicon_map.begin();

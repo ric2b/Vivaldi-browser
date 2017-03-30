@@ -11,13 +11,17 @@
 #include <vector>
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "ui/base/accelerators/accelerator.h"
 
-template <typename T> struct DefaultSingletonTraits;
+namespace base {
+template <typename T>
+struct DefaultSingletonTraits;
+}  // namespace base
 
 // This class maintains a map of command_ids to Accelerator objects (see
 // chrome/app/chrome_command_ids.h). Currently, this only lists the commands
-// that are used in the Wrench menu.
+// that are used in the App menu.
 //
 // It is recommended that this class be used as a singleton so that the key map
 // isn't created multiple places.
@@ -47,7 +51,7 @@ class AcceleratorsCocoa {
   static AcceleratorsCocoa* GetInstance();
 
  private:
-  friend struct DefaultSingletonTraits<AcceleratorsCocoa>;
+  friend struct base::DefaultSingletonTraits<AcceleratorsCocoa>;
   FRIEND_TEST_ALL_PREFIXES(AcceleratorsCocoaBrowserTest,
                            MappingAcceleratorsInMainMenu);
 
@@ -56,7 +60,7 @@ class AcceleratorsCocoa {
 
   // A map from command_id to Accelerator. The accelerator is fully filled out,
   // and its platform_accelerator is also fully filled out.
-  // Contains accelerators from both the wrench menu and the main menu.
+  // Contains accelerators from both the app menu and the main menu.
   AcceleratorMap accelerators_;
   // A list of accelerators used in the main menu that have no associated
   // command_id. The accelerator is fully filled out, and its

@@ -4,28 +4,32 @@
 
 #include "remoting/host/win/session_input_injector.h"
 
+#include <stddef.h>
+
 #include <set>
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/win/windows_version.h"
 #include "remoting/host/sas_injector.h"
 #include "remoting/proto/event.pb.h"
-#include "remoting/protocol/usb_key_codes.h"
 #include "third_party/webrtc/modules/desktop_capture/win/desktop.h"
 #include "third_party/webrtc/modules/desktop_capture/win/scoped_thread_desktop.h"
+#include "ui/events/keycodes/dom/dom_code.h"
 
 namespace {
 
-bool CheckCtrlAndAltArePressed(const std::set<uint32>& pressed_keys) {
-  size_t ctrl_keys = pressed_keys.count(kUsbLeftControl) +
-    pressed_keys.count(kUsbRightControl);
-  size_t alt_keys = pressed_keys.count(kUsbLeftAlt) +
-    pressed_keys.count(kUsbRightAlt);
+bool CheckCtrlAndAltArePressed(const std::set<ui::DomCode>& pressed_keys) {
+  size_t ctrl_keys = pressed_keys.count(ui::DomCode::CONTROL_LEFT) +
+                     pressed_keys.count(ui::DomCode::CONTROL_RIGHT);
+  size_t alt_keys = pressed_keys.count(ui::DomCode::ALT_LEFT) +
+                    pressed_keys.count(ui::DomCode::ALT_RIGHT);
   return ctrl_keys != 0 && alt_keys != 0 &&
     (ctrl_keys + alt_keys == pressed_keys.size());
 }
@@ -86,7 +90,7 @@ class SessionInputInjectorWin::Core
   scoped_ptr<SasInjector> sas_injector_;
 
   // Keys currently pressed by the client, used to detect Ctrl-Alt-Del.
-  std::set<uint32> pressed_keys_;
+  std::set<ui::DomCode> pressed_keys_;
 
   DISALLOW_COPY_AND_ASSIGN(Core);
 };
@@ -97,10 +101,9 @@ SessionInputInjectorWin::Core::Core(
     scoped_refptr<base::SingleThreadTaskRunner> inject_sas_task_runner,
     const base::Closure& inject_sas)
     : input_task_runner_(input_task_runner),
-      nested_executor_(nested_executor.Pass()),
+      nested_executor_(std::move(nested_executor)),
       inject_sas_task_runner_(inject_sas_task_runner),
-      inject_sas_(inject_sas) {
-}
+      inject_sas_(inject_sas) {}
 
 void SessionInputInjectorWin::Core::Start(
     scoped_ptr<protocol::ClipboardStub> client_clipboard) {
@@ -111,7 +114,7 @@ void SessionInputInjectorWin::Core::Start(
     return;
   }
 
-  nested_executor_->Start(client_clipboard.Pass());
+  nested_executor_->Start(std::move(client_clipboard));
 }
 
 void SessionInputInjectorWin::Core::InjectClipboardEvent(
@@ -136,9 +139,10 @@ void SessionInputInjectorWin::Core::InjectKeyEvent(const KeyEvent& event) {
   DCHECK(event.has_pressed());
 
   if (event.has_usb_keycode()) {
+    ui::DomCode dom_code = static_cast<ui::DomCode>(event.usb_keycode());
     if (event.pressed()) {
       // Simulate secure attention sequence if Ctrl-Alt-Del was just pressed.
-      if (event.usb_keycode() == kUsbDelete &&
+      if (dom_code == ui::DomCode::DEL &&
           CheckCtrlAndAltArePressed(pressed_keys_)) {
         VLOG(3) << "Sending Secure Attention Sequence to the session";
 
@@ -152,9 +156,9 @@ void SessionInputInjectorWin::Core::InjectKeyEvent(const KeyEvent& event) {
         }
       }
 
-      pressed_keys_.insert(event.usb_keycode());
+      pressed_keys_.insert(dom_code);
     } else {
-      pressed_keys_.erase(event.usb_keycode());
+      pressed_keys_.erase(dom_code);
     }
   }
 
@@ -215,7 +219,7 @@ SessionInputInjectorWin::SessionInputInjectorWin(
     scoped_ptr<InputInjector> nested_executor,
     scoped_refptr<base::SingleThreadTaskRunner> inject_sas_task_runner,
     const base::Closure& inject_sas) {
-  core_ = new Core(input_task_runner, nested_executor.Pass(),
+  core_ = new Core(input_task_runner, std::move(nested_executor),
                    inject_sas_task_runner, inject_sas);
 }
 
@@ -224,7 +228,7 @@ SessionInputInjectorWin::~SessionInputInjectorWin() {
 
 void SessionInputInjectorWin::Start(
     scoped_ptr<protocol::ClipboardStub> client_clipboard) {
-  core_->Start(client_clipboard.Pass());
+  core_->Start(std::move(client_clipboard));
 }
 
 void SessionInputInjectorWin::InjectClipboardEvent(

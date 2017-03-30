@@ -5,10 +5,12 @@
 #ifndef CONTENT_BROWSER_VR_VR_DEVICE_MANAGER_H
 #define CONTENT_BROWSER_VR_VR_DEVICE_MANAGER_H
 
+#include <stdint.h>
+
 #include <map>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/thread_checker.h"
@@ -20,7 +22,7 @@
 
 namespace content {
 
-class VRDeviceManager : public VRService, public mojo::ErrorHandler {
+class VRDeviceManager : public VRService {
  public:
   ~VRDeviceManager() override;
 
@@ -51,8 +53,8 @@ class VRDeviceManager : public VRService, public mojo::ErrorHandler {
                       const GetSensorStateCallback& callback) override;
   void ResetSensor(uint32_t index) override;
 
-  // mojo::ErrorHandler implementation
-  void OnConnectionError() override;
+  // Mojo connection error handler.
+  void OnConnectionError();
 
   using ProviderList = std::vector<linked_ptr<VRDeviceProvider>>;
   ProviderList providers_;

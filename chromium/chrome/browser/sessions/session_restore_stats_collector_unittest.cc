@@ -4,6 +4,10 @@
 
 #include "chrome/browser/sessions/session_restore_stats_collector.h"
 
+#include <stddef.h>
+#include <utility>
+
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "chrome/test/base/testing_profile.h"
@@ -159,8 +163,8 @@ class TestSessionRestoreStatsCollector : public SessionRestoreStatsCollector {
       scoped_ptr<base::TickClock> tick_clock,
       scoped_ptr<StatsReportingDelegate> reporting_delegate)
       : SessionRestoreStatsCollector(tick_clock->NowTicks(),
-                                     reporting_delegate.Pass()) {
-    set_tick_clock(tick_clock.Pass());
+                                     std::move(reporting_delegate)) {
+    set_tick_clock(std::move(tick_clock));
   }
 
  private:

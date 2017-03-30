@@ -52,7 +52,7 @@
     # resource bundle because that's the interface that
     # Authorization Services uses.  Also, Authorization Services
     # can't deal with .icns files.
-    'app/theme/default_100_percent/<(theme_dir_name)/product_logo_32.png',
+    '<(VIVALDI)/app/resources/theme/default_100_percent/<(theme_dir_name)/product_logo_32.png',
 
     'app/framework-Info.plist',
     '<@(mac_all_xibs)',
@@ -101,7 +101,6 @@
     },
   ],
   'variables': {
-    'libpeer_target_type%': 'static_library',
     'theme_dir_name': '<(branding_path_component)',
   },
   'postbuilds': [
@@ -151,16 +150,8 @@
       'files': [],
       'conditions': [
         ['disable_nacl!=1', {
-          'conditions': [
-            ['target_arch=="x64"', {
-              'files': [
-                '<(PRODUCT_DIR)/nacl_irt_x86_64.nexe',
-              ],
-            }, {
-              'files': [
-                '<(PRODUCT_DIR)/nacl_irt_x86_32.nexe',
-              ],
-            }],
+          'files': [
+            '<(PRODUCT_DIR)/nacl_irt_x86_64.nexe',
           ],
         }],
       ],
@@ -182,7 +173,7 @@
       'destination': '<(PRODUCT_DIR)/$(CONTENTS_FOLDER_PATH)/Internet Plug-Ins/',
       'files': [],
       'conditions': [
-        ['branding == "Chrome"', {
+        ['branding == "Chrome" or branding == "vivaldi"', {
           'files': [
             '<(PRODUCT_DIR)/widevinecdmadapter.plugin',
           ],
@@ -252,6 +243,17 @@
           ],
         },
         {
+          'postbuild_name:': 'Lipo KeystoneRegistration.framework',
+          'variables': {
+            'KEYSTONE_FILE':
+            '${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/Frameworks/KeystoneRegistration.framework/KeystoneRegistration',
+          },
+          'action': [
+            'tools/mac_helpers/lipo_thin_x86_64.sh',
+            '<(KEYSTONE_FILE)',
+          ],
+        },
+        {
           'postbuild_name': 'Symlink Frameworks',
           'action': [
             'ln',
@@ -268,7 +270,7 @@
           'postbuild_name': 'Copy Sparkle.framework',
           'action': [
             '../build/mac/copy_framework_unversioned.sh',
-            '<(VIVALDI)/third_party/Sparkle-1.9.0/Sparkle.framework',
+            '<(VIVALDI)/third_party/sparkle_lib/Sparkle.framework',
             '${TARGET_BUILD_DIR}/Vivaldi.app/Contents/Frameworks',
           ],
         },
@@ -299,13 +301,15 @@
         '<(SHARED_INTERMEDIATE_DIR)/repack/vivaldi_200_percent.pak',
       ],
     }],
-    ['enable_webrtc==1 and libpeer_target_type!="static_library"', {
-      'copies': [{
-       'destination': '<(PRODUCT_DIR)/$(CONTENTS_FOLDER_PATH)/Libraries',
-       'files': [
-          '<(PRODUCT_DIR)/libpeerconnection.so',
-        ],
-      }],
+    ['enable_topchrome_md==1', {
+      'mac_bundle_resources': [
+      '<(SHARED_INTERMEDIATE_DIR)/repack/chrome_material_100_percent.pak',
+      ],
+    }],
+    ['enable_topchrome_md==1 and enable_hidpi==1', {
+      'mac_bundle_resources': [
+        '<(SHARED_INTERMEDIATE_DIR)/repack/chrome_material_200_percent.pak',
+      ],
     }],
     ['icu_use_data_file_flag==1', {
       'mac_bundle_resources': [

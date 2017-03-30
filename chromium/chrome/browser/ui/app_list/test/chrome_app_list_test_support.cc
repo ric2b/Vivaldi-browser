@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/app_list/test/chrome_app_list_test_support.h"
 
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -29,7 +30,7 @@ class CreateProfileHelper {
         base::Bind(&CreateProfileHelper::OnProfileCreated,
                    base::Unretained(this)),
         base::string16(),
-        base::string16(),
+        std::string(),
         std::string());
     run_loop_.Run();
     return profile_;

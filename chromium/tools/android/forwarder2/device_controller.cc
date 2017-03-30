@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/logging.h"
@@ -29,12 +28,12 @@ scoped_ptr<DeviceController> DeviceController::Create(
   if (!host_socket->BindUnix(adb_unix_socket)) {
     PLOG(ERROR) << "Could not BindAndListen DeviceController socket on port "
                 << adb_unix_socket << ": ";
-    return device_controller.Pass();
+    return device_controller;
   }
   LOG(INFO) << "Listening on Unix Domain Socket " << adb_unix_socket;
   device_controller.reset(
-      new DeviceController(host_socket.Pass(), exit_notifier_fd));
-  return device_controller.Pass();
+      new DeviceController(std::move(host_socket), exit_notifier_fd));
+  return device_controller;
 }
 
 DeviceController::~DeviceController() {
@@ -47,7 +46,7 @@ void DeviceController::Start() {
 
 DeviceController::DeviceController(scoped_ptr<Socket> host_socket,
                                    int exit_notifier_fd)
-    : host_socket_(host_socket.Pass()),
+    : host_socket_(std::move(host_socket)),
       exit_notifier_fd_(exit_notifier_fd),
       construction_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       weak_ptr_factory_(this) {
@@ -90,11 +89,10 @@ void DeviceController::AcceptHostCommandInternal() {
                      << ". Attempting to restart the listener.\n";
         DeleteRefCountedValueInMapFromIterator(listener_it, &listeners_);
       }
-      scoped_ptr<DeviceListener> new_listener(
-          DeviceListener::Create(
-              socket.Pass(), port,
-              base::Bind(&DeviceController::DeleteListenerOnError,
-                         weak_ptr_factory_.GetWeakPtr())));
+      scoped_ptr<DeviceListener> new_listener(DeviceListener::Create(
+          std::move(socket), port,
+          base::Bind(&DeviceController::DeleteListenerOnError,
+                     weak_ptr_factory_.GetWeakPtr())));
       if (!new_listener)
         return;
       new_listener->Start();
@@ -117,7 +115,7 @@ void DeviceController::AcceptHostCommandInternal() {
         // sockets all the way to the host side.
         break;
       }
-      listener->SetAdbDataSocket(socket.Pass());
+      listener->SetAdbDataSocket(std::move(socket));
       break;
     case command::UNLISTEN:
       LOG(INFO) << "Unmapping port " << port;

@@ -10,6 +10,7 @@
 #include "ash/shell_delegate.h"
 #include "ash/shell_window_ids.h"
 #include "ash/wm/window_animations.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -199,7 +200,7 @@ class IdleAppNameNotificationDelegateView
   }
 
   // A timer which calls us to remove the message from the screen.
-  base::OneShotTimer<IdleAppNameNotificationDelegateView> hide_timer_;
+  base::OneShotTimer hide_timer_;
 
   // The owner of this message which needs to get notified when the message
   // closes.

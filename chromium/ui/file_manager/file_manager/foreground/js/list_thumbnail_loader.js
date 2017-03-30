@@ -18,7 +18,6 @@
  * @struct
  * @constructor
  * @extends {cr.EventTarget}
- * @suppress {checkStructDictInheritance}
  */
 function ListThumbnailLoader(
     directoryModel, thumbnailModel, volumeManager,
@@ -277,7 +276,8 @@ ListThumbnailLoader.prototype.continue_ = function() {
  */
 ListThumbnailLoader.prototype.enqueue_ = function(index, entry) {
   var task = new ListThumbnailLoader.Task(
-      entry, this.thumbnailModel_, this.thumbnailLoaderConstructor_);
+      entry, this.volumeManager_, this.thumbnailModel_,
+      this.thumbnailLoaderConstructor_);
 
   var url = entry.toURL();
   this.active_[url] = task;
@@ -286,9 +286,6 @@ ListThumbnailLoader.prototype.enqueue_ = function(index, entry) {
     delete this.active_[url];
     this.cache_.put(url, thumbnail);
     this.dispatchThumbnailLoaded_(index, thumbnail);
-    this.continue_();
-  }.bind(this), function() {
-    delete this.active_[url];
     this.continue_();
   }.bind(this));
 };
@@ -325,7 +322,6 @@ ListThumbnailLoader.prototype.dispatchThumbnailLoaded_ = function(
  * @param {number} index Index of an original image in the current data model.
  * @param {!ListThumbnailLoader.ThumbnailData} thumbnail Thumbnail.
  * @extends {Event}
- * @suppress {checkStructDictInheritance}
  * @constructor
  * @struct
  */
@@ -338,13 +334,13 @@ ListThumbnailLoader.ThumbnailLoadedEvent = function(index, thumbnail) {
   /** @type {string}*/
   event.fileUrl = thumbnail.fileUrl;
 
-  /** @type {string} */
+  /** @type {?string} */
   event.dataUrl = thumbnail.dataUrl;
 
-  /** @type {number} */
+  /** @type {?number} */
   event.width = thumbnail.width;
 
-  /** @type {number}*/
+  /** @type {?number}*/
   event.height = thumbnail.height;
 
   return event;
@@ -353,9 +349,9 @@ ListThumbnailLoader.ThumbnailLoadedEvent = function(index, thumbnail) {
 /**
  * A class to represent thumbnail data.
  * @param {string} fileUrl File url of an original image.
- * @param {string} dataUrl Data url of thumbnail.
- * @param {number} width Width of thumbnail.
- * @param {number} height Height of thumbnail.
+ * @param {?string} dataUrl Data url of thumbnail.
+ * @param {?number} width Width of thumbnail.
+ * @param {?number} height Height of thumbnail.
  * @constructor
  * @struct
  */
@@ -366,17 +362,17 @@ ListThumbnailLoader.ThumbnailData = function(fileUrl, dataUrl, width, height) {
   this.fileUrl = fileUrl;
 
   /**
-   * @const {string}
+   * @const {?string}
    */
   this.dataUrl = dataUrl;
 
   /**
-   * @const {number}
+   * @const {?number}
    */
   this.width = width;
 
   /**
-   * @const {number}
+   * @const {?number}
    */
   this.height = height;
 
@@ -390,6 +386,7 @@ ListThumbnailLoader.ThumbnailData = function(fileUrl, dataUrl, width, height) {
  * A task to load thumbnail.
  *
  * @param {!Entry} entry An entry.
+ * @param {!VolumeManagerWrapper} volumeManager Volume manager.
  * @param {!ThumbnailModel} thumbnailModel Metadata cache.
  * @param {!Function} thumbnailLoaderConstructor A constructor of thumbnail
  *     loader.
@@ -397,33 +394,77 @@ ListThumbnailLoader.ThumbnailData = function(fileUrl, dataUrl, width, height) {
  * @struct
  */
 ListThumbnailLoader.Task = function(
-    entry, thumbnailModel, thumbnailLoaderConstructor) {
+    entry, volumeManager, thumbnailModel, thumbnailLoaderConstructor) {
   this.entry_ = entry;
+  this.volumeManager_ = volumeManager;
   this.thumbnailModel_ = thumbnailModel;
   this.thumbnailLoaderConstructor_ = thumbnailLoaderConstructor;
 };
 
 /**
+ * Minimum delay of milliseconds before another retry for fetching a thumbnmail
+ * from EXIF after failing with an IO error. In milliseconds.
+ *
+ * @type {number}
+ */
+ListThumbnailLoader.Task.EXIF_IO_ERROR_DELAY = 3000;
+
+/**
  * Fetches thumbnail.
  *
  * @return {!Promise<!ListThumbnailLoader.ThumbnailData>} A promise which is
- *     resolved when thumbnail is fetched.
+ *     resolved when thumbnail data is fetched with either a success or an
+ *     error.
  */
 ListThumbnailLoader.Task.prototype.fetch = function() {
+  var ioError = false;
   return this.thumbnailModel_.get([this.entry_]).then(function(metadatas) {
     // When it failed to read exif header with an IO error, do not generate
     // thumbnail at this time since it may success in the second try. If it
     // failed to read at 0 byte, it would be an IO error.
     if (metadatas[0].thumbnail.urlError &&
         metadatas[0].thumbnail.urlError.errorDescription ===
-            'Error: Unexpected EOF @0')
-      throw metadatas[0].thumbnail.urlError;
+            'Error: Unexpected EOF @0') {
+      ioError = true;
+      return Promise.reject();
+    }
+    return metadatas[0];
+  }.bind(this)).then(function(metadata) {
+    var loadTargets = [
+      ThumbnailLoader.LoadTarget.CONTENT_METADATA,
+      ThumbnailLoader.LoadTarget.EXTERNAL_METADATA
+    ];
+
+    // If the file is on a provided file system which is based on network, then
+    // don't generate thumbnails from file entry, as it could cause very high
+    // network traffic.
+    var volumeInfo = this.volumeManager_.getVolumeInfo(this.entry_);
+    if (volumeInfo && (volumeInfo.volumeType !==
+        VolumeManagerCommon.VolumeType.PROVIDED ||
+        volumeInfo.source !== VolumeManagerCommon.Source.NETWORK)) {
+      loadTargets.push(ThumbnailLoader.LoadTarget.FILE_ENTRY);
+    }
 
     return new this.thumbnailLoaderConstructor_(
-        this.entry_, ThumbnailLoader.LoaderType.IMAGE, metadatas[0])
+        this.entry_, ThumbnailLoader.LoaderType.IMAGE, metadata,
+        undefined /* opt_mediaType */, loadTargets)
         .loadAsDataUrl(ThumbnailLoader.FillMode.OVER_FILL);
   }.bind(this)).then(function(result) {
     return new ListThumbnailLoader.ThumbnailData(
         this.entry_.toURL(), result.data, result.width, result.height);
+  }.bind(this)).catch(function() {
+    // If an error happens during generating of a thumbnail, then return
+    // an empty object, so we don't retry the thumbnail over and over
+    // again.
+    var thumbnailData = new ListThumbnailLoader.ThumbnailData(
+          this.entry_.toURL(), null, null, null);
+    if (ioError) {
+      // If fetching a thumbnail from EXIF fails due to an IO error, then try to
+      // refetch it in the future, but not earlier than in 3 second.
+      setTimeout(function() {
+        thumbnailData.outdated = true;
+      }, ListThumbnailLoader.Task.EXIF_IO_ERROR_DELAY);
+    }
+    return thumbnailData;
   }.bind(this));
 };

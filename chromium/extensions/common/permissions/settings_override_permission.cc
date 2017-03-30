@@ -12,6 +12,10 @@
 namespace extensions {
 
 SettingsOverrideAPIPermission::SettingsOverrideAPIPermission(
+    const APIPermissionInfo* permission)
+    : APIPermission(permission) {}
+
+SettingsOverrideAPIPermission::SettingsOverrideAPIPermission(
     const APIPermissionInfo* permission,
     const std::string& setting_value)
     : APIPermission(permission), setting_value_(setting_value) {}
@@ -22,39 +26,6 @@ PermissionIDSet SettingsOverrideAPIPermission::GetPermissions() const {
   PermissionIDSet permissions;
   permissions.insert(info()->id(), base::UTF8ToUTF16(setting_value_));
   return permissions;
-}
-
-bool SettingsOverrideAPIPermission::HasMessages() const {
-  return info()->message_id() > PermissionMessage::kNone;
-}
-
-PermissionMessages SettingsOverrideAPIPermission::GetMessages() const {
-  DCHECK(HasMessages());
-  int string_id = -1;
-  // Warning: when modifying this function, be sure to modify the correct rule
-  // in ChromePermissionMessageProvider.
-  switch (id()) {
-    case kHomepage: {
-      string_id = IDS_EXTENSION_PROMPT_WARNING_HOME_PAGE_SETTING_OVERRIDE;
-      break;
-    }
-    case kStartupPages: {
-      string_id = IDS_EXTENSION_PROMPT_WARNING_START_PAGE_SETTING_OVERRIDE;
-      break;
-    }
-    case kSearchProvider: {
-      string_id = IDS_EXTENSION_PROMPT_WARNING_SEARCH_SETTINGS_OVERRIDE;
-      break;
-    }
-    default:
-      NOTREACHED();
-  }
-  PermissionMessages result;
-  result.push_back(
-      PermissionMessage(info()->message_id(),
-                        l10n_util::GetStringFUTF16(
-                            string_id, base::UTF8ToUTF16(setting_value_))));
-  return result;
 }
 
 bool SettingsOverrideAPIPermission::Check(
@@ -77,11 +48,18 @@ bool SettingsOverrideAPIPermission::FromValue(
     const base::Value* value,
     std::string* /*error*/,
     std::vector<std::string>* unhandled_permissions) {
-  return (value == NULL);
+  // Ugly hack: |value| being null should be an error. But before M46 beta, we
+  // didn't store the parameter for settings override permissions in prefs.
+  // See crbug.com/533086.
+  // TODO(treib,devlin): Remove this for M48, when hopefully all users will have
+  // updated prefs.
+  // This should read:
+  // return value && value->GetAsString(&setting_value_);
+  return !value || value->GetAsString(&setting_value_);
 }
 
 scoped_ptr<base::Value> SettingsOverrideAPIPermission::ToValue() const {
-  return scoped_ptr<base::Value>();
+  return make_scoped_ptr(new base::StringValue(setting_value_));
 }
 
 APIPermission* SettingsOverrideAPIPermission::Clone() const {
@@ -113,6 +91,8 @@ bool SettingsOverrideAPIPermission::Read(const IPC::Message* m,
   return true;
 }
 
-void SettingsOverrideAPIPermission::Log(std::string* log) const {}
+void SettingsOverrideAPIPermission::Log(std::string* log) const {
+  *log = setting_value_;
+}
 
 }  // namespace extensions

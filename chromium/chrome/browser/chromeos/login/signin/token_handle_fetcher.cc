@@ -4,6 +4,7 @@
 
 #include "chrome/browser/chromeos/login/signin/token_handle_fetcher.h"
 
+#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/chromeos/login/signin/token_handle_util.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -11,24 +12,41 @@
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
+#include "components/keyed_service/content/browser_context_keyed_service_shutdown_notifier_factory.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "google_apis/gaia/gaia_constants.h"
 
 namespace {
 const int kMaxRetries = 3;
+
+class ShutdownNotifierFactory
+    : public BrowserContextKeyedServiceShutdownNotifierFactory {
+ public:
+  static ShutdownNotifierFactory* GetInstance() {
+    return base::Singleton<ShutdownNotifierFactory>::get();
+  }
+
+ private:
+  friend struct base::DefaultSingletonTraits<ShutdownNotifierFactory>;
+
+  ShutdownNotifierFactory()
+      : BrowserContextKeyedServiceShutdownNotifierFactory(
+            "TokenHandleFetcher") {
+    DependsOn(ProfileOAuth2TokenServiceFactory::GetInstance());
+  }
+  ~ShutdownNotifierFactory() override {}
+
+  DISALLOW_COPY_AND_ASSIGN(ShutdownNotifierFactory);
+};
+
 }  // namespace
 
 TokenHandleFetcher::TokenHandleFetcher(TokenHandleUtil* util,
-                                       const user_manager::UserID& user_id)
+                                       const AccountId& account_id)
     : OAuth2TokenService::Consumer("user_session_manager"),
       token_handle_util_(util),
-      user_id_(user_id),
-      token_service_(nullptr),
-      waiting_for_refresh_token_(false),
-      profile_(nullptr),
-      tokeninfo_response_start_time_(base::TimeTicks()) {
-}
+      account_id_(account_id) {}
 
 TokenHandleFetcher::~TokenHandleFetcher() {
   if (waiting_for_refresh_token_)
@@ -43,30 +61,35 @@ void TokenHandleFetcher::BackfillToken(Profile* profile,
   token_service_ = ProfileOAuth2TokenServiceFactory::GetForProfile(profile);
   SigninManagerBase* signin_manager =
       SigninManagerFactory::GetForProfile(profile);
-  std::string account_id = signin_manager->GetAuthenticatedAccountId();
-  if (!token_service_->RefreshTokenIsAvailable(account_id)) {
-    account_without_token_ = account_id;
+  const std::string user_email = signin_manager->GetAuthenticatedAccountId();
+  if (!token_service_->RefreshTokenIsAvailable(user_email)) {
+    account_without_token_ = user_email;
+    profile_shutdown_notification_ =
+        ShutdownNotifierFactory::GetInstance()->Get(profile)->Subscribe(
+            base::Bind(&TokenHandleFetcher::OnProfileDestroyed,
+                       base::Unretained(this)));
+
     token_service_->AddObserver(this);
     waiting_for_refresh_token_ = true;
     return;
   }
-  RequestAccessToken(account_id);
+  RequestAccessToken(user_email);
 }
 
 void TokenHandleFetcher::OnRefreshTokenAvailable(
-    const std::string& account_id) {
-  if (account_without_token_ != account_id)
+    const std::string& user_email) {
+  if (account_without_token_ != user_email)
     return;
   waiting_for_refresh_token_ = false;
   token_service_->RemoveObserver(this);
-  RequestAccessToken(account_id);
+  RequestAccessToken(user_email);
 }
 
-void TokenHandleFetcher::RequestAccessToken(const std::string& account_id) {
+void TokenHandleFetcher::RequestAccessToken(const std::string& user_email) {
   OAuth2TokenService::ScopeSet scopes;
   scopes.insert(GaiaConstants::kOAuth1LoginScope);
   oauth2_access_token_request_ =
-      token_service_->StartRequest(account_id, scopes, this);
+      token_service_->StartRequest(user_email, scopes, this);
 }
 
 void TokenHandleFetcher::OnGetTokenSuccess(
@@ -83,7 +106,7 @@ void TokenHandleFetcher::OnGetTokenFailure(
   oauth2_access_token_request_.reset();
   LOG(ERROR) << "Could not get access token to backfill token handler"
              << error.ToString();
-  callback_.Run(user_id_, false);
+  callback_.Run(account_id_, false);
 }
 
 void TokenHandleFetcher::FillForNewUser(const std::string& access_token,
@@ -102,11 +125,11 @@ void TokenHandleFetcher::FillForAccessToken(const std::string& access_token) {
 }
 
 void TokenHandleFetcher::OnOAuthError() {
-  callback_.Run(user_id_, false);
+  callback_.Run(account_id_, false);
 }
 
 void TokenHandleFetcher::OnNetworkError(int response_code) {
-  callback_.Run(user_id_, false);
+  callback_.Run(account_id_, false);
 }
 
 void TokenHandleFetcher::OnGetTokenInfoResponse(
@@ -116,11 +139,15 @@ void TokenHandleFetcher::OnGetTokenInfoResponse(
     std::string handle;
     if (token_info->GetString("token_handle", &handle)) {
       success = true;
-      token_handle_util_->StoreTokenHandle(user_id_, handle);
+      token_handle_util_->StoreTokenHandle(account_id_, handle);
     }
   }
   const base::TimeDelta duration =
       base::TimeTicks::Now() - tokeninfo_response_start_time_;
   UMA_HISTOGRAM_TIMES("Login.TokenObtainResponseTime", duration);
-  callback_.Run(user_id_, success);
+  callback_.Run(account_id_, success);
+}
+
+void TokenHandleFetcher::OnProfileDestroyed() {
+  callback_.Run(account_id_, false);
 }

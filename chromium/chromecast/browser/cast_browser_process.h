@@ -8,6 +8,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 
 class PrefService;
 
@@ -31,6 +32,7 @@ class CastMetricsServiceClient;
 
 namespace shell {
 class CastBrowserContext;
+class CastContentBrowserClient;
 class CastResourceDispatcherHostDelegate;
 class RemoteDebuggingServer;
 
@@ -44,6 +46,7 @@ class CastBrowserProcess {
   virtual ~CastBrowserProcess();
 
   void SetBrowserContext(scoped_ptr<CastBrowserContext> browser_context);
+  void SetCastContentBrowserClient(CastContentBrowserClient* browser_client);
   void SetCastService(scoped_ptr<CastService> cast_service);
 #if defined(USE_AURA)
   void SetCastScreen(scoped_ptr<CastScreen> cast_screen);
@@ -64,6 +67,9 @@ class CastBrowserProcess {
       scoped_refptr<ConnectivityChecker> connectivity_checker);
   void SetNetLog(net::NetLog* net_log);
 
+  CastContentBrowserClient* browser_client() const {
+    return cast_content_browser_client_;
+  }
   CastBrowserContext* browser_context() const { return browser_context_.get(); }
   CastService* cast_service() const { return cast_service_.get(); }
 #if defined(USE_AURA)
@@ -100,6 +106,7 @@ class CastBrowserProcess {
 #endif  // defined(OS_ANDROID)
   scoped_ptr<RemoteDebuggingServer> remote_debugging_server_;
 
+  CastContentBrowserClient* cast_content_browser_client_;
   net::NetLog* net_log_;
 
   // Note: CastService must be destroyed before others.

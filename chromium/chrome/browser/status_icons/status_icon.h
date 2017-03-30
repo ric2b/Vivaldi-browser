@@ -5,14 +5,19 @@
 #ifndef CHROME_BROWSER_STATUS_ICONS_STATUS_ICON_H_
 #define CHROME_BROWSER_STATUS_ICONS_STATUS_ICON_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "chrome/browser/status_icons/status_icon_menu_model.h"
 
 namespace gfx {
 class ImageSkia;
+}
+
+namespace message_center {
+struct NotifierId;
 }
 
 class StatusIconObserver;
@@ -33,9 +38,11 @@ class StatusIcon {
 
   // Displays a notification balloon with the specified contents.
   // Depending on the platform it might not appear by the icon tray.
-  virtual void DisplayBalloon(const gfx::ImageSkia& icon,
-                              const base::string16& title,
-                              const base::string16& contents) = 0;
+  virtual void DisplayBalloon(
+      const gfx::ImageSkia& icon,
+      const base::string16& title,
+      const base::string16& contents,
+      const message_center::NotifierId& notifier_id) = 0;
 
   // Set the context menu for this icon. The icon takes ownership of the passed
   // context menu. Passing NULL results in no menu at all.

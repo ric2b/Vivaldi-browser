@@ -62,8 +62,9 @@ if ! which adb >/dev/null; then
 fi
 
 # Ensure local and remote versions of adb are the same.
-remote_adb_version=$(ssh "$remote_host" "$remote_adb version")
-local_adb_version=$(adb version)
+remote_adb_version=$(ssh "$remote_host" "$remote_adb version" \
+    | grep -v "^Revision")
+local_adb_version=$(adb version | grep -v "^Revision")
 if [[ "$local_adb_version" != "$remote_adb_version" ]]; then
   echo >&2
   echo "WARNING: local adb is not the same version as remote adb." >&2
@@ -88,7 +89,7 @@ adb start-server
 #   9051: policy server
 #   10000: net unittests
 #   10201: net unittests
-ssh -C \
+ssh -4 -C \
     -R 5037:localhost:5037 \
     -L 8001:localhost:8001 \
     -L 9031:localhost:9031 \

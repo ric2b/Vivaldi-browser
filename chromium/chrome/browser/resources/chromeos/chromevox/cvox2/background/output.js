@@ -9,22 +9,27 @@
 goog.provide('Output');
 goog.provide('Output.EventType');
 
-goog.require('AutomationUtil.Dir');
+goog.require('EarconEngine');
+goog.require('Spannable');
+goog.require('constants');
 goog.require('cursors.Cursor');
 goog.require('cursors.Range');
 goog.require('cursors.Unit');
 goog.require('cvox.AbstractEarcons');
 goog.require('cvox.NavBraille');
-goog.require('cvox.Spannable');
 goog.require('cvox.ValueSelectionSpan');
 goog.require('cvox.ValueSpan');
+goog.require('goog.i18n.MessageFormat');
 
 goog.scope(function() {
-var Dir = AutomationUtil.Dir;
+var AutomationNode = chrome.automation.AutomationNode;
+var Dir = constants.Dir;
+var EventType = chrome.automation.EventType;
+var RoleType = chrome.automation.RoleType;
 
 /**
  * An Output object formats a cursors.Range into speech, braille, or both
- * representations. This is typically a cvox.Spannable.
+ * representations. This is typically a |Spannable|.
  *
  * The translation from Range to these output representations rely upon format
  * rules which specify how to convert AutomationNode objects into annotated
@@ -37,6 +42,12 @@ var Dir = AutomationUtil.Dir;
  * @ prefix: used to substitute a message. Note the ability to specify params to
  *     the message.  For example, '@tag_html' '@selected_index($text_sel_start,
  *     $text_sel_end').
+ * @@ prefix: similar to @, used to substitute a message, but also pulls the
+ *     localized string through goog.i18n.MessageFormat to support locale
+ *     aware plural handling.  The first argument should be a number which will
+ *     be passed as a COUNT named parameter to MessageFormat.
+ *     TODO(plundblad): Make subsequent arguments normal placeholder arguments
+ *     when needed.
  * = suffix: used to specify substitution only if not previously appended.
  *     For example, $name= would insert the name attribute only if no name
  * attribute had been inserted previously.
@@ -44,26 +55,42 @@ var Dir = AutomationUtil.Dir;
  */
 Output = function() {
   // TODO(dtseng): Include braille specific rules.
-  /** @type {!Array<cvox.Spannable>} */
-  this.buffer_ = [];
-  /** @type {!Array<cvox.Spannable>} */
+  /** @type {!Array<!Spannable>} */
+  this.speechBuffer_ = [];
+  /** @type {!Array<!Spannable>} */
   this.brailleBuffer_ = [];
-  /** @type {!Array<Object>} */
+  /** @type {!Array<!Object>} */
   this.locations_ = [];
   /** @type {function(?)} */
   this.speechEndCallback_;
 
   /**
    * Current global options.
-   * @type {{speech: boolean, braille: boolean, location: boolean}}
+   * @type {{speech: boolean, braille: boolean}}
+   * @private
    */
-  this.formatOptions_ = {speech: true, braille: false, location: true};
+  this.formatOptions_ = {speech: true, braille: false};
 
   /**
    * Speech properties to apply to the entire output.
    * @type {!Object<*>}
+   * @private
    */
   this.speechProperties_ = {};
+
+  /**
+   * The speech category for the generated speech utterance.
+   * @type {cvox.TtsCategory}
+   * @private
+   */
+  this.speechCategory_ = cvox.TtsCategory.NAV;
+
+  /**
+   * The speech queue mode for the generated speech utterance.
+   * @type {cvox.QueueMode}
+   * @private
+   */
+  this.queueMode_ = cvox.QueueMode.QUEUE;
 };
 
 /**
@@ -84,51 +111,51 @@ Output.SPACE = ' ';
  */
 Output.ROLE_INFO_ = {
   alert: {
-    msgId: 'aria_role_alert',
+    msgId: 'role_alert',
     earconId: 'ALERT_NONMODAL',
   },
   alertDialog: {
-    msgId: 'aria_role_alertdialog'
+    msgId: 'role_alertdialog'
   },
   article: {
-    msgId: 'aria_role_article',
+    msgId: 'role_article',
     inherits: 'abstractContainer'
   },
   application: {
-    msgId: 'aria_role_application',
+    msgId: 'role_application',
     inherits: 'abstractContainer'
   },
   banner: {
-    msgId: 'aria_role_banner',
+    msgId: 'role_banner',
     inherits: 'abstractContainer'
   },
   button: {
-    msgId: 'tag_button',
+    msgId: 'role_button',
     earconId: 'BUTTON'
   },
   buttonDropDown: {
-    msgId: 'tag_button',
+    msgId: 'role_button',
     earconId: 'BUTTON'
   },
   cell: {
-    msgId: 'aria_role_gridcell'
+    msgId: 'role_gridcell'
   },
   checkBox: {
-    msgId: 'input_type_checkbox'
+    msgId: 'role_checkbox'
   },
   columnHeader: {
-    msgId: 'aria_role_columnheader',
+    msgId: 'role_columnheader',
     inherits: 'abstractContainer'
   },
   comboBox: {
-    msgId: 'aria_role_combobox'
+    msgId: 'role_combobox'
   },
   complementary: {
-    msgId: 'aria_role_complementary',
+    msgId: 'role_complementary',
     inherits: 'abstractContainer'
   },
   contentInfo: {
-    msgId: 'aria_role_contentinfo',
+    msgId: 'role_contentinfo',
     inherits: 'abstractContainer'
   },
   date: {
@@ -136,139 +163,145 @@ Output.ROLE_INFO_ = {
     inherits: 'abstractContainer'
   },
   definition: {
-    msgId: 'aria_role_definition',
+    msgId: 'role_definition',
     inherits: 'abstractContainer'
   },
   dialog: {
-    msgId: 'dialog'
+    msgId: 'role_dialog'
   },
   directory: {
-    msgId: 'aria_role_directory',
+    msgId: 'role_directory',
     inherits: 'abstractContainer'
   },
   document: {
-    msgId: 'aria_role_document',
+    msgId: 'role_document',
     inherits: 'abstractContainer'
   },
   form: {
-    msgId: 'aria_role_form',
+    msgId: 'role_form',
     inherits: 'abstractContainer'
   },
   grid: {
-    msgId: 'aria_role_grid'
+    msgId: 'role_grid'
   },
   group: {
-    msgId: 'aria_role_group'
+    msgId: 'role_group'
   },
   heading: {
-    msgId: 'aria_role_heading',
+    msgId: 'role_heading',
   },
   image: {
-    msgId: 'aria_role_img',
+    msgId: 'role_img',
+  },
+  inputTime: {
+    msgId: 'input_type_time',
+    inherits: 'abstractContainer'
   },
   link: {
-    msgId: 'tag_link',
+    msgId: 'role_link',
     earconId: 'LINK'
   },
   listBox: {
-    msgId: 'aria_role_listbox',
+    msgId: 'role_listbox',
     earconId: 'LISTBOX'
   },
   listBoxOption: {
-    msgId: 'aria_role_listitem',
+    msgId: 'role_listitem',
     earconId: 'LIST_ITEM'
   },
   listItem: {
-    msgId: 'aria_role_listitem',
+    msgId: 'role_listitem',
     earconId: 'LIST_ITEM'
   },
   log: {
-    msgId: 'aria_role_log',
+    msgId: 'role_log',
   },
   main: {
-    msgId: 'aria_role_main',
+    msgId: 'role_main',
     inherits: 'abstractContainer'
   },
   marquee: {
-    msgId: 'aria_role_marquee',
+    msgId: 'role_marquee',
   },
   math: {
-    msgId: 'aria_role_math',
+    msgId: 'role_math',
     inherits: 'abstractContainer'
   },
   menu: {
-    msgId: 'aria_role_menu'
+    msgId: 'role_menu'
   },
   menuBar: {
-    msgId: 'aria_role_menubar',
+    msgId: 'role_menubar',
   },
   menuItem: {
-    msgId: 'aria_role_menuitem'
+    msgId: 'role_menuitem',
+    earconId: 'BUTTON'
   },
   menuItemCheckBox: {
-    msgId: 'aria_role_menuitemcheckbox'
+    msgId: 'role_menuitemcheckbox',
+    earconId: 'BUTTON'
   },
   menuItemRadio: {
-    msgId: 'aria_role_menuitemradio'
+    msgId: 'role_menuitemradio',
+    earconId: 'BUTTON'
   },
   menuListOption: {
-    msgId: 'aria_role_menuitem'
+    msgId: 'role_menuitem'
   },
   menuListPopup: {
-    msgId: 'aria_role_menu'
+    msgId: 'role_menu'
   },
   navigation: {
-    msgId: 'aria_role_navigation',
+    msgId: 'role_navigation',
     inherits: 'abstractContainer'
   },
   note: {
-    msgId: 'aria_role_note',
+    msgId: 'role_note',
     inherits: 'abstractContainer'
   },
   popUpButton: {
-    msgId: 'tag_button',
-    earcon: 'LISTBOX'
+    msgId: 'role_button',
   },
   radioButton: {
-    msgId: 'input_type_radio'
+    msgId: 'role_radio'
   },
   radioGroup: {
-    msgId: 'aria_role_radiogroup',
+    msgId: 'role_radiogroup',
   },
   region: {
-    msgId: 'aria_role_region',
+    msgId: 'role_region',
     inherits: 'abstractContainer'
   },
   rowHeader: {
-    msgId: 'aria_role_rowheader',
+    msgId: 'role_rowheader',
     inherits: 'abstractContainer'
   },
   scrollBar: {
-    msgId: 'aria_role_scrollbar',
+    msgId: 'role_scrollbar',
   },
   search: {
-    msgId: 'aria_role_search',
+    msgId: 'role_search',
     inherits: 'abstractContainer'
   },
   separator: {
-    msgId: 'aria_role_separator',
+    msgId: 'role_separator',
     inherits: 'abstractContainer'
   },
   spinButton: {
-    msgId: 'aria_role_spinbutton',
+    msgId: 'role_spinbutton',
     earconId: 'LISTBOX'
   },
   status: {
-    msgId: 'aria_role_status'
+    msgId: 'role_status'
   },
   tab: {
-    msgId: 'aria_role_tab'
+    msgId: 'role_tab'
   },
   tabList: {
-    msgId: 'aria_role_tablist'
+    msgId: 'role_tablist'
   },
   tabPanel: {
-    msgId: 'aria_role_tabpanel'
+    msgId: 'role_tabpanel'
   },
   textBox: {
     msgId: 'input_type_text',
@@ -283,16 +316,16 @@ Output.ROLE_INFO_ = {
     inherits: 'abstractContainer'
   },
   timer: {
-    msgId: 'aria_role_timer'
+    msgId: 'role_timer'
   },
   toolbar: {
-    msgId: 'aria_role_toolbar'
+    msgId: 'role_toolbar'
   },
   tree: {
-    msgId: 'aria_role_tree'
+    msgId: 'role_tree'
   },
   treeItem: {
-    msgId: 'aria_role_treeitem'
+    msgId: 'role_treeitem'
   }
 };
 
@@ -309,15 +342,12 @@ Output.ROLE_INFO_ = {
 Output.STATE_INFO_ = {
   checked: {
     on: {
-      earconId: 'CHECK_ON',
       msgId: 'checkbox_checked_state'
     },
     off: {
-      earconId: 'CHECK_OFF',
       msgId: 'checkbox_unchecked_state'
     },
     omitted: {
-      earconId: 'CHECK_OFF',
       msgId: 'checkbox_unchecked_state'
     }
   },
@@ -345,114 +375,141 @@ Output.STATE_INFO_ = {
 };
 
 /**
+ * Maps input types to message IDs.
+ * @const {Object<string>}
+ * @private
+ */
+Output.INPUT_TYPE_MESSAGE_IDS_ = {
+  'email': 'input_type_email',
+  'number': 'input_type_number',
+  'password': 'input_type_password',
+  'search': 'input_type_search',
+  'tel': 'input_type_number',
+  'text': 'input_type_text',
+  'url': 'input_type_url',
+};
+
+/**
  * Rules specifying format of AutomationNodes for output.
  * @type {!Object<Object<Object<string>>>}
  */
 Output.RULES = {
   navigate: {
     'default': {
-      speak: '$name $value $description $help $role',
+      speak: '$name $value $role $description',
       braille: ''
     },
     abstractContainer: {
-      enter: '$name $role',
+      enter: '$name $role $description',
       leave: '@exited_container($role)'
     },
     alert: {
       speak: '!doNotInterrupt $role $descendants'
     },
     alertDialog: {
-      enter: '$name $role $descendants'
+      enter: '$name $role $description $descendants'
     },
     cell: {
       enter: '@column_granularity $tableCellColumnIndex'
     },
     checkBox: {
-      speak: '$name $role $checked'
+      speak: '$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF)) ' +
+             '$name $role $checked $description'
     },
     dialog: {
-      enter: '$name $role'
+      enter: '$name $role $description'
+    },
+    div: {
+      enter: '$name',
+      speak: '$name $description'
     },
     grid: {
-      enter: '$name $role'
+      enter: '$name $role $description'
     },
     heading: {
       enter: '@tag_h+$hierarchicalLevel',
       speak: '@tag_h+$hierarchicalLevel $nameOrDescendants='
     },
     inlineTextBox: {
-      speak: '$value='
+      speak: '$name='
     },
     link: {
-      enter: '$name $visited $role',
-      stay: '$name= $visited $role',
-      speak: '$name= $visited $role'
+      enter: '$name $if($visited, @visited_link, $role)',
+      stay: '$name= $if($visited, @visited_link, $role)',
+      speak: '$name= $if($visited, @visited_link, $role) $description'
     },
     list: {
-      enter: '$role @list_with_items($countChildren(listItem))'
+      enter: '$role @@list_with_items($countChildren(listItem))'
     },
     listBox: {
-      enter: '$name $role @list_with_items($countChildren(listBoxOption))'
+      enter: '$name $role @@list_with_items($countChildren(listBoxOption)) ' +
+          '$description'
     },
     listBoxOption: {
-      speak: '$name $role @describe_index($indexInParent, $parentChildCount)'
+      speak: '$name $role @describe_index($indexInParent, $parentChildCount) ' +
+          '$description'
     },
     listItem: {
       enter: '$role'
     },
     menu: {
-      enter: '$name $role @list_with_items($countChildren(menuItem))'
+      enter: '$name $role @@list_with_items($countChildren(menuItem)) ' +
+          '$description'
     },
     menuItem: {
-      speak: '$if($haspopup, @describe_menu_item_with_submenu($name), ' +
-          '@describe_menu_item($name)) ' +
-          '@describe_index($indexInParent, $parentChildCount)'
+      speak: '$name $role $if($haspopup, @has_submenu) ' +
+          '@describe_index($indexInParent, $parentChildCount) ' +
+          '$description'
     },
     menuListOption: {
-      speak: '$name $value @aria_role_menuitem ' +
-          '@describe_index($indexInParent, $parentChildCount)'
+      speak: '$name @role_menuitem ' +
+          '@describe_index($indexInParent, $parentChildCount) $description'
     },
     paragraph: {
-      speak: '$value'
+      speak: '$descendants'
     },
     popUpButton: {
-      speak: '$value $name $role @aria_has_popup ' +
-          '$if($collapsed, @aria_expanded_false, @aria_expanded_true)'
+      speak: '$earcon(POP_UP_BUTTON) $value $name $role @aria_has_popup ' +
+          '$if($collapsed, @aria_expanded_false, @aria_expanded_true) ' +
+          '$description'
     },
     radioButton: {
       speak: '$if($checked, @describe_radio_selected($name), ' +
-          '@describe_radio_unselected($name))'
+          '@describe_radio_unselected($name)) $description'
     },
     radioGroup: {
-      enter: '$name $role'
+      enter: '$name $role $description'
+    },
+    rootWebArea: {
+      enter: '$name'
     },
     row: {
       enter: '@row_granularity $tableRowIndex'
     },
     slider: {
-      speak: '@describe_slider($value, $name) $help'
+      speak: '$earcon(SLIDER) @describe_slider($value, $name) $description'
     },
     staticText: {
-      speak: '$value $name'
+      speak: '$name='
     },
     tab: {
       speak: '@describe_tab($name)'
     },
     textField: {
       speak: '$name $value $if(' +
-          '$type, @input_type_+$type, @input_type_text)',
+          '$inputType, $inputType, $role) $description',
       braille: ''
     },
     toolbar: {
-      enter: '$name $role'
+      enter: '$name $role $description'
     },
     tree: {
-      enter: '$name $role @list_with_items($countChildren(treeItem))'
+      enter: '$name $role @@list_with_items($countChildren(treeItem))'
     },
     treeItem: {
-        enter: '$role $expanded $collapsed ' +
-            '@describe_index($indexInParent, $parentChildCount) ' +
-            '@describe_depth($hierarchicalLevel)'
+      enter: '$role $expanded $collapsed ' +
+          '@describe_index($indexInParent, $parentChildCount) ' +
+          '@describe_depth($hierarchicalLevel)'
     },
     window: {
       enter: '$name',
@@ -479,41 +536,42 @@ Output.RULES = {
   alert: {
     default: {
       speak: '!doNotInterrupt ' +
-          '@aria_role_alert $name $earcon(ALERT_NONMODAL) $descendants'
+          '@role_alert $name $earcon(ALERT_NONMODAL) $description $descendants'
     }
   }
 };
 
 /**
  * Custom actions performed while rendering an output string.
- * @param {function()} action
  * @constructor
  */
-Output.Action = function(action) {
-  this.action_ = action;
+Output.Action = function() {
 };
 
 Output.Action.prototype = {
   run: function() {
-    this.action_();
   }
 };
 
 /**
- * Action to play a earcon.
+ * Action to play an earcon.
  * @param {string} earconId
  * @constructor
  * @extends {Output.Action}
  */
 Output.EarconAction = function(earconId) {
-  Output.Action.call(this, function() {
-    cvox.ChromeVox.earcons.playEarcon(
-        cvox.AbstractEarcons[earconId]);
-  });
+  Output.Action.call(this);
+  /** @type {string} */
+  this.earconId = earconId;
 };
 
 Output.EarconAction.prototype = {
-  __proto__: Output.Action.prototype
+  __proto__: Output.Action.prototype,
+
+  /** @override */
+  run: function() {
+    cvox.ChromeVox.earcons.playEarcon(cvox.Earcon[this.earconId]);
+  }
 };
 
 /**
@@ -529,6 +587,17 @@ Output.SelectionSpan = function(startIndex, endIndex) {
 };
 
 /**
+ * Wrapper for automation nodes as annotations.  Since the
+ * {@code AutomationNode} constructor isn't exposed in the API, this class is
+ * used to allow instanceof checks on these annotations.
+ @ @param {!AutomationNode} node
+ * @constructor
+ */
+Output.NodeSpan = function(node) {
+  this.node = node;
+};
+
+/**
  * Possible events handled by ChromeVox internally.
  * @enum {string}
  */
@@ -536,41 +605,66 @@ Output.EventType = {
   NAVIGATE: 'navigate'
 };
 
+/**
+ * If true, the next speech utterance will flush instead of the normal
+ * queueing mode.
+ * @type {boolean}
+ * @private
+ */
+Output.flushNextSpeechUtterance_ = false;
+
+/**
+ * Calling this will make the next speech utterance flush even if it would
+ * normally queue or do a category flush.
+ */
+Output.flushNextSpeechUtterance = function() {
+  Output.flushNextSpeechUtterance_ = true;
+};
+
 Output.prototype = {
   /**
-   * Gets the output buffer for speech.
-   * @param {string=} opt_separator Used to join components of the output.
-   * @return {!cvox.Spannable}
+   * Gets the spoken output with separator '|'.
+   * @return {!Spannable}
    */
-  toSpannable: function(opt_separator) {
-    opt_separator = opt_separator || '';
-    return this.buffer_.reduce(function(prev, cur) {
+  get speechOutputForTest() {
+    return this.speechBuffer_.reduce(function(prev, cur) {
       if (prev === null)
         return cur;
-      prev.append(opt_separator);
+      prev.append('|');
       prev.append(cur);
       return prev;
     }, null);
   },
 
   /**
-   * Gets the output buffer for speech with separator '|'.
-   * @return {!cvox.Spannable}
+   * Gets the output buffer for braille.
+   * @return {!Spannable}
    */
-  toSpannableForTest: function() {
-    return this.toSpannable('|');
+  get brailleOutputForTest() {
+    return this.createBrailleOutput_();
+  },
+
+  /**
+   * @return {boolean} True if there's any speech that will be output.
+   */
+  get hasSpeech() {
+    for (var i = 0; i < this.speechBuffer_.length; i++) {
+      if (this.speechBuffer_[i].trim().length)
+        return true;
+    }
+    return false;
   },
 
   /**
    * Specify ranges for speech.
    * @param {!cursors.Range} range
    * @param {cursors.Range} prevRange
-   * @param {chrome.automation.EventType|Output.EventType} type
+   * @param {EventType|Output.EventType} type
    * @return {!Output}
    */
   withSpeech: function(range, prevRange, type) {
-    this.formatOptions_ = {speech: true, braille: false, location: true};
-    this.render_(range, prevRange, type, this.buffer_);
+    this.formatOptions_ = {speech: true, braille: false};
+    this.render_(range, prevRange, type, this.speechBuffer_);
     return this;
   },
 
@@ -578,12 +672,25 @@ Output.prototype = {
    * Specify ranges for braille.
    * @param {!cursors.Range} range
    * @param {cursors.Range} prevRange
-   * @param {chrome.automation.EventType|Output.EventType} type
+   * @param {EventType|Output.EventType} type
    * @return {!Output}
    */
   withBraille: function(range, prevRange, type) {
-    this.formatOptions_ = {speech: false, braille: true, location: false};
+    this.formatOptions_ = {speech: false, braille: true};
     this.render_(range, prevRange, type, this.brailleBuffer_);
+    return this;
+  },
+
+  /**
+   * Specify ranges for location.
+   * @param {!cursors.Range} range
+   * @param {cursors.Range} prevRange
+   * @param {EventType|Output.EventType} type
+   * @return {!Output}
+   */
+  withLocation: function(range, prevRange, type) {
+    this.formatOptions_ = {speech: false, braille: false};
+    this.render_(range, prevRange, type, [] /*unused output*/);
     return this;
   },
 
@@ -591,7 +698,7 @@ Output.prototype = {
    * Specify the same ranges for speech and braille.
    * @param {!cursors.Range} range
    * @param {cursors.Range} prevRange
-   * @param {chrome.automation.EventType|Output.EventType} type
+   * @param {EventType|Output.EventType} type
    * @return {!Output}
    */
   withSpeechAndBraille: function(range, prevRange, type) {
@@ -601,17 +708,41 @@ Output.prototype = {
   },
 
   /**
+   * Applies the given speech category to the output.
+   * @param {cvox.TtsCategory} category
+   * @return {!Output}
+   */
+  withSpeechCategory: function(category) {
+    this.speechCategory_ = category;
+    return this;
+  },
+
+  /**
+   * Applies the given speech queue mode to the output.
+   * @param {cvox.QueueMode} queueMode The queueMode for the speech.
+   * @return {!Output}
+   */
+  withQueueMode: function(queueMode) {
+    this.queueMode_ = queueMode;
+    return this;
+  },
+
+  /**
    * Apply a format string directly to the output buffer. This lets you
    * output a message directly to the buffer using the format syntax.
    * @param {string} formatStr
+   * @param {!AutomationNode=} opt_node An optional
+   *     node to apply the formatting to.
    * @return {!Output}
    */
-  format: function(formatStr) {
-    this.formatOptions_ = {speech: true, braille: false, location: true};
-    this.format_(null, formatStr, this.buffer_);
+  format: function(formatStr, opt_node) {
+    var node = opt_node || null;
 
-    this.formatOptions_ = {speech: false, braille: true, location: false};
-    this.format_(null, formatStr, this.brailleBuffer_);
+    this.formatOptions_ = {speech: true, braille: false};
+    this.format_(node, formatStr, this.speechBuffer_);
+
+    this.formatOptions_ = {speech: false, braille: true};
+    this.format_(node, formatStr, this.brailleBuffer_);
 
     return this;
   },
@@ -633,67 +764,65 @@ Output.prototype = {
    */
   go: function() {
     // Speech.
-    var queueMode = cvox.QueueMode.FLUSH;
-    this.buffer_.forEach(function(buff, i, a) {
-      if (buff.toString()) {
-        (function() {
-          var scopedBuff = buff;
-          this.speechProperties_['startCallback'] = function() {
-            var actions = scopedBuff.getSpansInstanceOf(Output.Action);
-            if (actions) {
-              actions.forEach(function(a) {
-                a.run();
-              });
-            }
-          };
-        }.bind(this)());
+    var queueMode = this.queueMode_;
+    if (Output.flushNextSpeechUtterance_) {
+      queueMode = cvox.QueueMode.FLUSH;
+      Output.flushNextSpeechUtterance_ = false;
+    }
 
-        if (this.speechEndCallback_ && i == a.length - 1)
-          this.speechProperties_['endCallback'] = this.speechEndCallback_;
-        else
-          this.speechProperties_['endCallback'] = null;
-        cvox.ChromeVox.tts.speak(
-            buff.toString(), queueMode, this.speechProperties_);
-        queueMode = cvox.QueueMode.QUEUE;
-      }
+    this.speechProperties_.category = this.speechCategory_;
+
+    this.speechBuffer_.forEach(function(buff, i, a) {
+      (function() {
+        var scopedBuff = buff;
+        this.speechProperties_['startCallback'] = function() {
+          var actions = scopedBuff.getSpansInstanceOf(Output.Action);
+          if (actions) {
+            actions.forEach(function(a) {
+              a.run();
+            });
+          }
+        };
+      }.bind(this)());
+
+      if (this.speechEndCallback_ && i == a.length - 1)
+        this.speechProperties_['endCallback'] = this.speechEndCallback_;
+      else
+        this.speechProperties_['endCallback'] = null;
+      cvox.ChromeVox.tts.speak(
+          buff.toString(), queueMode, this.speechProperties_);
+      queueMode = cvox.QueueMode.QUEUE;
     }.bind(this));
 
     // Braille.
-    var buff = this.brailleBuffer_.reduce(function(prev, cur) {
-      if (prev.getLength() > 0 && cur.getLength() > 0)
-        prev.append(Output.SPACE);
-      prev.append(cur);
-      return prev;
-    }, new cvox.Spannable());
+    if (this.brailleBuffer_.length) {
+      var buff = this.createBrailleOutput_();
+      var selSpan =
+          buff.getSpanInstanceOf(Output.SelectionSpan);
+      var startIndex = -1, endIndex = -1;
+      if (selSpan) {
+        var valueStart = buff.getSpanStart(selSpan);
+        var valueEnd = buff.getSpanEnd(selSpan);
+        startIndex = valueStart + selSpan.startIndex;
+        endIndex = valueStart + selSpan.endIndex;
+        buff.setSpan(new cvox.ValueSpan(0), valueStart, valueEnd);
+        buff.setSpan(new cvox.ValueSelectionSpan(), startIndex, endIndex);
+      }
 
-    var selSpan =
-        buff.getSpanInstanceOf(Output.SelectionSpan);
-    var startIndex = -1, endIndex = -1;
-    if (selSpan) {
-      // Casts ok, since the span is known to be in the spannable.
-      var valueStart =
-          /** @type {number} */ (buff.getSpanStart(selSpan));
-      var valueEnd =
-          /** @type {number} */ (buff.getSpanEnd(selSpan));
-      startIndex = valueStart + selSpan.startIndex;
-      endIndex = valueStart + selSpan.endIndex;
-        buff.setSpan(new cvox.ValueSpan(0),
-                                  valueStart, valueEnd);
-      buff.setSpan(new cvox.ValueSelectionSpan(),
-                                  startIndex, endIndex);
+      var output = new cvox.NavBraille({
+        text: buff,
+        startIndex: startIndex,
+        endIndex: endIndex
+      });
+
+      cvox.ChromeVox.braille.write(output);
     }
 
-    var output = new cvox.NavBraille({
-      text: buff,
-      startIndex: startIndex,
-      endIndex: endIndex
-    });
-
-    if (this.brailleBuffer_)
-      cvox.ChromeVox.braille.write(output);
-
     // Display.
-    chrome.accessibilityPrivate.setFocusRing(this.locations_);
+    if (cvox.ChromeVox.isChromeOS &&
+        this.speechCategory_ != cvox.TtsCategory.LIVE) {
+      chrome.accessibilityPrivate.setFocusRing(this.locations_);
+    }
   },
 
   /**
@@ -701,8 +830,8 @@ Output.prototype = {
    * type.
    * @param {!cursors.Range} range
    * @param {cursors.Range} prevRange
-   * @param {chrome.automation.EventType|string} type
-   * @param {!Array<cvox.Spannable>} buff Buffer to receive rendered output.
+   * @param {EventType|Output.EventType} type
+   * @param {!Array<Spannable>} buff Buffer to receive rendered output.
    * @private
    */
   render_: function(range, prevRange, type, buff) {
@@ -714,10 +843,10 @@ Output.prototype = {
 
   /**
    * Format the node given the format specifier.
-   * @param {chrome.automation.AutomationNode} node
+   * @param {AutomationNode} node
    * @param {string|!Object} format The output format either specified as an
    * output template string or a parsed output format tree.
-   * @param {!Array<cvox.Spannable>} buff Buffer to receive rendered output.
+   * @param {!Array<Spannable>} buff Buffer to receive rendered output.
    * @param {!Object=} opt_exclude A set of attributes to exclude.
    * @private
    */
@@ -742,7 +871,7 @@ Output.prototype = {
       // Parse the token.
       var tree;
       if (typeof(token) == 'string')
-        tree = this.createParseTree(token);
+        tree = this.createParseTree_(token);
       else
         tree = token;
 
@@ -755,6 +884,11 @@ Output.prototype = {
       options.isUnique = token[token.length - 1] == '=';
       if (options.isUnique)
         token = token.substring(0, token.length - 1);
+
+      // Annotate braille output with the corresponding automation nodes
+      // to support acting on nodes based on location in the output.
+      if (this.formatOptions_.braille)
+        options.annotation.push(new Output.NodeSpan(node));
 
       // Process token based on prefix.
       var prefix = token[0];
@@ -775,28 +909,26 @@ Output.prototype = {
             }
           }
           // Annotate this as a name so we don't duplicate names from ancestors.
-          if (node.role == chrome.automation.RoleType.inlineTextBox)
+          if (node.role == RoleType.inlineTextBox ||
+              node.role == RoleType.staticText)
             token = 'name';
           options.annotation.push(token);
           this.append_(buff, text, options);
         } else if (token == 'name') {
           options.annotation.push(token);
-          var earconFinder = node;
-          while (earconFinder) {
-            var info = Output.ROLE_INFO_[earconFinder.role];
-            if (info && info.earconId) {
-              options.annotation.push(
-                  new Output.EarconAction(info.earconId));
-              break;
+          if (this.formatOptions_.speech) {
+            var earconFinder = node;
+            while (earconFinder) {
+              var info = Output.ROLE_INFO_[earconFinder.role];
+              if (info && info.earconId) {
+                options.annotation.push(
+                    new Output.EarconAction(info.earconId));
+                break;
+              }
+              earconFinder = earconFinder.parent;
             }
-            earconFinder = earconFinder.parent;
           }
-
-          // Pending finalization of name calculation; we must use the
-          // attributes property to access aria-label. See crbug.com/473220.
-          node.attributes = node.attributes || {};
-          var resolvedName = node.name || node.attributes['aria-label'];
-          this.append_(buff, resolvedName, options);
+          this.append_(buff, node.name, options);
         } else if (token == 'nameOrDescendants') {
           options.annotation.push(token);
           if (node.name)
@@ -809,7 +941,7 @@ Output.prototype = {
         } else if (token == 'parentChildCount') {
           options.annotation.push(token);
           if (node.parent)
-          this.append_(buff, String(node.parent.children.length));
+            this.append_(buff, String(node.parent.children.length));
         } else if (token == 'state') {
           options.annotation.push(token);
           Object.getOwnPropertyNames(node.state).forEach(function(s) {
@@ -826,7 +958,7 @@ Output.prototype = {
               this.format_(node, formatString, buff);
           }
         } else if (token == 'descendants') {
-          if (AutomationPredicate.leaf(node))
+          if (!node || AutomationPredicate.leaf(node))
             return;
 
           // Construct a range to the leftmost and rightmost leaves.
@@ -843,20 +975,29 @@ Output.prototype = {
           var prev = null;
           if (node)
             prev = cursors.Range.fromNode(node);
-          this.range_(subrange, prev, 'navigate', buff);
+          this.range_(subrange, prev, Output.EventType.NAVIGATE, buff);
         } else if (token == 'role') {
           options.annotation.push(token);
           var msg = node.role;
           var info = Output.ROLE_INFO_[node.role];
           if (info) {
             if (this.formatOptions_.braille)
-              msg = cvox.ChromeVox.msgs.getMsg(info.msgId + '_brl');
+              msg = Msgs.getMsg(info.msgId + '_brl');
             else
-              msg = cvox.ChromeVox.msgs.getMsg(info.msgId);
+              msg = Msgs.getMsg(info.msgId);
           } else {
             console.error('Missing role info for ' + node.role);
           }
           this.append_(buff, msg, options);
+        } else if (token == 'inputType') {
+          if (!node.inputType)
+            return;
+          options.annotation.push(token);
+          var msgId = Output.INPUT_TYPE_MESSAGE_IDS_[node.inputType] ||
+              'input_type_text';
+          if (this.formatOptions_.braille)
+            msgId = msgId + '_brl';
+          this.append_(buff, Msgs.getMsg(msgId), options);
         } else if (token == 'tableRowIndex' ||
             token == 'tableCellColumnIndex') {
           var value = node[token];
@@ -881,14 +1022,14 @@ Output.prototype = {
             resolvedInfo = node.state[token] ? stateInfo.on : stateInfo.off;
           if (!resolvedInfo)
             return;
-          if (resolvedInfo.earconId) {
+          if (this.formatOptions_.speech && resolvedInfo.earconId) {
             options.annotation.push(
                 new Output.EarconAction(resolvedInfo.earconId));
           }
           var msgId =
               this.formatOptions_.braille ? resolvedInfo.msgId + '_brl' :
               resolvedInfo.msgId;
-          var msg = cvox.ChromeVox.msgs.getMsg(msgId);
+          var msg = Msgs.getMsg(msgId);
           this.append_(buff, msg, options);
         } else if (tree.firstChild) {
           // Custom functions.
@@ -900,13 +1041,13 @@ Output.prototype = {
             else
               this.format_(node, cond.nextSibling.nextSibling, buff);
           } else if (token == 'earcon') {
-            // Assumes there's existing output in our buffer.
-            var lastBuff = buff[buff.length - 1];
-            if (!lastBuff)
+            // Ignore unless we're generating speech output.
+            if (!this.formatOptions_.speech)
               return;
 
-            lastBuff.setSpan(
-                new Output.EarconAction(tree.firstChild.value), 0, 0);
+            options.annotation.push(
+                new Output.EarconAction(tree.firstChild.value));
+            this.append_(buff, '', options);
           } else if (token == 'countChildren') {
             var role = tree.firstChild.value;
             var count = node.children.filter(function(e) {
@@ -916,6 +1057,9 @@ Output.prototype = {
           }
         }
       } else if (prefix == '@') {
+        var isPluralized = (token[0] == '@');
+        if (isPluralized)
+          token = token.slice(1);
         // Tokens can have substitutions.
         var pieces = token.split('+');
         token = pieces.reduce(function(prev, cur) {
@@ -926,28 +1070,47 @@ Output.prototype = {
         }.bind(this), '');
         var msgId = token;
         var msgArgs = [];
-        var curMsg = tree.firstChild;
-
-        while (curMsg) {
-          var arg = curMsg.value;
-          if (arg[0] != '$') {
-            console.error('Unexpected value: ' + arg);
-            return;
+        if (!isPluralized) {
+          var curArg = tree.firstChild;
+          while (curArg) {
+            if (curArg.value[0] != '$') {
+              console.error('Unexpected value: ' + curArg.value);
+              return;
+            }
+            var msgBuff = [];
+            this.format_(node, curArg, msgBuff);
+            msgArgs = msgArgs.concat(msgBuff);
+            curArg = curArg.nextSibling;
           }
-          var msgBuff = [];
-          this.format_(node, curMsg, msgBuff);
-          msgArgs = msgArgs.concat(msgBuff);
-          curMsg = curMsg.nextSibling;
         }
-          var msg = cvox.ChromeVox.msgs.getMsg(msgId, msgArgs);
+        var msg = Msgs.getMsg(msgId, msgArgs);
         try {
           if (this.formatOptions_.braille)
-            msg = cvox.ChromeVox.msgs.getMsg(msgId + '_brl', msgArgs) || msg;
+            msg = Msgs.getMsg(msgId + '_brl', msgArgs) || msg;
         } catch(e) {}
 
-        if (msg) {
-          this.append_(buff, msg, options);
+        if (!msg) {
+          console.error('Could not get message ' + msgId);
+          return;
         }
+
+        if (isPluralized) {
+          var arg = tree.firstChild;
+          if (!arg || arg.nextSibling) {
+            console.error('Pluralized messages take exactly one argument');
+            return;
+          }
+          if (arg.value[0] != '$') {
+            console.error('Unexpected value: ' + arg.value);
+            return;
+          }
+          var argBuff = [];
+          this.format_(node, arg, argBuff);
+          var namedArgs = {COUNT: Number(argBuff[0])};
+          msg = new goog.i18n.MessageFormat(msg).format(namedArgs);
+        }
+
+        this.append_(buff, msg, options);
       } else if (prefix == '!') {
         this.speechProperties_[token] = true;
       }
@@ -957,47 +1120,45 @@ Output.prototype = {
   /**
    * @param {!cursors.Range} range
    * @param {cursors.Range} prevRange
-   * @param {chrome.automation.EventType|string} type
-   * @param {!Array<cvox.Spannable>} rangeBuff
+   * @param {EventType|Output.EventType} type
+   * @param {!Array<Spannable>} rangeBuff
    * @private
    */
   range_: function(range, prevRange, type, rangeBuff) {
     if (!prevRange)
-      prevRange = cursors.Range.fromNode(range.getStart().getNode().root);
-
-    var cursor = range.getStart();
-    var prevNode = prevRange.getStart().getNode();
+      prevRange = cursors.Range.fromNode(range.start.node.root);
+    var cursor = cursors.Cursor.fromNode(range.start.node);
+    var prevNode = prevRange.start.node;
 
     var formatNodeAndAncestors = function(node, prevNode) {
       var buff = [];
       this.ancestry_(node, prevNode, type, buff);
       this.node_(node, prevNode, type, buff);
-      if (this.formatOptions_.location)
-        this.locations_.push(node.location);
+      this.locations_.push(node.location);
       return buff;
     }.bind(this);
 
-    while (cursor.getNode() != range.getEnd().getNode()) {
-      var node = cursor.getNode();
-        rangeBuff.push.apply(rangeBuff, formatNodeAndAncestors(node, prevNode));
+    while (cursor.node != range.end.node) {
+      var node = cursor.node;
+      rangeBuff.push.apply(rangeBuff, formatNodeAndAncestors(node, prevNode));
       prevNode = node;
       cursor = cursor.move(cursors.Unit.NODE,
                            cursors.Movement.DIRECTIONAL,
                            Dir.FORWARD);
 
       // Reached a boundary.
-      if (cursor.getNode() == prevNode)
+      if (cursor.node == prevNode)
         break;
     }
-    var lastNode = range.getEnd().getNode();
+    var lastNode = range.end.node;
     rangeBuff.push.apply(rangeBuff, formatNodeAndAncestors(lastNode, prevNode));
   },
 
   /**
-   * @param {!chrome.automation.AutomationNode} node
-   * @param {!chrome.automation.AutomationNode} prevNode
-   * @param {chrome.automation.EventType|string} type
-   * @param {!Array<cvox.Spannable>} buff
+   * @param {!AutomationNode} node
+   * @param {!AutomationNode} prevNode
+   * @param {EventType|Output.EventType} type
+   * @param {!Array<Spannable>} buff
    * @param {!Object=} opt_exclude A list of attributes to exclude from
    * processing.
    * @private
@@ -1066,10 +1227,10 @@ Output.prototype = {
   },
 
   /**
-   * @param {!chrome.automation.AutomationNode} node
-   * @param {!chrome.automation.AutomationNode} prevNode
-   * @param {chrome.automation.EventType|string} type
-   * @param {!Array<cvox.Spannable>} buff
+   * @param {!AutomationNode} node
+   * @param {!AutomationNode} prevNode
+   * @param {EventType|Output.EventType} type
+   * @param {!Array<Spannable>} buff
    * @private
    */
   node_: function(node, prevNode, type, buff) {
@@ -1083,30 +1244,32 @@ Output.prototype = {
   /**
    * @param {!cursors.Range} range
    * @param {cursors.Range} prevRange
-   * @param {chrome.automation.EventType|string} type
-   * @param {!Array<cvox.Spannable>} buff
+   * @param {EventType|Output.EventType} type
+   * @param {!Array<Spannable>} buff
    * @private
    */
   subNode_: function(range, prevRange, type, buff) {
     if (!prevRange)
       prevRange = range;
     var dir = cursors.Range.getDirection(prevRange, range);
-    var prevNode = prevRange.getBound(dir).getNode();
+    var prevNode = prevRange.getBound(dir).node;
     this.ancestry_(
-        range.getStart().getNode(), prevNode, type, buff,
+        range.start.node, prevNode, type, buff,
         {stay: true, name: true, value: true});
-    var startIndex = range.getStart().getIndex();
-    var endIndex = range.getEnd().getIndex();
+    var startIndex = range.start.index;
+    var endIndex = range.end.index;
     if (startIndex === endIndex)
       endIndex++;
     this.append_(
-        buff, range.getStart().getText().substring(startIndex, endIndex));
+        buff, range.start.getText().substring(startIndex, endIndex));
+    this.locations_.push(
+        range.start.node.boundsForRange(startIndex, endIndex));
   },
 
   /**
    * Appends output to the |buff|.
-   * @param {!Array<cvox.Spannable>} buff
-   * @param {string|!cvox.Spannable} value
+   * @param {!Array<Spannable>} buff
+   * @param {string|!Spannable} value
    * @param {{isUnique: (boolean|undefined),
    *      annotation: !Array<*>}=} opt_options
    */
@@ -1117,22 +1280,24 @@ Output.prototype = {
     if ((!value || value.length == 0) && opt_options.annotation.length == 0)
       return;
 
-    var spannableToAdd = new cvox.Spannable(value);
+    var spannableToAdd = new Spannable(value);
     opt_options.annotation.forEach(function(a) {
-      spannableToAdd.setSpan(a, 0, spannableToAdd.getLength());
+      spannableToAdd.setSpan(a, 0, spannableToAdd.length);
     });
-
-    // Early return if the buffer is empty.
-    if (buff.length == 0) {
-      buff.push(spannableToAdd);
-      return;
-    }
 
     // |isUnique| specifies an annotation that cannot be duplicated.
     if (opt_options.isUnique) {
+      var annotationSansNodes = opt_options.annotation.filter(
+          function(annotation) {
+            return !(annotation instanceof Output.NodeSpan);
+          });
       var alreadyAnnotated = buff.some(function(s) {
-        return opt_options.annotation.some(function(annotation) {
-          return s.getSpanStart(annotation) != undefined;
+        return annotationSansNodes.some(function(annotation) {
+          if (!s.hasSpan(annotation))
+            return false;
+          var start = s.getSpanStart(annotation);
+          var end = s.getSpanEnd(annotation);
+          return s.substring(start, end).toString() == value.toString();
         });
       });
       if (alreadyAnnotated)
@@ -1146,8 +1311,9 @@ Output.prototype = {
    * Parses the token containing a custom function and returns a tree.
    * @param {string} inputStr
    * @return {Object}
+   * @private
    */
-  createParseTree: function(inputStr) {
+  createParseTree_: function(inputStr) {
     var root = {value: ''};
     var currentNode = root;
     var index = 0;
@@ -1179,6 +1345,68 @@ Output.prototype = {
       throw 'Unbalanced parenthesis.';
 
     return root;
+  },
+
+  /**
+   * Converts the currently rendered braille buffers to a single spannable.
+   * @return {!Spannable}
+   * @private
+   */
+  createBrailleOutput_: function() {
+    var result = new Spannable();
+    var separator = '';  // Changes to space as appropriate.
+    this.brailleBuffer_.forEach(function(cur) {
+      // If this chunk is empty, don't add it since it won't result
+      // in any output on the braille display, but node spans would
+      // start before the separator in that case, which is not desired.
+      // The exception is if this chunk contains a selectionm, in which
+      // case it will result in a cursor which has to be preserved.
+      // In this case, having separators, potentially both before and after
+      // the empty string is correct.
+      if (cur.length == 0 && !cur.getSpanInstanceOf(Output.SelectionSpan))
+        return;
+      var spansToExtend = [];
+      var spansToRemove = [];
+      // Nodes that have node spans both on the character to the left
+      // of the separator and to the right should also cover the separator.
+      // We extend the left span to cover both the separator and what the
+      // right span used to cover, removing the right span, mostly for
+      // ease of writing tests and debug.
+      // Note that getSpan(position) never returns zero length spans
+      // (because they don't cover any position).  Still, we want to include
+      // these because they can be included (the selection span in an empty
+      // text field is an example), which is why we write the below code
+      // using getSpansInstanceOf and check the endpoints (isntead of doing
+      // the opposite).
+      result.getSpansInstanceOf(Output.NodeSpan).forEach(function(leftSpan) {
+        if (result.getSpanEnd(leftSpan) < result.length)
+          return;
+        var newEnd = result.length;
+        cur.getSpansInstanceOf(Output.NodeSpan).forEach(function(rightSpan) {
+          if (cur.getSpanStart(rightSpan) == 0 &&
+              leftSpan.node === rightSpan.node) {
+            newEnd = Math.max(
+                newEnd,
+                result.length + separator.length +
+                    cur.getSpanEnd(rightSpan));
+            spansToRemove.push(rightSpan);
+          }
+        });
+        if (newEnd > result.length)
+          spansToExtend.push({span: leftSpan, end: newEnd});
+      });
+      result.append(separator);
+      result.append(cur);
+      spansToExtend.forEach(function(elem) {
+        result.setSpan(
+            elem.span,
+            result.getSpanStart(elem.span),
+            elem.end);
+      });
+      spansToRemove.forEach(result.removeSpan.bind(result));
+      separator = Output.SPACE;
+    });
+    return result;
   }
 };
 

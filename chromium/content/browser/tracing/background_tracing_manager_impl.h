@@ -6,20 +6,24 @@
 #define CONTENT_BROWSER_TRACING_BACKGROUND_TRACING_MANAGER_IMPL_H_
 
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/metrics/histogram.h"
+#include "content/browser/tracing/background_tracing_config_impl.h"
 #include "content/browser/tracing/tracing_controller_impl.h"
-#include "content/public/browser/background_tracing_config.h"
 #include "content/public/browser/background_tracing_manager.h"
 
 namespace content {
 
+class BackgroundTracingRule;
+class TraceMessageFilter;
 class TracingDelegate;
 
-class BackgroundTracingManagerImpl : public content::BackgroundTracingManager {
+class BackgroundTracingManagerImpl : public BackgroundTracingManager {
  public:
-  static BackgroundTracingManagerImpl* GetInstance();
+  static CONTENT_EXPORT BackgroundTracingManagerImpl* GetInstance();
 
   bool SetActiveScenario(scoped_ptr<BackgroundTracingConfig>,
                          const ReceiveCallback&,
@@ -28,56 +32,66 @@ class BackgroundTracingManagerImpl : public content::BackgroundTracingManager {
 
   void TriggerNamedEvent(TriggerHandle, StartedFinalizingCallback) override;
   TriggerHandle RegisterTriggerType(const char* trigger_name) override;
-  void GetTriggerNameList(std::vector<std::string>* trigger_names) override;
 
+  void OnHistogramTrigger(const std::string& histogram_name);
+
+  void OnRuleTriggered(const BackgroundTracingRule* triggered_rule,
+                       StartedFinalizingCallback callback);
+  void AbortScenario();
+  bool HasActiveScenario() override;
+
+  // For tests
   void InvalidateTriggerHandlesForTesting() override;
   void SetTracingEnabledCallbackForTesting(
       const base::Closure& callback) override;
+  CONTENT_EXPORT void SetRuleTriggeredCallbackForTesting(
+      const base::Closure& callback);
   void FireTimerForTesting() override;
-  bool HasActiveScenarioForTesting() override;
+  CONTENT_EXPORT bool IsTracingForTesting();
 
  private:
   BackgroundTracingManagerImpl();
   ~BackgroundTracingManagerImpl() override;
 
-  void EnableRecording(std::string, base::trace_event::TraceRecordMode);
-  void EnableRecordingIfConfigNeedsIt();
-  void OnFinalizeStarted(base::RefCountedString*);
+  void StartTracing(std::string, base::trace_event::TraceRecordMode);
+  void StartTracingIfConfigNeedsIt();
+  void OnFinalizeStarted(
+      scoped_ptr<const base::DictionaryValue> metadata,
+      base::RefCountedString*);
   void OnFinalizeComplete();
   void BeginFinalizing(StartedFinalizingCallback);
   void ValidateStartupScenario();
-  void AbortScenario();
 
-  scoped_ptr<base::DictionaryValue> GenerateMetadataDict() const;
+  void AddCustomMetadata(TracingControllerImpl::TraceDataSink*) const;
 
   std::string GetTriggerNameFromHandle(TriggerHandle handle) const;
   bool IsTriggerHandleValid(TriggerHandle handle) const;
 
-  bool IsAbleToTriggerTracing(TriggerHandle handle) const;
-  bool IsSupportedConfig(BackgroundTracingConfig* config);
+  BackgroundTracingRule* GetRuleAbleToTriggerTracing(
+      TriggerHandle handle) const;
+  bool IsSupportedConfig(BackgroundTracingConfigImpl* config);
 
   std::string GetCategoryFilterStringForCategoryPreset(
-      BackgroundTracingConfig::CategoryPreset) const;
+      BackgroundTracingConfigImpl::CategoryPreset) const;
 
   class TracingTimer {
    public:
     explicit TracingTimer(StartedFinalizingCallback);
     ~TracingTimer();
 
-    void StartTimer();
+    void StartTimer(int seconds);
     void CancelTimer();
-
     void FireTimerForTesting();
 
    private:
     void TracingTimerFired();
 
-    base::OneShotTimer<TracingTimer> tracing_timer_;
+    base::OneShotTimer tracing_timer_;
     StartedFinalizingCallback callback_;
   };
 
   scoped_ptr<TracingDelegate> delegate_;
-  scoped_ptr<content::BackgroundTracingConfig> config_;
+  scoped_ptr<const content::BackgroundTracingConfigImpl> config_;
   std::map<TriggerHandle, std::string> trigger_handles_;
   scoped_ptr<TracingTimer> tracing_timer_;
   ReceiveCallback receive_callback_;
@@ -87,8 +101,11 @@ class BackgroundTracingManagerImpl : public content::BackgroundTracingManager {
   bool requires_anonymized_data_;
   int trigger_handle_ids_;
 
+  TriggerHandle triggered_named_event_handle_;
+
   IdleCallback idle_callback_;
   base::Closure tracing_enabled_callback_for_testing_;
+  base::Closure rule_triggered_callback_for_testing_;
 
   friend struct base::DefaultLazyInstanceTraits<BackgroundTracingManagerImpl>;
 

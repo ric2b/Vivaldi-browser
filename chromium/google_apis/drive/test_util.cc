@@ -26,7 +26,7 @@ namespace test_util {
 bool RemovePrefix(const std::string& input,
                   const std::string& prefix,
                   std::string* output) {
-  if (!base::StartsWithASCII(input, prefix, true /* case sensitive */))
+  if (!base::StartsWith(input, prefix, base::CompareCase::SENSITIVE))
     return false;
 
   *output = input.substr(prefix.size());
@@ -37,7 +37,7 @@ base::FilePath GetTestFilePath(const std::string& relative_path) {
   base::FilePath path;
   if (!PathService::Get(base::DIR_SOURCE_ROOT, &path))
     return base::FilePath();
-  path = path.AppendASCII("chrome")
+  path = path.AppendASCII("google_apis")
              .AppendASCII("test")
              .AppendASCII("data")
              .Append(base::FilePath::FromUTF8Unsafe(relative_path));
@@ -82,10 +82,10 @@ scoped_ptr<base::Value> LoadJSONFile(const std::string& relative_path) {
 
   std::string error;
   JSONFileValueDeserializer deserializer(path);
-  scoped_ptr<base::Value> value(deserializer.Deserialize(NULL, &error));
+  scoped_ptr<base::Value> value = deserializer.Deserialize(NULL, &error);
   LOG_IF(WARNING, !value.get()) << "Failed to parse " << path.value()
                                 << ": " << error;
-  return value.Pass();
+  return value;
 }
 
 // Returns a HttpResponse created from the given file path.
@@ -97,7 +97,7 @@ scoped_ptr<net::test_server::BasicHttpResponse> CreateHttpResponseFromFile(
 
   std::string content_type = "text/plain";
   if (base::EndsWith(file_path.AsUTF8Unsafe(), ".json",
-                     true /* case sensitive */))
+                     base::CompareCase::SENSITIVE))
     content_type = "application/json";
 
   scoped_ptr<net::test_server::BasicHttpResponse> http_response(
@@ -105,7 +105,7 @@ scoped_ptr<net::test_server::BasicHttpResponse> CreateHttpResponseFromFile(
   http_response->set_code(net::HTTP_OK);
   http_response->set_content(content);
   http_response->set_content_type(content_type);
-  return http_response.Pass();
+  return http_response;
 }
 
 scoped_ptr<net::test_server::HttpResponse> HandleDownloadFileRequest(
@@ -122,9 +122,9 @@ scoped_ptr<net::test_server::HttpResponse> HandleDownloadFileRequest(
 }
 
 bool ParseContentRangeHeader(const std::string& value,
-                             int64* start_position,
-                             int64* end_position,
-                             int64* length) {
+                             int64_t* start_position,
+                             int64_t* end_position,
+                             int64_t* length) {
   DCHECK(start_position);
   DCHECK(end_position);
   DCHECK(length);
@@ -133,17 +133,16 @@ bool ParseContentRangeHeader(const std::string& value,
   if (!RemovePrefix(value, "bytes ", &remaining))
     return false;
 
-  std::vector<std::string> parts;
-  base::SplitString(remaining, '/', &parts);
+  std::vector<base::StringPiece> parts = base::SplitStringPiece(
+      remaining, "/", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   if (parts.size() != 2U)
     return false;
 
-  const std::string range = parts[0];
   if (!base::StringToInt64(parts[1], length))
     return false;
 
-  parts.clear();
-  base::SplitString(range, '-', &parts);
+  parts = base::SplitStringPiece(parts[0], "-", base::TRIM_WHITESPACE,
+                                 base::SPLIT_WANT_ALL);
   if (parts.size() != 2U)
     return false;
 
@@ -152,8 +151,8 @@ bool ParseContentRangeHeader(const std::string& value,
 }
 
 void AppendProgressCallbackResult(std::vector<ProgressInfo>* progress_values,
-                                  int64 progress,
-                                  int64 total) {
+                                  int64_t progress,
+                                  int64_t total) {
   progress_values->push_back(ProgressInfo(progress, total));
 }
 

@@ -12,8 +12,8 @@ import android.util.Log;
 import android.view.ViewGroup;
 import android.webkit.ValueCallback;
 
-import org.chromium.base.CalledByNative;
-import org.chromium.base.JNINamespace;
+import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.JNINamespace;
 
 /**
  * Export the android webview as a PDF.
@@ -78,11 +78,16 @@ public class AwPdfExporter {
     @CalledByNative
     private void setNativeAwPdfExporter(long nativePdfExporter) {
         mNativeAwPdfExporter = nativePdfExporter;
-        // Handle the cornercase that Webview.Destroy is called before the native side
-        // has a chance to complete the pdf exporting.
+        // Handle the cornercase that the native side is destroyed (for example
+        // via Webview.Destroy) before it has a chance to complete the pdf exporting.
         if (nativePdfExporter == 0 && mResultCallback != null) {
-            mResultCallback.onReceiveValue(false);
-            mResultCallback = null;
+            try {
+                mResultCallback.onReceiveValue(false);
+                mResultCallback = null;
+            } catch (IllegalStateException ex) {
+                // Swallow the illegal state exception here. It is possible that app
+                // is going away and binder is already finalized. b/25462345
+            }
         }
     }
 

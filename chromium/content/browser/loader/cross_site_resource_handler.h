@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_LOADER_CROSS_SITE_RESOURCE_HANDLER_H_
 #define CONTENT_BROWSER_LOADER_CROSS_SITE_RESOURCE_HANDLER_H_
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "content/browser/loader/layered_resource_handler.h"
@@ -26,6 +27,12 @@ struct TransitionLayerData;
 // and not a download.
 class CrossSiteResourceHandler : public LayeredResourceHandler {
  public:
+  enum class NavigationDecision {
+    TRANSFER_REQUIRED,
+    USE_EXISTING_RENDERER,
+    CANCEL_REQUEST
+  };
+
   CrossSiteResourceHandler(scoped_ptr<ResourceHandler> next_handler,
                            net::URLRequest* request);
   ~CrossSiteResourceHandler() override;
@@ -69,7 +76,7 @@ class CrossSiteResourceHandler : public LayeredResourceHandler {
                                bool open_when_done = false,
                                bool ask_for_target = false);
 
-  void ResumeOrTransfer(bool is_transfer);
+  void ResumeOrTransfer(NavigationDecision decision);
   void ResumeIfDeferred();
 
   // Called when about to defer a request.  Sets |did_defer_| and logs the

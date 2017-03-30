@@ -4,6 +4,7 @@
 
 #include "net/http/http_stream_factory_impl_request.h"
 
+#include "base/memory/scoped_ptr.h"
 #include "net/http/http_stream_factory_impl_job.h"
 #include "net/proxy/proxy_info.h"
 #include "net/proxy/proxy_service.h"
@@ -20,7 +21,6 @@ class HttpStreamFactoryImplRequestTest
 INSTANTIATE_TEST_CASE_P(NextProto,
                         HttpStreamFactoryImplRequestTest,
                         testing::Values(kProtoSPDY31,
-                                        kProtoHTTP2_14,
                                         kProtoHTTP2));
 
 namespace {
@@ -35,6 +35,11 @@ class DoNothingRequestDelegate : public HttpStreamRequest::Delegate {
   void OnStreamReady(const SSLConfig& used_ssl_config,
                      const ProxyInfo& used_proxy_info,
                      HttpStream* stream) override {}
+  void OnBidirectionalStreamJobReady(
+      const SSLConfig& used_ssl_config,
+      const ProxyInfo& used_proxy_info,
+      BidirectionalStreamJob* stream_job) override {}
+
   void OnWebSocketHandshakeStreamReady(
       const SSLConfig& used_ssl_config,
       const ProxyInfo& used_proxy_info,
@@ -55,6 +60,7 @@ class DoNothingRequestDelegate : public HttpStreamRequest::Delegate {
                                   const SSLConfig& used_ssl_config,
                                   const ProxyInfo& used_proxy_info,
                                   HttpStream* stream) override {}
+  void OnQuicBroken() override {}
 };
 
 }  // namespace
@@ -64,23 +70,24 @@ TEST_P(HttpStreamFactoryImplRequestTest, SetPriority) {
   SpdySessionDependencies session_deps(GetParam(),
                                        ProxyService::CreateDirect());
 
-  scoped_refptr<HttpNetworkSession>
-      session(SpdySessionDependencies::SpdyCreateSession(&session_deps));
+  scoped_ptr<HttpNetworkSession> session =
+      SpdySessionDependencies::SpdyCreateSession(&session_deps);
   HttpStreamFactoryImpl* factory =
       static_cast<HttpStreamFactoryImpl*>(session->http_stream_factory());
 
   DoNothingRequestDelegate request_delegate;
   HttpStreamFactoryImpl::Request request(
-      GURL(), factory, &request_delegate, NULL, BoundNetLog());
+      GURL(), factory, &request_delegate, NULL, BoundNetLog(),
+      HttpStreamFactoryImpl::Request::HTTP_STREAM);
 
-  HttpStreamFactoryImpl::Job* job =
-      new HttpStreamFactoryImpl::Job(factory,
-                                     session.get(),
-                                     HttpRequestInfo(),
-                                     DEFAULT_PRIORITY,
-                                     SSLConfig(),
-                                     SSLConfig(),
-                                     NULL);
+  HttpRequestInfo request_info;
+
+  HostPortPair server = HostPortPair::FromURL(request_info.url);
+  GURL original_url = factory->ApplyHostMappingRules(request_info.url, &server);
+
+  HttpStreamFactoryImpl::Job* job = new HttpStreamFactoryImpl::Job(
+      factory, session.get(), request_info, DEFAULT_PRIORITY, SSLConfig(),
+      SSLConfig(), server, original_url, NULL);
   request.AttachJob(job);
   EXPECT_EQ(DEFAULT_PRIORITY, job->priority());
 

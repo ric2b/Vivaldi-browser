@@ -4,6 +4,8 @@
 
 #include "components/json_schema/json_schema_validator.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
@@ -11,13 +13,14 @@
 
 #include "base/json/json_reader.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "components/json_schema/json_schema_constants.h"
-#include "third_party/re2/re2/re2.h"
+#include "third_party/re2/src/re2/re2.h"
 
 namespace schema = json_schema_constants;
 
@@ -399,8 +402,8 @@ scoped_ptr<base::DictionaryValue> JSONSchemaValidator::IsValidSchema(
     int validator_options,
     std::string* error) {
   base::JSONParserOptions json_options = base::JSON_PARSE_RFC;
-  scoped_ptr<base::Value> json(base::JSONReader::DeprecatedReadAndReturnError(
-      schema, json_options, NULL, error));
+  scoped_ptr<base::Value> json =
+      base::JSONReader::ReadAndReturnError(schema, json_options, NULL, error);
   if (!json)
     return scoped_ptr<base::DictionaryValue>();
   base::DictionaryValue* dict = NULL;

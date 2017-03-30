@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "cc/animation/animation.h"
+#include "cc/animation/animation_events.h"
 #include "ui/compositor/layer_animation_sequence.h"
 #include "ui/compositor/test/layer_animator_test_controller.h"
 #include "ui/gfx/geometry/rect.h"

@@ -20,7 +20,6 @@
 #include "extensions/shell/common/shell_extensions_client.h"
 #include "extensions/shell/renderer/shell_extensions_renderer_client.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "components/content_settings/core/common/content_settings.h"
 
 #if !defined(DISABLE_NACL)
 #include "components/nacl/common/nacl_constants.h"
@@ -60,9 +59,6 @@ void ShellContentRendererClient::RenderThreadStarted() {
   guest_view_container_dispatcher_.reset(
       new ExtensionsGuestViewContainerDispatcher());
   thread->AddObserver(guest_view_container_dispatcher_.get());
-
-  // TODO(jamescook): Init WebSecurityPolicy for chrome-extension: schemes.
-  // See ChromeContentRendererClient for details.
 }
 
 void ShellContentRendererClient::RenderFrameCreated(
@@ -88,8 +84,7 @@ bool ShellContentRendererClient::OverrideCreatePlugin(
     content::RenderFrame* render_frame,
     blink::WebLocalFrame* frame,
     const blink::WebPluginParams& params,
-    blink::WebPlugin** plugin,
-    ContentSetting override_action) {
+    blink::WebPlugin** plugin) {
   // Allow the content module to create the plugin.
   return false;
 }

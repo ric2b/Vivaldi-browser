@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.signin;
 
 import android.accounts.Account;
 import android.app.Activity;
-import android.app.Dialog;
 import android.content.Intent;
 import android.os.Bundle;
 import android.text.TextUtils;
@@ -14,6 +13,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.LinearLayout;
 
+import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.firstrun.AccountFirstRunView;
 import org.chromium.chrome.browser.firstrun.ProfileDataCache;
@@ -24,16 +24,19 @@ import org.chromium.chrome.browser.preferences.Preferences;
 import org.chromium.chrome.browser.preferences.PreferencesLauncher;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.SigninManager.SignInFlowObserver;
+import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.chrome.browser.sync.ui.SyncCustomizationFragment;
+import org.chromium.chrome.browser.widget.AlwaysDismissedDialog;
 import org.chromium.sync.signin.AccountManagerHelper;
 import org.chromium.sync.signin.ChromeSigninController;
 
 /**
  * This class implements the dialog UI for the signin promo.
  */
-public class SigninPromoScreen extends Dialog implements AccountFirstRunView.Listener {
-
+public class SigninPromoScreen
+        extends AlwaysDismissedDialog implements AccountFirstRunView.Listener {
     private AccountFirstRunView mAccountFirstRunView;
+    private ProfileDataCache mProfileDataCache;
 
     /**
      * Launches the signin promo if it needs to be displayed.
@@ -58,6 +61,7 @@ public class SigninPromoScreen extends Dialog implements AccountFirstRunView.Lis
 
         SigninPromoScreen promoScreen = new SigninPromoScreen(activity);
         promoScreen.show();
+        SigninManager.logSigninStartAccessPoint(SigninAccessPoint.SIGNIN_PROMO);
         preferenceManager.setSigninPromoShown();
         return true;
     }
@@ -73,9 +77,9 @@ public class SigninPromoScreen extends Dialog implements AccountFirstRunView.Lis
 
         LayoutInflater inflater = LayoutInflater.from(activity);
         View view = inflater.inflate(R.layout.fre_choose_account, null);
-        ProfileDataCache profileData = new ProfileDataCache(activity, Profile.getLastUsedProfile());
+        mProfileDataCache = new ProfileDataCache(activity, Profile.getLastUsedProfile());
         mAccountFirstRunView = (AccountFirstRunView) view.findViewById(R.id.fre_account_layout);
-        mAccountFirstRunView.init(profileData);
+        mAccountFirstRunView.init(mProfileDataCache);
         mAccountFirstRunView.configureForAddAccountPromo();
         mAccountFirstRunView.setListener(this);
 
@@ -87,6 +91,14 @@ public class SigninPromoScreen extends Dialog implements AccountFirstRunView.Lis
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         SigninPromoUma.recordAction(SigninPromoUma.SIGNIN_PROMO_SHOWN);
+        RecordUserAction.record("Signin_Impression_FromSigninPromo");
+    }
+
+    @Override
+    public void dismiss() {
+        super.dismiss();
+        mProfileDataCache.destroy();
+        mProfileDataCache = null;
     }
 
     @Override
@@ -99,6 +111,7 @@ public class SigninPromoScreen extends Dialog implements AccountFirstRunView.Lis
                 mAccountFirstRunView.switchToSignedMode();
                 SigninManager.get(getOwnerActivity()).logInSignedInUser();
                 SigninPromoUma.recordAction(SigninPromoUma.SIGNIN_PROMO_ACCEPTED);
+                RecordUserAction.record("Signin_Signin_Succeed");
             }
 
             @Override
@@ -107,9 +120,10 @@ public class SigninPromoScreen extends Dialog implements AccountFirstRunView.Lis
                 dismiss();
             }
         };
-        SigninManager.get(getOwnerActivity().getApplicationContext()).signInToSelectedAccount(
-                getOwnerActivity(), account, SigninManager.SIGNIN_TYPE_INTERACTIVE,
-                SigninManager.SIGNIN_SYNC_IMMEDIATELY, false, signInCallback);
+        RecordUserAction.record("Signin_Signin_FromSigninPromo");
+        SigninManager.get(getOwnerActivity().getApplicationContext())
+                .signInToSelectedAccount(getOwnerActivity(), account,
+                        SigninManager.SIGNIN_TYPE_INTERACTIVE, signInCallback);
     }
 
     @Override
@@ -130,12 +144,14 @@ public class SigninPromoScreen extends Dialog implements AccountFirstRunView.Lis
 
     @Override
     public void onSettingsButtonClicked(String accountName) {
-        Intent intent = PreferencesLauncher.createIntentForSettingsPage(getContext(),
-                SyncCustomizationFragment.class.getName());
-        Bundle args = new Bundle();
-        args.putString(SyncCustomizationFragment.ARGUMENT_ACCOUNT, accountName);
-        intent.putExtra(Preferences.EXTRA_SHOW_FRAGMENT_ARGUMENTS, args);
-        getContext().startActivity(intent);
+        if (ProfileSyncService.get() != null) {
+            Intent intent = PreferencesLauncher.createIntentForSettingsPage(getContext(),
+                    SyncCustomizationFragment.class.getName());
+            Bundle args = new Bundle();
+            args.putString(SyncCustomizationFragment.ARGUMENT_ACCOUNT, accountName);
+            intent.putExtra(Preferences.EXTRA_SHOW_FRAGMENT_ARGUMENTS, args);
+            getContext().startActivity(intent);
+        }
 
         SigninPromoUma.recordAction(SigninPromoUma.SIGNIN_PROMO_ACCEPTED_WITH_ADVANCED);
         dismiss();

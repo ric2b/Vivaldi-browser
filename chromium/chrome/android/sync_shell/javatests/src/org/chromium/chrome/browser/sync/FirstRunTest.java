@@ -9,7 +9,10 @@ import android.os.Bundle;
 import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
+import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.firstrun.FirstRunActivity;
 import org.chromium.chrome.browser.firstrun.FirstRunSignInProcessor;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
@@ -18,6 +21,7 @@ import org.chromium.sync.AndroidSyncSettings;
 /**
  * Tests for the first run experience.
  */
+@CommandLineFlags.Remove(ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE)
 public class FirstRunTest extends SyncTestBase {
     private static final String TAG = "FirstRunTest";
 
@@ -26,11 +30,17 @@ public class FirstRunTest extends SyncTestBase {
         NO;
     }
 
+    @Override
+    public void startMainActivity() throws InterruptedException {
+        startMainActivityFromLauncher();
+    }
+
     // Test that signing in through FirstRun signs in and starts sync.
     @SmallTest
     @Feature({"Sync"})
+    @DisabledTest
     public void testFreSignin() throws Exception {
-        Account testAccount = setupTestAccount(CLIENT_ID);
+        Account testAccount = setUpTestAccount();
         SyncTestUtil.verifySyncIsSignedOut(mContext);
         assertFalse(AndroidSyncSettings.isChromeSyncEnabled(mContext));
         processFirstRun(testAccount.name, ShowSyncSettings.NO);
@@ -42,7 +52,7 @@ public class FirstRunTest extends SyncTestBase {
     @SmallTest
     @Feature({"Sync"})
     public void testFreNoSignin() throws Exception {
-        setupTestAccount(CLIENT_ID);
+        setUpTestAccount();
         SyncTestUtil.verifySyncIsSignedOut(mContext);
         assertFalse(AndroidSyncSettings.isChromeSyncEnabled(mContext));
         processFirstRun(null, ShowSyncSettings.NO);

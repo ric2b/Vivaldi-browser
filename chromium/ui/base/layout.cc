@@ -4,25 +4,21 @@
 
 #include "ui/base/layout.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
 
-#include "base/basictypes.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "build/build_config.h"
 #include "ui/base/touch/touch_device.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/gfx/display.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/screen.h"
-
-#if defined(OS_WIN)
-#include "base/win/metro.h"
-#include "ui/gfx/win/dpi.h"
-#include <Windows.h>
-#endif  // defined(OS_WIN)
 
 namespace ui {
 
@@ -78,14 +74,6 @@ ScaleFactor GetSupportedScaleFactor(float scale) {
   }
   DCHECK_NE(closest_match, SCALE_FACTOR_NONE);
   return closest_match;
-}
-
-float GetImageScale(ScaleFactor scale_factor) {
-#if defined(OS_WIN)
-  return gfx::GetDPIScale();
-#else
-  return GetScaleForScaleFactor(scale_factor);
-#endif
 }
 
 float GetScaleForScaleFactor(ScaleFactor scale_factor) {

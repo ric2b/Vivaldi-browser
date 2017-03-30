@@ -26,8 +26,8 @@
 #include "base/version.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/chrome_version_info.h"
 #include "chrome/common/mac/launchd.h"
+#include "components/version_info/version_info.h"
 #include "ipc/unix_domain_socket_util.h"
 
 using ::base::FilePathWatcher;
@@ -91,14 +91,8 @@ base::FilePath GetServiceProcessSocketName() {
   PathService::Get(base::DIR_TEMP, &socket_name);
   std::string pipe_name = GetServiceProcessScopedName("srv");
   socket_name = socket_name.Append(pipe_name);
-  UMA_HISTOGRAM_CUSTOM_COUNTS("CloudPrint.ServiceProcessSocketLength",
-                              socket_name.value().size(), 75, 124, 50);
-  if (socket_name.value().size() < IPC::kMaxSocketNameLength)
-    return socket_name;
-  // Fallback to /tmp if $TMPDIR is too long.
-  // TODO(vitalybuka): Investigate how often we get there.
-  // See http://crbug.com/466644
-  return base::FilePath("/tmp").Append(pipe_name);
+  CHECK_LT(socket_name.value().size(), IPC::kMaxSocketNameLength);
+  return socket_name;
 }
 
 }  // namespace
@@ -208,8 +202,7 @@ bool CheckServiceProcessReady() {
   if (!service_version.IsValid()) {
     ready = false;
   } else {
-    chrome::VersionInfo version_info;
-    Version running_version(version_info.Version());
+    Version running_version(version_info::GetVersionNumber());
     if (!running_version.IsValid()) {
       // Our own version is invalid. This is an error case. Pretend that we
       // are out of date.

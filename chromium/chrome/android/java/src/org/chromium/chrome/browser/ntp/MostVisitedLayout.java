@@ -6,35 +6,28 @@ package org.chromium.chrome.browser.ntp;
 
 import android.content.Context;
 import android.content.res.Resources;
-import android.graphics.Canvas;
-import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 import android.view.View;
 import android.widget.FrameLayout;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.util.MathUtils;
 
 /**
- * A layout that arranges most visited items in a grid. All items must be the same size.
+ * A layout that arranges most visited items in a grid.
+ *
+ * Intended for use with the new icon-based most visited items.
  */
 public class MostVisitedLayout extends FrameLayout {
 
-    private int mHorizontalSpacing;
+    private static final int MAX_COLUMNS = 4;
+
     private int mVerticalSpacing;
-    private int mTwoColumnMinWidth;
-    private int mThreeColumnMinWidth;
-
-    /**
-     * The ideal width of a child. The children may need be stretched or shrunk a bit to fill the
-     * available width.
-     */
-    private int mDefaultChildWidth;
-
-    private Drawable mEmptyTileDrawable;
-    private int mNumEmptyTiles;
-    private int mEmptyTileTop;
-    private int mFirstEmptyTileLeft;
+    private int mMinHorizontalSpacing;
+    private int mMaxHorizontalSpacing;
+    private int mMaxWidth;
+    private int mMaxRows;
 
     /**
      * @param context The view context in which this item will be shown.
@@ -42,109 +35,87 @@ public class MostVisitedLayout extends FrameLayout {
      */
     public MostVisitedLayout(Context context, AttributeSet attrs) {
         super(context, attrs);
-        setWillNotDraw(false);
 
         Resources res = getResources();
-        mHorizontalSpacing = res.getDimensionPixelOffset(R.dimen.most_visited_spacing);
-        mVerticalSpacing = mHorizontalSpacing;
-        mDefaultChildWidth = res.getDimensionPixelSize(R.dimen.most_visited_tile_width);
-        mTwoColumnMinWidth = res.getDimensionPixelOffset(R.dimen.most_visited_two_column_min_width);
-        mThreeColumnMinWidth = res.getDimensionPixelOffset(
-                R.dimen.most_visited_three_column_min_width);
+        mVerticalSpacing = res.getDimensionPixelOffset(R.dimen.most_visited_vertical_spacing);
+        mMinHorizontalSpacing = res.getDimensionPixelOffset(
+                R.dimen.most_visited_min_horizontal_spacing);
+        mMaxHorizontalSpacing = res.getDimensionPixelOffset(
+                R.dimen.most_visited_max_horizontal_spacing);
+        mMaxWidth = res.getDimensionPixelOffset(R.dimen.most_visited_layout_max_width);
+    }
+
+    /**
+     * Sets the maximum number of rows to display. Any items that don't fit within these rows will
+     * be hidden.
+     */
+    public void setMaxRows(int rows) {
+        mMaxRows = rows;
     }
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        // Determine the number of columns in the grid.
-        final int totalWidth = MeasureSpec.getSize(widthMeasureSpec);
-        int childWidth = mDefaultChildWidth;
-        int childWidthWithSpacing = childWidth + mHorizontalSpacing;
-
-        int numColumns;
-        if (totalWidth + mHorizontalSpacing >= 3 * childWidthWithSpacing) {
-            numColumns = 3;
-        } else if (totalWidth < mTwoColumnMinWidth) {
-            numColumns = 1;
-        } else {
-            numColumns = totalWidth < mThreeColumnMinWidth ? 2 : 3;
-
-            // Resize the tiles to make them fill the entire available width.
-            childWidthWithSpacing = Math.max(mHorizontalSpacing,
-                    (totalWidth + mHorizontalSpacing) / numColumns);
-            childWidth = childWidthWithSpacing - mHorizontalSpacing;
-        }
-
+        int totalWidth = resolveSize(mMaxWidth, widthMeasureSpec);
         int childCount = getChildCount();
-        int childHeight = 0;
-        if (childCount > 0) {
-            // Measure the children.
-            int childWidthSpec = MeasureSpec.makeMeasureSpec(childWidth, MeasureSpec.EXACTLY);
-            int childHeightSpec = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED);
-            for (int i = 0; i < childCount; i++) {
-                getChildAt(i).measure(childWidthSpec, childHeightSpec);
-            }
-            childHeight = getChildAt(0).getMeasuredHeight();
+        if (childCount == 0) {
+            setMeasuredDimension(totalWidth, resolveSize(0, heightMeasureSpec));
+            return;
         }
+
+        // Measure the children.
+        for (int i = 0; i < childCount; i++) {
+            measureChild(getChildAt(i), MeasureSpec.UNSPECIFIED, MeasureSpec.UNSPECIFIED);
+        }
+
+        // Determine the number of columns that will fit.
+        int gridWidth = totalWidth - ApiCompatibilityUtils.getPaddingStart(this)
+                - ApiCompatibilityUtils.getPaddingEnd(this);
+        int childHeight = getChildAt(0).getMeasuredHeight();
+        int childWidth = getChildAt(0).getMeasuredWidth();
+        int numColumns = MathUtils.clamp(
+                (gridWidth + mMinHorizontalSpacing) / (childWidth + mMinHorizontalSpacing),
+                1, MAX_COLUMNS);
+
+        // Ensure column spacing isn't greater than mMaxHorizontalSpacing.
+        int gridWidthMinusColumns = Math.max(0, gridWidth - numColumns * childWidth);
+        int gridSidePadding = gridWidthMinusColumns - mMaxHorizontalSpacing * (numColumns - 1);
+
+        int gridStart = 0;
+        float horizontalSpacing;
+        if (gridSidePadding > 0) {
+            horizontalSpacing = mMaxHorizontalSpacing;
+            gridStart = gridSidePadding / 2;
+        } else {
+            horizontalSpacing = (float) gridWidthMinusColumns / Math.max(1, numColumns - 1);
+        }
+
+        // Limit the number of rows to mMaxRows.
+        int visibleChildCount = Math.min(childCount, mMaxRows * numColumns);
 
         // Arrange the children in a grid.
-        int childStart = 0;
-        int childTop = 0;
-        int column = 0;
+        int paddingTop = getPaddingTop();
         boolean isRtl = ApiCompatibilityUtils.isLayoutRtl(this);
-        for (int i = 0; i < childCount; i++) {
+        for (int i = 0; i < visibleChildCount; i++) {
             View child = getChildAt(i);
+            child.setVisibility(View.VISIBLE);
+            int row = i / numColumns;
+            int column = i % numColumns;
+            int childTop = row * (childHeight + mVerticalSpacing);
+            int childStart = gridStart + Math.round(column * (childWidth + horizontalSpacing));
             MarginLayoutParams layoutParams = (MarginLayoutParams) child.getLayoutParams();
-            layoutParams.setMargins(isRtl ? 0 : childStart, childTop,
-                    isRtl ? childStart : 0, 0);
+            layoutParams.setMargins(isRtl ? 0 : childStart, childTop, isRtl ? childStart : 0, 0);
             child.setLayoutParams(layoutParams);
-            column++;
-            if (column == numColumns) {
-                column = 0;
-                childStart = 0;
-                childTop += childHeight + mVerticalSpacing;
-            } else {
-                childStart += childWidthWithSpacing;
-            }
         }
 
-        // Fill the rest of the current row with empty tiles.
-        if (column != 0) {
-            mNumEmptyTiles = numColumns - column;
-            mEmptyTileTop = childTop + getPaddingTop();
-            mFirstEmptyTileLeft = isRtl ? 0 : childStart;
-        } else {
-            mNumEmptyTiles = 0;
+        // Hide the last row if it's incomplete.
+        for (int i = visibleChildCount; i < childCount; i++) {
+            getChildAt(i).setVisibility(View.GONE);
         }
 
-        int numRows = (childCount + mNumEmptyTiles) / numColumns;
-        int totalHeight = getPaddingTop() + getPaddingBottom() + numRows * childHeight
+        int numRows = (visibleChildCount + numColumns - 1) / numColumns;
+        int totalHeight = paddingTop + getPaddingBottom() + numRows * childHeight
                 + (numRows - 1) * mVerticalSpacing;
 
-        int gridWidth = numColumns * childWidthWithSpacing - mHorizontalSpacing;
-        setMeasuredDimension(gridWidth, resolveSize(totalHeight, heightMeasureSpec));
-    }
-
-    @Override
-    protected void onDraw(Canvas canvas) {
-        super.onDraw(canvas);
-        if (mNumEmptyTiles == 0 || getChildCount() == 0) return;
-
-        // Draw empty tiles.
-        if (mEmptyTileDrawable == null) {
-            mEmptyTileDrawable = ApiCompatibilityUtils.getDrawable(
-                    getResources(), R.drawable.most_visited_item_empty);
-        }
-        int tileLeft = mFirstEmptyTileLeft;
-        int tileWidth = getChildAt(0).getMeasuredWidth();
-        int tileHeight = getChildAt(0).getMeasuredHeight();
-        for (int i = 0; i < mNumEmptyTiles; i++) {
-            mEmptyTileDrawable.setBounds(
-                    tileLeft,
-                    mEmptyTileTop,
-                    tileLeft + tileWidth,
-                    mEmptyTileTop + tileHeight);
-            mEmptyTileDrawable.draw(canvas);
-            tileLeft += tileWidth + mHorizontalSpacing;
-        }
+        setMeasuredDimension(totalWidth, resolveSize(totalHeight, heightMeasureSpec));
     }
 }

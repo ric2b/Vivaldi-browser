@@ -7,6 +7,7 @@
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/trace_event/trace_event.h"
 #include "media/audio/win/audio_manager_win.h"
 #include "media/audio/win/avrt_wrapper_win.h"
 #include "media/audio/win/core_audio_util_win.h"
@@ -28,7 +29,6 @@ WASAPIAudioInputStream::WASAPIAudioInputStream(AudioManagerWin* manager,
       packet_size_frames_(0),
       packet_size_bytes_(0),
       endpoint_buffer_size_frames_(0),
-      effects_(params.effects()),
       device_id_(device_id),
       perf_count_to_100ns_units_(0.0),
       ms_to_frame_count_(0.0),
@@ -291,14 +291,17 @@ void WASAPIAudioInputStream::Run() {
   size_t capture_buffer_size = std::max(
       2 * endpoint_buffer_size_frames_ * frame_size_,
       2 * packet_size_frames_ * frame_size_);
-  scoped_ptr<uint8[]> capture_buffer(new uint8[capture_buffer_size]);
+  scoped_ptr<uint8_t[]> capture_buffer(new uint8_t[capture_buffer_size]);
 
-  LARGE_INTEGER now_count;
+  LARGE_INTEGER now_count = {};
   bool recording = true;
   bool error = false;
   double volume = GetVolume();
   HANDLE wait_array[2] =
       { stop_capture_event_.Get(), audio_samples_ready_event_.Get() };
+
+  base::win::ScopedComPtr<IAudioClock> audio_clock;
+  audio_client_->GetService(__uuidof(IAudioClock), audio_clock.ReceiveVoid());
 
   while (recording && !error) {
     HRESULT hr = S_FALSE;
@@ -315,6 +318,7 @@ void WASAPIAudioInputStream::Run() {
         break;
       case WAIT_OBJECT_0 + 1:
         {
+          TRACE_EVENT0("audio", "WASAPIAudioInputStream::Run_0");
           // |audio_samples_ready_event_| has been set.
           BYTE* data_ptr = NULL;
           UINT32 num_frames_to_read = 0;
@@ -334,6 +338,16 @@ void WASAPIAudioInputStream::Run() {
             DLOG(ERROR) << "Failed to get data from the capture buffer";
             continue;
           }
+
+          if (audio_clock) {
+            // The reported timestamp from GetBuffer is not as reliable as the
+            // clock from the client.  We've seen timestamps reported for
+            // USB audio devices, be off by several days.  Furthermore we've
+            // seen them jump back in time every 2 seconds or so.
+            audio_clock->GetPosition(
+                &device_position, &first_audio_frame_timestamp);
+          }
+
 
           if (num_frames_to_read != 0) {
             size_t pos = buffer_frame_index * frame_size_;
@@ -359,7 +373,9 @@ void WASAPIAudioInputStream::Run() {
           // first audio frame in the packet and B is the extra delay
           // contained in any stored data. Unit is in audio frames.
           QueryPerformanceCounter(&now_count);
-          double audio_delay_frames =
+          // first_audio_frame_timestamp will be 0 if we didn't get a timestamp.
+          double audio_delay_frames = first_audio_frame_timestamp == 0 ?
+              num_frames_to_read :
               ((perf_count_to_100ns_units_ * now_count.QuadPart -
                 first_audio_frame_timestamp) / 10000.0) * ms_to_frame_count_ +
                 buffer_frame_index - num_frames_to_read;
@@ -371,10 +387,12 @@ void WASAPIAudioInputStream::Run() {
 
           // Deliver captured data to the registered consumer using a packet
           // size which was specified at construction.
-          uint32 delay_frames = static_cast<uint32>(audio_delay_frames + 0.5);
+          uint32_t delay_frames =
+              static_cast<uint32_t>(audio_delay_frames + 0.5);
           while (buffer_frame_index >= packet_size_frames_) {
             // Copy data to audio bus to match the OnData interface.
-            uint8* audio_data = reinterpret_cast<uint8*>(capture_buffer.get());
+            uint8_t* audio_data =
+                reinterpret_cast<uint8_t*>(capture_buffer.get());
             audio_bus_->FromInterleaved(
                 audio_data, audio_bus_->frames(), format_.wBitsPerSample / 8);
 
@@ -387,12 +405,21 @@ void WASAPIAudioInputStream::Run() {
             // using the current packet size. The stored section will be used
             // either in the next while-loop iteration or in the next
             // capture event.
+            // TODO(tommi): If this data will be used in the next capture
+            // event, we will report incorrect delay estimates because
+            // we'll use the one for the captured data that time around
+            // (i.e. in the future).
             memmove(&capture_buffer[0],
                     &capture_buffer[packet_size_bytes_],
                     (buffer_frame_index - packet_size_frames_) * frame_size_);
 
+            DCHECK_GE(buffer_frame_index, packet_size_frames_);
             buffer_frame_index -= packet_size_frames_;
-            delay_frames -= packet_size_frames_;
+            if (delay_frames > packet_size_frames_) {
+              delay_frames -= packet_size_frames_;
+            } else {
+              delay_frames = 0;
+            }
           }
         }
         break;
@@ -433,47 +460,22 @@ HRESULT WASAPIAudioInputStream::SetCaptureDevice() {
   // Retrieve the IMMDevice by using the specified role or the specified
   // unique endpoint device-identification string.
 
-  if (effects_ & AudioParameters::DUCKING) {
-    // Ducking has been requested and it is only supported for the default
-    // communication device.  So, let's open up the communication device and
-    // see if the ID of that device matches the requested ID.
-    // We consider a kDefaultDeviceId as well as an explicit device id match,
-    // to be valid matches.
+  if (device_id_ == AudioManagerBase::kDefaultDeviceId) {
+    // Retrieve the default capture audio endpoint for the specified role.
+    // Note that, in Windows Vista, the MMDevice API supports device roles
+    // but the system-supplied user interface programs do not.
+    hr = enumerator->GetDefaultAudioEndpoint(eCapture, eConsole,
+                                             endpoint_device_.Receive());
+  } else if (device_id_ == AudioManagerBase::kCommunicationsDeviceId) {
     hr = enumerator->GetDefaultAudioEndpoint(eCapture, eCommunications,
                                              endpoint_device_.Receive());
-    if (endpoint_device_.get() &&
-        device_id_ != AudioManagerBase::kDefaultDeviceId) {
-      base::win::ScopedCoMem<WCHAR> communications_id;
-      endpoint_device_->GetId(&communications_id);
-      if (device_id_ !=
-          base::WideToUTF8(static_cast<WCHAR*>(communications_id))) {
-        DLOG(WARNING) << "Ducking has been requested for a non-default device."
-                         "Not supported.";
-        // We can't honor the requested effect flag, so turn it off and
-        // continue.  We'll check this flag later to see if we've actually
-        // opened up the communications device, so it's important that it
-        // reflects the active state.
-        effects_ &= ~AudioParameters::DUCKING;
-        endpoint_device_.Release();  // Fall back on code below.
-      }
-    }
-  }
-
-  if (!endpoint_device_.get()) {
-    if (device_id_ == AudioManagerBase::kDefaultDeviceId) {
-      // Retrieve the default capture audio endpoint for the specified role.
-      // Note that, in Windows Vista, the MMDevice API supports device roles
-      // but the system-supplied user interface programs do not.
-      hr = enumerator->GetDefaultAudioEndpoint(eCapture, eConsole,
-                                               endpoint_device_.Receive());
-    } else if (device_id_ == AudioManagerBase::kLoopbackInputDeviceId) {
-      // Capture the default playback stream.
-      hr = enumerator->GetDefaultAudioEndpoint(eRender, eConsole,
-                                               endpoint_device_.Receive());
-    } else {
-      hr = enumerator->GetDevice(base::UTF8ToUTF16(device_id_).c_str(),
-                                 endpoint_device_.Receive());
-    }
+  } else if (device_id_ == AudioManagerBase::kLoopbackInputDeviceId) {
+    // Capture the default playback stream.
+    hr = enumerator->GetDefaultAudioEndpoint(eRender, eConsole,
+                                             endpoint_device_.Receive());
+  } else {
+    hr = enumerator->GetDevice(base::UTF8ToUTF16(device_id_).c_str(),
+                               endpoint_device_.Receive());
   }
 
   if (FAILED(hr))
@@ -571,8 +573,7 @@ HRESULT WASAPIAudioInputStream::InitializeAudioEngine() {
   if (device_id_ == AudioManagerBase::kLoopbackInputDeviceId) {
     flags = AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_NOPERSIST;
   } else {
-    flags =
-      AUDCLNT_STREAMFLAGS_EVENTCALLBACK | AUDCLNT_STREAMFLAGS_NOPERSIST;
+    flags = AUDCLNT_STREAMFLAGS_EVENTCALLBACK | AUDCLNT_STREAMFLAGS_NOPERSIST;
   }
 
   // Initialize the audio stream between the client and the device.
@@ -587,7 +588,8 @@ HRESULT WASAPIAudioInputStream::InitializeAudioEngine() {
       0,  // hnsBufferDuration
       0,
       &format_,
-      (effects_ & AudioParameters::DUCKING) ? &kCommunicationsSessionId : NULL);
+      device_id_ == AudioManagerBase::kCommunicationsDeviceId ?
+          &kCommunicationsSessionId : nullptr);
 
   if (FAILED(hr))
     return hr;

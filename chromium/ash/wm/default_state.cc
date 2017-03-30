@@ -4,7 +4,8 @@
 
 #include "ash/wm/default_state.h"
 
-#include "ash/display/display_controller.h"
+#include "ash/display/window_tree_host_manager.h"
+#include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
 #include "ash/shell.h"
 #include "ash/shell_window_ids.h"
@@ -17,6 +18,7 @@
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "ash/wm/workspace/workspace_window_resizer.h"
+#include "ash/wm/workspace_controller.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
@@ -58,10 +60,10 @@ void MoveToDisplayForRestore(WindowState* window_state) {
   if (!display_area.Intersects(restore_bounds)) {
     const gfx::Display& display =
         Shell::GetScreen()->GetDisplayMatching(restore_bounds);
-    DisplayController* display_controller =
-        Shell::GetInstance()->display_controller();
+    WindowTreeHostManager* window_tree_host_manager =
+        Shell::GetInstance()->window_tree_host_manager();
     aura::Window* new_root =
-        display_controller->GetRootWindowForDisplayId(display.id());
+        window_tree_host_manager->GetRootWindowForDisplayId(display.id());
     if (new_root != window_state->window()->GetRootWindow()) {
       aura::Window* new_container =
           Shell::GetContainer(new_root, window_state->window()->parent()->id());
@@ -172,7 +174,7 @@ void CycleSnapDock(WindowState* window_state, WMEventType event) {
 }  // namespace;
 
 DefaultState::DefaultState(WindowStateType initial_state_type)
-    : state_type_(initial_state_type) {}
+    : state_type_(initial_state_type), stored_window_state_(nullptr) {}
 DefaultState::~DefaultState() {}
 
 void DefaultState::OnWMEvent(WindowState* window_state,
@@ -461,6 +463,15 @@ bool DefaultState::ProcessWorkspaceEvents(WindowState* window_state,
       return true;
     }
     case WM_EVENT_WORKAREA_BOUNDS_CHANGED: {
+      // Don't resize the maximized window when the desktop is covered
+      // by fullscreen window. crbug.com/504299.
+      bool in_fullscreen =
+          RootWindowController::ForWindow(window_state->window())
+              ->workspace_controller()
+              ->GetWindowState() == WORKSPACE_WINDOW_STATE_FULL_SCREEN;
+      if (in_fullscreen && window_state->IsMaximized())
+        return true;
+
       if (window_state->is_dragged() ||
           SetMaximizedOrFullscreenBounds(window_state)) {
         return true;
@@ -584,12 +595,15 @@ void DefaultState::ReenterToCurrentState(
     WindowState* window_state,
     WindowState::State* state_in_previous_mode) {
   WindowStateType previous_state_type = state_in_previous_mode->GetType();
-  if (previous_state_type == wm::WINDOW_STATE_TYPE_FULLSCREEN) {
-    // A state change should not move a window out of full screen since full
-    // screen is a "special mode" the user wanted to be in and should be
-    // respected as such.
+
+  // A state change should not move a window into or out of full screen since
+  // full screen is a "special mode" the user wanted to be in and should be
+  // respected as such.
+  if (previous_state_type == wm::WINDOW_STATE_TYPE_FULLSCREEN)
     state_type_ = wm::WINDOW_STATE_TYPE_FULLSCREEN;
-  }
+  else if (state_type_ == wm::WINDOW_STATE_TYPE_FULLSCREEN)
+    state_type_ = previous_state_type;
+
   window_state->UpdateWindowShowStateFromStateType();
   window_state->NotifyPreStateTypeChange(previous_state_type);
 

@@ -101,6 +101,25 @@
       ],
     },
     {
+      # GN version: //ppapi:blink_test_plugin
+      'target_name': 'blink_test_plugin',
+      'type': 'loadable_module',
+      'sources': [
+        'tests/blink_test_plugin.cc',
+      ],
+      'dependencies': [
+        'ppapi.gyp:ppapi_cpp',
+        'ppapi_internal.gyp:ppapi_shared',
+      ],
+      'conditions': [
+        ['OS=="mac"', {
+          'mac_bundle': 1,
+          'product_name': 'blink_test_plugin',
+          'product_extension': 'plugin',
+        }],
+      ],
+    },
+    {
       # GN version: //ppapi/proxy:test_support
       #             //ppapi/shared_impl:test_support
       'target_name': 'ppapi_unittest_shared',
@@ -127,33 +146,33 @@
       ],
     },
 
-    #{
-    #  # GN version: //ppapi:ppapi_perftests
-    #  'target_name': 'ppapi_perftests',
-    #  'type': 'executable',
-    #  'variables': {
-    #    'chromium_code': 1,
-    #  },
-    #  'dependencies': [
-    #    'ppapi_proxy',
-    #    'ppapi_shared',
-    #    'ppapi_unittest_shared',
-    #    '../base/base.gyp:test_support_base',
-    #    '../testing/gtest.gyp:gtest',
-    #  ],
-    #  'sources': [
-    #    'proxy/ppapi_perftests.cc',
-    #    'proxy/ppp_messaging_proxy_perftest.cc',
-    #  ],
-    #  'conditions': [
-    #    # See http://crbug.com/162998#c4 for why this is needed.
-    #    ['OS=="linux" and use_allocator!="none"', {
-    #      'dependencies': [
-    #        '../base/allocator/allocator.gyp:allocator',
-    #      ],
-    #    }],
-    #  ],
-    #},
+    {
+      # GN version: //ppapi:ppapi_perftests
+      'target_name': 'ppapi_perftests',
+      'type': 'executable',
+      'variables': {
+        'chromium_code': 1,
+      },
+      'dependencies': [
+        'ppapi_proxy',
+        'ppapi_shared',
+        'ppapi_unittest_shared',
+        '../base/base.gyp:test_support_base',
+        '../testing/gtest.gyp:gtest',
+      ],
+      'sources': [
+        'proxy/ppapi_perftests.cc',
+        'proxy/ppp_messaging_proxy_perftest.cc',
+      ],
+      'conditions': [
+        # See http://crbug.com/162998#c4 for why this is needed.
+        ['OS=="linux" and use_allocator!="none"', {
+          'dependencies': [
+            '../base/allocator/allocator.gyp:allocator',
+          ],
+        }],
+      ],
+    },
     {
       # GN version: //ppapi:ppapi_unittests
       'target_name': 'ppapi_unittests',
@@ -223,10 +242,6 @@
         }],
       ],
     },
-  ],
-  'conditions': [
-    ['0==1', {
-    'targets': [
     {
       'target_name': 'ppapi_example_skeleton',
       'suppress_wildcard': 1,
@@ -333,6 +348,16 @@
       ],
       'sources': [
         'examples/audio/audio.cc',
+      ],
+    },
+    {
+      'target_name': 'ppapi_example_audio_encode',
+      'dependencies': [
+        'ppapi_example_skeleton',
+        'ppapi.gyp:ppapi_cpp',
+      ],
+      'sources': [
+        'examples/audio_encode/audio_encode.cc',
       ],
     },
     {
@@ -656,7 +681,5 @@
     },
     # Adding a new PPAPI example? Don't forget to update the GN build.
     # See //ppapi/examples/BUILD.gn
-  ],
-  },],
   ],
 }

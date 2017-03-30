@@ -8,6 +8,8 @@
 #ifndef SYNC_ENGINE_SYNCER_UTIL_H_
 #define SYNC_ENGINE_SYNCER_UTIL_H_
 
+#include <stdint.h>
+
 #include <set>
 #include <string>
 #include <vector>
@@ -53,23 +55,22 @@ UpdateAttemptResponse AttemptToUpdateEntry(
 
 // Returns the most accurate position information available in this update.  It
 // prefers to use the unique_position() field, but will fall back to using the
-// int64-based position_in_parent if necessary.
+// int64_t-based position_in_parent if necessary.
 //
 // The suffix parameter is the unique bookmark tag for the item being updated.
 //
 // Will return an invalid position if no valid position can be constructed, or
 // if this type does not support positioning.
-SYNC_EXPORT_PRIVATE UniquePosition GetUpdatePosition(
-    const sync_pb::SyncEntity& update,
-    const std::string& suffix);
+SYNC_EXPORT UniquePosition GetUpdatePosition(const sync_pb::SyncEntity& update,
+                                             const std::string& suffix);
 
 // Fetch the cache_guid and item_id-based unique bookmark tag from an update.
 // Will return an empty string if someting unexpected happens.
-SYNC_EXPORT_PRIVATE std::string GetUniqueBookmarkTagFromUpdate(
+SYNC_EXPORT std::string GetUniqueBookmarkTagFromUpdate(
     const sync_pb::SyncEntity& update);
 
 // Pass in name to avoid redundant UTF8 conversion.
-SYNC_EXPORT_PRIVATE void UpdateServerFieldsFromUpdate(
+SYNC_EXPORT void UpdateServerFieldsFromUpdate(
     syncable::ModelNeutralMutableEntry* local_entry,
     const sync_pb::SyncEntity& server_entry,
     const std::string& name);

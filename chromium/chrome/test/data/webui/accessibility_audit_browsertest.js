@@ -19,7 +19,7 @@ function WebUIAccessibilityAuditBrowserTest() {}
 WebUIAccessibilityAuditBrowserTest.prototype = {
   __proto__: testing.Test.prototype,
 
-  browsePreload: 'chrome://terms',
+  browsePrintPreload: '../../../app/resources/terms/terms_en.html',
 
   runAccessibilityChecks: true,
   accessibilityIssuesAreErrors: true,
@@ -354,10 +354,9 @@ TEST_F('WebUIAccessibilityAuditBrowserTest_IssuesAreWarnings',
 });
 
 // Tests that parts of the page can be ignored on a per-audit rule basis.
-// Disabled for Vivaldi
 TEST_F('WebUIAccessibilityAuditBrowserTest_IssuesAreWarnings',
-       'DISABLED_testCanIgnoreSelectors',
-        function () {
+       'testCanIgnoreSelectors',
+        function() {
   this.disableAccessibilityChecks();
   addAuditFailures();
   var accessibilityResults = [];

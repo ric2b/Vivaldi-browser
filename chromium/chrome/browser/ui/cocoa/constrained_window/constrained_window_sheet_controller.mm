@@ -151,8 +151,22 @@ NSRect GetSheetParentBoundsForParentView(NSView* view) {
     forParentView:(NSView*)parentView {
   DCHECK(sheet);
   DCHECK(parentView);
+
+  // At maximum one active view is allowed.
+  DCHECK(!activeView_.get() || [activeView_ isEqual:parentView]);
   if (!activeView_.get())
     activeView_.reset([parentView retain]);
+
+  // This function can be called multiple times for the same
+  // |parentView|, so sheet info could be created already.
+  ConstrainedWindowSheetInfo* existingInfo =
+      [self findSheetInfoForParentView:activeView_];
+  if (existingInfo) {
+    DCHECK([[existingInfo sheet] isEqual:sheet]);
+    [self updateSheetPosition:activeView_];
+    [existingInfo showSheet];
+    return;
+  }
 
   // Observe the parent window's size.
   [[NSNotificationCenter defaultCenter]
@@ -175,11 +189,29 @@ NSRect GetSheetParentBoundsForParentView(NSView* view) {
                                           overlayWindow:overlayWindow]);
   [sheets_ addObject:info];
 
-  // Show or hide the sheet.
-  if ([activeView_ isEqual:parentView])
-    [info showSheet];
-  else
-    [info hideSheet];
+  // Show the sheet.
+  [info showSheet];
+}
+
+- (void)hideSheet {
+  [[self findSheetInfoForParentView:activeView_] hideSheet];
+  activeView_.reset();
+}
+
+- (void)hideSheetForFullscreenTransition {
+  if (ConstrainedWindowSheetInfo* sheetInfo =
+          [self findSheetInfoForParentView:activeView_]) {
+    [sheetInfo hideSheet];
+    isSheetHiddenForFullscreen_ = YES;
+  }
+}
+
+- (void)unhideSheetForFullscreenTransition {
+  isSheetHiddenForFullscreen_ = NO;
+  if (ConstrainedWindowSheetInfo* sheetInfo =
+          [self findSheetInfoForParentView:activeView_]) {
+    [self showSheet:[sheetInfo sheet] forParentView:activeView_];
+  }
 }
 
 - (NSPoint)originForSheet:(id<ConstrainedWindowSheet>)sheet
@@ -195,13 +227,6 @@ NSRect GetSheetParentBoundsForParentView(NSView* view) {
   ConstrainedWindowSheetInfo* info = [self findSheetInfoForSheet:sheet];
   DCHECK(info);
   [self closeSheet:info withAnimation:YES];
-}
-
-- (void)parentViewDidBecomeActive:(NSView*)parentView {
-  [[self findSheetInfoForParentView:activeView_] hideSheet];
-  activeView_.reset([parentView retain]);
-  [self updateSheetPosition:parentView];
-  [[self findSheetInfoForParentView:activeView_] showSheet];
 }
 
 - (void)pulseSheet:(id<ConstrainedWindowSheet>)sheet {
@@ -258,6 +283,9 @@ NSRect GetSheetParentBoundsForParentView(NSView* view) {
 }
 
 - (void)onParentWindowSizeDidChange:(NSNotification*)note {
+  if (isSheetHiddenForFullscreen_)
+    return;
+
   [self updateSheetPosition:activeView_];
 }
 
@@ -321,6 +349,9 @@ NSRect GetSheetParentBoundsForParentView(NSView* view) {
       removeObserver:self
                 name:NSWindowDidResizeNotification
               object:parentWindow_];
+
+  if ([activeView_ isEqual:[info parentView]])
+    activeView_.reset();
 
   [parentWindow_ removeChildWindow:[info overlayWindow]];
   [[info sheet] closeSheetWithAnimation:withAnimation];

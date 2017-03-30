@@ -10,9 +10,9 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "components/invalidation/impl/invalidation_state_tracker.h"
@@ -36,7 +36,7 @@ class GCMNetworkChannelDelegate;
 typedef base::Callback<scoped_ptr<SyncNetworkChannel>(void)>
     NetworkChannelCreator;
 
-class INVALIDATION_EXPORT_PRIVATE NonBlockingInvalidator
+class INVALIDATION_EXPORT NonBlockingInvalidator
     : public Invalidator,
       public InvalidationStateTracker {
  public:

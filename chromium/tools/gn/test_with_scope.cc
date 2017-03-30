@@ -4,6 +4,8 @@
 
 #include "tools/gn/test_with_scope.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "tools/gn/parser.h"
 #include "tools/gn/tokenizer.h"
@@ -12,7 +14,8 @@ TestWithScope::TestWithScope()
     : build_settings_(),
       settings_(&build_settings_, std::string()),
       toolchain_(&settings_, Label(SourceDir("//toolchain/"), "default")),
-      scope_(&settings_) {
+      scope_(&settings_),
+      scope_progammatic_provider_(&scope_, true) {
   build_settings_.SetBuildDir(SourceDir("//out/Debug/"));
   build_settings_.set_print_callback(
       base::Bind(&TestWithScope::AppendPrintOutput, base::Unretained(this)));
@@ -46,7 +49,7 @@ void TestWithScope::SetupToolchain(Toolchain* toolchain) {
       cc_tool.get());
   cc_tool->set_outputs(SubstitutionList::MakeForTest(
       "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o"));
-  toolchain->SetTool(Toolchain::TYPE_CC, cc_tool.Pass());
+  toolchain->SetTool(Toolchain::TYPE_CC, std::move(cc_tool));
 
   // CXX
   scoped_ptr<Tool> cxx_tool(new Tool);
@@ -56,7 +59,7 @@ void TestWithScope::SetupToolchain(Toolchain* toolchain) {
       cxx_tool.get());
   cxx_tool->set_outputs(SubstitutionList::MakeForTest(
       "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o"));
-  toolchain->SetTool(Toolchain::TYPE_CXX, cxx_tool.Pass());
+  toolchain->SetTool(Toolchain::TYPE_CXX, std::move(cxx_tool));
 
   // OBJC
   scoped_ptr<Tool> objc_tool(new Tool);
@@ -66,7 +69,7 @@ void TestWithScope::SetupToolchain(Toolchain* toolchain) {
       objc_tool.get());
   objc_tool->set_outputs(SubstitutionList::MakeForTest(
       "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o"));
-  toolchain->SetTool(Toolchain::TYPE_OBJC, objc_tool.Pass());
+  toolchain->SetTool(Toolchain::TYPE_OBJC, std::move(objc_tool));
 
   // OBJC
   scoped_ptr<Tool> objcxx_tool(new Tool);
@@ -76,45 +79,64 @@ void TestWithScope::SetupToolchain(Toolchain* toolchain) {
       objcxx_tool.get());
   objcxx_tool->set_outputs(SubstitutionList::MakeForTest(
       "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o"));
-  toolchain->SetTool(Toolchain::TYPE_OBJCXX, objcxx_tool.Pass());
+  toolchain->SetTool(Toolchain::TYPE_OBJCXX, std::move(objcxx_tool));
 
   // Don't use RC and ASM tools in unit tests yet. Add here if needed.
 
   // ALINK
   scoped_ptr<Tool> alink_tool(new Tool);
   SetCommandForTool("ar {{output}} {{source}}", alink_tool.get());
+  alink_tool->set_lib_switch("-l");
+  alink_tool->set_lib_dir_switch("-L");
   alink_tool->set_output_prefix("lib");
   alink_tool->set_outputs(SubstitutionList::MakeForTest(
       "{{target_out_dir}}/{{target_output_name}}.a"));
-  toolchain->SetTool(Toolchain::TYPE_ALINK, alink_tool.Pass());
+  toolchain->SetTool(Toolchain::TYPE_ALINK, std::move(alink_tool));
 
   // SOLINK
   scoped_ptr<Tool> solink_tool(new Tool);
   SetCommandForTool("ld -shared -o {{target_output_name}}.so {{inputs}} "
       "{{ldflags}} {{libs}}", solink_tool.get());
+  solink_tool->set_lib_switch("-l");
+  solink_tool->set_lib_dir_switch("-L");
   solink_tool->set_output_prefix("lib");
   solink_tool->set_default_output_extension(".so");
   solink_tool->set_outputs(SubstitutionList::MakeForTest(
       "{{root_out_dir}}/{{target_output_name}}{{output_extension}}"));
-  toolchain->SetTool(Toolchain::TYPE_SOLINK, solink_tool.Pass());
+  toolchain->SetTool(Toolchain::TYPE_SOLINK, std::move(solink_tool));
+
+  // SOLINK_MODULE
+  scoped_ptr<Tool> solink_module_tool(new Tool);
+  SetCommandForTool("ld -bundle -o {{target_output_name}}.so {{inputs}} "
+      "{{ldflags}} {{libs}}", solink_module_tool.get());
+  solink_module_tool->set_lib_switch("-l");
+  solink_module_tool->set_lib_dir_switch("-L");
+  solink_module_tool->set_output_prefix("lib");
+  solink_module_tool->set_default_output_extension(".so");
+  solink_module_tool->set_outputs(SubstitutionList::MakeForTest(
+      "{{root_out_dir}}/{{target_output_name}}{{output_extension}}"));
+  toolchain->SetTool(Toolchain::TYPE_SOLINK_MODULE,
+                     std::move(solink_module_tool));
 
   // LINK
   scoped_ptr<Tool> link_tool(new Tool);
   SetCommandForTool("ld -o {{target_output_name}} {{source}} "
       "{{ldflags}} {{libs}}", link_tool.get());
+  link_tool->set_lib_switch("-l");
+  link_tool->set_lib_dir_switch("-L");
   link_tool->set_outputs(SubstitutionList::MakeForTest(
       "{{root_out_dir}}/{{target_output_name}}"));
-  toolchain->SetTool(Toolchain::TYPE_LINK, link_tool.Pass());
+  toolchain->SetTool(Toolchain::TYPE_LINK, std::move(link_tool));
 
   // STAMP
   scoped_ptr<Tool> stamp_tool(new Tool);
   SetCommandForTool("touch {{output}}", stamp_tool.get());
-  toolchain->SetTool(Toolchain::TYPE_STAMP, stamp_tool.Pass());
+  toolchain->SetTool(Toolchain::TYPE_STAMP, std::move(stamp_tool));
 
   // COPY
   scoped_ptr<Tool> copy_tool(new Tool);
   SetCommandForTool("cp {{source}} {{output}}", copy_tool.get());
-  toolchain->SetTool(Toolchain::TYPE_COPY, copy_tool.Pass());
+  toolchain->SetTool(Toolchain::TYPE_COPY, std::move(copy_tool));
 
   toolchain->ToolchainSetupComplete();
 }
@@ -145,7 +167,7 @@ TestParseInput::TestParseInput(const std::string& input)
 TestParseInput::~TestParseInput() {
 }
 
-TestTarget::TestTarget(TestWithScope& setup,
+TestTarget::TestTarget(const TestWithScope& setup,
                        const std::string& label_string,
                        Target::OutputType type)
     : Target(setup.settings(), setup.ParseLabel(label_string)) {

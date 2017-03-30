@@ -110,9 +110,10 @@ class IframeSourceTest : public testing::Test {
           false,   // is_main_frame
           false,   // parent_is_main_frame
           true,    // allow_download
-          false);  // is_async
+          false,   // is_async
+          false);  // is_using_lofi
     }
-    return request.Pass();
+    return request;
   }
 
   void SendResource(int resource_id) {
@@ -141,7 +142,7 @@ class IframeSourceTest : public testing::Test {
 
   void TearDown() override { source_.reset(); }
 
-  void SaveResponse(base::RefCountedMemory* data) {
+  void SaveResponse(scoped_refptr<base::RefCountedMemory> data) {
     response_ = data;
   }
 

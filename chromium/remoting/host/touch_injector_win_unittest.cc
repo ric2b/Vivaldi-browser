@@ -4,7 +4,11 @@
 
 #include "remoting/host/touch_injector_win.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
+#include <utility>
 
 #include "base/stl_util.h"
 #include "remoting/proto/event.pb.h"
@@ -136,7 +140,7 @@ TEST(TouchInjectorWinTest, CheckConversionWithPressure) {
       .WillOnce(Return(1));
 
   TouchInjectorWin injector;
-  injector.SetInjectorDelegateForTest(delegate_mock.Pass());
+  injector.SetInjectorDelegateForTest(std::move(delegate_mock));
   EXPECT_TRUE(injector.Init());
   injector.InjectTouchEvent(event);
 
@@ -190,7 +194,7 @@ TEST(TouchInjectorWinTest, CheckConversionNoPressure) {
       .WillOnce(Return(1));
 
   TouchInjectorWin injector;
-  injector.SetInjectorDelegateForTest(delegate_mock.Pass());
+  injector.SetInjectorDelegateForTest(std::move(delegate_mock));
   EXPECT_TRUE(injector.Init());
   injector.InjectTouchEvent(event);
 }
@@ -209,7 +213,7 @@ TEST(TouchInjectorWinTest, InitFailed) {
   EXPECT_CALL(*delegate_mock, InjectTouchInput(_, _)).Times(0);
 
   TouchInjectorWin injector;
-  injector.SetInjectorDelegateForTest(delegate_mock.Pass());
+  injector.SetInjectorDelegateForTest(std::move(delegate_mock));
   EXPECT_FALSE(injector.Init());
   injector.InjectTouchEvent(event);
 }
@@ -255,13 +259,15 @@ TEST(TouchInjectorWinTest, Reinitialize) {
       .WillOnce(Return(1));
 
   TouchInjectorWin injector;
-  injector.SetInjectorDelegateForTest(delegate_mock_before_deinitialize.Pass());
+  injector.SetInjectorDelegateForTest(
+      std::move(delegate_mock_before_deinitialize));
 
   EXPECT_TRUE(injector.Init());
   injector.InjectTouchEvent(first_event);
   injector.Deinitialize();
 
-  injector.SetInjectorDelegateForTest(delegate_mock_after_deinitialize.Pass());
+  injector.SetInjectorDelegateForTest(
+      std::move(delegate_mock_after_deinitialize));
   EXPECT_TRUE(injector.Init());
   injector.InjectTouchEvent(second_event);
 }
@@ -288,7 +294,7 @@ TEST(TouchInjectorWinTest, StartTouchPoint) {
       .WillOnce(Return(1));
 
   TouchInjectorWin injector;
-  injector.SetInjectorDelegateForTest(delegate_mock.Pass());
+  injector.SetInjectorDelegateForTest(std::move(delegate_mock));
   EXPECT_TRUE(injector.Init());
   injector.InjectTouchEvent(event);
 }
@@ -322,7 +328,7 @@ TEST(TouchInjectorWinTest, MoveTouchPoint) {
       .WillOnce(Return(1));
 
   TouchInjectorWin injector;
-  injector.SetInjectorDelegateForTest(delegate_mock.Pass());
+  injector.SetInjectorDelegateForTest(std::move(delegate_mock));
   EXPECT_TRUE(injector.Init());
   injector.InjectTouchEvent(event);
   event.set_event_type(TouchEvent::TOUCH_POINT_MOVE);
@@ -357,7 +363,7 @@ TEST(TouchInjectorWinTest, EndTouchPoint) {
       .WillOnce(Return(1));
 
   TouchInjectorWin injector;
-  injector.SetInjectorDelegateForTest(delegate_mock.Pass());
+  injector.SetInjectorDelegateForTest(std::move(delegate_mock));
   EXPECT_TRUE(injector.Init());
   injector.InjectTouchEvent(event);
   event.set_event_type(TouchEvent::TOUCH_POINT_END);
@@ -392,7 +398,7 @@ TEST(TouchInjectorWinTest, CancelTouchPoint) {
       .WillOnce(Return(1));
 
   TouchInjectorWin injector;
-  injector.SetInjectorDelegateForTest(delegate_mock.Pass());
+  injector.SetInjectorDelegateForTest(std::move(delegate_mock));
   EXPECT_TRUE(injector.Init());
   injector.InjectTouchEvent(event);
   event.set_event_type(TouchEvent::TOUCH_POINT_CANCEL);
@@ -461,7 +467,7 @@ TEST(TouchInjectorWinTest, MultiTouch) {
       .WillOnce(Return(1));
 
   TouchInjectorWin injector;
-  injector.SetInjectorDelegateForTest(delegate_mock.Pass());
+  injector.SetInjectorDelegateForTest(std::move(delegate_mock));
   EXPECT_TRUE(injector.Init());
 
   // Start first touch point.

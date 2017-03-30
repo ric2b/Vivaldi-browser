@@ -6,10 +6,12 @@
 #define DEVICE_BLUETOOTH_BLUETOOTH_DISCOVERY_SESSION_H_
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_discovery_filter.h"
+#include "device/bluetooth/bluetooth_discovery_session_outcome.h"
 #include "device/bluetooth/bluetooth_export.h"
 
 namespace device {
@@ -80,6 +82,10 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDiscoverySession {
   static void OnDiscoverySessionRemoved(
       const base::Closure& deactivate_discovery_session,
       const base::Closure& success_callback);
+
+  static void OnDiscoverySessionRemovalFailed(
+      const base::Closure& error_callback,
+      UMABluetoothDiscoverySessionOutcome outcome);
 
   // Deactivate discovery session object after
   // BluetoothAdapter::RemoveDiscoverySession completes.

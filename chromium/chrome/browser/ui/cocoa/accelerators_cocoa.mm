@@ -5,8 +5,12 @@
 #include "chrome/browser/ui/cocoa/accelerators_cocoa.h"
 
 #import <Cocoa/Cocoa.h>
+#include <stddef.h>
+
+#include <utility>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "chrome/app/chrome_command_ids.h"
 #import "ui/base/accelerators/platform_accelerator_cocoa.h"
@@ -125,7 +129,7 @@ ui::Accelerator AcceleratorFromKeyCode(ui::KeyboardCode key_code,
 
   scoped_ptr<ui::PlatformAccelerator> platform_accelerator =
       PlatformAcceleratorFromKeyCode(key_code, cocoa_modifiers);
-  accelerator.set_platform_accelerator(platform_accelerator.Pass());
+  accelerator.set_platform_accelerator(std::move(platform_accelerator));
   return accelerator;
 }
 
@@ -151,7 +155,7 @@ AcceleratorsCocoa::~AcceleratorsCocoa() {}
 
 // static
 AcceleratorsCocoa* AcceleratorsCocoa::GetInstance() {
-  return Singleton<AcceleratorsCocoa>::get();
+  return base::Singleton<AcceleratorsCocoa>::get();
 }
 
 const ui::Accelerator* AcceleratorsCocoa::GetAcceleratorForCommand(

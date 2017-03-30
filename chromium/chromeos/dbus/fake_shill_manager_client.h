@@ -7,8 +7,8 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "chromeos/chromeos_export.h"
 #include "chromeos/dbus/shill_manager_client.h"
 
@@ -126,7 +126,8 @@ class CHROMEOS_EXPORT FakeShillManagerClient
   // {wifi,cellular,etc}={on,off,disabled,none} - sets initial state for type
   void ParseCommandLineSwitch();
   bool ParseOption(const std::string& arg0, const std::string& arg1);
-  bool SetInitialNetworkState(std::string type_arg, std::string state_arg);
+  bool SetInitialNetworkState(std::string type_arg,
+                              const std::string& state_arg);
   std::string GetInitialStateForType(const std::string& type,
                                      bool* enabled);
 

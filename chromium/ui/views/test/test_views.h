@@ -5,6 +5,7 @@
 #ifndef UI_VIEWS_TEST_TEST_VIEWS_H_
 #define UI_VIEWS_TEST_TEST_VIEWS_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "ui/events/event_constants.h"
 #include "ui/views/view.h"
@@ -73,6 +74,44 @@ class CloseWidgetView : public View {
   const ui::EventType event_type_;
 
   DISALLOW_COPY_AND_ASSIGN(CloseWidgetView);
+};
+
+// A view that keeps track of the events it receives, optionally consuming them.
+class EventCountView : public View {
+ public:
+  // Whether to call SetHandled() on events as they are received. For some event
+  // types, this will allow EventCountView to receives future events in the
+  // event sequence, such as a drag.
+  enum HandleMode { PROPAGATE_EVENTS, CONSUME_EVENTS };
+
+  EventCountView();
+  ~EventCountView() override;
+
+  int GetEventCount(ui::EventType type);
+  void ResetCounts();
+
+  int last_flags() const { return last_flags_; }
+
+  void set_handle_mode(HandleMode handle_mode) { handle_mode_ = handle_mode; }
+
+ protected:
+  // Overridden from View:
+  void OnMouseMoved(const ui::MouseEvent& event) override;
+
+  // Overridden from ui::EventHandler:
+  void OnKeyEvent(ui::KeyEvent* event) override;
+  void OnMouseEvent(ui::MouseEvent* event) override;
+  void OnScrollEvent(ui::ScrollEvent* event) override;
+  void OnGestureEvent(ui::GestureEvent* event) override;
+
+ private:
+  void RecordEvent(ui::Event* event);
+
+  std::map<ui::EventType, int> event_count_;
+  int last_flags_;
+  HandleMode handle_mode_;
+
+  DISALLOW_COPY_AND_ASSIGN(EventCountView);
 };
 
 }  // namespace views

@@ -4,9 +4,13 @@
 
 #include "chrome/browser/extensions/api/omnibox/omnibox_api.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/lazy_instance.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
@@ -63,7 +67,7 @@ scoped_ptr<omnibox::SuggestResult> GetOmniboxDefaultSuggestion(
     suggestion.reset(new omnibox::SuggestResult);
     omnibox::SuggestResult::Populate(*dict, suggestion.get());
   }
-  return suggestion.Pass();
+  return suggestion;
 }
 
 // Tries to set the omnibox default suggestion; returns true on success or
@@ -99,12 +103,12 @@ std::string GetTemplateURLStringForExtension(const std::string& extension_id) {
 // static
 void ExtensionOmniboxEventRouter::OnInputStarted(
     Profile* profile, const std::string& extension_id) {
-  scoped_ptr<Event> event(new Event(events::UNKNOWN,
+  scoped_ptr<Event> event(new Event(events::OMNIBOX_ON_INPUT_STARTED,
                                     omnibox::OnInputStarted::kEventName,
                                     make_scoped_ptr(new base::ListValue())));
   event->restrict_to_browser_context = profile;
   EventRouter::Get(profile)
-      ->DispatchEventToExtension(extension_id, event.Pass());
+      ->DispatchEventToExtension(extension_id, std::move(event));
 }
 
 // static
@@ -120,10 +124,11 @@ bool ExtensionOmniboxEventRouter::OnInputChanged(
   args->Set(0, new base::StringValue(input));
   args->Set(1, new base::FundamentalValue(suggest_id));
 
-  scoped_ptr<Event> event(new Event(
-      events::UNKNOWN, omnibox::OnInputChanged::kEventName, args.Pass()));
+  scoped_ptr<Event> event(new Event(events::OMNIBOX_ON_INPUT_CHANGED,
+                                    omnibox::OnInputChanged::kEventName,
+                                    std::move(args)));
   event->restrict_to_browser_context = profile;
-  event_router->DispatchEventToExtension(extension_id, event.Pass());
+  event_router->DispatchEventToExtension(extension_id, std::move(event));
   return true;
 }
 
@@ -152,11 +157,12 @@ void ExtensionOmniboxEventRouter::OnInputEntered(
   else
     args->Set(1, new base::StringValue(kCurrentTabDisposition));
 
-  scoped_ptr<Event> event(new Event(
-      events::UNKNOWN, omnibox::OnInputEntered::kEventName, args.Pass()));
+  scoped_ptr<Event> event(new Event(events::OMNIBOX_ON_INPUT_ENTERED,
+                                    omnibox::OnInputEntered::kEventName,
+                                    std::move(args)));
   event->restrict_to_browser_context = profile;
   EventRouter::Get(profile)
-      ->DispatchEventToExtension(extension_id, event.Pass());
+      ->DispatchEventToExtension(extension_id, std::move(event));
 
   content::NotificationService::current()->Notify(
       extensions::NOTIFICATION_EXTENSION_OMNIBOX_INPUT_ENTERED,
@@ -167,12 +173,12 @@ void ExtensionOmniboxEventRouter::OnInputEntered(
 // static
 void ExtensionOmniboxEventRouter::OnInputCancelled(
     Profile* profile, const std::string& extension_id) {
-  scoped_ptr<Event> event(new Event(events::UNKNOWN,
+  scoped_ptr<Event> event(new Event(events::OMNIBOX_ON_INPUT_CANCELLED,
                                     omnibox::OnInputCancelled::kEventName,
                                     make_scoped_ptr(new base::ListValue())));
   event->restrict_to_browser_context = profile;
   EventRouter::Get(profile)
-      ->DispatchEventToExtension(extension_id, event.Pass());
+      ->DispatchEventToExtension(extension_id, std::move(event));
 }
 
 OmniboxAPI::OmniboxAPI(content::BrowserContext* context)

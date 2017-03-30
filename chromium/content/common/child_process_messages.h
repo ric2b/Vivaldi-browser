@@ -5,21 +5,23 @@
 // Common IPC messages used for child processes.
 // Multiply-included message file, hence no include guard.
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
 #include "base/memory/shared_memory.h"
 #include "base/tracked_objects.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "cc/resources/shared_bitmap_manager.h"
 #include "content/common/content_export.h"
 #include "content/common/host_discardable_shared_memory_manager.h"
+#include "gpu/command_buffer/common/sync_token.h"
 #include "ipc/ipc_message_macros.h"
+#include "ipc/ipc_platform_file.h"
 #include "ui/gfx/gpu_memory_buffer.h"
-
-#if defined(OS_MACOSX)
-#include "content/common/mac/io_surface_manager_token.h"
-#endif
+#include "ui/gfx/ipc/gfx_param_traits.h"
 
 IPC_ENUM_TRAITS_MAX_VALUE(tracked_objects::ThreadData::Status,
                           tracked_objects::ThreadData::STATUS_LAST)
@@ -67,13 +69,18 @@ IPC_STRUCT_TRAITS_BEGIN(gfx::GpuMemoryBufferHandle)
   IPC_STRUCT_TRAITS_MEMBER(id)
   IPC_STRUCT_TRAITS_MEMBER(type)
   IPC_STRUCT_TRAITS_MEMBER(handle)
+  IPC_STRUCT_TRAITS_MEMBER(offset)
+  IPC_STRUCT_TRAITS_MEMBER(stride)
+#if defined(USE_OZONE)
+  IPC_STRUCT_TRAITS_MEMBER(native_pixmap_handle)
+#elif defined(OS_MACOSX)
+  IPC_STRUCT_TRAITS_MEMBER(mach_port)
+#endif
 IPC_STRUCT_TRAITS_END()
 
-IPC_ENUM_TRAITS_MAX_VALUE(gfx::GpuMemoryBuffer::Format,
-                          gfx::GpuMemoryBuffer::FORMAT_LAST)
-
-IPC_ENUM_TRAITS_MAX_VALUE(gfx::GpuMemoryBuffer::Usage,
-                          gfx::GpuMemoryBuffer::USAGE_LAST)
+IPC_STRUCT_TRAITS_BEGIN(gfx::GpuMemoryBufferId)
+  IPC_STRUCT_TRAITS_MEMBER(id)
+IPC_STRUCT_TRAITS_END()
 
 #undef IPC_MESSAGE_EXPORT
 #define IPC_MESSAGE_EXPORT CONTENT_EXPORT
@@ -115,18 +122,16 @@ IPC_MESSAGE_CONTROL1(ChildProcessMsg_GetChildHistogramData,
 IPC_MESSAGE_CONTROL1(ChildProcessMsg_SetProcessBackgrounded,
                      bool /* background */)
 
-#if defined(USE_TCMALLOC)
-// Sent to child process to request tcmalloc stats.
-IPC_MESSAGE_CONTROL0(ChildProcessMsg_GetTcmallocStats)
-#endif
+// Sends a pipe used by the child process to broker passing of Mojo handles.
+IPC_MESSAGE_CONTROL1(ChildProcessMsg_SetMojoParentPipeHandle,
+                     IPC::PlatformFileForTransit /* handle */)
 
-#if defined(OS_MACOSX)
-// Sent to child processes to tell them what token to use when registering
-// and/or acquiring IOSurfaces.
-IPC_MESSAGE_CONTROL1(ChildProcessMsg_SetIOSurfaceManagerToken,
-                     content::IOSurfaceManagerToken /* token */)
+#if defined(USE_OZONE)
+// Sent to child processes to initialize ClientNativePixmapFactory using
+// a device file descriptor.
+IPC_MESSAGE_CONTROL1(ChildProcessMsg_InitializeClientNativePixmapFactory,
+                     base::FileDescriptor /* device_fd */)
 #endif
-
 ////////////////////////////////////////////////////////////////////////////////
 // Messages sent from the child process to the browser.
 
@@ -163,19 +168,19 @@ IPC_MESSAGE_CONTROL0(ChildProcessHostMsg_ReleaseCachedFonts)
 // Asks the browser to create a block of shared memory for the child process to
 // fill in and pass back to the browser.
 IPC_SYNC_MESSAGE_CONTROL1_1(ChildProcessHostMsg_SyncAllocateSharedMemory,
-                            uint32 /* buffer size */,
+                            uint32_t /* buffer size */,
                             base::SharedMemoryHandle)
 
 // Asks the browser to create a block of shared memory for the child process to
 // fill in and pass back to the browser.
 IPC_SYNC_MESSAGE_CONTROL2_1(ChildProcessHostMsg_SyncAllocateSharedBitmap,
-                            uint32 /* buffer size */,
+                            uint32_t /* buffer size */,
                             cc::SharedBitmapId,
                             base::SharedMemoryHandle)
 
 // Informs the browser that the child allocated a shared bitmap.
 IPC_MESSAGE_CONTROL3(ChildProcessHostMsg_AllocatedSharedBitmap,
-                     uint32 /* buffer size */,
+                     uint32_t /* buffer size */,
                      base::SharedMemoryHandle,
                      cc::SharedBitmapId)
 
@@ -183,30 +188,25 @@ IPC_MESSAGE_CONTROL3(ChildProcessHostMsg_AllocatedSharedBitmap,
 IPC_MESSAGE_CONTROL1(ChildProcessHostMsg_DeletedSharedBitmap,
                      cc::SharedBitmapId)
 
-#if defined(USE_TCMALLOC)
-// Reply to ChildProcessMsg_GetTcmallocStats.
-IPC_MESSAGE_CONTROL1(ChildProcessHostMsg_TcmallocStats,
-                     std::string /* output */)
-#endif
-
 // Asks the browser to create a gpu memory buffer.
-IPC_SYNC_MESSAGE_CONTROL4_1(ChildProcessHostMsg_SyncAllocateGpuMemoryBuffer,
-                            uint32 /* width */,
-                            uint32 /* height */,
-                            gfx::GpuMemoryBuffer::Format,
-                            gfx::GpuMemoryBuffer::Usage,
+IPC_SYNC_MESSAGE_CONTROL5_1(ChildProcessHostMsg_SyncAllocateGpuMemoryBuffer,
+                            gfx::GpuMemoryBufferId /* new_id */,
+                            uint32_t /* width */,
+                            uint32_t /* height */,
+                            gfx::BufferFormat,
+                            gfx::BufferUsage,
                             gfx::GpuMemoryBufferHandle)
 
 // Informs the browser that the child deleted a gpu memory buffer.
 IPC_MESSAGE_CONTROL2(ChildProcessHostMsg_DeletedGpuMemoryBuffer,
                      gfx::GpuMemoryBufferId,
-                     uint32 /* sync_point */)
+                     gpu::SyncToken /* sync_token */)
 
 // Asks the browser to create a block of discardable shared memory for the
 // child process.
 IPC_SYNC_MESSAGE_CONTROL2_1(
     ChildProcessHostMsg_SyncAllocateLockedDiscardableSharedMemory,
-    uint32 /* size */,
+    uint32_t /* size */,
     content::DiscardableSharedMemoryId,
     base::SharedMemoryHandle)
 

@@ -9,6 +9,7 @@
 #define CONTENT_COMMON_GPU_MEDIA_VA_SURFACE_H_
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "content/common/content_export.h"
 #include "third_party/libva/va/va.h"
@@ -90,6 +91,7 @@ class CONTENT_EXPORT VASurface : public base::RefCountedThreadSafe<VASurface> {
 
   VASurface(VASurfaceID va_surface_id,
             const gfx::Size& size,
+            unsigned int format,
             const ReleaseCB& release_cb);
 
   VASurfaceID id() {
@@ -97,6 +99,7 @@ class CONTENT_EXPORT VASurface : public base::RefCountedThreadSafe<VASurface> {
   }
 
   const gfx::Size& size() const { return size_; }
+  unsigned int format() const { return format_; }
 
  private:
   friend class base::RefCountedThreadSafe<VASurface>;
@@ -104,6 +107,7 @@ class CONTENT_EXPORT VASurface : public base::RefCountedThreadSafe<VASurface> {
 
   const VASurfaceID va_surface_id_;
   gfx::Size size_;
+  unsigned int format_;
   ReleaseCB release_cb_;
 
   DISALLOW_COPY_AND_ASSIGN(VASurface);

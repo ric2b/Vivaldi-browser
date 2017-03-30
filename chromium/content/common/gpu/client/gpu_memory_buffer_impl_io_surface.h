@@ -5,37 +5,52 @@
 #ifndef CONTENT_COMMON_GPU_CLIENT_GPU_MEMORY_BUFFER_IMPL_IO_SURFACE_H_
 #define CONTENT_COMMON_GPU_CLIENT_GPU_MEMORY_BUFFER_IMPL_IO_SURFACE_H_
 
-#include <IOSurface/IOSurfaceAPI.h>
+#include <IOSurface/IOSurface.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include "base/mac/scoped_cftyperef.h"
+#include "base/macros.h"
+#include "content/common/content_export.h"
 #include "content/common/gpu/client/gpu_memory_buffer_impl.h"
 
 namespace content {
 
 // Implementation of GPU memory buffer based on IO surfaces.
-class GpuMemoryBufferImplIOSurface : public GpuMemoryBufferImpl {
+class CONTENT_EXPORT GpuMemoryBufferImplIOSurface : public GpuMemoryBufferImpl {
  public:
-  static scoped_ptr<GpuMemoryBufferImpl> CreateFromHandle(
+  ~GpuMemoryBufferImplIOSurface() override;
+
+  static scoped_ptr<GpuMemoryBufferImplIOSurface> CreateFromHandle(
       const gfx::GpuMemoryBufferHandle& handle,
       const gfx::Size& size,
-      Format format,
-      Usage usage,
+      gfx::BufferFormat format,
+      gfx::BufferUsage usage,
       const DestructionCallback& callback);
 
+  static bool IsConfigurationSupported(gfx::BufferFormat format,
+                                       gfx::BufferUsage usage);
+
+  static base::Closure AllocateForTesting(const gfx::Size& size,
+                                          gfx::BufferFormat format,
+                                          gfx::BufferUsage usage,
+                                          gfx::GpuMemoryBufferHandle* handle);
+
   // Overridden from gfx::GpuMemoryBuffer:
-  bool Map(void** data) override;
+  bool Map() override;
+  void* memory(size_t plane) override;
   void Unmap() override;
-  void GetStride(int* stride) const override;
+  bool IsInUseByMacOSWindowServer() const override;
+  int stride(size_t plane) const override;
   gfx::GpuMemoryBufferHandle GetHandle() const override;
 
  private:
   GpuMemoryBufferImplIOSurface(gfx::GpuMemoryBufferId id,
                                const gfx::Size& size,
-                               Format format,
+                               gfx::BufferFormat format,
                                const DestructionCallback& callback,
                                IOSurfaceRef io_surface,
                                uint32_t lock_flags);
-  ~GpuMemoryBufferImplIOSurface() override;
 
   base::ScopedCFTypeRef<IOSurfaceRef> io_surface_;
   uint32_t lock_flags_;

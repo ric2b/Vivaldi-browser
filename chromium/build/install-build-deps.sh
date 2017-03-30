@@ -102,21 +102,21 @@ dev_list="apache2.2-bin bison cdbs curl dpkg-dev elfutils devscripts fakeroot
           language-pack-fr language-pack-he language-pack-zh-hant
           libapache2-mod-php5 libasound2-dev libbrlapi-dev libav-tools
           libbz2-dev libcairo2-dev libcap-dev libcups2-dev libcurl4-gnutls-dev
-          libdrm-dev libelf-dev libexif-dev libgconf2-dev libglib2.0-dev
-          libglu1-mesa-dev libgnome-keyring-dev libgtk2.0-dev libkrb5-dev
-          libnspr4-dev libnss3-dev libpam0g-dev libpci-dev libpulse-dev
-          libsctp-dev libspeechd-dev libsqlite3-dev libssl-dev libudev-dev
-          libwww-perl libxslt1-dev libxss-dev libxt-dev libxtst-dev openbox
-          patch perl php5-cgi pkg-config python python-cherrypy3 python-crypto
-          python-dev python-numpy python-opencv python-openssl python-psutil
-          python-yaml rpm ruby subversion ttf-dejavu-core ttf-indic-fonts
-          ttf-kochi-gothic ttf-kochi-mincho wdiff xfonts-mathml zip
+          libdrm-dev libelf-dev libexif-dev libffi-dev libgconf2-dev
+          libglib2.0-dev libglu1-mesa-dev libgnome-keyring-dev libgtk2.0-dev
+          libkrb5-dev libnspr4-dev libnss3-dev libpam0g-dev libpci-dev
+          libpulse-dev libsctp-dev libspeechd-dev libsqlite3-dev libssl-dev
+          libudev-dev libwww-perl libxslt1-dev libxss-dev libxt-dev libxtst-dev
+          openbox patch perl php5-cgi pkg-config python python-cherrypy3
+          python-crypto python-dev python-numpy python-opencv python-openssl
+          python-psutil python-yaml rpm ruby subversion ttf-dejavu-core
+          ttf-indic-fonts ttf-kochi-gothic ttf-kochi-mincho wdiff xfonts-mathml
           chrpath
-          $chromeos_dev_list"
+          zip $chromeos_dev_list"
 
 # 64-bit systems need a minimum set of 32-bit compat packages for the pre-built
 # NaCl binaries.
-if file /sbin/init | grep -q 'ELF 64-bit'; then
+if file -L /sbin/init | grep -q 'ELF 64-bit'; then
   dev_list="${dev_list} libc6-i386 lib32gcc1 lib32stdc++6"
 fi
 
@@ -125,15 +125,15 @@ chromeos_lib_list="libpulse0 libbz2-1.0"
 
 # Full list of required run-time libraries
 lib_list="libatk1.0-0 libc6 libasound2 libcairo2 libcap2 libcups2 libexpat1
-          libexif12 libfontconfig1 libfreetype6 libglib2.0-0 libgnome-keyring0
-          libgtk2.0-0 libpam0g libpango1.0-0 libpci3 libpcre3 libpixman-1-0
-          libpng12-0 libspeechd2 libstdc++6 libsqlite3-0 libx11-6
+          libexif12 libffi6 libfontconfig1 libfreetype6 libglib2.0-0
+          libgnome-keyring0 libgtk2.0-0 libpam0g libpango1.0-0 libpci3 libpcre3
+          libpixman-1-0 libpng12-0 libspeechd2 libstdc++6 libsqlite3-0 libx11-6
           libxau6 libxcb1 libxcomposite1 libxcursor1 libxdamage1 libxdmcp6
           libxext6 libxfixes3 libxi6 libxinerama1 libxrandr2 libxrender1
           libxtst6 zlib1g $chromeos_lib_list"
 
 # Debugging symbols for all of the run-time libraries
-dbg_list="libatk1.0-dbg libc6-dbg libcairo2-dbg libfontconfig1-dbg
+dbg_list="libatk1.0-dbg libc6-dbg libcairo2-dbg libffi6-dbg libfontconfig1-dbg
           libglib2.0-0-dbg libgtk2.0-0-dbg libpango1.0-0-dbg libpcre3-dbg
           libpixman-1-0-dbg libsqlite3-0-dbg libx11-6-dbg libxau6-dbg
           libxcb1-dbg libxcomposite1-dbg libxcursor1-dbg libxdamage1-dbg
@@ -175,16 +175,25 @@ nacl_list="g++-mingw-w64-i686 lib32z1-dev
            libxrandr2:i386 libxss1:i386 libxtst6:i386 texinfo xvfb
            ${naclports_list}"
 
-# Find the proper version of libgbm-dev. We can't just install libgbm-dev as
-# it depends on mesa, and only one version of mesa can exists on the system.
-# Hence we must match the same version or this entire script will fail.
-mesa_variant=""
-for variant in "-lts-trusty" "-lts-utopic"; do
-  if $(dpkg-query -Wf'${Status}' libgl1-mesa-glx${variant} 2>/dev/null | \
-       grep -q " ok installed"); then
-    mesa_variant="${variant}"
-  fi
-done
+# Find the proper version of packages that depend on mesa. Only one -lts variant
+# of mesa can be installed and everything that depends on it must match.
+
+# Query for the name and status of all mesa LTS variants, filter for only
+# installed packages, extract just the name, and eliminate duplicates (there can
+# be more than one with the same name in the case of multiarch). Expand into an
+# array.
+mesa_packages=($(dpkg-query -Wf'${package} ${status}\n' \
+                            libgl1-mesa-glx-lts-\* | \
+                 grep " ok installed" | cut -d " " -f 1 | sort -u))
+if [ "${#mesa_packages[@]}" -eq 0 ]; then
+  mesa_variant=""
+elif [ "${#mesa_packages[@]}" -eq 1 ]; then
+  # Strip the base package name and leave just "-lts-whatever"
+  mesa_variant="${mesa_packages[0]#libgl1-mesa-glx}"
+else
+  echo "ERROR: unable to determine which libgl1-mesa-glx variant is installed."
+  exit 1
+fi
 dev_list="${dev_list} libgbm-dev${mesa_variant}
           libgles2-mesa-dev${mesa_variant} libgl1-mesa-dev${mesa_variant}
           mesa-common-dev${mesa_variant}"
@@ -231,7 +240,7 @@ fi
 # When cross building for arm/Android on 64-bit systems the host binaries
 # that are part of v8 need to be compiled with -m32 which means
 # that basic multilib support is needed.
-if file /sbin/init | grep -q 'ELF 64-bit'; then
+if file -L /sbin/init | grep -q 'ELF 64-bit'; then
   # gcc-multilib conflicts with the arm cross compiler (at least in trusty) but
   # g++-X.Y-multilib gives us the 32-bit support that we need. Find out the
   # appropriate value of X and Y by seeing what version the current

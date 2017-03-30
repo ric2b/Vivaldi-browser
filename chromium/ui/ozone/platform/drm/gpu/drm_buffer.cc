@@ -4,6 +4,8 @@
 
 #include "ui/ozone/platform/drm/gpu/drm_buffer.h"
 
+#include <drm_fourcc.h>
+
 #include "base/logging.h"
 #include "ui/ozone/platform/drm/gpu/drm_device.h"
 
@@ -11,21 +13,19 @@ namespace ui {
 
 namespace {
 
-// Modesetting cannot happen from a buffer with transparencies. Return the size
-// of a pixel without alpha.
-uint8_t GetColorDepth(SkColorType type) {
+uint32_t GetFourCCCodeForSkColorType(SkColorType type) {
   switch (type) {
     case kUnknown_SkColorType:
     case kAlpha_8_SkColorType:
       return 0;
     case kIndex_8_SkColorType:
-      return 8;
+      return DRM_FORMAT_C8;
     case kRGB_565_SkColorType:
-      return 16;
+      return DRM_FORMAT_RGB565;
     case kARGB_4444_SkColorType:
-      return 12;
+      return DRM_FORMAT_ARGB4444;
     case kN32_SkColorType:
-      return 24;
+      return DRM_FORMAT_ARGB8888;
     default:
       NOTREACHED();
       return 0;
@@ -64,12 +64,18 @@ bool DrmBuffer::Initialize(const SkImageInfo& info,
     return false;
   }
 
-  if (should_register_framebuffer &&
-      !drm_->AddFramebuffer(
-          info.width(), info.height(), GetColorDepth(info.colorType()),
-          info.bytesPerPixel() << 3, stride_, handle_, &framebuffer_)) {
-    PLOG(ERROR) << "DrmBuffer: AddFramebuffer: handle " << handle_;
-    return false;
+  if (should_register_framebuffer) {
+    uint32_t handles[4] = {0};
+    handles[0] = handle_;
+    uint32_t strides[4] = {0};
+    strides[0] = stride_;
+    uint32_t offsets[4] = {0};
+    fb_pixel_format_ = GetFourCCCodeForSkColorType(info.colorType());
+    if (!drm_->AddFramebuffer2(info.width(), info.height(), fb_pixel_format_,
+                               handles, strides, offsets, &framebuffer_, 0)) {
+      PLOG(ERROR) << "DrmBuffer: AddFramebuffer2: handle " << handle_;
+      return false;
+    }
   }
 
   surface_ =
@@ -90,6 +96,10 @@ uint32_t DrmBuffer::GetFramebufferId() const {
   return framebuffer_;
 }
 
+uint32_t DrmBuffer::GetFramebufferPixelFormat() const {
+  return fb_pixel_format_;
+}
+
 uint32_t DrmBuffer::GetHandle() const {
   return handle_;
 }
@@ -98,21 +108,8 @@ gfx::Size DrmBuffer::GetSize() const {
   return gfx::Size(surface_->width(), surface_->height());
 }
 
-DrmBufferGenerator::DrmBufferGenerator() {
-}
-
-DrmBufferGenerator::~DrmBufferGenerator() {
-}
-
-scoped_refptr<ScanoutBuffer> DrmBufferGenerator::Create(
-    const scoped_refptr<DrmDevice>& drm,
-    const gfx::Size& size) {
-  scoped_refptr<DrmBuffer> buffer(new DrmBuffer(drm));
-  SkImageInfo info = SkImageInfo::MakeN32Premul(size.width(), size.height());
-  if (!buffer->Initialize(info, true /* should_register_framebuffer */))
-    return NULL;
-
-  return buffer;
+bool DrmBuffer::RequiresGlFinish() const {
+  return false;
 }
 
 }  // namespace ui

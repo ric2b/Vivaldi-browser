@@ -4,20 +4,25 @@
 
 #include "base/android/library_loader/library_prefetcher.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <sys/mman.h>
 #include <string>
 #include <vector>
 #include "base/debug/proc_maps_linux.h"
+#include "base/memory/shared_memory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace base {
 namespace android {
 
 namespace {
-const uint8 kRead = base::debug::MappedMemoryRegion::READ;
-const uint8 kReadPrivate = base::debug::MappedMemoryRegion::READ |
-                           base::debug::MappedMemoryRegion::PRIVATE;
-const uint8 kExecutePrivate = base::debug::MappedMemoryRegion::EXECUTE |
-                              base::debug::MappedMemoryRegion::PRIVATE;
+const uint8_t kRead = base::debug::MappedMemoryRegion::READ;
+const uint8_t kReadPrivate = base::debug::MappedMemoryRegion::READ |
+                             base::debug::MappedMemoryRegion::PRIVATE;
+const uint8_t kExecutePrivate = base::debug::MappedMemoryRegion::EXECUTE |
+                                base::debug::MappedMemoryRegion::PRIVATE;
+const size_t kPageSize = 4096;
 }  // namespace
 
 TEST(NativeLibraryPrefetcherTest, TestIsGoodToPrefetchNoRange) {
@@ -89,6 +94,61 @@ TEST(NativeLibraryPrefetcherTest,
   EXPECT_EQ(ranges.size(), 1U);
   EXPECT_EQ(ranges[0].first, 0x6U);
   EXPECT_EQ(ranges[0].second, 0x7U);
+}
+
+TEST(NativeLibraryPrefetcherTest, DISABLED_TestPercentageOfResidentCode) {
+  size_t length = 4 * kPageSize;
+  base::SharedMemory shared_mem;
+  ASSERT_TRUE(shared_mem.CreateAndMapAnonymous(length));
+  void* address = shared_mem.memory();
+
+  std::vector<NativeLibraryPrefetcher::AddressRange> ranges = {
+      {reinterpret_cast<uintptr_t>(address),
+       reinterpret_cast<uintptr_t>(address) + length}};
+
+  // Remove everything.
+  ASSERT_EQ(0, madvise(address, length, MADV_DONTNEED));
+  // TODO(lizeb): If flaky, mock mincore().
+  EXPECT_EQ(0, NativeLibraryPrefetcher::PercentageOfResidentCode(ranges));
+
+  // Get everything back.
+  ASSERT_EQ(0, mlock(address, length));
+  EXPECT_EQ(100, NativeLibraryPrefetcher::PercentageOfResidentCode(ranges));
+  munlock(address, length);
+}
+
+TEST(NativeLibraryPrefetcherTest,
+     DISABLED_TestPercentageOfResidentCodeTwoRegions) {
+  size_t length = 4 * kPageSize;
+  base::SharedMemory shared_mem;
+  ASSERT_TRUE(shared_mem.CreateAndMapAnonymous(length));
+  void* address = shared_mem.memory();
+
+  size_t length2 = 8 * kPageSize;
+  base::SharedMemory shared_mem2;
+  ASSERT_TRUE(shared_mem2.CreateAndMapAnonymous(length2));
+  void* address2 = shared_mem2.memory();
+
+  std::vector<NativeLibraryPrefetcher::AddressRange> ranges = {
+      {reinterpret_cast<uintptr_t>(address),
+       reinterpret_cast<uintptr_t>(address) + length},
+      {reinterpret_cast<uintptr_t>(address2),
+       reinterpret_cast<uintptr_t>(address2) + length2}};
+
+  // Remove everything.
+  ASSERT_EQ(0, madvise(address, length, MADV_DONTNEED));
+  ASSERT_EQ(0, madvise(address2, length, MADV_DONTNEED));
+  // TODO(lizeb): If flaky, mock mincore().
+  EXPECT_EQ(0, NativeLibraryPrefetcher::PercentageOfResidentCode(ranges));
+
+  // Get back the first range.
+  ASSERT_EQ(0, mlock(address, length));
+  EXPECT_EQ(33, NativeLibraryPrefetcher::PercentageOfResidentCode(ranges));
+  // The second one.
+  ASSERT_EQ(0, mlock(address2, length2));
+  EXPECT_EQ(100, NativeLibraryPrefetcher::PercentageOfResidentCode(ranges));
+  munlock(address, length);
+  munlock(address2, length);
 }
 
 }  // namespace android

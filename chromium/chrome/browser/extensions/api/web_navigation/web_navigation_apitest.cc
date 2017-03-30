@@ -6,11 +6,13 @@
 #include <set>
 
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_browser_main.h"
@@ -26,12 +28,14 @@
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
 #include "chrome/browser/renderer_host/chrome_resource_dispatcher_host_delegate.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/resource_controller.h"
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/resource_throttle.h"
@@ -40,6 +44,7 @@
 #include "content/public/common/resource_type.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/switches.h"
 #include "extensions/test/result_catcher.h"
@@ -213,7 +218,8 @@ class DelayLoadStartAndExecuteJavascript
       rvh_->GetMainFrame()->ExecuteJavaScriptWithUserGestureForTests(
           base::UTF8ToUTF16(script_));
     } else {
-      rvh_->GetMainFrame()->ExecuteJavaScript(base::UTF8ToUTF16(script_));
+      rvh_->GetMainFrame()->ExecuteJavaScriptForTests(
+          base::UTF8ToUTF16(script_));
     }
     script_was_executed_ = true;
   }
@@ -223,7 +229,8 @@ class DelayLoadStartAndExecuteJavascript
       const GURL& url,
       ui::PageTransition transition_type) override {
     if (script_was_executed_ &&
-        base::EndsWith(url.spec(), until_url_suffix_, true)) {
+        base::EndsWith(url.spec(), until_url_suffix_,
+                       base::CompareCase::SENSITIVE)) {
       content::WebContentsObserver::Observe(NULL);
       test_navigation_listener_->ResumeAll();
     }
@@ -464,7 +471,6 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, SimpleLoad) {
   ASSERT_TRUE(RunExtensionTest("webnavigation/simpleLoad")) << message_;
 }
 
-// Disabled in Vivaldi
 #if defined(OS_WIN)  // http://crbug.com/477840
 #define MAYBE_Failures DISABLED_Failures
 #else
@@ -540,9 +546,9 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, RequestOpenTab) {
   mouse_event.x = 7;
   mouse_event.y = 7;
   mouse_event.clickCount = 1;
-  tab->GetRenderViewHost()->ForwardMouseEvent(mouse_event);
+  tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
   mouse_event.type = blink::WebInputEvent::MouseUp;
-  tab->GetRenderViewHost()->ForwardMouseEvent(mouse_event);
+  tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
 
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
 }
@@ -572,9 +578,9 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, TargetBlank) {
   mouse_event.x = 7;
   mouse_event.y = 7;
   mouse_event.clickCount = 1;
-  tab->GetRenderViewHost()->ForwardMouseEvent(mouse_event);
+  tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
   mouse_event.type = blink::WebInputEvent::MouseUp;
-  tab->GetRenderViewHost()->ForwardMouseEvent(mouse_event);
+  tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
 
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
 }
@@ -591,8 +597,7 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, TargetBlankIncognito) {
   GURL url = embedded_test_server()->GetURL(
       "/extensions/api_test/webnavigation/targetBlank/a.html");
 
-  Browser* otr_browser = ui_test_utils::OpenURLOffTheRecord(
-      browser()->profile(), url);
+  Browser* otr_browser = OpenURLOffTheRecord(browser()->profile(), url);
   WebContents* tab = otr_browser->tab_strip_model()->GetActiveWebContents();
 
   // There's a link with target=_blank on a.html. Click on it to open it in a
@@ -603,9 +608,9 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, TargetBlankIncognito) {
   mouse_event.x = 7;
   mouse_event.y = 7;
   mouse_event.clickCount = 1;
-  tab->GetRenderViewHost()->ForwardMouseEvent(mouse_event);
+  tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
   mouse_event.type = blink::WebInputEvent::MouseUp;
-  tab->GetRenderViewHost()->ForwardMouseEvent(mouse_event);
+  tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
 
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
 }
@@ -675,7 +680,8 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, CrossProcessAbort) {
   // Ensure the cross-site navigation has started, then execute JavaScript
   // to cause the renderer-initiated, non-user navigation.
   cross_site_load.Wait();
-  tab->GetMainFrame()->ExecuteJavaScript(base::UTF8ToUTF16("navigate2()"));
+  tab->GetMainFrame()->ExecuteJavaScriptForTests(
+      base::UTF8ToUTF16("navigate2()"));
 
   // Wait for the same-site navigation to start and resume the cross-site
   // one, allowing it to commit.
@@ -732,6 +738,12 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, CrossProcessHistory) {
 
   ASSERT_TRUE(RunExtensionTest("webnavigation/crossProcessHistory"))
       << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, CrossProcessIframe) {
+  content::IsolateAllSitesForTesting(base::CommandLine::ForCurrentProcess());
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  ASSERT_TRUE(RunExtensionTest("webnavigation/crossProcessIframe")) << message_;
 }
 
 // TODO(jam): http://crbug.com/350550

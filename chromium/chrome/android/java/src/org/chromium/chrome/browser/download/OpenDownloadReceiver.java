@@ -18,18 +18,17 @@ import android.net.Uri;
  * a complete, successful download will open the file.
  */
 public class OpenDownloadReceiver extends BroadcastReceiver {
-
     @Override
     public void onReceive(final Context context, Intent intent) {
         String action = intent.getAction();
         if (!DownloadManager.ACTION_NOTIFICATION_CLICKED.equals(action)) {
-            openDownloadsPage(context);
+            DownloadManagerService.openDownloadsPage(context);
             return;
         }
         long ids[] = intent.getLongArrayExtra(
                 DownloadManager.EXTRA_NOTIFICATION_CLICK_DOWNLOAD_IDS);
         if (ids == null || ids.length == 0) {
-            openDownloadsPage(context);
+            DownloadManagerService.openDownloadsPage(context);
             return;
         }
         long id = ids[0];
@@ -38,7 +37,7 @@ public class OpenDownloadReceiver extends BroadcastReceiver {
         Uri uri = manager.getUriForDownloadedFile(id);
         if (uri == null) {
             // Open the downloads page
-            openDownloadsPage(context);
+            DownloadManagerService.openDownloadsPage(context);
         } else {
             Intent launchIntent = new Intent(Intent.ACTION_VIEW);
             launchIntent.setDataAndType(uri, manager.getMimeTypeForDownloadedFile(id));
@@ -46,18 +45,8 @@ public class OpenDownloadReceiver extends BroadcastReceiver {
             try {
                 context.startActivity(launchIntent);
             } catch (ActivityNotFoundException e) {
-                openDownloadsPage(context);
+                DownloadManagerService.openDownloadsPage(context);
             }
         }
-    }
-
-    /**
-     * Open the Activity which shows a list of all downloads.
-     * @param context
-     */
-    private void openDownloadsPage(Context context) {
-        Intent pageView = new Intent(DownloadManager.ACTION_VIEW_DOWNLOADS);
-        pageView.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        context.startActivity(pageView);
     }
 }

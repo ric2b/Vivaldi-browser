@@ -106,7 +106,7 @@
           },
           "files": {
             "type": "array",
-            "items": {"type": "string"},
+            "items": { "type": "string"},
             "optional": true,
             "description": "The list of JavaScript or CSS files to be injected into matching pages. These are injected in the order they appear in this array."
           }
@@ -123,12 +123,12 @@
           },
           "matches": {
             "type": "array",
-            "items": {"type": "string"},
+            "items": { "type": "string"},
             "description": "Specifies which pages this content script will be injected into."
           },
           "exclude_matches": {
             "type": "array",
-            "items": {"type": "string"},
+            "items": { "type": "string"},
             "optional": true,
             "description": "Excludes pages that this content script would otherwise be injected into."
           },
@@ -159,13 +159,13 @@
           },
           "include_globs": {
             "type": "array",
-            "items": {"type": "string"},
+            "items": { "type": "string"},
             "optional": true,
             "description": "Applied after matches to include only those URLs that also match this glob. Intended to emulate the @include Greasemonkey keyword."
           },
           "exclude_globs": {
             "type": "array",
-            "items": {"type": "string"},
+            "items": { "type": "string"},
             "optional": true,
             "description": "Applied after matches to exclude URLs that match this glob. Intended to emulate the @exclude Greasemonkey keyword."
           }
@@ -481,10 +481,10 @@
         ]
       },
       {
-        "name": "loadDataWithBaseUrl",
-        "type": "function",
-        "description": "Loads a data URL with a specified base URL used for relative links. Optionally, a virtual URL can be provided to be shown to the user instead of the data URL.",
-        "parameters": [
+	"name": "loadDataWithBaseUrl",
+	"type": "function",
+	"description": "Loads a data URL with a specified base URL used for relative links. Optionally, a virtual URL can be provided to be shown to the user instead of the data URL.",
+	"parameters": [
           {
             "type": "integer",
             "name": "instanceId",
@@ -493,24 +493,24 @@
           {
             "type": "string",
             "name": "dataUrl",
-            "description": "The data URL to load."
+            "description" : "The data URL to load."
           },
           {
             "type": "string",
             "name": "baseUrl",
             "description": "The base URL that will be used for relative links."
           },
-          {
+	  {
             "type": "string",
             "name": "virtualUrl",
             "description": "The URL that will be displayed to the user.",
-            "optional": true
+	    "optional": true
           },
-          {
+	  {
             "type": "function",
             "name": "callback",
             "description": "Called internally for the purpose of reporting errors to console.error().",
-            "parameters": [ ]
+            "parameters": []
           }
         ]
       },
@@ -704,228 +704,6 @@
             "description": "Called when deletion has completed.",
             "optional": true,
             "parameters": []
-          }
-        ]
-      },
-      {
-        "name": "setVisible",
-        "type": "function",
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "instanceId"
-          },
-          {
-            "type": "boolean",
-            "name": "isVisible"
-          }
-        ]
-      },
-      {
-        "name": "getThumbnail",
-        "type": "function",
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "instanceId"
-          },
-          {
-            "type": "object",
-            "name": "dimension",
-            "optional": true,
-            "properties": {
-              "width": { "type": "integer", "description": "The width of the scaled output bitmap.", "optional": true },
-              "height": { "type": "integer", "description": "The height of the scaled output bitmap.", "optional": true },
-              "scale": { "type": "number", "description": "Set scale of the output bitmap, defaults to 0.5. Note that |width.height| will be used if both |scale| and |width.height| are set.", "optional": true }
-            }
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "description": "Returns results",
-            "parameters": [
-              {
-                "name": "thumbnail",
-                "type": "string",
-                "description": "Thumbnail in base64 format."
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "name": "getThumbnailFromService",
-        "type": "function",
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "instanceId"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "description": "Returns results",
-            "parameters": [
-              {
-                "name": "thumbnail",
-                "optional": false,
-                "type": "string",
-                "description": "Thumbnail in base64 format from the thumbnail service."
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "name": "addToThumbnailService",
-        "type": "function",
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "instanceId"
-          },
-          {
-            "type": "string",
-            "name": "key",
-            "description": "Key the thumbnail will be stored under."
-          },
-          {
-            "type": "object",
-            "name": "dimensions",
-            "optional": true,
-            "properties": {
-              "width": {
-                "type": "integer",
-                "description": "The width of the scaled output bitmap.",
-                "optional": true
-              },
-              "height": {
-                "type": "integer",
-                "description": "The height of the scaled output bitmap.",
-                "optional": true
-              },
-              "scale": {
-                "type": "number",
-                "description": "Set scale of the output bitmap, defaults to 0.5. Note that |width.height| will be used if both |scale| and |width.height| are set.",
-                "optional": true
-              },
-              "storeAsCurrentUrl": {
-                "type": "boolean",
-                "description": "Also store it under the current url as key",
-                "optional": true
-              }
-            }
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "description": "Returns results",
-            "parameters": [
-              {
-                "name": "thumbnail",
-                "optional": false,
-                "type": "string",
-                "description": "Url to reference the thumbnail with."
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "name": "showPageInfo",
-        "type": "function",
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "instanceId"
-          },
-          {
-            "type": "object",
-            "name": "position",
-            "properties": {
-              "left": { "type": "integer", "description": "Anchor left position, screen coordinates." },
-              "top": { "type": "integer", "description": "Anchor top position, screen coordinates." }
-            }
-          }
-        ]
-      },
-      {
-        "name": "setIsFullscreen",
-        "type": "function",
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "instanceId"
-          },
-          {
-            "type": "boolean",
-            "name": "isFullscreen",
-            "description": "This is used to set a webview as fullscreen or not. This is needed for updating the pseudo-style :fullscreen when going in and out of fullscreen not via element.requestFullscreen and element.cancelFullscreen ."
-          }
-        ]
-      },
-      {
-        "name": "setShowImages",
-        "type": "function",
-        "allowAmbiguousOptionalArguments": true,
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "instanceId"
-          },
-          {
-            "type": "boolean",
-            "name": "showImages"
-          },
-          {
-            "type": "boolean",
-            "optional": true,
-            "name": "onlyLoadFromCache"
-          },
-          {
-            "type": "boolean",
-            "optional": true,
-            "name": "enablePlugins"
-          }
-        ]
-      },
-      {
-        "name": "getPageHistory",
-        "type": "function",
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "instanceId",
-            "description": "The instance ID of the guest <webview> process."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "description": "Called when history .",
-            "parameters": [
-              {
-                "type": "integer",
-                "name": "currentEntryIndex",
-                "description": "The current index."
-              },
-              {
-                "name": "pageHistory",
-                "optional": true,
-                "type": "array",
-                "description": "Array of history items with name and index.",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "name": { "type": "string", "description": "Title for the page." },
-                    "url": { "type": "string", "description": "URL for the entry." },
-                    "index": { "type": "integer", "description": "Relative history index. This can be used in <webview>.go(|index|)." }
-                  }
-                }
-              }
-            ]
           }
         ]
       }

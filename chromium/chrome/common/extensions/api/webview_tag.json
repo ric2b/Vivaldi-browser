@@ -494,7 +494,7 @@
                 "type": "object",
                 "name": "webview",
                 "description": "The <code>webview</code> element to which the target page should be attached.",
-                "properties": { }
+                "properties": {}
               }
             ]
           },
@@ -854,10 +854,10 @@
       },
       {
         "name": "getZoom",
-        "type": "function",
+	"type": "function",
         "description": "Gets the current zoom factor.",
-        "parameters": [
-          {
+	"parameters": [
+	  {
             "type": "function",
             "name": "callback",
             "description": "Called after the current zoom factor is retrieved.",
@@ -868,7 +868,7 @@
                 "description": "The current zoom factor."
               }
             ]
-          }
+	  }
         ]
       },
       {
@@ -987,15 +987,15 @@
           {
             "type": "number",
             "name": "zoomFactor",
-            "description": "The new zoom factor."
+            "description" : "The new zoom factor."
           },
-          {
+	  {
             "type": "function",
             "name": "callback",
             "description": "Called after the page has been zoomed.",
             "optional": true,
             "parameters": []
-          }
+	  }
         ]
       },
       {
@@ -1038,25 +1038,25 @@
         ]
       },
       {
-        "name": "loadDataWithBaseUrl",
-        "type": "function",
-        "description": "Loads a data URL with a specified base URL used for relative links. Optionally, a virtual URL can be provided to be shown to the user instead of the data URL.",
-        "parameters": [
+	"name": "loadDataWithBaseUrl",
+	"type": "function",
+	"description": "Loads a data URL with a specified base URL used for relative links. Optionally, a virtual URL can be provided to be shown to the user instead of the data URL.",
+	"parameters": [
           {
             "type": "string",
             "name": "dataUrl",
-            "description": "The data URL to load."
+            "description" : "The data URL to load."
           },
           {
             "type": "string",
             "name": "baseUrl",
             "description": "The base URL that will be used for relative links."
           },
-          {
+	  {
             "type": "string",
             "name": "virtualUrl",
             "description": "The URL that will be displayed to the user (in the address bar).",
-            "optional": true
+	    "optional": true
           }
         ]
       },
@@ -1209,7 +1209,7 @@
             "name": "reason",
             "description": "String indicating what type of abort occurred. This string is <em>not</em> guaranteed to remain backwards compatible between releases. You must not parse and act based upon its content. It is also possible that, in some cases, an error not listed here could be reported.",
             "type": "string",
-            "enum": ["ERR_ABORTED", "ERR_BLOCKED_BY_CLIENT", "ERR_ADDRESS_UNREACHABLE", "ERR_EMPTY_RESPONSE", "ERR_FILE_NOT_FOUND", "ERR_UNKNOWN_URL_SCHEME"]
+            "enum": ["ERR_ABORTED", "ERR_INVALID_URL", "ERR_DISALLOWED_URL_SCHEME", "ERR_BLOCKED_BY_CLIENT", "ERR_ADDRESS_UNREACHABLE", "ERR_EMPTY_RESPONSE", "ERR_FILE_NOT_FOUND", "ERR_UNKNOWN_URL_SCHEME"]
           }
         ]
       },

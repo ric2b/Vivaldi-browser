@@ -5,8 +5,9 @@
 #ifndef COMPONENTS_SIGNIN_CORE_BROWSER_SIGNIN_METRICS_H_
 #define COMPONENTS_SIGNIN_CORE_BROWSER_SIGNIN_METRICS_H_
 
-#include "base/time/time.h"
+#include <limits.h>
 
+#include "base/time/time.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 
 namespace signin_metrics {
@@ -98,22 +99,58 @@ enum {
   HISTOGRAM_CONFIRM_MAX
 };
 
-// Enum valus used with the "Signin.SigninSource" histogram, which tracks the
-// source that launched a Gaia signin page.
+// TODO(gogerald): right now, gaia server needs to distinguish the source from
+// signin_metrics::SOURCE_START_PAGE, signin_metrics::SOURCE_SETTINGS and the
+// others to show advanced sync setting, remove them after switching to Minute
+// Maid sign in flow.
+// This was previously used in Signin.SigninSource UMA histogram, but no longer
+// used after having below AccessPoint and Reason related histograms.
 enum Source {
-  SOURCE_START_PAGE = 0, // This must be first.
-  SOURCE_NTP_LINK,
-  SOURCE_MENU,
-  SOURCE_SETTINGS,
-  SOURCE_EXTENSION_INSTALL_BUBBLE,
-  SOURCE_APP_LAUNCHER,
-  SOURCE_APPS_PAGE_LINK,
-  SOURCE_BOOKMARK_BUBBLE,
-  SOURCE_AVATAR_BUBBLE_SIGN_IN,
-  SOURCE_AVATAR_BUBBLE_ADD_ACCOUNT,
-  SOURCE_DEVICES_PAGE,
-  SOURCE_REAUTH,
-  SOURCE_UNKNOWN, // This must be last.
+  SOURCE_START_PAGE = 0,  // This must be first.
+  SOURCE_SETTINGS = 3,
+  SOURCE_OTHERS = 13,
+};
+
+// Enum values which enumerates all access points where sign in could be
+// initiated. Not all of them exist on all platforms. They are used with
+// "Signin.SigninStartedAccessPoint" and "Signin.SigninCompletedAccessPoint"
+// histograms.
+// A Java counterpart will be generated for this enum.
+// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.signin
+// GENERATED_JAVA_CLASS_NAME_OVERRIDE: SigninAccessPoint
+enum class AccessPoint : int {
+  ACCESS_POINT_START_PAGE = 0,
+  ACCESS_POINT_NTP_LINK,
+  ACCESS_POINT_MENU,
+  ACCESS_POINT_SETTINGS,
+  ACCESS_POINT_SUPERVISED_USER,
+  ACCESS_POINT_EXTENSION_INSTALL_BUBBLE,
+  ACCESS_POINT_EXTENSIONS,
+  ACCESS_POINT_APPS_PAGE_LINK,
+  ACCESS_POINT_BOOKMARK_BUBBLE,
+  ACCESS_POINT_BOOKMARK_MANAGER,
+  ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN,
+  ACCESS_POINT_USER_MANAGER,
+  ACCESS_POINT_DEVICES_PAGE,
+  ACCESS_POINT_CLOUD_PRINT,
+  ACCESS_POINT_CONTENT_AREA,
+  ACCESS_POINT_SIGNIN_PROMO,
+  ACCESS_POINT_RECENT_TABS,
+  ACCESS_POINT_UNKNOWN,  // This should never have been used to get signin URL.
+  ACCESS_POINT_MAX,      // This must be last.
+};
+
+// Enum values which enumerates all reasons to start sign in process.
+// A Java counterpart will be generated for this enum.
+// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.signin
+// GENERATED_JAVA_CLASS_NAME_OVERRIDE: SigninReason
+enum class Reason : int {
+  REASON_SIGNIN_PRIMARY_ACCOUNT = 0,
+  REASON_ADD_SECONDARY_ACCOUNT,
+  REASON_REAUTHENTICATION,
+  REASON_UNLOCK,
+  REASON_UNKNOWN_REASON,  // This should never have been used to get signin URL.
+  REASON_MAX,             // This must be last.
 };
 
 // Enum values used for use with the "Signin.Reauth" histogram.
@@ -177,6 +214,33 @@ enum AccountReconcilorState {
   ACCOUNT_RECONCILOR_HISTOGRAM_COUNT,
 };
 
+// Values of histogram comparing account id and email.
+enum class AccountEquality : int {
+  // Expected case when the user is not switching accounts.
+  BOTH_EQUAL = 0,
+  // Expected case when the user is switching accounts.
+  BOTH_DIFFERENT,
+  // The user has changed at least two email account names. This is actually
+  // a different account, even though the email matches.
+  ONLY_SAME_EMAIL,
+  // The user has changed the email of their account, but the account is
+  // actually the same.
+  ONLY_SAME_ID,
+  // The last account id was not present, email equality was used. This should
+  // happen once to all old clients. Does not differentiate between same and
+  // different accounts.
+  EMAIL_FALLBACK,
+  // Always the last enumerated type.
+  HISTOGRAM_COUNT,
+};
+
+// Tracks the access point of sign in.
+void LogSigninAccessPointStarted(AccessPoint access_point);
+void LogSigninAccessPointCompleted(AccessPoint access_point);
+
+// Tracks the reason of sign in.
+void LogSigninReason(Reason reason);
+
 // Log to UMA histograms and UserCounts stats about a single execution of the
 // AccountReconciler.
 // |total_number_accounts| - How many accounts are in the browser for this
@@ -198,11 +262,14 @@ void LogSigninAccountReconciliation(int total_number_accounts,
                                     bool is_first_reconcile,
                                     int pre_count_gaia_cookies);
 
+// Logs duration of a single execution of AccountReconciler to UMA histograms.
+// |duration| - How long execution of AccountReconciler took.
+// |successful| - True if AccountReconciler was successful.
+void LogSigninAccountReconciliationDuration(base::TimeDelta duration,
+                                            bool successful);
+
 // Track a successful signin.
 void LogSigninAddAccount();
-
-// Tracks the original source that showed the signin page.
-void LogSigninSource(Source source);
 
 // Track a successful signin of a profile.
 void LogSigninProfile(bool is_first_run, base::Time install_date);
@@ -232,6 +299,10 @@ void LogBrowsingSessionDuration(const base::Time& previous_activity_time);
 // If |state| is different than ACCOUNT_RECONCILOR_OK it means the user will
 // be shown a different set of accounts in the content-area and the settings UI.
 void LogAccountReconcilorStateOnGaiaResponse(AccountReconcilorState state);
+
+// Records the AccountEquality metric when an investigator compares the current
+// and previous id/emails during a signin.
+void LogAccountEquality(AccountEquality equality);
 
 }  // namespace signin_metrics
 

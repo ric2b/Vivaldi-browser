@@ -5,11 +5,14 @@
 #ifndef MEDIA_FORMATS_MP2T_ES_PARSER_ADTS_H_
 #define MEDIA_FORMATS_MP2T_ES_PARSER_ADTS_H_
 
+#include <stdint.h>
+
 #include <list>
 #include <utility>
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "media/base/audio_decoder_config.h"
@@ -58,7 +61,7 @@ class MEDIA_EXPORT EsParserAdts : public EsParser {
   // Signal any audio configuration change (if any).
   // Return false if the current audio config is not
   // a supported ADTS audio config.
-  bool UpdateAudioConfiguration(const uint8* adts_header);
+  bool UpdateAudioConfiguration(const uint8_t* adts_header);
 
   // Callbacks:
   // - to signal a new audio configuration,

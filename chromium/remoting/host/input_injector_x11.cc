@@ -4,29 +4,36 @@
 
 #include "remoting/host/input_injector.h"
 
+#include <stddef.h>
+#include <stdint.h>
 #include <X11/extensions/XInput.h>
 #include <X11/extensions/XTest.h>
 #include <X11/Xlib.h>
 #include <X11/XKBlib.h>
+#undef Status  // Xlib.h #defines this, which breaks protobuf headers.
 
 #include <set>
+#include <utility>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversion_utils.h"
+#include "build/build_config.h"
 #include "remoting/base/logging.h"
+#include "remoting/host/clipboard.h"
+#include "remoting/host/linux/unicode_to_keysym.h"
+#include "remoting/host/linux/x11_util.h"
+#include "remoting/proto/internal.pb.h"
+#include "third_party/webrtc/modules/desktop_capture/desktop_geometry.h"
+#include "ui/events/keycodes/dom/dom_code.h"
+#include "ui/events/keycodes/dom/keycode_converter.h"
+
 #if defined(OS_CHROMEOS)
 #include "remoting/host/chromeos/point_transformer.h"
 #endif
-#include "remoting/host/clipboard.h"
-#include "remoting/host/linux/unicode_to_keysym.h"
-#include "remoting/proto/internal.pb.h"
-#include "remoting/protocol/usb_key_codes.h"
-#include "third_party/webrtc/modules/desktop_capture/desktop_geometry.h"
-#include "ui/events/keycodes/dom/keycode_converter.h"
 
 namespace remoting {
 
@@ -88,15 +95,15 @@ bool FindKeycodeForUnicode(Display* display,
   return false;
 }
 
-bool IsModifierKey(int usb_keycode) {
-  return usb_keycode == kUsbLeftControl ||
-         usb_keycode == kUsbLeftShift ||
-         usb_keycode == kUsbLeftAlt ||
-         usb_keycode == kUsbLeftOs ||
-         usb_keycode == kUsbRightControl ||
-         usb_keycode == kUsbRightShift ||
-         usb_keycode == kUsbRightAlt ||
-         usb_keycode == kUsbRightOs;
+bool IsModifierKey(ui::DomCode dom_code) {
+  return dom_code == ui::DomCode::CONTROL_LEFT ||
+         dom_code == ui::DomCode::SHIFT_LEFT ||
+         dom_code == ui::DomCode::ALT_LEFT ||
+         dom_code == ui::DomCode::OS_LEFT ||
+         dom_code == ui::DomCode::CONTROL_RIGHT ||
+         dom_code == ui::DomCode::SHIFT_RIGHT ||
+         dom_code == ui::DomCode::ALT_RIGHT ||
+         dom_code == ui::DomCode::OS_RIGHT;
 }
 
 // Pixel-to-wheel-ticks conversion ratio used by GTK.
@@ -179,9 +186,6 @@ class InputInjectorX11 : public InputInjector {
     Display* display_;
     Window root_window_;
 
-    int test_event_base_;
-    int test_error_base_;
-
     // Number of buttons we support.
     // Left, Right, Middle, VScroll Up/Down, HScroll Left/Right.
     static const int kNumPointerButtons = 7;
@@ -239,7 +243,7 @@ void InputInjectorX11::InjectTouchEvent(const TouchEvent& event) {
 
 void InputInjectorX11::Start(
     scoped_ptr<protocol::ClipboardStub> client_clipboard) {
-  core_->Start(client_clipboard.Pass());
+  core_->Start(std::move(client_clipboard));
 }
 
 InputInjectorX11::Core::Core(
@@ -265,11 +269,7 @@ bool InputInjectorX11::Core::Init() {
     return false;
   }
 
-  // TODO(ajwong): Do we want to check the major/minor version at all for XTest?
-  int major = 0;
-  int minor = 0;
-  if (!XTestQueryExtension(display_, &test_event_base_, &test_error_base_,
-                           &major, &minor)) {
+  if (!IgnoreXServerGrabs(display_, true)) {
     LOG(ERROR) << "Server does not support XTest.";
     return false;
   }
@@ -313,7 +313,7 @@ void InputInjectorX11::Core::InjectKeyEvent(const KeyEvent& event) {
   if (event.pressed()) {
     if (pressed_keys_.find(keycode) != pressed_keys_.end()) {
       // Ignore repeats for modifier keys.
-      if (IsModifierKey(event.usb_keycode()))
+      if (IsModifierKey(static_cast<ui::DomCode>(event.usb_keycode())))
         return;
       // Key is already held down, so lift the key up to ensure this repeated
       // press takes effect.
@@ -357,7 +357,7 @@ void InputInjectorX11::Core::InjectTextEvent(const TextEvent& event) {
   pressed_keys_.clear();
 
   const std::string text = event.text();
-  for (int32 index = 0; index < static_cast<int32>(text.size()); ++index) {
+  for (int32_t index = 0; index < static_cast<int32_t>(text.size()); ++index) {
     uint32_t code_point;
     if (!base::ReadUnicodeCharacter(
             text.c_str(), text.size(), &index, &code_point)) {
@@ -630,7 +630,7 @@ void InputInjectorX11::Core::Start(
 
   InitMouseButtonMap();
 
-  clipboard_->Start(client_clipboard.Pass());
+  clipboard_->Start(std::move(client_clipboard));
 }
 
 void InputInjectorX11::Core::Stop() {
@@ -652,7 +652,7 @@ scoped_ptr<InputInjector> InputInjector::Create(
       new InputInjectorX11(main_task_runner));
   if (!injector->Init())
     return nullptr;
-  return injector.Pass();
+  return std::move(injector);
 }
 
 // static

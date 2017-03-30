@@ -10,6 +10,7 @@
 #undef Bool
 #undef None
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "ui/aura/env.h"
@@ -23,7 +24,7 @@
 #include "ui/events/platform/x11/x11_event_source.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/x/x11_atom_cache.h"
-#include "ui/gl/gl_surface.h"
+#include "ui/gl/test/gl_surface_test_support.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/test/x11_property_change_waiter.h"
@@ -88,7 +89,7 @@ scoped_ptr<Widget> CreateWidget(const gfx::Rect& bounds) {
   params.native_widget = new DesktopNativeWidgetAura(widget.get());
   params.bounds = bounds;
   widget->Init(params);
-  return widget.Pass();
+  return widget;
 }
 
 // Dispatches an XMotionEvent targeted at |host|'s X window with location
@@ -126,7 +127,7 @@ class DesktopWindowTreeHostX11Test : public ViewsTestBase {
   ~DesktopWindowTreeHostX11Test() override {}
 
   static void SetUpTestCase() {
-    gfx::GLSurface::InitializeOneOffForTests();
+    gfx::GLSurfaceTestSupport::InitializeOneOff();
     ui::RegisterPathProvider();
     base::FilePath ui_test_pak_path;
     ASSERT_TRUE(PathService::Get(ui::UI_TEST_PAK, &ui_test_pak_path));
@@ -258,7 +259,7 @@ TEST_F(DesktopWindowTreeHostX11Test, InputMethodFocus) {
   scoped_ptr<Textfield> textfield(new Textfield);
   textfield->SetBounds(0, 0, 200, 20);
   widget->GetRootView()->AddChildView(textfield.get());
-  widget->Show();
+  widget->ShowInactive();
   textfield->RequestFocus();
 
   EXPECT_FALSE(widget->IsActive());

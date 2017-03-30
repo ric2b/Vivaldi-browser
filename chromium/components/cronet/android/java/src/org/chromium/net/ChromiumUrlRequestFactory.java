@@ -14,7 +14,7 @@ import java.util.Map;
 
 /**
  * Network request factory using the native http stack implementation.
- * @deprecated Use {@link CronetUrlRequestContext} instead.
+ * @deprecated Use {@link CronetEngine} instead.
  */
 @UsedByReflection("HttpUrlRequestFactory.java")
 @Deprecated
@@ -22,12 +22,12 @@ public class ChromiumUrlRequestFactory extends HttpUrlRequestFactory {
     private ChromiumUrlRequestContext mRequestContext;
 
     @UsedByReflection("HttpUrlRequestFactory.java")
-    public ChromiumUrlRequestFactory(
-            Context context, UrlRequestContextConfig config) {
+    public ChromiumUrlRequestFactory(Context context, CronetEngine.Builder config) {
         if (isEnabled()) {
-            String userAgent = config.userAgent();
-            if (userAgent.isEmpty()) {
-                userAgent = UserAgent.from(context);
+            String userAgent = config.getUserAgent();
+            if (userAgent == null) {
+                // Cannot use config.getDefaultUserAgent() as config.mContext may be null.
+                userAgent = new CronetEngine.Builder(context).getDefaultUserAgent();
             }
             mRequestContext = new ChromiumUrlRequestContext(context,
                     userAgent, config);

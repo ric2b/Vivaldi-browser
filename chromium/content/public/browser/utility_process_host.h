@@ -8,6 +8,7 @@
 #include "base/environment.h"
 #include "base/process/launch.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "ipc/ipc_sender.h"
 
@@ -35,8 +36,7 @@ struct ChildProcessData;
 // Note: If your class keeps a ptr to an object of this type, grab a weak ptr to
 // avoid a use after free since this object is deleted synchronously but the
 // client notification is asynchronous.  See http://crbug.com/108871.
-class UtilityProcessHost : public IPC::Sender,
-                           public base::SupportsWeakPtr<UtilityProcessHost> {
+class UtilityProcessHost : public IPC::Sender {
  public:
   // Used to create a utility process. |client| is optional. If supplied it will
   // be notified of incoming messages from the utility process.
@@ -48,6 +48,8 @@ class UtilityProcessHost : public IPC::Sender,
 
   ~UtilityProcessHost() override {}
 
+  virtual base::WeakPtr<UtilityProcessHost> AsWeakPtr() = 0;
+
   // Starts utility process in batch mode. Caller must call EndBatchMode()
   // to finish the utility process.
   virtual bool StartBatchMode() = 0;
@@ -58,9 +60,6 @@ class UtilityProcessHost : public IPC::Sender,
   // Allows a directory to be opened through the sandbox, in case it's needed by
   // the operation.
   virtual void SetExposedDir(const base::FilePath& dir) = 0;
-
-  // Perform presandbox initialization for mDNS.
-  virtual void EnableMDns() = 0;
 
   // Make the process run without a sandbox.
   virtual void DisableSandbox() = 0;

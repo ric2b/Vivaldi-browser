@@ -4,16 +4,19 @@
 
 #include "content/browser/frame_host/interstitial_page_impl.h"
 
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/dom_storage/dom_storage_context_wrapper.h"
 #include "content/browser/dom_storage/session_storage_namespace_impl.h"
@@ -35,7 +38,6 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
-#include "content/public/browser/dom_operation_notification_details.h"
 #include "content/public/browser/interstitial_page_delegate.h"
 #include "content/public/browser/invalidate_type.h"
 #include "content/public/browser/notification_service.h"
@@ -147,6 +149,14 @@ InterstitialPage* InterstitialPage::GetInterstitialPage(
   return iter->second;
 }
 
+InterstitialPage* InterstitialPage::FromRenderFrameHost(RenderFrameHost* rfh) {
+  if (!rfh)
+    return nullptr;
+  return static_cast<RenderFrameHostImpl*>(rfh)
+      ->delegate()
+      ->GetAsInterstitialPage();
+}
+
 InterstitialPageImpl::InterstitialPageImpl(
     WebContents* web_contents,
     RenderWidgetHostDelegate* render_widget_host_delegate,
@@ -184,11 +194,6 @@ InterstitialPageImpl::InterstitialPageImpl(
       delegate_(delegate),
       weak_ptr_factory_(this) {
   InitInterstitialPageMap();
-  // It would be inconsistent to create an interstitial with no new navigation
-  // (which is the case when the interstitial was triggered by a sub-resource on
-  // a page) when we have a pending entry (in the process of loading a new top
-  // frame).
-  DCHECK(new_navigation || !web_contents->GetController().GetPendingEntry());
 }
 
 InterstitialPageImpl::~InterstitialPageImpl() {
@@ -228,7 +233,8 @@ void InterstitialPageImpl::Show() {
   // already been destroyed.
   notification_registrar_.Add(
       this, NOTIFICATION_RENDER_WIDGET_HOST_DESTROYED,
-      Source<RenderWidgetHost>(controller_->delegate()->GetRenderViewHost()));
+      Source<RenderWidgetHost>(
+          controller_->delegate()->GetRenderViewHost()->GetWidget()));
 
   // Update the g_web_contents_to_interstitial_page map.
   iter = g_web_contents_to_interstitial_page->find(web_contents_);
@@ -245,7 +251,7 @@ void InterstitialPageImpl::Show() {
     // Give delegates a chance to set some states on the navigation entry.
     delegate_->OverrideEntry(entry.get());
 
-    controller_->SetTransientEntry(entry.Pass());
+    controller_->SetTransientEntry(std::move(entry));
 
     static_cast<WebContentsImpl*>(web_contents_)->DidChangeVisibleSSLState();
   }
@@ -254,9 +260,9 @@ void InterstitialPageImpl::Show() {
   render_view_host_ = CreateRenderViewHost();
   CreateWebContentsView();
 
-  std::string data_url = "data:text/html;charset=utf-8," +
-                         net::EscapePath(delegate_->GetHTMLContents());
-  frame_tree_.root()->current_frame_host()->NavigateToURL(GURL(data_url));
+  GURL data_url = GURL("data:text/html;charset=utf-8," +
+                       net::EscapePath(delegate_->GetHTMLContents()));
+  frame_tree_.root()->current_frame_host()->NavigateToInterstitialURL(data_url);
   frame_tree_.root()->current_frame_host()->SetAccessibilityMode(
       GetAccessibilityMode());
 
@@ -277,7 +283,7 @@ void InterstitialPageImpl::Hide() {
   static_cast<WebContentsImpl*>(web_contents_)->DidChangeVisibleSSLState();
 
   RenderWidgetHostView* old_view =
-      controller_->delegate()->GetRenderViewHost()->GetView();
+      controller_->delegate()->GetRenderViewHost()->GetWidget()->GetView();
   if (controller_->delegate()->GetInterstitialPage() == this &&
       old_view &&
       !old_view->IsShowing() &&
@@ -302,10 +308,14 @@ void InterstitialPageImpl::Hide() {
 
   // If the focus was on the interstitial, let's keep it to the page.
   // (Note that in unit-tests the RVH may not have a view).
-  if (render_view_host_->GetView() &&
-      render_view_host_->GetView()->HasFocus() &&
-      controller_->delegate()->GetRenderViewHost()->GetView()) {
-    controller_->delegate()->GetRenderViewHost()->GetView()->Focus();
+  if (render_view_host_->GetWidget()->GetView() &&
+      render_view_host_->GetWidget()->GetView()->HasFocus() &&
+      controller_->delegate()->GetRenderViewHost()->GetWidget()->GetView()) {
+    controller_->delegate()
+        ->GetRenderViewHost()
+        ->GetWidget()
+        ->GetView()
+        ->Focus();
   }
 
   // Delete this and call Shutdown on the RVH asynchronously, as we may have
@@ -324,6 +334,8 @@ void InterstitialPageImpl::Hide() {
     controller_->delegate()->NotifyNavigationStateChanged(
         INVALIDATE_TYPE_TITLE);
   }
+
+  static_cast<WebContentsImpl*>(web_contents_)->DidChangeVisibleSSLState();
 
   InterstitialPageMap::iterator iter =
       g_web_contents_to_interstitial_page->find(web_contents_);
@@ -358,10 +370,8 @@ void InterstitialPageImpl::Observe(
       if (action_taken_ == NO_ACTION) {
         // The RenderViewHost is being destroyed (as part of the tab being
         // closed); make sure we clear the blocked requests.
-        RenderViewHost* rvh = static_cast<RenderViewHost*>(
-            static_cast<RenderViewHostImpl*>(
-                RenderWidgetHostImpl::From(
-                    Source<RenderWidgetHost>(source).ptr())));
+        RenderViewHost* rvh =
+            RenderViewHost::From(Source<RenderWidgetHost>(source).ptr());
         DCHECK(rvh->GetProcess()->GetID() == original_child_id_ &&
                rvh->GetRoutingID() == original_rvh_id_);
         TakeActionOnResourceDispatcher(CANCEL);
@@ -413,7 +423,7 @@ void InterstitialPageImpl::RenderFrameCreated(
 
 void InterstitialPageImpl::UpdateTitle(
     RenderFrameHost* render_frame_host,
-    int32 page_id,
+    int32_t page_id,
     const base::string16& title,
     base::i18n::TextDirection title_direction) {
   if (!enabled())
@@ -442,6 +452,10 @@ void InterstitialPageImpl::UpdateTitle(
   // http://code.google.com/p/chromium/issues/detail?id=27094
   entry->SetTitle(title);
   controller_->delegate()->NotifyNavigationStateChanged(INVALIDATE_TYPE_TITLE);
+}
+
+InterstitialPage* InterstitialPageImpl::GetAsInterstitialPage() {
+  return this;
 }
 
 AccessibilityMode InterstitialPageImpl::GetAccessibilityMode() const {
@@ -495,6 +509,10 @@ RenderViewHostDelegateView* InterstitialPageImpl::GetDelegateView() {
   return rvh_delegate_view_.get();
 }
 
+WebContents* InterstitialPageImpl::GetWebContents() const {
+  return web_contents();
+}
+
 const GURL& InterstitialPageImpl::GetMainFrameLastCommittedURL() const {
   return url_;
 }
@@ -529,11 +547,11 @@ void InterstitialPageImpl::DidNavigate(
 
   // The RenderViewHost has loaded its contents, we can show it now.
   if (!controller_->delegate()->IsHidden())
-    render_view_host_->GetView()->Show();
+    render_view_host_->GetWidget()->GetView()->Show();
   controller_->delegate()->AttachInterstitialPage(this);
 
   RenderWidgetHostView* rwh_view =
-      controller_->delegate()->GetRenderViewHost()->GetView();
+      controller_->delegate()->GetRenderViewHost()->GetWidget()->GetView();
 
   // The RenderViewHost may already have crashed before we even get here.
   if (rwh_view) {
@@ -613,8 +631,12 @@ RenderViewHostImpl* InterstitialPageImpl::CreateRenderViewHost() {
       new SessionStorageNamespaceImpl(dom_storage_context);
 
   // Use the RenderViewHost from our FrameTree.
+  // TODO(avi): The view routing ID can be restored to MSG_ROUTING_NONE once
+  // RenderViewHostImpl has-a RenderWidgetHostImpl. https://crbug.com/545684
+  int32_t widget_routing_id = site_instance->GetProcess()->GetNextRoutingID();
   frame_tree_.root()->render_manager()->Init(
-      browser_context, site_instance.get(), MSG_ROUTING_NONE, MSG_ROUTING_NONE);
+      site_instance.get(), widget_routing_id, MSG_ROUTING_NONE,
+      widget_routing_id);
   return frame_tree_.root()->current_frame_host()->render_view_host();
 }
 
@@ -624,12 +646,12 @@ WebContentsView* InterstitialPageImpl::CreateWebContentsView() {
   WebContentsView* wcv =
       static_cast<WebContentsImpl*>(web_contents())->GetView();
   RenderWidgetHostViewBase* view =
-      wcv->CreateViewForWidget(render_view_host_, false);
-  render_view_host_->SetView(view);
+      wcv->CreateViewForWidget(render_view_host_->GetWidget(), false);
+  RenderWidgetHostImpl::From(render_view_host_->GetWidget())->SetView(view);
   render_view_host_->AllowBindings(BINDINGS_POLICY_DOM_AUTOMATION);
 
-  int32 max_page_id = web_contents()->
-      GetMaxPageIDForSiteInstance(render_view_host_->GetSiteInstance());
+  int32_t max_page_id = web_contents()->GetMaxPageIDForSiteInstance(
+      render_view_host_->GetSiteInstance());
   render_view_host_->CreateRenderView(MSG_ROUTING_NONE,
                                       MSG_ROUTING_NONE,
                                       max_page_id,
@@ -735,8 +757,8 @@ void InterstitialPageImpl::SetSize(const gfx::Size& size) {
 #if !defined(OS_MACOSX)
   // When a tab is closed, we might be resized after our view was NULLed
   // (typically if there was an info-bar).
-  if (render_view_host_->GetView())
-    render_view_host_->GetView()->SetSize(size);
+  if (render_view_host_->GetWidget()->GetView())
+    render_view_host_->GetWidget()->GetView()->SetSize(size);
 #else
   // TODO(port): Does Mac need to SetSize?
   NOTIMPLEMENTED();
@@ -747,7 +769,7 @@ void InterstitialPageImpl::Focus() {
   // Focus the native window.
   if (!enabled())
     return;
-  render_view_host_->GetView()->Focus();
+  render_view_host_->GetWidget()->GetView()->Focus();
 }
 
 void InterstitialPageImpl::FocusThroughTabTraversal(bool reverse) {
@@ -757,7 +779,7 @@ void InterstitialPageImpl::FocusThroughTabTraversal(bool reverse) {
 }
 
 RenderWidgetHostView* InterstitialPageImpl::GetView() {
-  return render_view_host_->GetView();
+  return render_view_host_->GetWidget()->GetView();
 }
 
 RenderFrameHost* InterstitialPageImpl::GetMainFrame() const {
@@ -772,27 +794,24 @@ void InterstitialPageImpl::DontCreateViewForTesting() {
   create_view_ = false;
 }
 
-gfx::Rect InterstitialPageImpl::GetRootWindowResizerRect() const {
-  return gfx::Rect();
-}
-
 void InterstitialPageImpl::CreateNewWindow(
-    int render_process_id,
-    int route_id,
-    int main_frame_route_id,
+    SiteInstance* source_site_instance,
+    int32_t route_id,
+    int32_t main_frame_route_id,
+    int32_t main_frame_widget_route_id,
     const ViewHostMsg_CreateWindow_Params& params,
     SessionStorageNamespace* session_storage_namespace) {
   NOTREACHED() << "InterstitialPage does not support showing popups yet.";
 }
 
-void InterstitialPageImpl::CreateNewWidget(int render_process_id,
-                                           int route_id,
+void InterstitialPageImpl::CreateNewWidget(int32_t render_process_id,
+                                           int32_t route_id,
                                            blink::WebPopupType popup_type) {
   NOTREACHED() << "InterstitialPage does not support showing drop-downs yet.";
 }
 
-void InterstitialPageImpl::CreateNewFullscreenWidget(int render_process_id,
-                                                     int route_id) {
+void InterstitialPageImpl::CreateNewFullscreenWidget(int32_t render_process_id,
+                                                     int32_t route_id) {
   NOTREACHED()
       << "InterstitialPage does not support showing full screen popups.";
 }
@@ -877,18 +896,16 @@ void InterstitialPageImpl::TakeActionOnResourceDispatcher(
 }
 
 void InterstitialPageImpl::OnDomOperationResponse(
-    const std::string& json_string,
-    int automation_id) {
+    const std::string& json_string) {
+  std::string json = json_string;
   // Needed by test code.
-  DomOperationNotificationDetails details(json_string, automation_id);
-  NotificationService::current()->Notify(
-      NOTIFICATION_DOM_OPERATION_RESPONSE,
-      Source<WebContents>(web_contents()),
-      Details<DomOperationNotificationDetails>(&details));
+  NotificationService::current()->Notify(NOTIFICATION_DOM_OPERATION_RESPONSE,
+                                         Source<WebContents>(web_contents()),
+                                         Details<std::string>(&json));
 
   if (!enabled())
     return;
-  delegate_->CommandReceived(details.json);
+  delegate_->CommandReceived(json_string);
 }
 
 

@@ -12,6 +12,7 @@
 #include "base/process/process.h"
 #include "base/process/process_handle.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 
 namespace base {
 
@@ -37,6 +38,7 @@ enum TerminationStatus {
   // a hint.
   TERMINATION_STATUS_OOM_PROTECTED,        // child was protected from oom kill
 #endif
+  TERMINATION_STATUS_LAUNCH_FAILED,        // child process never launched
   TERMINATION_STATUS_MAX_ENUM
 };
 

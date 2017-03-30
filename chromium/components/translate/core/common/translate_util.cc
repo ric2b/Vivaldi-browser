@@ -4,9 +4,11 @@
 
 #include "components/translate/core/common/translate_util.h"
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_split.h"
 #include "components/translate/core/common/translate_switches.h"
 #include "url/gurl.h"
@@ -21,12 +23,12 @@ void SplitIntoMainAndTail(const std::string& language,
   DCHECK(main_part);
   DCHECK(tail_part);
 
-  std::vector<std::string> chunks;
-  base::SplitString(language, '-', &chunks);
-  if (chunks.size() == 0u)
+  std::vector<base::StringPiece> chunks = base::SplitStringPiece(
+      language, "-", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+  if (chunks.empty())
     return;
 
-  *main_part = chunks[0];
+  chunks[0].CopyToString(main_part);
   *tail_part = language.substr(main_part->size());
 }
 
@@ -46,7 +48,8 @@ struct LanguageCodePair {
 // are different to be exact.
 //
 // If this table is updated, please sync this with the synonym table in
-// chrome/browser/resources/options/language_options.js
+// chrome/browser/resources/options/language_options.js and
+// chrome/browser/resources/settings/languages_page/languages.js.
 const LanguageCodePair kLanguageCodeSimilitudes[] = {
   {"no", "nb"},
   {"tl", "fil"},
@@ -56,7 +59,8 @@ const LanguageCodePair kLanguageCodeSimilitudes[] = {
 // codes are used, so we must see them as synonyms.
 //
 // If this table is updated, please sync this with the synonym table in
-// chrome/browser/resources/options/language_options.js
+// chrome/browser/resources/options/language_options.js and
+// chrome/browser/resources/settings/languages_page/languages.js.
 const LanguageCodePair kLanguageCodeSynonyms[] = {
   {"iw", "he"},
   {"jw", "jv"},
@@ -66,7 +70,8 @@ const LanguageCodePair kLanguageCodeSynonyms[] = {
 // Translate.
 //
 // If this table is updated, please sync this with the synonym table in
-// chrome/browser/resources/options/language_options.js
+// chrome/browser/resources/options/language_options.js and
+// chrome/browser/resources/settings/languages_page/languages.js.
 const LanguageCodePair kLanguageCodeChineseCompatiblePairs[] = {
   {"zh-TW", "zh-HK"},
   {"zh-TW", "zh-MO"},

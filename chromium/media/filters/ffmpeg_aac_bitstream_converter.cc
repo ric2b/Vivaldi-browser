@@ -14,12 +14,21 @@ namespace {
 // Creates an ADTS header and stores in |hdr|
 // Assumes |hdr| points to an array of length |kAdtsHeaderSize|
 // Returns false if parameter values are for an unsupported configuration.
-bool GenerateAdtsHeader(
-    int codec, int layer, int audio_profile, int sample_rate_index,
-    int private_stream, int channel_configuration, int originality, int home,
-    int copyrighted_stream, int copyright_start, int frame_length,
-    int buffer_fullness, int number_of_frames_minus_one, uint8* hdr) {
-  DCHECK_EQ(codec, CODEC_ID_AAC);
+bool GenerateAdtsHeader(int codec,
+                        int layer,
+                        int audio_profile,
+                        int sample_rate_index,
+                        int private_stream,
+                        int channel_configuration,
+                        int originality,
+                        int home,
+                        int copyrighted_stream,
+                        int copyright_start,
+                        int frame_length,
+                        int buffer_fullness,
+                        int number_of_frames_minus_one,
+                        uint8_t* hdr) {
+  DCHECK_EQ(codec, AV_CODEC_ID_AAC);
 
   memset(reinterpret_cast<void *>(hdr), 0,
          FFmpegAACBitstreamConverter::kAdtsHeaderSize);
@@ -230,7 +239,7 @@ bool FFmpegAACBitstreamConverter::ConvertPacket(AVPacket* packet) {
   av_packet_copy_props(&dest_packet, packet);
 
   // Release the old packet.
-  av_free_packet(packet);
+  av_packet_unref(packet);
   *packet = dest_packet;  // Finally, replace the values in the input packet.
 
   return true;

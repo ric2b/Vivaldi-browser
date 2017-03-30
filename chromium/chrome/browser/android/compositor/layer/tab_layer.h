@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_ANDROID_COMPOSITOR_LAYER_TAB_LAYER_H_
 #define CHROME_BROWSER_ANDROID_COMPOSITOR_LAYER_TAB_LAYER_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/android/compositor/layer/layer.h"
 
@@ -47,7 +47,6 @@ class TabLayer : public Layer {
 
   void SetProperties(int id,
                      bool can_use_live_layer,
-                     bool can_use_ntp_fallback,
                      int toolbar_resource_id,
                      int close_button_resource_id,
                      int shadow_resource_id,
@@ -84,7 +83,11 @@ class TabLayer : public Layer {
                      float view_width,
                      float view_height,
                      bool show_toolbar,
+                     int toolbar_background_color,
                      bool anonymize_toolbar,
+                     int toolbar_textbox_resource_id,
+                     int toolbar_textbox_background_color,
+                     float toolbar_textbox_alpha,
                      float toolbar_alpha,
                      float toolbar_y_offset,
                      float side_border_scale,

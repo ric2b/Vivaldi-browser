@@ -7,34 +7,53 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "jni/MockUrlRequestJobFactory_jni.h"
+#include "net/test/url_request/ssl_certificate_error_job.h"
 #include "net/test/url_request/url_request_failed_job.h"
 #include "net/test/url_request/url_request_mock_data_job.h"
+#include "url/gurl.h"
 
 namespace cronet {
 
-void AddUrlInterceptors(JNIEnv* env, jclass jcaller) {
+void AddUrlInterceptors(JNIEnv* env, const JavaParamRef<jclass>& jcaller) {
   net::URLRequestMockDataJob::AddUrlHandler();
   net::URLRequestFailedJob::AddUrlHandler();
+  net::SSLCertificateErrorJob::AddUrlHandler();
 }
 
-jstring GetMockUrlWithFailure(JNIEnv* jenv,
-                              jclass jcaller,
-                              jint jphase,
-                              jint jnet_error) {
+ScopedJavaLocalRef<jstring> GetMockUrlWithFailure(
+    JNIEnv* jenv,
+    const JavaParamRef<jclass>& jcaller,
+    jint jphase,
+    jint jnet_error) {
   GURL url(net::URLRequestFailedJob::GetMockHttpUrlWithFailurePhase(
       static_cast<net::URLRequestFailedJob::FailurePhase>(jphase),
       static_cast<int>(jnet_error)));
-  return base::android::ConvertUTF8ToJavaString(jenv, url.spec()).Release();
+  return base::android::ConvertUTF8ToJavaString(jenv, url.spec());
 }
 
-jstring GetMockUrlForData(JNIEnv* jenv,
-                          jclass jcaller,
-                          jstring jdata,
-                          jint jdata_repeat_count) {
+ScopedJavaLocalRef<jstring> GetMockUrlForData(
+    JNIEnv* jenv,
+    const JavaParamRef<jclass>& jcaller,
+    const JavaParamRef<jstring>& jdata,
+    jint jdata_repeat_count) {
   std::string data(base::android::ConvertJavaStringToUTF8(jenv, jdata));
   GURL url(net::URLRequestMockDataJob::GetMockHttpUrl(data,
                                                       jdata_repeat_count));
-  return base::android::ConvertUTF8ToJavaString(jenv, url.spec()).Release();
+  return base::android::ConvertUTF8ToJavaString(jenv, url.spec());
+}
+
+ScopedJavaLocalRef<jstring> GetMockUrlForSSLCertificateError(
+    JNIEnv* jenv,
+    const JavaParamRef<jclass>& jcaller) {
+  GURL url(net::SSLCertificateErrorJob::GetMockUrl());
+  return base::android::ConvertUTF8ToJavaString(jenv, url.spec());
+}
+
+ScopedJavaLocalRef<jstring> GetMockUrlForClientCertificateRequest(
+    JNIEnv* jenv,
+    const JavaParamRef<jclass>& jcaller) {
+  GURL url(net::URLRequestMockDataJob::GetMockUrlForClientCertificateRequest());
+  return base::android::ConvertUTF8ToJavaString(jenv, url.spec());
 }
 
 bool RegisterMockUrlRequestJobFactory(JNIEnv* env) {

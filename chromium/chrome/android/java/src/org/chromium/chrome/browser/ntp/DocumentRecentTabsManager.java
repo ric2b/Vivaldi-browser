@@ -15,13 +15,12 @@ import android.text.TextUtils;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.chrome.browser.ChromeApplication;
-import org.chromium.chrome.browser.ForeignSessionHelper.ForeignSession;
-import org.chromium.chrome.browser.ForeignSessionHelper.ForeignSessionTab;
-import org.chromium.chrome.browser.IntentHandler;
-import org.chromium.chrome.browser.RecentlyClosedBridge.RecentlyClosedTab;
-import org.chromium.chrome.browser.Tab;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.document.DocumentUtils;
+import org.chromium.chrome.browser.ntp.ForeignSessionHelper.ForeignSession;
+import org.chromium.chrome.browser.ntp.ForeignSessionHelper.ForeignSessionTab;
+import org.chromium.chrome.browser.ntp.RecentlyClosedBridge.RecentlyClosedTab;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
@@ -46,7 +45,6 @@ public class DocumentRecentTabsManager extends RecentTabsManager {
      */
     private static final int NEW_TAB_DELAY_MS = 150;
     private final Activity mActivity;
-    private final boolean mFinishActivityOnOpen;
     private final List<CurrentlyOpenTab> mCurrentlyOpenTabs;
     private final DocumentTabModel mTabModel;
     private final DocumentTabModel.InitializationObserver mUpdateOpenTabsObserver;
@@ -58,10 +56,9 @@ public class DocumentRecentTabsManager extends RecentTabsManager {
     /**
      * @param activity Activity that should be used to launch intents.
      */
-    public DocumentRecentTabsManager(Tab tab, Activity activity, boolean finishActivityOnOpen) {
+    public DocumentRecentTabsManager(Tab tab, Activity activity) {
         super(tab, tab.getProfile().getOriginalProfile(), activity);
         mActivity = activity;
-        mFinishActivityOnOpen = finishActivityOnOpen;
         mCurrentlyOpenTabs = new ArrayList<CurrentlyOpenTab>();
         mTabModel =
                 ChromeApplication.getDocumentTabModelSelector().getModel(tab.isIncognito());
@@ -119,10 +116,10 @@ public class DocumentRecentTabsManager extends RecentTabsManager {
         ThreadUtils.postOnUiThreadDelayed(new Runnable() {
             @Override
             public void run() {
+                if (isDestroyed()) return;
                 DocumentRecentTabsManager.super.openForeignSessionTab(
                         session, tab, WindowOpenDisposition.NEW_FOREGROUND_TAB);
                 if (mDialog != null) mDialog.dismiss();
-                if (mFinishActivityOnOpen) mActivity.finishAndRemoveTask();
             }
         }, NEW_TAB_DELAY_MS);
     }
@@ -135,10 +132,10 @@ public class DocumentRecentTabsManager extends RecentTabsManager {
         ThreadUtils.postOnUiThreadDelayed(new Runnable() {
             @Override
             public void run() {
+                if (isDestroyed()) return;
                 DocumentRecentTabsManager.super.openRecentlyClosedTab(
                         tab, WindowOpenDisposition.NEW_FOREGROUND_TAB);
                 if (mDialog != null) mDialog.dismiss();
-                if (mFinishActivityOnOpen) mActivity.finishAndRemoveTask();
             }
         }, NEW_TAB_DELAY_MS);
     }
@@ -209,11 +206,7 @@ public class DocumentRecentTabsManager extends RecentTabsManager {
             final Runnable startNewDocument = new Runnable() {
                 @Override
                 public void run() {
-                    Intent newIntent = new Intent();
-                    newIntent.setAction(Intent.ACTION_MAIN);
-                    newIntent.setPackage(mActivity.getPackageName());
-                    newIntent.putExtra(
-                            IntentHandler.TabOpenType.BRING_TAB_TO_FRONT.name(), tabId);
+                    Intent newIntent = Tab.createBringTabToFrontIntent(tabId);
                     newIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
                     mActivity.startActivity(newIntent);
                 }

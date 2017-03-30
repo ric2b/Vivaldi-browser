@@ -36,6 +36,12 @@
     "https://drive.google.com/",
     "https://www.google-analytics.com/",
     "launcherSearchProvider",
+    {
+      // TODO(ryoh): we do not need any permissions to use getMetadata,
+      // but mediaGalleriesAPI requires nonempty list,
+      // or treated as invalid permission requests.
+      "mediaGalleries": ["we don't need any permissions"]
+    },
     "mediaPlayerPrivate",
     "metricsPrivate",
     "notifications",
@@ -158,6 +164,16 @@
     "common/js/path_util.js",
     "common/js/util.js",
     "common/js/volume_manager_common.js",
+    "foreground/elements/files_icon_button.html",
+    "foreground/elements/files_icon_button.js",
+    "foreground/elements/files_ripple.html",
+    "foreground/elements/files_ripple.js",
+    "foreground/elements/files_toast.html",
+    "foreground/elements/files_toast.js",
+    "foreground/elements/files_toggle_ripple.html",
+    "foreground/elements/files_toggle_ripple.js",
+    "foreground/elements/files_tooltip.html",
+    "foreground/elements/files_tooltip.js",
     "foreground/js/metadata/byte_reader.js",
     "foreground/js/metadata/exif_parser.js",
     "foreground/js/metadata/exif_constants.js",
@@ -210,6 +226,6 @@
       ]
     },
     // chrome-extension://pmfjbimdmchhbnneeidfognadeopoehp is the image loader extension.
-    "content_security_policy": "default-src 'none'; script-src 'self' blob: filesystem: chrome://resources chrome-extension://pmfjbimdmchhbnneeidfognadeopoehp chrome-extension://fbjakikfhfdajcamjleinfciajelkpek; style-src 'self' blob: filesystem: 'unsafe-inline' chrome://resources chrome-extension://fbjakikfhfdajcamjleinfciajelkpek; frame-src 'self' blob: filesystem: about:; img-src 'self' blob: filesystem: chrome://resources chrome://theme data: https://docs.google.com https://*.googleusercontent.com chrome://extension-icon; media-src 'self' blob: filesystem: https://*.googleusercontent.com; connect-src https://drive.google.com https://www.google-analytics.com chrome://resources; object-src 'self' blob: filesystem:"
+    "content_security_policy": "default-src 'none'; script-src 'self' blob: filesystem: chrome://resources chrome-extension://pmfjbimdmchhbnneeidfognadeopoehp chrome-extension://fbjakikfhfdajcamjleinfciajelkpek; style-src 'self' blob: filesystem: 'unsafe-inline' chrome://resources chrome-extension://fbjakikfhfdajcamjleinfciajelkpek; frame-src 'self' blob: filesystem: about:; img-src 'self' blob: filesystem: chrome://resources chrome://theme data: https://docs.google.com https://*.googleusercontent.com chrome://extension-icon; media-src 'self' blob: filesystem: https://*.googleusercontent.com; connect-src https://drive.google.com https://www.google-analytics.com chrome://resources; object-src 'self' blob: filesystem:; font-src chrome://resources;"
   }
 }

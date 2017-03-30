@@ -5,6 +5,9 @@
 #ifndef COMPONENTS_SYNC_DRIVER_CHANGE_PROCESSOR_H_
 #define COMPONENTS_SYNC_DRIVER_CHANGE_PROCESSOR_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "components/sync_driver/data_type_error_handler.h"
 #include "sync/internal_api/public/base_transaction.h"
 #include "sync/internal_api/public/change_record.h"
@@ -36,7 +39,7 @@ class ChangeProcessor {
   // applied to the frontend model.
   virtual void ApplyChangesFromSyncModel(
       const syncer::BaseTransaction* trans,
-      int64 model_version,
+      int64_t model_version,
       const syncer::ImmutableChangeRecordList& changes) = 0;
 
   // The changes found in ApplyChangesFromSyncModel may be too slow to be
@@ -47,24 +50,6 @@ class ChangeProcessor {
   // safe to perform inter-thread or slow I/O operations. Note that not all
   // datatypes need this, so we provide an empty default version.
   virtual void CommitChangesFromSyncModel();
-
-  // This ensures that startobserving gets called after stopobserving even
-  // if there is an early return in the function.
-  template <class T>
-  class ScopedStopObserving {
-   public:
-    explicit ScopedStopObserving(T* processor)
-        : processor_(processor) {
-      processor_->StopObserving();
-    }
-    ~ScopedStopObserving() {
-      processor_->StartObserving();
-    }
-
-   private:
-    ScopedStopObserving() {}
-    T* processor_;
-  };
 
  protected:
   // These methods are invoked by Start() and Stop() to do

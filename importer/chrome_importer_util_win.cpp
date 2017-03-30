@@ -65,7 +65,7 @@ base::FilePath GetProfileDir(importer::ImporterType importerType) {
     profile_path = app_data_path.AppendASCII("Opera Software\\Opera Developer");
     break;
   case importer::TYPE_VIVALDI:
-    profile_path = app_data_path.AppendASCII("");
+    profile_path = app_data_path.AppendASCII("Vivaldi\\User Data");
     break;
   default:
     profile_path = app_data_path.AppendASCII("not-supported");

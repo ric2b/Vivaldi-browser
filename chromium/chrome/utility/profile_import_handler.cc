@@ -10,6 +10,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "chrome/common/importer/profile_import_process_messages.h"
 #include "chrome/utility/importer/external_process_importer_bridge.h"
 #include "chrome/utility/importer/importer.h"
@@ -45,11 +46,13 @@ void ProfileImportHandler::OnImportStart(
     const importer::SourceProfile& source_profile,
     const importer::ImportConfig &import_config,
     const base::DictionaryValue& localized_strings) {
+  content::UtilityThread::Get()->EnsureBlinkInitialized();
   bridge_ = new ExternalProcessImporterBridge(
       localized_strings,
       content::UtilityThread::Get(),
       base::ThreadTaskRunnerHandle::Get().get());
-  importer_ = importer::CreateImporterByType(source_profile.importer_type, import_config);
+  importer_ = importer::CreateImporterByType(source_profile.importer_type,
+                                             import_config);
   if (!importer_.get()) {
     Send(new ProfileImportProcessHostMsg_Import_Finished(
         false, "Importer could not be created."));
@@ -69,14 +72,15 @@ void ProfileImportHandler::OnImportStart(
   }
   import_thread_->task_runner()->PostTask(
       FROM_HERE, base::Bind(&Importer::StartImport, importer_.get(),
-                            source_profile, import_config.imported_items, bridge_));
+                            source_profile, import_config.imported_items,
+                            bridge_));
 }
 
 void ProfileImportHandler::OnImportCancel() {
   ImporterCleanup();
 }
 
-void ProfileImportHandler::OnImportItemFinished(uint16 item) {
+void ProfileImportHandler::OnImportItemFinished(uint16_t item) {
   items_to_import_ ^= item;  // Remove finished item from mask.
   // If we've finished with all items, notify the browser process.
   if (items_to_import_ == 0) {

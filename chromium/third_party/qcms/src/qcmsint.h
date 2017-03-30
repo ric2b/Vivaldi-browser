@@ -95,7 +95,12 @@ struct _qcms_transform {
 
 	void (*transform_fn)(struct _qcms_transform *transform, unsigned char *src, unsigned char *dest, size_t length, struct _qcms_format_type output_format);
 
-#define TRANSFORM_FLAG_MATRIX  0x0001
+	unsigned char floor_cache[256];
+	unsigned char ceil_cache[256];
+	float r_cache[256];
+
+#define TRANSFORM_FLAG_MATRIX		0x0001
+#define TRANSFORM_FLAG_CLUT_CACHE	0x0002
 
 	uint16_t transform_flags;
 };
@@ -242,11 +247,13 @@ struct tag_value {
 #define LAB_SIGNATURE  0x4C616220
 
 struct _qcms_profile {
+	uint32_t icc_version;
 	char description[64];
 	uint32_t class;
 	uint32_t color_space;
 	uint32_t pcs;
 	qcms_intent rendering_intent;
+	struct XYZNumber mediaWhitePoint;
 	struct XYZNumber redColorant;
 	struct XYZNumber blueColorant;
 	struct XYZNumber greenColorant;
@@ -306,6 +313,13 @@ void qcms_transform_data_rgba_out_lut_sse2(qcms_transform *transform,
                                           unsigned char *dest,
                                           size_t length,
                                           qcms_format_type output_format);
+void qcms_transform_data_tetra_clut_rgba_sse2(qcms_transform* transform,
+                                              unsigned char* src,
+                                              unsigned char* dest,
+                                              size_t length,
+                                              qcms_format_type output_format);
+
+void qcms_transform_build_clut_cache(qcms_transform* transform);
 
 extern qcms_bool qcms_supports_iccv4;
 

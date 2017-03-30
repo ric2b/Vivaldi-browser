@@ -5,10 +5,12 @@
 #ifndef BASE_PICKLE_H_
 #define BASE_PICKLE_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 
 #include "base/base_export.h"
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/logging.h"
@@ -34,10 +36,10 @@ class BASE_EXPORT PickleIterator {
   bool ReadBool(bool* result) WARN_UNUSED_RESULT;
   bool ReadInt(int* result) WARN_UNUSED_RESULT;
   bool ReadLong(long* result) WARN_UNUSED_RESULT;
-  bool ReadUInt16(uint16* result) WARN_UNUSED_RESULT;
-  bool ReadUInt32(uint32* result) WARN_UNUSED_RESULT;
-  bool ReadInt64(int64* result) WARN_UNUSED_RESULT;
-  bool ReadUInt64(uint64* result) WARN_UNUSED_RESULT;
+  bool ReadUInt16(uint16_t* result) WARN_UNUSED_RESULT;
+  bool ReadUInt32(uint32_t* result) WARN_UNUSED_RESULT;
+  bool ReadInt64(int64_t* result) WARN_UNUSED_RESULT;
+  bool ReadUInt64(uint64_t* result) WARN_UNUSED_RESULT;
   bool ReadSizeT(size_t* result) WARN_UNUSED_RESULT;
   bool ReadFloat(float* result) WARN_UNUSED_RESULT;
   bool ReadDouble(double* result) WARN_UNUSED_RESULT;
@@ -74,11 +76,6 @@ class BASE_EXPORT PickleIterator {
   }
 
  private:
-  // Aligns 'i' by rounding it up to the next multiple of 'alignment'.
-  static size_t AlignInt(size_t i, int alignment) {
-    return i + (alignment - (i % alignment)) % alignment;
-  }
-
   // Read Type from Pickle.
   template <typename Type>
   bool ReadBuiltinType(Type* result);
@@ -184,22 +181,14 @@ class BASE_EXPORT Pickle {
   bool WriteLongUsingDangerousNonPortableLessPersistableForm(long value) {
     return WritePOD(value);
   }
-  bool WriteUInt16(uint16 value) {
-    return WritePOD(value);
-  }
-  bool WriteUInt32(uint32 value) {
-    return WritePOD(value);
-  }
-  bool WriteInt64(int64 value) {
-    return WritePOD(value);
-  }
-  bool WriteUInt64(uint64 value) {
-    return WritePOD(value);
-  }
+  bool WriteUInt16(uint16_t value) { return WritePOD(value); }
+  bool WriteUInt32(uint32_t value) { return WritePOD(value); }
+  bool WriteInt64(int64_t value) { return WritePOD(value); }
+  bool WriteUInt64(uint64_t value) { return WritePOD(value); }
   bool WriteSizeT(size_t value) {
     // Always write size_t as a 64-bit value to ensure compatibility between
     // 32-bit and 64-bit processes.
-    return WritePOD(static_cast<uint64>(value));
+    return WritePOD(static_cast<uint64_t>(value));
   }
   bool WriteFloat(float value) {
     return WritePOD(value);
@@ -224,7 +213,7 @@ class BASE_EXPORT Pickle {
 
   // Payload follows after allocation of Header (header size is customizable).
   struct Header {
-    uint32 payload_size;  // Specifies the size of the payload.
+    uint32_t payload_size;  // Specifies the size of the payload.
   };
 
   // Returns the header, cast to a user-specified type T.  The type T must be a
@@ -270,16 +259,30 @@ class BASE_EXPORT Pickle {
   // of the header.
   void Resize(size_t new_capacity);
 
-  // Aligns 'i' by rounding it up to the next multiple of 'alignment'
-  static size_t AlignInt(size_t i, int alignment) {
-    return i + (alignment - (i % alignment)) % alignment;
-  }
+  // Claims |num_bytes| bytes of payload. This is similar to Reserve() in that
+  // it may grow the capacity, but it also advances the write offset of the
+  // pickle by |num_bytes|. Claimed memory, including padding, is zeroed.
+  //
+  // Returns the address of the first byte claimed.
+  void* ClaimBytes(size_t num_bytes);
 
   // Find the end of the pickled data that starts at range_start.  Returns NULL
   // if the entire Pickle is not found in the given data range.
   static const char* FindNext(size_t header_size,
                               const char* range_start,
                               const char* range_end);
+
+  // Parse pickle header and return total size of the pickle. Data range
+  // doesn't need to contain entire pickle.
+  // Returns true if pickle header was found and parsed. Callers must check
+  // returned |pickle_size| for sanity (against maximum message size, etc).
+  // NOTE: when function successfully parses a header, but encounters an
+  // overflow during pickle size calculation, it sets |pickle_size| to the
+  // maximum size_t value and returns true.
+  static bool PeekNext(size_t header_size,
+                       const char* range_start,
+                       const char* range_end,
+                       size_t* pickle_size);
 
   // The allocation granularity of the payload.
   static const int kPayloadUnit;
@@ -304,9 +307,14 @@ class BASE_EXPORT Pickle {
     WriteBytesStatic<sizeof(data)>(&data);
     return true;
   }
+
+  inline void* ClaimUninitializedBytesInternal(size_t num_bytes);
   inline void WriteBytesCommon(const void* data, size_t length);
 
+  FRIEND_TEST_ALL_PREFIXES(PickleTest, DeepCopyResize);
   FRIEND_TEST_ALL_PREFIXES(PickleTest, Resize);
+  FRIEND_TEST_ALL_PREFIXES(PickleTest, PeekNext);
+  FRIEND_TEST_ALL_PREFIXES(PickleTest, PeekNextOverflow);
   FRIEND_TEST_ALL_PREFIXES(PickleTest, FindNext);
   FRIEND_TEST_ALL_PREFIXES(PickleTest, FindNextWithIncompleteHeader);
   FRIEND_TEST_ALL_PREFIXES(PickleTest, FindNextOverflow);

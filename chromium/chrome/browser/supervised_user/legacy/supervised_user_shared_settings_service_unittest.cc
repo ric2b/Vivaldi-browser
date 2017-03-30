@@ -2,12 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/supervised_user/legacy/supervised_user_shared_settings_service.h"
+
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/json/json_writer.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
-#include "chrome/browser/supervised_user/legacy/supervised_user_shared_settings_service.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -84,17 +87,17 @@ class SupervisedUserSharedSettingsServiceTest : public ::testing::Test {
       : settings_service_(profile_.GetPrefs()) {}
   ~SupervisedUserSharedSettingsServiceTest() override {}
 
-  void StartSyncing(const syncer::SyncDataList& initial_sync_data) {
+  SyncMergeResult StartSyncing(const syncer::SyncDataList& initial_sync_data) {
     sync_processor_.reset(new syncer::FakeSyncChangeProcessor);
     scoped_ptr<syncer::SyncErrorFactory> error_handler(
         new MockSyncErrorFactory(SUPERVISED_USER_SHARED_SETTINGS));
     SyncMergeResult result = settings_service_.MergeDataAndStartSyncing(
-        SUPERVISED_USER_SHARED_SETTINGS,
-        initial_sync_data,
+        SUPERVISED_USER_SHARED_SETTINGS, initial_sync_data,
         scoped_ptr<SyncChangeProcessor>(
             new SyncChangeProcessorWrapperForTest(sync_processor_.get())),
-        error_handler.Pass());
+        std::move(error_handler));
     EXPECT_FALSE(result.error().IsSet());
+    return result;
   }
 
   const base::DictionaryValue* GetAllSettings() {
@@ -188,7 +191,12 @@ TEST_F(SupervisedUserSharedSettingsServiceTest, SetAndGet) {
 
 TEST_F(SupervisedUserSharedSettingsServiceTest, Merge) {
   // Set initial values, then stop syncing so we can restart.
-  StartSyncing(SyncDataList());
+  SyncMergeResult result = StartSyncing(SyncDataList());
+  EXPECT_EQ(0, result.num_items_added());
+  EXPECT_EQ(0, result.num_items_deleted());
+  EXPECT_EQ(0, result.num_items_modified());
+  EXPECT_EQ(0, result.num_items_before_association());
+  EXPECT_EQ(0, result.num_items_after_association());
 
   const char kIdA[] = "aaaaaa";
   const char kIdB[] = "bbbbbb";
@@ -212,7 +220,14 @@ TEST_F(SupervisedUserSharedSettingsServiceTest, Merge) {
       SupervisedUserSharedSettingsService::CreateSyncDataForSetting(
           kIdC, "baz", blurp, true));
 
-  StartSyncing(sync_data);
+  result = StartSyncing(sync_data);
+
+  EXPECT_EQ(1, result.num_items_added());
+  EXPECT_EQ(0, result.num_items_deleted());
+  EXPECT_EQ(1, result.num_items_modified());
+  EXPECT_EQ(3, result.num_items_before_association());
+  EXPECT_EQ(4, result.num_items_after_association());
+
   EXPECT_EQ(2u, sync_processor_->changes().size());
   VerifySyncChangesAndClear();
   EXPECT_EQ(2u, changed_settings_.size());

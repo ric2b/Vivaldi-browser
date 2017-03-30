@@ -3,7 +3,9 @@
      Use of this source code is governed by a BSD-style license that can be
      found in the LICENSE file. -->
 
-<org.chromium.chrome.browser.toolbar.CustomTabToolbar xmlns:android="http://schemas.android.com/apk/res/android">
+<org.chromium.chrome.browser.toolbar.CustomTabToolbar
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:chrome="http://schemas.android.com/apk/res-auto" >
     <ImageButton
         android:id="@+id/close_button"
         style="@style/ToolbarButton"
@@ -20,7 +22,6 @@
             android:layout_width="@dimen/location_bar_icon_width"
             android:layout_height="match_parent"
             android:layout_gravity="center_vertical"
-            android:alpha="0"
             android:contentDescription="@string/accessibility_toolbar_btn_site_info"
             android:scaleType="center"
             android:visibility="gone" />
@@ -79,9 +80,8 @@
         android:background="@null" />
     <org.chromium.chrome.browser.widget.ToolbarProgressBar
         android:id="@+id/progress"
-        style="@style/Widget.AppCompat.ProgressBar.Horizontal"
-        android:progressDrawable="@drawable/progress_bar"
         android:layout_width="match_parent"
         android:layout_height="2dp"
-        android:progress="0" />
+        chrome:progressBarColor="@color/progress_bar_foreground"
+        chrome:backgroundColor="@color/progress_bar_background" />
 </org.chromium.chrome.browser.toolbar.CustomTabToolbar>

@@ -32,10 +32,11 @@ if (enable_plugins && !is_linux) {
 
     deps = [
       "//content:export",
-      "//mojo/application/public/interfaces",
+      "//content/public/common:common_sources",
+      "//mojo/shell/public/interfaces",
       "//skia",
-      "//third_party/npapi",
       "//third_party/WebKit/public:blink",
+      "//third_party/npapi",
     ]
   }
 } else {

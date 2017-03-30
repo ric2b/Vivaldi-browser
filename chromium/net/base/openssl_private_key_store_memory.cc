@@ -9,6 +9,7 @@
 #include <openssl/evp.h>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/synchronization/lock.h"
 
@@ -24,7 +25,7 @@ class MemoryKeyPairStore {
   MemoryKeyPairStore() {}
 
   static MemoryKeyPairStore* GetInstance() {
-    return Singleton<MemoryKeyPairStore>::get();
+    return base::Singleton<MemoryKeyPairStore>::get();
   }
 
   ~MemoryKeyPairStore() {

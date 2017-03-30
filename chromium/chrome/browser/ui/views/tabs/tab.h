@@ -8,6 +8,8 @@
 #include <list>
 #include <string>
 
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/ui/views/tabs/tab_renderer_data.h"
@@ -50,6 +52,9 @@ class Tab : public gfx::AnimationDelegate,
   // The Tab's class name.
   static const char kViewClassName[];
 
+  // The color of an inactive tab.
+  static const SkColor kInactiveTabColor;
+
   explicit Tab(TabController* controller);
   ~Tab() override;
 
@@ -68,8 +73,10 @@ class Tab : public gfx::AnimationDelegate,
   void set_detached() { detached_ = true; }
   bool detached() const { return detached_; }
 
+  SkColor button_color() const { return button_color_; }
+
   // Sets the container all animations run from.
-  void set_animation_container(gfx::AnimationContainer* container);
+  void SetAnimationContainer(gfx::AnimationContainer* container);
 
   // Returns true if this tab is the active tab.
   bool IsActive() const;
@@ -81,12 +88,12 @@ class Tab : public gfx::AnimationDelegate,
   // Returns true if the tab is selected.
   bool IsSelected() const;
 
-  // Sets the data this tabs displays. Invokes DataChanged.
+  // Sets the data this tabs displays. Invokes DataChanged. Should only be
+  // called after Tab is added to widget hierarchy.
   void SetData(const TabRendererData& data);
   const TabRendererData& data() const { return data_; }
 
-  // Sets the network state. If the network state changes NetworkStateChanged is
-  // invoked.
+  // Sets the network state.
   void UpdateLoadingAnimation(TabRendererData::NetworkState state);
 
   // Starts/Stops a pulse animation.
@@ -119,6 +126,10 @@ class Tab : public gfx::AnimationDelegate,
   // user to click to select/activate the tab.
   int GetWidthOfLargestSelectableRegion() const;
 
+  // Called when stacked layout changes and the close button may need to
+  // be updated.
+  void HideCloseButtonForInactiveTabsChanged() { Layout(); }
+
   // Returns the inset within the first dragged tab to use when calculating the
   // "drag insertion point".  If we simply used the x-coordinate of the tab,
   // we'd be calculating based on a point well before where the user considers
@@ -131,11 +142,12 @@ class Tab : public gfx::AnimationDelegate,
   static int leading_width_for_drag() { return 16; }
 
   // Returns the minimum possible size of a single unselected Tab.
-  static gfx::Size GetMinimumUnselectedSize();
+  static gfx::Size GetMinimumInactiveSize();
+
   // Returns the minimum possible size of a selected Tab. Selected tabs must
   // always show a close button and have a larger minimum size than unselected
   // tabs.
-  static gfx::Size GetMinimumSelectedSize();
+  static gfx::Size GetMinimumActiveSize();
   // Returns the preferred size of a single Tab, assuming space is
   // available.
   static gfx::Size GetStandardSize();
@@ -149,17 +161,31 @@ class Tab : public gfx::AnimationDelegate,
   // Returns the height for immersive mode tabs.
   static int GetImmersiveHeight();
 
+  // Returns the Y inset within the tab bounds for drawing the background image.
+  // This is necessary for correct vertical alignment of the frame, tab, and
+  // toolbar images with custom themes.
+  static int GetYInsetForActiveTabBackground();
+
+  // Returns the inverse of the slope of the diagonal portion of the tab outer
+  // border.  (This is a positive value, so it's specifically for the slope of
+  // the leading edge.)
+  //
+  // This returns the inverse (dx/dy instead of dy/dx) because we use exact
+  // values for the vertical distances between points and then compute the
+  // horizontal deltas from those.
+  static float GetInverseDiagonalSlope();
+
  private:
   friend class TabTest;
-  FRIEND_TEST_ALL_PREFIXES(TabTest, CloseButtonLayout);
-
   friend class TabStripTest;
   FRIEND_TEST_ALL_PREFIXES(TabStripTest, TabHitTestMaskWhenStacked);
   FRIEND_TEST_ALL_PREFIXES(TabStripTest, TabCloseButtonVisibilityWhenStacked);
 
   // The animation object used to swap the favicon with the sad tab icon.
   class FaviconCrashAnimation;
+
   class TabCloseButton;
+  class ThrobberView;
 
   // Contains a cached image and the values used to generate it.
   struct ImageCacheEntry {
@@ -195,6 +221,8 @@ class Tab : public gfx::AnimationDelegate,
   bool GetHitTestMask(gfx::Path* mask) const override;
 
   // views::View:
+  void ViewHierarchyChanged(
+      const ViewHierarchyChangedDetails& details) override;
   void OnPaint(gfx::Canvas* canvas) override;
   void Layout() override;
   void OnThemeChanged() override;
@@ -232,16 +260,22 @@ class Tab : public gfx::AnimationDelegate,
   void PaintTabBackground(gfx::Canvas* canvas);
   void PaintInactiveTabBackgroundWithTitleChange(gfx::Canvas* canvas);
   void PaintInactiveTabBackground(gfx::Canvas* canvas);
-  void PaintInactiveTabBackgroundUsingResourceId(gfx::Canvas* canvas,
-                                                 int tab_id);
-  void PaintActiveTabBackground(gfx::Canvas* canvas);
+  void PaintTabBackgroundUsingFillId(gfx::Canvas* canvas,
+                                     bool is_active,
+                                     int fill_id,
+                                     bool has_custom_image,
+                                     int y_offset);
+  void PaintTabFill(gfx::Canvas* canvas,
+                    gfx::ImageSkia* fill_image,
+                    int x_offset,
+                    int y_offset,
+                    bool is_active);
 
   // Paints the favicon, mirrored for RTL if needed.
   void PaintIcon(gfx::Canvas* canvas);
 
   // Invoked if data_.network_state changes, or the network_state is not none.
-  void AdvanceLoadingAnimation(TabRendererData::NetworkState old_state,
-                               TabRendererData::NetworkState state);
+  void AdvanceLoadingAnimation();
 
   // Returns the number of favicon-size elements that can fit in the tab's
   // current size.
@@ -256,6 +290,10 @@ class Tab : public gfx::AnimationDelegate,
   // Returns whether the Tab should display a close button.
   bool ShouldShowCloseBox() const;
 
+  // Returns whether the tab should be rendered as a normal tab as opposed to a
+  // pinned tab.
+  bool ShouldRenderAsNormalTab() const;
+
   // Gets the throb value for the tab. When a tab is not selected the
   // active background is drawn at |GetThrobValue()|%. This is used for hover,
   // mini tab title change and pulsing.
@@ -265,35 +303,33 @@ class Tab : public gfx::AnimationDelegate,
   // animation.
   void SetFaviconHidingOffset(int offset);
 
-  void DisplayCrashedFavicon();
-  void ResetCrashedFavicon();
+  void set_should_display_crashed_favicon() {
+    should_display_crashed_favicon_ = true;
+  }
 
-  void StopCrashAnimation();
-  void StartCrashAnimation();
-
-  // Returns true if the crash animation is currently running.
-  bool IsPerformingCrashAnimation() const;
+  // Recalculates the correct |button_color_| and resets the title, media
+  // indicator, and close button colors if necessary.  This should be called any
+  // time the theme or active state may have changed.
+  void OnButtonColorMaybeChanged();
 
   // Schedules repaint task for icon.
   void ScheduleIconPaint();
 
+  // Computes a path corresponding to the tab's content region inside the outer
+  // stroke.
+  void GetFillPath(float scale, SkPath* path) const;
+
+  // Computes a path corresponding to the tab's outer border for a given |scale|
+  // and stores it in |path|.  If |extend_to_top| is true, the path is extended
+  // vertically to the top of the tab bounds.  The caller uses this for Fitts'
+  // Law purposes in maximized/fullscreen mode.
+  void GetBorderPath(float scale, bool extend_to_top, SkPath* path) const;
+
   // Returns the rectangle for the light bar in immersive mode.
   gfx::Rect GetImmersiveBarRect() const;
 
-  // Gets the tab id and frame id.
-  void GetTabIdAndFrameId(views::Widget* widget,
-                          int* tab_id,
-                          int* frame_id) const;
-
-  // Returns |media_indicator_button_|, creating it on-demand.
-  MediaIndicatorButton* GetMediaIndicatorButton();
-
   // Performs a one-time initialization of static resources such as tab images.
   static void InitTabResources();
-
-  // Returns the minimum possible size of a single unselected Tab, not
-  // including considering touch mode.
-  static gfx::Size GetBasicMinimumUnselectedSize();
 
   // Loads the images to be used for the tab background.
   static void LoadTabImages();
@@ -327,15 +363,6 @@ class Tab : public gfx::AnimationDelegate,
   // crashes.
   int favicon_hiding_offset_;
 
-  // The point in time when the tab icon was first painted in the waiting state.
-  base::TimeTicks waiting_start_time_;
-
-  // The point in time when the tab icon was first painted in the loading state.
-  base::TimeTicks loading_start_time_;
-
-  // Paint state for the throbber after the most recent waiting paint.
-  gfx::ThrobberWaitingState waiting_state_;
-
   // Step in the immersive loading progress indicator.
   int immersive_loading_step_;
 
@@ -351,8 +378,9 @@ class Tab : public gfx::AnimationDelegate,
 
   scoped_refptr<gfx::AnimationContainer> animation_container_;
 
+  ThrobberView* throbber_;
+  MediaIndicatorButton* media_indicator_button_;
   views::ImageButton* close_button_;
-  MediaIndicatorButton* media_indicator_button_;  // NULL until first use.
   views::Label* title_;
 
   bool tab_activated_with_last_tap_down_;
@@ -365,16 +393,16 @@ class Tab : public gfx::AnimationDelegate,
   // The offset used to paint the inactive background image.
   gfx::Point background_offset_;
 
-  struct TabImage {
+  struct TabImages {
     gfx::ImageSkia* image_l;
     gfx::ImageSkia* image_c;
     gfx::ImageSkia* image_r;
     int l_width;
     int r_width;
   };
-  static TabImage tab_active_;
-  static TabImage tab_inactive_;
-  static TabImage tab_alpha_;
+  static TabImages active_images_;
+  static TabImages inactive_images_;
+  static TabImages mask_images_;
 
   // Whether we're showing the icon. It is cached so that we can detect when it
   // changes and layout appropriately.
@@ -388,8 +416,8 @@ class Tab : public gfx::AnimationDelegate,
   // detect when it changes and layout appropriately.
   bool showing_close_button_;
 
-  // The current color of the close button.
-  SkColor close_button_color_;
+  // The current color of the media indicator and close button icons.
+  SkColor button_color_;
 
   // As the majority of the tabs are inactive, and painting tabs is slowish,
   // we cache a handful of the inactive tab backgrounds here.

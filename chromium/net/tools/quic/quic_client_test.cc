@@ -2,17 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "net/tools/quic/quic_client.h"
+
 #include <dirent.h>
 #include <stdio.h>
 
-#include "base/basictypes.h"
 #include "base/strings/string_util.h"
+#include "net/quic/test_tools/crypto_test_utils.h"
 #include "net/quic/test_tools/quic_test_utils.h"
 #include "net/tools/epoll_server/epoll_server.h"
-#include "net/tools/quic/quic_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using net::EpollServer;
+using net::test::CryptoTestUtils;
 
 namespace net {
 namespace tools {
@@ -35,17 +37,23 @@ int NumOpenFDs() {
 
 // Creates a new QuicClient and Initializes it. Caller is responsible for
 // deletion.
-QuicClient* CreateAndInitializeQuicClient(EpollServer* eps, uint16 port) {
+QuicClient* CreateAndInitializeQuicClient(EpollServer* eps, uint16_t port) {
   IPEndPoint server_address(IPEndPoint(net::test::Loopback4(), port));
-  QuicServerId server_id("hostname", server_address.port(), false,
+  QuicServerId server_id("hostname", server_address.port(),
                          PRIVACY_MODE_DISABLED);
   QuicVersionVector versions = QuicSupportedVersions();
-  QuicClient* client = new QuicClient(server_address, server_id, versions, eps);
+  QuicClient* client =
+      new QuicClient(server_address, server_id, versions, eps,
+                     CryptoTestUtils::ProofVerifierForTesting());
   EXPECT_TRUE(client->Initialize());
   return client;
 }
 
 TEST(QuicClientTest, DoNotLeakFDs) {
+  // Create a ProofVerifier before counting the number of open FDs to work
+  // around some ASAN weirdness.
+  delete CryptoTestUtils::ProofVerifierForTesting();
+
   // Make sure that the QuicClient doesn't leak FDs. Doing so could cause port
   // exhaustion in long running processes which repeatedly create clients.
 
@@ -55,7 +63,7 @@ TEST(QuicClientTest, DoNotLeakFDs) {
 
   // Create a number of clients, initialize them, and verify this has resulted
   // in additional FDs being opened.
-  const int kNumClients = 5;
+  const int kNumClients = 50;
   for (int i = 0; i < kNumClients; ++i) {
     scoped_ptr<QuicClient> client(
         CreateAndInitializeQuicClient(&eps, net::test::kTestPort + i));

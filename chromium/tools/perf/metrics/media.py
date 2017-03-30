@@ -1,6 +1,7 @@
 # Copyright 2013 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
+
 import logging
 import os
 
@@ -36,7 +37,7 @@ class MediaMetric(Metric):
     self._results = tab.EvaluateJavaScript('window.__getAllMetrics()')
 
   # Optional |exclude_metrics| args are not in base class Metric.
-  # pylint: disable=W0221
+  # pylint: disable=arguments-differ
   def AddResults(self, tab, results, exclude_metrics=None):
     """Reports all recorded metrics as Telemetry perf results."""
     exclude_metrics = exclude_metrics or []

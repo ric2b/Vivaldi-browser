@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "extensions/browser/api/document_scan/document_scan_interface.h"
 
 namespace {
@@ -12,7 +13,7 @@ const char kScanFunctionNotImplementedError[] = "Scan function not implemented";
 
 namespace extensions {
 
-namespace core_api {
+namespace api {
 
 class DocumentScanInterfaceImpl : public DocumentScanInterface {
  public:
@@ -38,6 +39,6 @@ DocumentScanInterface* DocumentScanInterface::CreateInstance() {
   return new DocumentScanInterfaceImpl();
 }
 
-}  // namespace core_api
+}  // namespace api
 
 }  // namespace extensions

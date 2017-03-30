@@ -20,13 +20,16 @@
           'common/process_control.mojom',
           'common/render_frame_setup.mojom',
           'common/service_port_service.mojom',
+          'common/service_worker/embedded_worker_setup.mojom',
           'common/vr_service.mojom',
+          'common/wake_lock_service.mojom',
 
           # NOTE: Sources duplicated in
           # //content/public/common/BUILD.gn:mojo_bindings.
           'public/common/background_sync.mojom',
           'public/common/mojo_geoposition.mojom',
           'public/common/permission_status.mojom',
+          'public/common/service_worker_event_status.mojom',
         ],
       },
       'includes': [ '../third_party/mojo/mojom_bindings_generator_explicit.gypi' ],

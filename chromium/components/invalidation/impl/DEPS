@@ -1,6 +1,7 @@
 include_rules = [
   "+components/invalidation/public",
 
+  "+components/data_use_measurement/core",
   "+components/gcm_driver",
   "+components/keyed_service",
   "+components/pref_registry",
@@ -11,6 +12,7 @@ include_rules = [
   "+jni",
   "+jingle/notifier",
   "+net/base/backoff_entry.h",
+  "+net/base/ip_endpoint.h",
   "+net/base/network_change_notifier.h",
   "+net/http/http_status_code.h",
   "+net/url_request",

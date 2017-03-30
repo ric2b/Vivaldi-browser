@@ -61,16 +61,21 @@
     var testConfig;
     var emeApp;
     var player;
+    var heartbeatCount = 0;
 
     function initApp() {
       testConfig = new TestConfig();
       testConfig.loadQueryParams();
       // Update document with test configuration values.
       emeApp = new EMEApp(testConfig);
+      setInterval(function () {
+                      Utils.timeLog('heartbeat #' + ++heartbeatCount);
+                  }, 1000);
     }
 
     function onTimeUpdate(e) {
       var video = e.target;
+      Utils.timeLog('timeupdate @ ' + video.currentTime);
       if (video.currentTime < 1)
         return;
       // For loadSession() tests, addKey() will not be called after
@@ -85,6 +90,7 @@
             !video.receivedRenewalMessage)
           Utils.failTest('license-renewal message not received.');
       }
+      Utils.timeLog('waiting for video to end.');
       video.removeEventListener('ended', Utils.failTest);
       Utils.installTitleEventHandler(video, 'ended');
       video.removeEventListener('timeupdate', onTimeUpdate);
@@ -104,7 +110,24 @@
       play(video, false);
     }
 
+    function onLogEvent(e) {
+      Utils.timeLog('Event: ' + e.type);
+    }
+
+    function onVisibilityChange(e) {
+      Utils.timeLog('Event: ' + e.type + ', hidden: ' + document.hidden);
+    }
+
     function play(video, playTwice) {
+      Utils.timeLog('Starting play, hidden: ' + document.hidden);
+      video.addEventListener('canplay', onLogEvent);
+      video.addEventListener('load', onLogEvent);
+      video.addEventListener('playing', onLogEvent);
+      video.addEventListener('play', onLogEvent);
+      video.addEventListener('canplaythrough', onLogEvent);
+      video.addEventListener('stalled', onLogEvent);
+      video.addEventListener('waiting', onLogEvent);
+      document.addEventListener('visibilitychange', onVisibilityChange);
       Utils.resetTitleChange();
       if (playTwice) {
         // Wait for the first play to complete.

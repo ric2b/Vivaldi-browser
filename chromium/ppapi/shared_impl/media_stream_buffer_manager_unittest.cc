@@ -2,10 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ppapi/shared_impl/media_stream_buffer_manager.h"
+
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
 #include "ppapi/c/pp_errors.h"
-#include "ppapi/shared_impl/media_stream_buffer_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using base::SharedMemory;
@@ -20,7 +25,7 @@ scoped_ptr<SharedMemory> CreateSharedMemory(int32_t buffer_size,
   options.size = buffer_size * number_of_buffers;
   options.executable = false;
   EXPECT_TRUE(shared_memory->Create(options));
-  return shared_memory.Pass();
+  return shared_memory;
 }
 
 }  // namespace
@@ -46,16 +51,15 @@ TEST(MediaStreamBufferManager, General) {
     scoped_ptr<SharedMemory> shared_memory =
         CreateSharedMemory(kBufferSize, kNumberOfBuffers);
     // SetBuffers with enqueue_all_buffers = true;
-    EXPECT_TRUE(manager.SetBuffers(kNumberOfBuffers,
-                                   kBufferSize,
-                                   shared_memory.Pass(),
-                                   true));
+    EXPECT_TRUE(manager.SetBuffers(kNumberOfBuffers, kBufferSize,
+                                   std::move(shared_memory), true));
 
     int8_t* memory = reinterpret_cast<int8_t*>(manager.GetBufferPointer(0));
     EXPECT_NE(static_cast<int8_t*>(NULL), memory);
 
     EXPECT_EQ(kNumberOfBuffers, manager.number_of_buffers());
     EXPECT_EQ(kBufferSize, manager.buffer_size());
+    EXPECT_TRUE(manager.HasAvailableBuffer());
 
     // Test DequeueBuffer() and GetBufferPointer()
     for (int32_t i = 0; i < kNumberOfBuffers; ++i) {
@@ -78,6 +82,7 @@ TEST(MediaStreamBufferManager, General) {
     EXPECT_EQ(2, manager.DequeueBuffer());
     EXPECT_EQ(PP_ERROR_FAILED, manager.DequeueBuffer());
     EXPECT_EQ(PP_ERROR_FAILED, manager.DequeueBuffer());
+    EXPECT_FALSE(manager.HasAvailableBuffer());
 
     // Returns NULL for invalid index to GetBufferPointer()
     EXPECT_EQ(NULL, manager.GetBufferPointer(-1));
@@ -106,10 +111,8 @@ TEST(MediaStreamBufferManager, General) {
     scoped_ptr<SharedMemory> shared_memory =
         CreateSharedMemory(kBufferSize, kNumberOfBuffers);
     // SetBuffers with enqueue_all_buffers = false;
-    EXPECT_TRUE(manager.SetBuffers(kNumberOfBuffers,
-                                   kBufferSize,
-                                   shared_memory.Pass(),
-                                   false));
+    EXPECT_TRUE(manager.SetBuffers(kNumberOfBuffers, kBufferSize,
+                                   std::move(shared_memory), false));
 
     int8_t* memory = reinterpret_cast<int8_t*>(manager.GetBufferPointer(0));
     EXPECT_NE(static_cast<int8_t*>(NULL), memory);
@@ -142,10 +145,8 @@ TEST(MediaStreamBufferManager, ResetBuffers) {
     EXPECT_TRUE(shared_memory->Create(options));
 
     // SetBuffers with enqueue_all_buffers = true;
-    EXPECT_TRUE(manager.SetBuffers(kNumberOfBuffers1,
-                                   kBufferSize1,
-                                   shared_memory.Pass(),
-                                   true));
+    EXPECT_TRUE(manager.SetBuffers(kNumberOfBuffers1, kBufferSize1,
+                                   std::move(shared_memory), true));
 
     int8_t* memory = reinterpret_cast<int8_t*>(manager.GetBufferPointer(0));
     EXPECT_NE(static_cast<int8_t*>(NULL), memory);
@@ -165,10 +166,8 @@ TEST(MediaStreamBufferManager, ResetBuffers) {
     scoped_ptr<SharedMemory> shared_memory =
         CreateSharedMemory(kBufferSize2, kNumberOfBuffers2);
     // SetBuffers with enqueue_all_buffers = true;
-    EXPECT_TRUE(manager.SetBuffers(kNumberOfBuffers2,
-                                   kBufferSize2,
-                                   shared_memory.Pass(),
-                                   true));
+    EXPECT_TRUE(manager.SetBuffers(kNumberOfBuffers2, kBufferSize2,
+                                   std::move(shared_memory), true));
 
     int8_t* memory = reinterpret_cast<int8_t*>(manager.GetBufferPointer(0));
     EXPECT_NE(static_cast<int8_t*>(NULL), memory);

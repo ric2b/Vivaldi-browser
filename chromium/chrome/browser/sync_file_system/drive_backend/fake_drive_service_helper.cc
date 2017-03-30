@@ -4,6 +4,8 @@
 
 #include "chrome/browser/sync_file_system/drive_backend/fake_drive_service_helper.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/message_loop/message_loop.h"
@@ -35,7 +37,7 @@ void UploadResultCallback(DriveApiErrorCode* error_out,
   ASSERT_TRUE(error_out);
   ASSERT_TRUE(entry_out);
   *error_out = error;
-  *entry_out = entry.Pass();
+  *entry_out = std::move(entry);
 }
 
 void DownloadResultCallback(DriveApiErrorCode* error_out,
@@ -85,8 +87,9 @@ DriveApiErrorCode FakeDriveServiceHelper::AddFolder(
     std::string* folder_id) {
   DriveApiErrorCode error = google_apis::DRIVE_OTHER_ERROR;
   scoped_ptr<FileResource> folder;
-  fake_drive_service_->AddNewDirectory(parent_folder_id, title,
-                                       drive::AddNewDirectoryOptions(),
+  drive::AddNewDirectoryOptions options;
+  options.visibility = google_apis::drive::FILE_VISIBILITY_PRIVATE;
+  fake_drive_service_->AddNewDirectory(parent_folder_id, title, options,
                                        CreateResultReceiver(&error, &folder));
   base::RunLoop().RunUntilIdle();
 
@@ -238,7 +241,7 @@ DriveApiErrorCode FakeDriveServiceHelper::ListFilesInFolder(
   if (error != google_apis::HTTP_SUCCESS)
     return error;
 
-  return CompleteListing(list.Pass(), entries);
+  return CompleteListing(std::move(list), entries);
 }
 
 DriveApiErrorCode FakeDriveServiceHelper::SearchByTitle(
@@ -254,7 +257,7 @@ DriveApiErrorCode FakeDriveServiceHelper::SearchByTitle(
   if (error != google_apis::HTTP_SUCCESS)
     return error;
 
-  return CompleteListing(list.Pass(), entries);
+  return CompleteListing(std::move(list), entries);
 }
 
 DriveApiErrorCode FakeDriveServiceHelper::GetFileResource(
@@ -266,6 +269,14 @@ DriveApiErrorCode FakeDriveServiceHelper::GetFileResource(
       CreateResultReceiver(&error, entry));
   base::RunLoop().RunUntilIdle();
   return error;
+}
+
+DriveApiErrorCode FakeDriveServiceHelper::GetFileVisibility(
+    const std::string& file_id,
+    google_apis::drive::FileVisibility* visibility) {
+  return fake_drive_service_->GetFileVisibility(
+      file_id,
+      visibility);
 }
 
 DriveApiErrorCode FakeDriveServiceHelper::ReadFile(

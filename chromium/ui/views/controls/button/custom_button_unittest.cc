@@ -4,10 +4,15 @@
 
 #include "ui/views/controls/button/custom_button.h"
 
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/layout.h"
 #include "ui/events/event_utils.h"
+#include "ui/events/test/event_generator.h"
 #include "ui/gfx/screen.h"
+#include "ui/views/animation/ink_drop_delegate.h"
+#include "ui/views/animation/ink_drop_host.h"
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/label_button.h"
@@ -36,17 +41,92 @@ class TestCustomButton : public CustomButton, public ButtonListener {
   ~TestCustomButton() override {}
 
   void ButtonPressed(Button* sender, const ui::Event& event) override {
-    notified_ = true;
+    pressed_ = true;
   }
 
-  bool notified() { return notified_; }
+  void OnClickCanceled(const ui::Event& event) override {
+    canceled_ = true;
+  }
 
-  void Reset() { notified_ = false; }
+  bool pressed() { return pressed_; }
+  bool canceled() { return canceled_; }
+
+  void Reset() {
+    pressed_ = false;
+    canceled_ = false;
+  }
 
  private:
-  bool notified_ = false;
+  bool pressed_ = false;
+  bool canceled_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(TestCustomButton);
+};
+
+// An InkDropDelegate that keeps track of ink drop visibility.
+class TestInkDropDelegate : public InkDropDelegate {
+ public:
+  TestInkDropDelegate(InkDropHost* ink_drop_host,
+                      bool* ink_shown,
+                      bool* ink_hidden)
+      : ink_drop_host_(ink_drop_host),
+        ink_shown_(ink_shown),
+        ink_hidden_(ink_hidden) {
+    ink_drop_host_->AddInkDropLayer(nullptr);
+  }
+  ~TestInkDropDelegate() override {}
+
+  // InkDropDelegate:
+  void SetInkDropSize(int large_size,
+                      int large_corner_radius,
+                      int small_size,
+                      int small_corner_radius) override {}
+  void OnLayout() override {}
+  void OnAction(InkDropState state) override {
+    switch (state) {
+      case InkDropState::ACTION_PENDING:
+      case InkDropState::SLOW_ACTION_PENDING:
+      case InkDropState::ACTIVATED:
+        *ink_shown_ = true;
+        break;
+      case InkDropState::HIDDEN:
+        *ink_hidden_ = true;
+        break;
+      case InkDropState::QUICK_ACTION:
+      case InkDropState::SLOW_ACTION:
+      case InkDropState::DEACTIVATED:
+        break;
+    }
+  }
+
+ private:
+  InkDropHost* ink_drop_host_;
+  bool* ink_shown_;
+  bool* ink_hidden_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestInkDropDelegate);
+};
+
+// A test Button class that owns a TestInkDropDelegate.
+class TestButtonWithInkDrop : public TestCustomButton {
+ public:
+  TestButtonWithInkDrop(bool* ink_shown, bool* ink_hidden)
+      : TestCustomButton(),
+        ink_drop_delegate_(
+            new TestInkDropDelegate(this, ink_shown, ink_hidden)) {
+    set_ink_drop_delegate(ink_drop_delegate_.get());
+  }
+  ~TestButtonWithInkDrop() override {}
+
+  // views::InkDropHost:
+  void AddInkDropLayer(ui::Layer* ink_drop_layer) override {}
+  void RemoveInkDropLayer(ui::Layer* ink_drop_layer) override {}
+  gfx::Point CalculateInkDropCenter() const override { return gfx::Point(); }
+
+ private:
+  scoped_ptr<views::InkDropDelegate> ink_drop_delegate_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestButtonWithInkDrop);
 };
 
 class CustomButtonTest : public ViewsTestBase {
@@ -66,13 +146,6 @@ class CustomButtonTest : public ViewsTestBase {
     widget_->Init(params);
     widget_->Show();
 
-    // Position the widget in a way so that it is under the cursor.
-    gfx::Point cursor = gfx::Screen::GetScreenFor(
-        widget_->GetNativeView())->GetCursorScreenPoint();
-    gfx::Rect widget_bounds = widget_->GetWindowBoundsInScreen();
-    widget_bounds.set_origin(cursor);
-    widget_->SetBounds(widget_bounds);
-
     button_ = new TestCustomButton();
     widget_->SetContentsView(button_);
   }
@@ -82,12 +155,25 @@ class CustomButtonTest : public ViewsTestBase {
     ViewsTestBase::TearDown();
   }
 
+  void CreateButtonWithInkDrop() {
+    delete button_;
+    ink_shown_ = false;
+    ink_hidden_ = false;
+    button_ = new TestButtonWithInkDrop(&ink_shown_, &ink_hidden_);
+    widget_->SetContentsView(button_);
+  }
+
+ protected:
   Widget* widget() { return widget_.get(); }
   TestCustomButton* button() { return button_; }
+  bool ink_shown() const { return ink_shown_; }
+  bool ink_hidden() const { return ink_hidden_; }
 
  private:
   scoped_ptr<Widget> widget_;
   TestCustomButton* button_;
+  bool ink_shown_ = false;
+  bool ink_hidden_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(CustomButtonTest);
 };
@@ -118,6 +204,32 @@ TEST_F(CustomButtonTest, HoverStateOnVisibilityChange) {
 
   button()->SetVisible(true);
   EXPECT_EQ(CustomButton::STATE_HOVERED, button()->state());
+
+#if defined(USE_AURA)
+  {
+    // If another widget has capture, the button should ignore mouse position
+    // and not enter hovered state.
+    Widget second_widget;
+    Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
+    params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+    params.bounds = gfx::Rect(700, 700, 10, 10);
+    second_widget.Init(params);
+    second_widget.Show();
+    second_widget.GetNativeWindow()->SetCapture();
+
+    button()->SetEnabled(false);
+    EXPECT_EQ(CustomButton::STATE_DISABLED, button()->state());
+
+    button()->SetEnabled(true);
+    EXPECT_EQ(CustomButton::STATE_NORMAL, button()->state());
+
+    button()->SetVisible(false);
+    EXPECT_EQ(CustomButton::STATE_NORMAL, button()->state());
+
+    button()->SetVisible(true);
+    EXPECT_EQ(CustomButton::STATE_NORMAL, button()->state());
+  }
+#endif
 
 // Disabling cursor events occurs for touch events and the Ash magnifier. There
 // is no touch on desktop Mac. Tracked in http://crbug.com/445520.
@@ -152,13 +264,13 @@ TEST_F(CustomButtonTest, NotifyAction) {
       ui::ET_MOUSE_PRESSED, center, center, ui::EventTimeForNow(),
       ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON));
   EXPECT_EQ(CustomButton::STATE_PRESSED, button()->state());
-  EXPECT_FALSE(button()->notified());
+  EXPECT_FALSE(button()->pressed());
 
   button()->OnMouseReleased(ui::MouseEvent(
       ui::ET_MOUSE_RELEASED, center, center, ui::EventTimeForNow(),
       ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON));
   EXPECT_EQ(CustomButton::STATE_HOVERED, button()->state());
-  EXPECT_TRUE(button()->notified());
+  EXPECT_TRUE(button()->pressed());
 
   // Set the notify action to its listener on mouse press.
   button()->Reset();
@@ -167,7 +279,7 @@ TEST_F(CustomButtonTest, NotifyAction) {
       ui::ET_MOUSE_PRESSED, center, center, ui::EventTimeForNow(),
       ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON));
   EXPECT_EQ(CustomButton::STATE_PRESSED, button()->state());
-  EXPECT_TRUE(button()->notified());
+  EXPECT_TRUE(button()->pressed());
 
   // The button should no longer notify on mouse release.
   button()->Reset();
@@ -175,7 +287,40 @@ TEST_F(CustomButtonTest, NotifyAction) {
       ui::ET_MOUSE_RELEASED, center, center, ui::EventTimeForNow(),
       ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON));
   EXPECT_EQ(CustomButton::STATE_HOVERED, button()->state());
-  EXPECT_FALSE(button()->notified());
+  EXPECT_FALSE(button()->pressed());
+}
+
+// Tests that OnClickCanceled gets called when NotifyClick is not expected
+// anymore.
+TEST_F(CustomButtonTest, NotifyActionNoClick) {
+  gfx::Point center(10, 10);
+
+  // By default the button should notify its listener on mouse release.
+  button()->OnMousePressed(ui::MouseEvent(
+      ui::ET_MOUSE_PRESSED, center, center, ui::EventTimeForNow(),
+      ui::EF_RIGHT_MOUSE_BUTTON, ui::EF_RIGHT_MOUSE_BUTTON));
+  EXPECT_FALSE(button()->canceled());
+
+  button()->OnMouseReleased(ui::MouseEvent(
+      ui::ET_MOUSE_RELEASED, center, center, ui::EventTimeForNow(),
+      ui::EF_RIGHT_MOUSE_BUTTON, ui::EF_RIGHT_MOUSE_BUTTON));
+  EXPECT_TRUE(button()->canceled());
+
+  // Set the notify action to its listener on mouse press.
+  button()->Reset();
+  button()->set_notify_action(CustomButton::NOTIFY_ON_PRESS);
+  button()->OnMousePressed(ui::MouseEvent(
+      ui::ET_MOUSE_PRESSED, center, center, ui::EventTimeForNow(),
+      ui::EF_RIGHT_MOUSE_BUTTON, ui::EF_RIGHT_MOUSE_BUTTON));
+  // OnClickCanceled is only sent on mouse release.
+  EXPECT_FALSE(button()->canceled());
+
+  // The button should no longer notify on mouse release.
+  button()->Reset();
+  button()->OnMouseReleased(ui::MouseEvent(
+      ui::ET_MOUSE_RELEASED, center, center, ui::EventTimeForNow(),
+      ui::EF_RIGHT_MOUSE_BUTTON, ui::EF_RIGHT_MOUSE_BUTTON));
+  EXPECT_FALSE(button()->canceled());
 }
 
 // No touch on desktop Mac. Tracked in http://crbug.com/445520.
@@ -238,6 +383,42 @@ TEST_F(CustomButtonTest, AsCustomButton) {
 
   Textfield textfield;
   EXPECT_FALSE(CustomButton::AsCustomButton(&textfield));
+}
+
+// Tests that pressing a button shows the ink drop and releasing the button
+// does not hide the ink drop.
+// Note: Ink drop is not hidden upon release because CustomButton descendants
+// may enter a different ink drop state.
+TEST_F(CustomButtonTest, ButtonClickTogglesInkDrop) {
+  gfx::Point old_cursor = gfx::Screen::GetScreenFor(
+      widget()->GetNativeView())->GetCursorScreenPoint();
+  CreateButtonWithInkDrop();
+
+  ui::test::EventGenerator generator(GetContext(), widget()->GetNativeWindow());
+  generator.set_current_location(gfx::Point(50, 50));
+  generator.PressLeftButton();
+  EXPECT_TRUE(ink_shown());
+  EXPECT_FALSE(ink_hidden());
+
+  generator.ReleaseLeftButton();
+  EXPECT_FALSE(ink_hidden());
+}
+
+// Tests that pressing a button shows and releasing capture hides ink drop.
+TEST_F(CustomButtonTest, CaptureLossHidesInkDrop) {
+  gfx::Point old_cursor = gfx::Screen::GetScreenFor(
+      widget()->GetNativeView())->GetCursorScreenPoint();
+  CreateButtonWithInkDrop();
+
+  ui::test::EventGenerator generator(GetContext(), widget()->GetNativeWindow());
+  generator.set_current_location(gfx::Point(50, 50));
+  generator.PressLeftButton();
+  EXPECT_TRUE(ink_shown());
+  EXPECT_FALSE(ink_hidden());
+
+  widget()->SetCapture(button());
+  widget()->ReleaseCapture();
+  EXPECT_TRUE(ink_hidden());
 }
 
 }  // namespace views

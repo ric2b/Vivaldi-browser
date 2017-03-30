@@ -4,12 +4,14 @@
 
 #include "remoting/host/setup/daemon_controller_delegate_win.h"
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "base/win/scoped_bstr.h"
@@ -72,8 +74,8 @@ bool ReadConfig(const base::FilePath& filename,
   }
 
   // Parse the JSON configuration, expecting it to contain a dictionary.
-  scoped_ptr<base::Value> value(base::JSONReader::DeprecatedRead(
-      file_content, base::JSON_ALLOW_TRAILING_COMMAS));
+  scoped_ptr<base::Value> value =
+      base::JSONReader::Read(file_content, base::JSON_ALLOW_TRAILING_COMMAS);
 
   base::DictionaryValue* dictionary;
   if (!value || !value->GetAsDictionary(&dictionary)) {
@@ -81,7 +83,7 @@ bool ReadConfig(const base::FilePath& filename,
     return false;
   }
 
-  value.release();
+  ignore_result(value.release());
   config_out->reset(dictionary);
   return true;
 }
@@ -178,8 +180,7 @@ bool WriteConfig(const std::string& content) {
 
   // Extract the unprivileged fields from the configuration.
   base::DictionaryValue unprivileged_config_dict;
-  for (int i = 0; i < arraysize(kUnprivilegedConfigKeys); ++i) {
-    const char* key = kUnprivilegedConfigKeys[i];
+  for (const char* key : kUnprivilegedConfigKeys) {
     base::string16 value;
     if (config_dict->GetString(key, &value)) {
       unprivileged_config_dict.SetString(key, value);
@@ -255,7 +256,7 @@ ScopedScHandle OpenService(DWORD access) {
                 << "' service";
   }
 
-  return service.Pass();
+  return service;
 }
 
 void InvokeCompletionCallback(
@@ -263,17 +264,6 @@ void InvokeCompletionCallback(
   DaemonController::AsyncResult async_result =
       success ? DaemonController::RESULT_OK : DaemonController::RESULT_FAILED;
   done.Run(async_result);
-}
-
-bool SetConfig(const std::string& config) {
-  // Determine the config directory path and create it if necessary.
-  base::FilePath config_dir = remoting::GetConfigDir();
-  if (!base::CreateDirectory(config_dir)) {
-    PLOG(ERROR) << "Failed to create the config directory.";
-    return false;
-  }
-
-  return WriteConfig(config);
 }
 
 bool StartDaemon() {
@@ -392,7 +382,7 @@ void DaemonControllerDelegateWin::UpdateConfig(
     scoped_ptr<base::DictionaryValue> config,
     const DaemonController::CompletionCallback& done) {
   // Check for bad keys.
-  for (int i = 0; i < arraysize(kReadonlyKeys); ++i) {
+  for (size_t i = 0; i < arraysize(kReadonlyKeys); ++i) {
     if (config->HasKey(kReadonlyKeys[i])) {
       LOG(ERROR) << "Cannot update config: '" << kReadonlyKeys[i]
                  << "' is read only.";
@@ -478,9 +468,8 @@ void DaemonControllerDelegateWin::SetConfigAndStart(
 }
 
 scoped_refptr<DaemonController> DaemonController::Create() {
-  scoped_ptr<DaemonController::Delegate> delegate(
-      new DaemonControllerDelegateWin());
-  return new DaemonController(delegate.Pass());
+  return new DaemonController(
+      make_scoped_ptr(new DaemonControllerDelegateWin()));
 }
 
 }  // namespace remoting

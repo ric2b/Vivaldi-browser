@@ -12,10 +12,10 @@
 #include "base/callback.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string16.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/win/metro.h"
 #include "chrome/common/chrome_utility_messages.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/utility_process_host.h"
@@ -26,24 +26,6 @@
 #include "ui/shell_dialogs/select_file_dialog_win.h"
 
 namespace {
-
-bool CallMetroOPENFILENAMEMethod(const char* method_name, OPENFILENAME* ofn) {
-  typedef BOOL (*MetroOPENFILENAMEMethod)(OPENFILENAME*);
-  MetroOPENFILENAMEMethod metro_method = NULL;
-  HMODULE metro_module = base::win::GetMetroModule();
-
-  if (metro_module != NULL) {
-    metro_method = reinterpret_cast<MetroOPENFILENAMEMethod>(
-        ::GetProcAddress(metro_module, method_name));
-  }
-
-  if (metro_method != NULL)
-    return metro_method(ofn) == TRUE;
-
-  NOTREACHED();
-
-  return false;
-}
 
 bool ShouldIsolateShellOperations() {
   return base::FieldTrialList::FindFullName("IsolateShellOperations") ==
@@ -171,14 +153,11 @@ bool GetOpenFileNameInUtilityProcess(
   return true;
 }
 
-// Implements GetOpenFileName for CreateWinSelectFileDialog by delegating either
-// to Metro or a utility process.
+// Implements GetOpenFileName for CreateWinSelectFileDialog by delegating to a
+// utility process.
 bool GetOpenFileNameImpl(
     const scoped_refptr<base::SequencedTaskRunner>& blocking_task_runner,
     OPENFILENAME* ofn) {
-  if (base::win::IsMetroProcess())
-    return CallMetroOPENFILENAMEMethod("MetroGetOpenFileName", ofn);
-
   if (ShouldIsolateShellOperations())
     return GetOpenFileNameInUtilityProcess(blocking_task_runner, ofn);
 
@@ -310,14 +289,11 @@ bool GetSaveFileNameInUtilityProcess(
   return true;
 }
 
-// Implements GetSaveFileName for CreateWinSelectFileDialog by delegating either
-// to Metro or a utility process.
+// Implements GetSaveFileName for CreateWinSelectFileDialog by delegating to a
+// utility process.
 bool GetSaveFileNameImpl(
     const scoped_refptr<base::SequencedTaskRunner>& blocking_task_runner,
     OPENFILENAME* ofn) {
-  if (base::win::IsMetroProcess())
-    return CallMetroOPENFILENAMEMethod("MetroGetSaveFileName", ofn);
-
   if (ShouldIsolateShellOperations())
     return GetSaveFileNameInUtilityProcess(blocking_task_runner, ofn);
 

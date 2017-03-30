@@ -4,6 +4,8 @@
 
 #include "ui/events/test/test_event_target.h"
 
+#include <utility>
+
 #include "ui/events/event.h"
 #include "ui/events/event_target_iterator.h"
 #include "ui/events/event_targeter.h"
@@ -15,7 +17,9 @@ TestEventTarget::TestEventTarget()
     : parent_(NULL),
       mark_events_as_handled_(false),
       recorder_(NULL),
-      target_name_("unknown") {}
+      target_name_("unknown") {
+  SetTargetHandler(this);
+}
 TestEventTarget::~TestEventTarget() {}
 
 void TestEventTarget::AddChild(scoped_ptr<TestEventTarget> child) {
@@ -23,7 +27,7 @@ void TestEventTarget::AddChild(scoped_ptr<TestEventTarget> child) {
   if (child->parent()) {
     AddChild(child->parent()->RemoveChild(child.release()));
   } else {
-    children_.push_back(child.Pass());
+    children_.push_back(std::move(child));
   }
   child_r->set_parent(this);
 }
@@ -41,7 +45,7 @@ scoped_ptr<TestEventTarget> TestEventTarget::RemoveChild(TestEventTarget *c) {
 }
 
 void TestEventTarget::SetEventTargeter(scoped_ptr<EventTargeter> targeter) {
-  targeter_ = targeter.Pass();
+  targeter_ = std::move(targeter);
 }
 
 bool TestEventTarget::DidReceiveEvent(ui::EventType type) const {
@@ -76,7 +80,7 @@ void TestEventTarget::OnEvent(Event* event) {
   if (recorder_)
     recorder_->push_back(target_name_);
   received_.insert(event->type());
-  EventTarget::OnEvent(event);
+  EventHandler::OnEvent(event);
   if (!event->handled() && mark_events_as_handled_)
     event->SetHandled();
 }

@@ -4,6 +4,8 @@
 
 #include "content/renderer/android/email_detector.h"
 
+#include <stddef.h>
+
 #include "base/strings/utf_string_conversions.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -48,6 +50,8 @@ TEST_F(EmailDetectorTest, FindEmail) {
   FindAndCheckEmail("@", "");
   FindAndCheckEmail("Just bob @google.com", "");
   FindAndCheckEmail("Why not call larry@google and ask him.", "");
+  FindAndCheckEmail("Lets test invalid invalid@email..com address", "");
+  FindAndCheckEmail("Invalid dots are bad invalid@.email.com address", "");
 }
 
 }  // namespace content

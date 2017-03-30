@@ -5,10 +5,12 @@
 #ifndef MEDIA_AUDIO_VIRTUAL_AUDIO_INPUT_STREAM_H_
 #define MEDIA_AUDIO_VIRTUAL_AUDIO_INPUT_STREAM_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <set>
 
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_checker.h"
@@ -86,7 +88,7 @@ class MEDIA_EXPORT VirtualAudioInputStream : public AudioInputStream {
   AudioInputCallback* callback_;
 
   // Non-const for testing.
-  scoped_ptr<uint8[]> buffer_;
+  scoped_ptr<uint8_t[]> buffer_;
   AudioParameters params_;
 
   // Guards concurrent access to the converter network: converters_, mixer_, and

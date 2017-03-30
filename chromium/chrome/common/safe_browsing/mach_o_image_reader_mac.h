@@ -6,6 +6,7 @@
 #define CHROME_COMMON_SAFE_BROWSING_MACH_O_IMAGE_READER_MAC_H_
 
 #include <mach-o/loader.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include <vector>
@@ -40,14 +41,19 @@ class MachOImageReader {
 
     template <typename T>
     const T* as_command() const {
-      const T* command = reinterpret_cast<const T*>(&data[0]);
-      if (data.size() < sizeof(T) || command->cmdsize < sizeof(T))
+      if (data.size() < sizeof(T))
         return nullptr;
-      return command;
+      return reinterpret_cast<const T*>(&data[0]);
     }
 
     std::vector<uint8_t> data;
   };
+
+  // Returns true if |magic| is any Mach-O magic number. This can be used on the
+  // first four bytes of a file (either in little- or big-endian) to quickly
+  // determine whether or not the file is potentially a Mach-O file. An instance
+  // of this class must be used for a true validity check.
+  static bool IsMachOMagicValue(uint32_t magic);
 
   MachOImageReader();
   ~MachOImageReader();

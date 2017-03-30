@@ -4,6 +4,8 @@
 
 #import "ios/chrome/browser/updatable_config/updatable_config_base.h"
 
+#include <stdint.h>
+
 #include "base/logging.h"
 #import "base/mac/bind_objc_block.h"
 #include "base/mac/scoped_nsobject.h"
@@ -63,7 +65,7 @@ class ConfigFetcher : public net::URLFetcherDelegate {
   }
 
   void OnURLFetchComplete(const net::URLFetcher* fetcher) override {
-    DCHECK_EQ(fetcher_, fetcher);
+    DCHECK_EQ(fetcher_.get(), fetcher);
     NSData* responseData = nil;
     if (fetcher_->GetResponseCode() == net::HTTP_OK) {
       std::string response;
@@ -132,8 +134,8 @@ class ConfigFetcher : public net::URLFetcherDelegate {
     // two phases and is probably not MT safe. However,
     // initWithAppId:version:plist: is called from a singleton's
     // initialization loop and thus will not be called more than once.
-    // TODO(pkl): -loadDefaults accesses the file system to load in the
-    // plist. This should be done via PostBlockingPoolTask.
+    // TODO(crbug/545309): -loadDefaults accesses the file system to load in
+    // the plist. This should be done via PostBlockingPoolTask.
     [_updatableResource loadDefaults];
 
     NSString* notificationName = ios::GetChromeBrowserProvider()
@@ -200,6 +202,8 @@ class ConfigFetcher : public net::URLFetcherDelegate {
 
 #if !defined(NDEBUG)
 - (void)scheduleConsistencyCheck {
+  if (!g_consistency_check_enabled)
+    return;
   // Sets a delayed call that will cause a DCHECK if -startUpdate:
   // was not called.
   [self performSelector:@selector(startUpdateNotCalled:)
@@ -208,6 +212,8 @@ class ConfigFetcher : public net::URLFetcherDelegate {
 }
 
 - (void)cancelConsistencyCheck {
+  if (!g_consistency_check_enabled)
+    return;
   // Cancels the delayed error check since -startUpdate: has been called.
   // Added for completeness since singletons should never be deallocated.
   [NSObject
@@ -218,8 +224,7 @@ class ConfigFetcher : public net::URLFetcherDelegate {
 
 - (void)startUpdateNotCalled:(id)config {
   DCHECK(self == config);
-  if (!g_consistency_check_enabled)
-    return;
+  DCHECK(g_consistency_check_enabled);
   // Make sure that |startUpdate:| was called for this config.
   NOTREACHED() << "startUpdate: was not called for "
                << [[self description] UTF8String];

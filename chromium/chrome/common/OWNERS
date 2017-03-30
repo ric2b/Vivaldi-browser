@@ -25,8 +25,10 @@ per-file *_messages*.h=tsepez@chromium.org
 per-file *_messages*.h=wfh@chromium.org
 
 # Spellcheck files. Not using spellcheck* since it covers IPC messages too.
-per-file spellcheck_common.*=groby@chromium.org
-per-file spellcheck_common.*=rouslan@chromium.org
+per-file spellcheck_bdict_language.h=groby@chromium.org
+per-file spellcheck_bdict_language.h=rouslan@chromium.org
+per-file spellcheck_common*=groby@chromium.org
+per-file spellcheck_common*=rouslan@chromium.org
 per-file spellcheck_marker.h=groby@chromium.org
 per-file spellcheck_marker.h=rouslan@chromium.org
 per-file spellcheck_result.h=groby@chromium.org
@@ -45,10 +47,7 @@ per-file content_settings*=markusheintz@chromium.org
 
 # Pepper files.
 per-file pepper_*=bbudge@chromium.org
-per-file pepper_*=dmichael@chromium.org
 per-file pepper_*=raymes@chromium.org
-per-file pepper_*=teravest@chromium.org
-per-file pepper_*=yzshen@chromium.org
 
 # Other stuff.
 per-file autocomplete_match_type.*=mpearson@chromium.org

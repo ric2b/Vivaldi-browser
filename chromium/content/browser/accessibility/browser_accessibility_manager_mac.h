@@ -7,6 +7,7 @@
 
 #import <Cocoa/Cocoa.h>
 
+#include "base/macros.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 
 namespace content {
@@ -35,6 +36,9 @@ class CONTENT_EXPORT BrowserAccessibilityManagerMac
       ui::AXTree* tree,
       bool root_changed,
       const std::vector<ui::AXTreeDelegate::Change>& changes) override;
+
+  // Returns an autoreleased object.
+  NSDictionary* GetUserInfoForSelectedTextChangedNotification();
 
   // This gives BrowserAccessibilityManager::Create access to the class
   // constructor.

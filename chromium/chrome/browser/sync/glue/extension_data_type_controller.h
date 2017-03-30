@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "components/sync_driver/generic_change_processor.h"
 #include "components/sync_driver/ui_data_type_controller.h"
 
@@ -21,7 +22,8 @@ class ExtensionDataTypeController : public sync_driver::UIDataTypeController {
  public:
   ExtensionDataTypeController(
       syncer::ModelType type,  // Either EXTENSIONS or APPS.
-      sync_driver::SyncApiComponentFactory* sync_factory,
+      const base::Closure& error_callback,
+      sync_driver::SyncClient* sync_client,
       Profile* profile);
 
  private:

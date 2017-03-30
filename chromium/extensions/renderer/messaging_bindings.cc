@@ -4,14 +4,16 @@
 
 #include "extensions/renderer/messaging_bindings.h"
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/values.h"
@@ -26,6 +28,7 @@
 #include "extensions/renderer/dispatcher.h"
 #include "extensions/renderer/event_bindings.h"
 #include "extensions/renderer/extension_frame_helper.h"
+#include "extensions/renderer/gc_callback.h"
 #include "extensions/renderer/object_backed_native_handler.h"
 #include "extensions/renderer/script_context.h"
 #include "extensions/renderer/script_context_set.h"
@@ -58,72 +61,6 @@ using v8_helpers::ToV8StringUnsafe;
 using v8_helpers::IsEmptyOrUndefied;
 
 namespace {
-
-// Binds |callback| to run when |object| is garbage collected. So as to not
-// re-entrantly call into v8, we execute this function asynchronously, at
-// which point |context| may have been invalidated. If so, |callback| is not
-// run, and |fallback| will be called instead.
-//
-// Deletes itself when the object args[0] is garbage collected or when the
-// context is invalidated.
-class GCCallback : public base::SupportsWeakPtr<GCCallback> {
- public:
-  GCCallback(ScriptContext* context,
-             const v8::Local<v8::Object>& object,
-             const v8::Local<v8::Function>& callback,
-             const base::Closure& fallback)
-      : context_(context),
-        object_(context->isolate(), object),
-        callback_(context->isolate(), callback),
-        fallback_(fallback) {
-    object_.SetWeak(this, FirstWeakCallback, v8::WeakCallbackType::kParameter);
-    context->AddInvalidationObserver(
-        base::Bind(&GCCallback::OnContextInvalidated, AsWeakPtr()));
-  }
-
- private:
-  static void FirstWeakCallback(const v8::WeakCallbackInfo<GCCallback>& data) {
-    // v8 says we need to explicitly reset weak handles from their callbacks.
-    // It's not implicit as one might expect.
-    data.GetParameter()->object_.Reset();
-    data.SetSecondPassCallback(SecondWeakCallback);
-  }
-
-  static void SecondWeakCallback(const v8::WeakCallbackInfo<GCCallback>& data) {
-    base::MessageLoop::current()->PostTask(
-        FROM_HERE,
-        base::Bind(&GCCallback::RunCallback, data.GetParameter()->AsWeakPtr()));
-  }
-
-  void RunCallback() {
-    CHECK(context_);
-    v8::Isolate* isolate = context_->isolate();
-    v8::HandleScope handle_scope(isolate);
-    context_->CallFunction(v8::Local<v8::Function>::New(isolate, callback_));
-    delete this;
-  }
-
-  void OnContextInvalidated() {
-    fallback_.Run();
-    context_ = NULL;
-    delete this;
-  }
-
-  // ScriptContext which owns this GCCallback.
-  ScriptContext* context_;
-
-  // Holds a global handle to the object this GCCallback is bound to.
-  v8::Global<v8::Object> object_;
-
-  // Function to run when |object_| bound to this GCCallback is GC'd.
-  v8::Global<v8::Function> callback_;
-
-  // Function to run if context is invalidated before we have a chance
-  // to execute |callback_|.
-  base::Closure fallback_;
-
-  DISALLOW_COPY_AND_ASSIGN(GCCallback);
-};
 
 // Tracks every reference between ScriptContexts and Ports, by ID.
 class PortTracker {
@@ -193,8 +130,6 @@ class PortTracker {
 base::LazyInstance<PortTracker> g_port_tracker = LAZY_INSTANCE_INITIALIZER;
 
 const char kPortClosedError[] = "Attempting to use a disconnected port object";
-const char kReceivingEndDoesntExistError[] =
-    "Could not establish connection. Receiving end does not exist.";
 
 class ExtensionImpl : public ObjectBackedNativeHandler {
  public:
@@ -238,11 +173,11 @@ class ExtensionImpl : public ObjectBackedNativeHandler {
 
   // Sends a message along the given channel.
   void PostMessage(const v8::FunctionCallbackInfo<v8::Value>& args) {
-    content::RenderFrame* renderframe = context()->GetRenderFrame();
-    if (!renderframe)
+    content::RenderFrame* render_frame = context()->GetRenderFrame();
+    if (!render_frame)
       return;
 
-    // Arguments are (int32 port_id, string message).
+    // Arguments are (int32_t port_id, string message).
     CHECK(args.Length() == 2 && args[0]->IsInt32() && args[1]->IsString());
 
     int port_id = args[0].As<v8::Int32>()->Value();
@@ -253,15 +188,15 @@ class ExtensionImpl : public ObjectBackedNativeHandler {
       return;
     }
 
-    renderframe->Send(new ExtensionHostMsg_PostMessage(
-        renderframe->GetRoutingID(), port_id,
+    render_frame->Send(new ExtensionHostMsg_PostMessage(
+        render_frame->GetRoutingID(), port_id,
         Message(*v8::String::Utf8Value(args[1]),
                 blink::WebUserGestureIndicator::isProcessingUserGesture())));
   }
 
   // Forcefully disconnects a port.
   void CloseChannel(const v8::FunctionCallbackInfo<v8::Value>& args) {
-    // Arguments are (int32 port_id, boolean notify_browser).
+    // Arguments are (int32_t port_id, boolean notify_browser).
     CHECK_EQ(2, args.Length());
     CHECK(args[0]->IsInt32());
     CHECK(args[1]->IsBoolean());
@@ -272,9 +207,10 @@ class ExtensionImpl : public ObjectBackedNativeHandler {
 
     // Send via the RenderThread because the RenderFrame might be closing.
     bool notify_browser = args[1].As<v8::Boolean>()->Value();
-    if (notify_browser) {
-      content::RenderThread::Get()->Send(
-          new ExtensionHostMsg_CloseChannel(port_id, std::string()));
+    content::RenderFrame* render_frame = context()->GetRenderFrame();
+    if (notify_browser && render_frame) {
+      render_frame->Send(new ExtensionHostMsg_CloseMessagePort(
+          render_frame->GetRoutingID(), port_id, true));
     }
 
     ClearPortDataAndNotifyDispatcher(port_id);
@@ -283,7 +219,7 @@ class ExtensionImpl : public ObjectBackedNativeHandler {
   // A new port has been created for a context.  This occurs both when script
   // opens a connection, and when a connection is opened to this script.
   void PortAddRef(const v8::FunctionCallbackInfo<v8::Value>& args) {
-    // Arguments are (int32 port_id).
+    // Arguments are (int32_t port_id).
     CHECK_EQ(1, args.Length());
     CHECK(args[0]->IsInt32());
 
@@ -294,8 +230,10 @@ class ExtensionImpl : public ObjectBackedNativeHandler {
   // The frame a port lived in has been destroyed.  When there are no more
   // frames with a reference to a given port, we will disconnect it and notify
   // the other end of the channel.
+  // TODO(robwu): Port lifetime management has moved to the browser, this is no
+  // longer needed. See .destroy_() inmessaging.js for more details.
   void PortRelease(const v8::FunctionCallbackInfo<v8::Value>& args) {
-    // Arguments are (int32 port_id).
+    // Arguments are (int32_t port_id).
     CHECK(args.Length() == 1 && args[0]->IsInt32());
     ReleasePort(args[0].As<v8::Int32>()->Value());
   }
@@ -303,12 +241,11 @@ class ExtensionImpl : public ObjectBackedNativeHandler {
   // Releases the reference to |port_id| for this context, and clears all port
   // data if there are no more references.
   void ReleasePort(int port_id) {
+    content::RenderFrame* render_frame = context()->GetRenderFrame();
     if (g_port_tracker.Get().RemoveReference(context(), port_id) &&
-        !g_port_tracker.Get().HasPort(port_id)) {
-      // Send via the RenderThread because the RenderFrame might be closing.
-      content::RenderThread::Get()->Send(
-          new ExtensionHostMsg_CloseChannel(port_id, std::string()));
-      ClearPortDataAndNotifyDispatcher(port_id);
+        !g_port_tracker.Get().HasPort(port_id) && render_frame) {
+      render_frame->Send(new ExtensionHostMsg_CloseMessagePort(
+          render_frame->GetRoutingID(), port_id, false));
     }
   }
 
@@ -349,23 +286,6 @@ void DispatchOnConnectToScriptContext(
     const std::string& tls_channel_id,
     bool* port_created,
     ScriptContext* script_context) {
-  // Only dispatch the events if this is the requested target frame (0 = main
-  // frame; positive = child frame).
-  content::RenderFrame* renderframe = script_context->GetRenderFrame();
-  if (info.target_frame_id == 0 && renderframe->GetWebFrame()->parent() != NULL)
-    return;
-  if (info.target_frame_id > 0 &&
-      renderframe->GetRoutingID() != info.target_frame_id)
-    return;
-
-  // Bandaid fix for crbug.com/520303.
-  // TODO(rdevlin.cronin): Fix this properly by routing messages to the correct
-  // RenderFrame from the browser (same with |target_frame_id| in fact).
-  if (info.target_tab_id != -1 &&
-      info.target_tab_id != ExtensionFrameHelper::Get(renderframe)->tab_id()) {
-    return;
-  }
-
   v8::Isolate* isolate = script_context->isolate();
   v8::HandleScope handle_scope(isolate);
 
@@ -461,8 +381,11 @@ void DeliverMessageToScriptContext(const Message& message,
   v8::Local<v8::Value> has_port =
       script_context->module_system()->CallModuleMethod("messaging", "hasPort",
                                                         1, &port_id_handle);
-
-  CHECK(!has_port.IsEmpty() && has_port->IsBoolean());
+  // Could be empty/undefined if an exception was thrown.
+  // TODO(kalman): Should this be built into CallModuleMethod?
+  if (IsEmptyOrUndefied(has_port))
+    return;
+  CHECK(has_port->IsBoolean());
   if (!has_port.As<v8::Boolean>()->Value())
     return;
 
@@ -532,11 +455,15 @@ void MessagingBindings::DispatchOnConnect(
       base::Bind(&DispatchOnConnectToScriptContext, target_port_id,
                  channel_name, &source, info, tls_channel_id, &port_created));
 
-  // If we didn't create a port, notify the other end of the channel (treat it
-  // as a disconnect).
-  if (!port_created) {
-    content::RenderThread::Get()->Send(new ExtensionHostMsg_CloseChannel(
-        target_port_id, kReceivingEndDoesntExistError));
+  int routing_id = restrict_to_render_frame
+                       ? restrict_to_render_frame->GetRoutingID()
+                       : MSG_ROUTING_NONE;
+  if (port_created) {
+    content::RenderThread::Get()->Send(
+        new ExtensionHostMsg_OpenMessagePort(routing_id, target_port_id));
+  } else {
+    content::RenderThread::Get()->Send(new ExtensionHostMsg_CloseMessagePort(
+        routing_id, target_port_id, false));
   }
 }
 

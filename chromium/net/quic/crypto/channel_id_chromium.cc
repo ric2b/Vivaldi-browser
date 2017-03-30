@@ -5,7 +5,9 @@
 #include "net/quic/crypto/channel_id_chromium.h"
 
 #include <string>
+#include <utility>
 
+#include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "crypto/ec_private_key.h"
@@ -18,8 +20,7 @@ namespace net {
 
 ChannelIDKeyChromium::ChannelIDKeyChromium(
     scoped_ptr<crypto::ECPrivateKey> ec_private_key)
-    : ec_private_key_(ec_private_key.Pass()) {
-}
+    : ec_private_key_(std::move(ec_private_key)) {}
 
 ChannelIDKeyChromium::~ChannelIDKeyChromium() {}
 
@@ -32,15 +33,15 @@ bool ChannelIDKeyChromium::Sign(base::StringPiece signed_data,
   }
   const size_t len1 = strlen(ChannelIDVerifier::kContextStr) + 1;
   const size_t len2 = strlen(ChannelIDVerifier::kClientToServerStr) + 1;
-  std::vector<uint8> data(len1 + len2 + signed_data.size());
+  std::vector<uint8_t> data(len1 + len2 + signed_data.size());
   memcpy(&data[0], ChannelIDVerifier::kContextStr, len1);
   memcpy(&data[len1], ChannelIDVerifier::kClientToServerStr, len2);
   memcpy(&data[len1 + len2], signed_data.data(), signed_data.size());
-  std::vector<uint8> der_signature;
+  std::vector<uint8_t> der_signature;
   if (!sig_creator->Sign(&data[0], data.size(), &der_signature)) {
     return false;
   }
-  std::vector<uint8> raw_signature;
+  std::vector<uint8_t> raw_signature;
   if (!sig_creator->DecodeSignature(der_signature, &raw_signature)) {
     return false;
   }
@@ -103,13 +104,11 @@ class ChannelIDSourceChromium::Job {
   DISALLOW_COPY_AND_ASSIGN(Job);
 };
 
-ChannelIDSourceChromium::Job::Job(
-    ChannelIDSourceChromium* channel_id_source,
-    ChannelIDService* channel_id_service)
+ChannelIDSourceChromium::Job::Job(ChannelIDSourceChromium* channel_id_source,
+                                  ChannelIDService* channel_id_service)
     : channel_id_source_(channel_id_source),
       channel_id_service_(channel_id_service),
-      next_state_(STATE_NONE) {
-}
+      next_state_(STATE_NONE) {}
 
 QuicAsyncStatus ChannelIDSourceChromium::Job::GetChannelIDKey(
     const std::string& hostname,
@@ -197,15 +196,14 @@ int ChannelIDSourceChromium::Job::DoGetChannelIDKeyComplete(int result) {
     return ERR_UNEXPECTED;
   }
   channel_id_key_.reset(
-      new ChannelIDKeyChromium(channel_id_crypto_key_.Pass()));
+      new ChannelIDKeyChromium(std::move(channel_id_crypto_key_)));
 
   return result;
 }
 
 ChannelIDSourceChromium::ChannelIDSourceChromium(
     ChannelIDService* channel_id_service)
-    : channel_id_service_(channel_id_service) {
-}
+    : channel_id_service_(channel_id_service) {}
 
 ChannelIDSourceChromium::~ChannelIDSourceChromium() {
   STLDeleteElements(&active_jobs_);
@@ -216,8 +214,8 @@ QuicAsyncStatus ChannelIDSourceChromium::GetChannelIDKey(
     scoped_ptr<ChannelIDKey>* channel_id_key,
     ChannelIDSourceCallback* callback) {
   scoped_ptr<Job> job(new Job(this, channel_id_service_));
-  QuicAsyncStatus status = job->GetChannelIDKey(hostname, channel_id_key,
-                                                callback);
+  QuicAsyncStatus status =
+      job->GetChannelIDKey(hostname, channel_id_key, callback);
   if (status == QUIC_PENDING) {
     active_jobs_.insert(job.release());
   }

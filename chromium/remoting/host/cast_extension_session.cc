@@ -4,17 +4,21 @@
 
 #include "remoting/host/cast_extension_session.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/synchronization/waitable_event.h"
-#include "net/url_request/url_request_context_getter.h"
-#include "remoting/host/cast_video_capturer_adapter.h"
-#include "remoting/host/chromium_port_allocator_factory.h"
+#include "base/thread_task_runner_handle.h"
 #include "remoting/host/client_session.h"
 #include "remoting/proto/control.pb.h"
 #include "remoting/protocol/client_stub.h"
+#include "remoting/protocol/port_allocator_factory.h"
+#include "remoting/protocol/transport_context.h"
+#include "remoting/protocol/webrtc_video_capturer_adapter.h"
 #include "third_party/libjingle/source/talk/app/webrtc/mediastreaminterface.h"
 #include "third_party/libjingle/source/talk/app/webrtc/test/fakeconstraints.h"
 #include "third_party/libjingle/source/talk/app/webrtc/videosourceinterface.h"
@@ -48,10 +52,6 @@ const char kWebRtcSDPMLineIndex[] = "sdpMLineIndex";
 // Media labels used over the PeerConnection.
 const char kVideoLabel[] = "cast_video_label";
 const char kStreamLabel[] = "stream_label";
-
-// Default STUN server used to construct
-// webrtc::PeerConnectionInterface::RTCConfiguration for the PeerConnection.
-const char kDefaultStunURI[] = "stun:stun.l.google.com:19302";
 
 const char kWorkerThreadName[] = "CastExtensionSessionWorkerThread";
 
@@ -170,22 +170,17 @@ CastExtensionSession::~CastExtensionSession() {
 
 // static
 scoped_ptr<CastExtensionSession> CastExtensionSession::Create(
-    scoped_refptr<base::SingleThreadTaskRunner> caller_task_runner,
-    scoped_refptr<net::URLRequestContextGetter> url_request_context_getter,
-    const protocol::NetworkSettings& network_settings,
+    scoped_refptr<protocol::TransportContext> transport_context,
     ClientSessionControl* client_session_control,
     protocol::ClientStub* client_stub) {
   scoped_ptr<CastExtensionSession> cast_extension_session(
-      new CastExtensionSession(caller_task_runner,
-                               url_request_context_getter,
-                               network_settings,
-                               client_session_control,
-                               client_stub));
+      new CastExtensionSession(transport_context,
+                               client_session_control, client_stub));
   if (!cast_extension_session->WrapTasksAndSave() ||
       !cast_extension_session->InitializePeerConnection()) {
     return nullptr;
   }
-  return cast_extension_session.Pass();
+  return cast_extension_session;
 }
 
 void CastExtensionSession::OnCreateSessionDescription(
@@ -239,7 +234,7 @@ void CastExtensionSession::OnCreateVideoCapturer(
 
   if (received_offer_) {
     has_grabbed_capturer_ = true;
-    if (SetupVideoStream(capturer->Pass())) {
+    if (SetupVideoStream(std::move(*capturer))) {
       peer_connection_->CreateAnswer(create_session_desc_observer_, nullptr);
     } else {
       has_grabbed_capturer_ = false;
@@ -301,14 +296,11 @@ bool CastExtensionSession::OnExtensionMessage(
 // Private methods ------------------------------------------------------------
 
 CastExtensionSession::CastExtensionSession(
-    scoped_refptr<base::SingleThreadTaskRunner> caller_task_runner,
-    scoped_refptr<net::URLRequestContextGetter> url_request_context_getter,
-    const protocol::NetworkSettings& network_settings,
+    scoped_refptr<protocol::TransportContext> transport_context,
     ClientSessionControl* client_session_control,
     protocol::ClientStub* client_stub)
-    : caller_task_runner_(caller_task_runner),
-      url_request_context_getter_(url_request_context_getter),
-      network_settings_(network_settings),
+    : caller_task_runner_(base::ThreadTaskRunnerHandle::Get()),
+      transport_context_(transport_context),
       client_session_control_(client_session_control),
       client_stub_(client_stub),
       stats_observer_(CastStatsObserver::Create()),
@@ -318,7 +310,6 @@ CastExtensionSession::CastExtensionSession(
       worker_thread_wrapper_(nullptr),
       worker_thread_(kWorkerThreadName) {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
-  DCHECK(url_request_context_getter_.get());
   DCHECK(client_session_control_);
   DCHECK(client_stub_);
 
@@ -481,13 +472,6 @@ bool CastExtensionSession::InitializePeerConnection() {
 
   VLOG(1) << "Created PeerConnectionFactory successfully.";
 
-  webrtc::PeerConnectionInterface::IceServers servers;
-  webrtc::PeerConnectionInterface::IceServer server;
-  server.uri = kDefaultStunURI;
-  servers.push_back(server);
-  webrtc::PeerConnectionInterface::RTCConfiguration rtc_config;
-  rtc_config.servers = servers;
-
   // DTLS-SRTP is the preferred encryption method. If set to kValueFalse, the
   // peer connection uses SDES. Disabling SDES as well will cause the peer
   // connection to fail to connect.
@@ -497,12 +481,15 @@ bool CastExtensionSession::InitializePeerConnection() {
   constraints.AddMandatory(webrtc::MediaConstraintsInterface::kEnableDtlsSrtp,
                            webrtc::MediaConstraintsInterface::kValueTrue);
 
-  rtc::scoped_refptr<webrtc::PortAllocatorFactoryInterface>
-      port_allocator_factory = ChromiumPortAllocatorFactory::Create(
-          network_settings_, url_request_context_getter_);
+  scoped_ptr<cricket::PortAllocator> port_allocator =
+      transport_context_->port_allocator_factory()->CreatePortAllocator(
+          transport_context_);
 
+  webrtc::PeerConnectionInterface::RTCConfiguration rtc_config;
   peer_connection_ = peer_conn_factory_->CreatePeerConnection(
-      rtc_config, &constraints, port_allocator_factory, nullptr, this);
+      rtc_config, &constraints,
+      rtc::scoped_ptr<cricket::PortAllocator>(port_allocator.release()),
+      nullptr, this);
 
   if (!peer_connection_.get()) {
     CleanupPeerConnection();
@@ -535,8 +522,8 @@ bool CastExtensionSession::SetupVideoStream(
     return false;
   }
 
-  scoped_ptr<CastVideoCapturerAdapter> cast_video_capturer_adapter(
-      new CastVideoCapturerAdapter(desktop_capturer.Pass()));
+  scoped_ptr<protocol::WebrtcVideoCapturerAdapter> video_capturer_adapter(
+      new protocol::WebrtcVideoCapturerAdapter(std::move(desktop_capturer)));
 
   // Set video stream constraints.
   webrtc::FakeConstraints video_constraints;
@@ -547,7 +534,7 @@ bool CastExtensionSession::SetupVideoStream(
       peer_conn_factory_->CreateVideoTrack(
           kVideoLabel,
           peer_conn_factory_->CreateVideoSource(
-              cast_video_capturer_adapter.release(), &video_constraints));
+              video_capturer_adapter.release(), &video_constraints));
 
   stream_ = peer_conn_factory_->CreateLocalMediaStream(kStreamLabel);
 
@@ -568,8 +555,7 @@ void CastExtensionSession::PollPeerConnectionStats() {
   rtc::scoped_refptr<webrtc::MediaStreamTrackInterface> video_track =
       stream_->FindVideoTrack(kVideoLabel);
   peer_connection_->GetStats(
-      stats_observer_,
-      video_track.release(),
+      stats_observer_, video_track.release(),
       webrtc::PeerConnectionInterface::kStatsOutputLevelStandard);
 }
 

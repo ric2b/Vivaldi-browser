@@ -15,6 +15,7 @@
 
 #include "base/containers/hash_tables.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
@@ -72,19 +73,12 @@ class Extension : public base::RefCountedThreadSafe<Extension> {
     NUM_STATES
   };
 
-  // Used to record the reason an extension was disabled.
-  enum DeprecatedDisableReason {
-    DEPRECATED_DISABLE_UNKNOWN,
-    DEPRECATED_DISABLE_USER_ACTION,
-    DEPRECATED_DISABLE_PERMISSIONS_INCREASE,
-    DEPRECATED_DISABLE_RELOAD,
-    DEPRECATED_DISABLE_LAST,  // Not used.
-  };
-
   // Reasons an extension may be disabled. These are used in histograms, so do
   // not remove/reorder entries - only add at the end just before
   // DISABLE_REASON_LAST (and update the shift value for it). Also remember to
   // update the enum listing in tools/metrics/histograms.xml.
+  // Also carefully consider if your reason should sync to other devices, and if
+  // so, add it to kKnownSyncableDisableReasons in extension_sync_service.cc.
   enum DisableReason {
     DISABLE_NONE = 0,
     DISABLE_USER_ACTION = 1 << 0,
@@ -92,7 +86,7 @@ class Extension : public base::RefCountedThreadSafe<Extension> {
     DISABLE_RELOAD = 1 << 2,
     DISABLE_UNSUPPORTED_REQUIREMENT = 1 << 3,
     DISABLE_SIDELOAD_WIPEOUT = 1 << 4,
-    DISABLE_UNKNOWN_FROM_SYNC = 1 << 5,
+    DEPRECATED_DISABLE_UNKNOWN_FROM_SYNC = 1 << 5,
     // DISABLE_PERMISSIONS_CONSENT = 1 << 6,  // Deprecated.
     // DISABLE_KNOWN_DISABLED = 1 << 7,  // Deprecated.
     DISABLE_NOT_VERIFIED = 1 << 8,  // Disabled because we could not verify
@@ -100,8 +94,7 @@ class Extension : public base::RefCountedThreadSafe<Extension> {
     DISABLE_GREYLIST = 1 << 9,
     DISABLE_CORRUPTED = 1 << 10,
     DISABLE_REMOTE_INSTALL = 1 << 11,
-    DISABLE_INACTIVE_EPHEMERAL_APP = 1 << 12,  // Cached ephemeral apps are
-                                               // disabled to prevent activity.
+    // DISABLE_INACTIVE_EPHEMERAL_APP = 1 << 12,  // Deprecated.
     DISABLE_EXTERNAL_EXTENSION = 1 << 13,  // External extensions might be
                                            // disabled for user prompting.
     DISABLE_UPDATE_REQUIRED_BY_POLICY = 1 << 14,  // Doesn't meet minimum
@@ -203,6 +196,9 @@ class Extension : public base::RefCountedThreadSafe<Extension> {
 
   // Valid schemes for web extent URLPatterns.
   static const int kValidWebExtentSchemes;
+
+  // Valid schemes for bookmark app installs.
+  static const int kValidBookmarkAppSchemes;
 
   // Valid schemes for host permission URLPatterns.
   static const int kValidHostPermissionSchemes;
@@ -336,6 +332,9 @@ class Extension : public base::RefCountedThreadSafe<Extension> {
   int creation_flags() const { return creation_flags_; }
   bool from_webstore() const { return (creation_flags_ & FROM_WEBSTORE) != 0; }
   bool from_bookmark() const { return (creation_flags_ & FROM_BOOKMARK) != 0; }
+  bool may_be_untrusted() const {
+    return (creation_flags_ & MAY_BE_UNTRUSTED) != 0;
+  }
   bool was_installed_by_default() const {
     return (creation_flags_ & WAS_INSTALLED_BY_DEFAULT) != 0;
   }
@@ -354,8 +353,6 @@ class Extension : public base::RefCountedThreadSafe<Extension> {
   bool is_extension() const;
   bool is_shared_module() const;
   bool is_theme() const;
-
-  bool can_be_incognito_enabled() const;
 
   void AddWebExtentPattern(const URLPattern& pattern);
   const URLPatternSet& web_extent() const { return extent_; }
@@ -548,6 +545,8 @@ struct UnloadedExtensionInfo {
     REASON_BLACKLIST,         // Extension has been blacklisted.
     REASON_PROFILE_SHUTDOWN,  // Profile is being shut down.
     REASON_LOCK_ALL,          // All extensions for the profile are blocked.
+    REASON_MIGRATED_TO_COMPONENT,  // Extension is being migrated to a component
+                                   // action.
   };
 
   Reason reason;
@@ -573,12 +572,11 @@ struct UpdatedExtensionPermissionsInfo {
   // The permissions that have changed. For Reason::ADDED, this would contain
   // only the permissions that have added, and for Reason::REMOVED, this would
   // only contain the removed permissions.
-  const PermissionSet* permissions;
+  const PermissionSet& permissions;
 
-  UpdatedExtensionPermissionsInfo(
-      const Extension* extension,
-      const PermissionSet* permissions,
-      Reason reason);
+  UpdatedExtensionPermissionsInfo(const Extension* extension,
+                                  const PermissionSet& permissions,
+                                  Reason reason);
 };
 
 }  // namespace extensions

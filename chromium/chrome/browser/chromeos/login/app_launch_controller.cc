@@ -9,13 +9,13 @@
 #include "base/files/file_path.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/chromeos/app_mode/app_session_lifetime.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/app_mode/startup_app_launcher.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
@@ -322,7 +322,7 @@ bool AppLaunchController::CanConfigureNetwork() {
     return true;
   }
 
-  return !user_manager::UserManager::Get()->GetOwnerEmail().empty();
+  return user_manager::UserManager::Get()->GetOwnerAccountId().is_valid();
 }
 
 bool AppLaunchController::NeedOwnerAuthToConfigureNetwork() {
@@ -408,9 +408,10 @@ void AppLaunchController::OnReadyToLaunch() {
 
   ClearNetworkWaitTimer();
 
-  const int64 time_taken_ms = (base::TimeTicks::Now() -
-      base::TimeTicks::FromInternalValue(launch_splash_start_time_)).
-      InMilliseconds();
+  const int64_t time_taken_ms =
+      (base::TimeTicks::Now() -
+       base::TimeTicks::FromInternalValue(launch_splash_start_time_))
+          .InMilliseconds();
 
   // Enforce that we show app install splash screen for some minimum amount
   // of time.

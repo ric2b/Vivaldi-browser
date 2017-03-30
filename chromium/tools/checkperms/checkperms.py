@@ -42,8 +42,12 @@ import sys
 EXECUTABLE_EXTENSIONS = (
   'bat',
   'dll',
-  'dylib',
   'exe',
+)
+
+# Files for which the executable bit may or may not be set.
+IGNORED_EXTENSIONS = (
+  'dylib',
 )
 
 # These files must have executable bit set.
@@ -172,22 +176,20 @@ IGNORED_FILENAMES = (
 #
 # Case-insensitive, lower-case only.
 IGNORED_PATHS = (
+  'base/third_party/libevent/autogen.sh',
+  'base/third_party/libevent/test/test.sh',
   'native_client_sdk/src/build_tools/sdk_tools/third_party/fancy_urllib/'
       '__init__.py',
   'out/',
   # TODO(maruel): Fix these.
-  'third_party/android_testrunner/',
   'third_party/bintrees/',
   'third_party/closure_linter/',
   'third_party/devscripts/licensecheck.pl.vanilla',
   'third_party/hyphen/',
-  'third_party/jemalloc/',
   'third_party/lcov-1.9/contrib/galaxy/conglomerate_functions.pl',
   'third_party/lcov-1.9/contrib/galaxy/gen_makefile.sh',
   'third_party/lcov/contrib/galaxy/conglomerate_functions.pl',
   'third_party/lcov/contrib/galaxy/gen_makefile.sh',
-  'third_party/libevent/autogen.sh',
-  'third_party/libevent/test/test.sh',
   'third_party/libxml/linux/xml2-config',
   'third_party/libxml/src/ltmain.sh',
   'third_party/mesa/',
@@ -197,11 +199,14 @@ IGNORED_PATHS = (
   'third_party/talloc/script/mksyms.sh',
   'third_party/tcmalloc/',
   'third_party/tlslite/setup.py',
+  # TODO(nednguyen): Remove this when telemetry is moved to catapult
+  'tools/telemetry/third_party/',
 )
 
 #### USER EDITABLE SECTION ENDS HERE ####
 
-assert set(EXECUTABLE_EXTENSIONS) & set(NON_EXECUTABLE_EXTENSIONS) == set()
+assert (set(EXECUTABLE_EXTENSIONS) & set(IGNORED_EXTENSIONS) &
+        set(NON_EXECUTABLE_EXTENSIONS) == set())
 assert set(EXECUTABLE_PATHS) & set(NON_EXECUTABLE_PATHS) == set()
 
 VALID_CHARS = set(string.ascii_lowercase + string.digits + '/-_.')
@@ -243,6 +248,13 @@ def must_be_executable(rel_path):
   """
   return (os.path.splitext(rel_path)[1][1:] in EXECUTABLE_EXTENSIONS or
           rel_path.lower() in EXECUTABLE_PATHS)
+
+
+def ignored_extension(rel_path):
+    """The file name represents a file type that may or may not have the
+    executable set.
+    """
+    return os.path.splitext(rel_path)[1][1:] in IGNORED_EXTENSIONS
 
 
 def must_not_be_executable(rel_path):
@@ -290,9 +302,8 @@ def check_file(root_path, rel_path):
   try:
     bit = has_executable_bit(full_path)
   except OSError:
-    # It's faster to catch exception than call os.path.islink(). Chromium
-    # tree happens to have invalid symlinks under
-    # third_party/openssl/openssl/test/.
+    # It's faster to catch exception than call os.path.islink(). The Chromium
+    # tree may have invalid symlinks.
     return None
 
   if must_be_executable(rel_path):
@@ -302,6 +313,8 @@ def check_file(root_path, rel_path):
   if must_not_be_executable(rel_path):
     if bit:
       return result_dict('Must not have executable bit set')
+    return
+  if ignored_extension(rel_path):
     return
 
   # For the others, it depends on the file header.
@@ -443,9 +456,6 @@ Examples:
     options.root = os.path.abspath(options.root)
 
   if options.files:
-    # --file implies --bare (for PRESUBMIT.py).
-    options.bare = True
-
     errors = check_files(options.root, options.files)
   else:
     api = get_scm(options.root, options.bare)

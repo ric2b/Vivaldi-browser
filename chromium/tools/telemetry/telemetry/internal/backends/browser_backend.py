@@ -1,12 +1,15 @@
 # Copyright 2013 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
+import uuid
+import sys
 
 from telemetry.core import platform
-from telemetry.core.platform import profiling_controller_backend
 from telemetry import decorators
+from catapult_base import cloud_storage
 from telemetry.internal.backends import app_backend
 from telemetry.internal.browser import web_contents
+from telemetry.internal.platform import profiling_controller_backend
 
 
 class ExtensionsNotSupportedException(Exception):
@@ -36,6 +39,25 @@ class BrowserBackend(app_backend.AppBackend):
         host_platform.InstallApplication('ipfw')
 
   @property
+  def log_file_path(self):
+    # Specific browser backend is responsible for overriding this properly.
+    raise NotImplementedError
+
+  def UploadLogsToCloudStorage(self):
+    """ Uploading log files produce by this browser instance to cloud storage.
+
+    Check supports_uploading_logs before calling this method.
+    """
+    assert self.supports_uploading_logs
+    remote_path = (self.browser_options.logs_cloud_remote_path or
+                   'log_%s' % uuid.uuid4())
+    cloud_url = cloud_storage.Insert(
+        bucket=self.browser_options.logs_cloud_bucket,
+        remote_path=remote_path,
+        local_path=self.log_file_path)
+    sys.stderr.write('Uploading browser log to %s\n' % cloud_url)
+
+  @property
   def browser(self):
     return self.app
 
@@ -46,6 +68,11 @@ class BrowserBackend(app_backend.AppBackend):
   @property
   def browser_type(self):
     return self.app_type
+
+  @property
+  def supports_uploading_logs(self):
+    # Specific browser backend is responsible for overriding this properly.
+    return False
 
   @property
   def supports_extensions(self):
@@ -100,4 +127,35 @@ class BrowserBackend(app_backend.AppBackend):
     raise NotImplementedError()
 
   def GetSystemInfo(self):
+    raise NotImplementedError()
+
+  @property
+  def supports_memory_dumping(self):
+    return False
+
+  def DumpMemory(self, timeout=web_contents.DEFAULT_WEB_CONTENTS_TIMEOUT):
+    raise NotImplementedError()
+
+  @property
+  def supports_overriding_memory_pressure_notifications(self):
+    return False
+
+  def SetMemoryPressureNotificationsSuppressed(
+      self, suppressed, timeout=web_contents.DEFAULT_WEB_CONTENTS_TIMEOUT):
+    raise NotImplementedError()
+
+  def SimulateMemoryPressureNotification(
+      self, pressure_level, timeout=web_contents.DEFAULT_WEB_CONTENTS_TIMEOUT):
+    raise NotImplementedError()
+
+  @property
+  def supports_cpu_metrics(self):
+    raise NotImplementedError()
+
+  @property
+  def supports_memory_metrics(self):
+    raise NotImplementedError()
+
+  @property
+  def supports_power_metrics(self):
     raise NotImplementedError()

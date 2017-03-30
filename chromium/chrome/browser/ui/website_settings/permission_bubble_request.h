@@ -8,6 +8,10 @@
 #include "base/strings/string16.h"
 #include "url/gurl.h"
 
+namespace gfx {
+enum class VectorIconId;
+}
+
 // Describes the interface a feature utilizing permission bubbles should
 // implement. A class of this type is registered with the permission bubble
 // manager to receive updates about the result of the permissions request
@@ -20,9 +24,13 @@ class PermissionBubbleRequest {
  public:
   virtual ~PermissionBubbleRequest() {}
 
+  // Returns a vector icon id if the icon should be drawn as a vector
+  // resource. Otherwise, returns VECTOR_ICON_NONE.
+  virtual gfx::VectorIconId GetVectorIconId() const;
+
   // The icon to use next to the message text fragment in the permission bubble.
   // Must be a valid icon of size 18x18.
-  virtual int GetIconID() const = 0;
+  virtual int GetIconId() const = 0;
 
   // Returns the full prompt text for this permission. This is the only text
   // that will be shown in the single-permission case and should be phrased
@@ -35,9 +43,8 @@ class PermissionBubbleRequest {
   // next to an image and indicate the user grants the permission.
   virtual base::string16 GetMessageTextFragment() const = 0;
 
-  // Get whether this request was accompanied by a user gesture. Non-gestured
-  // requests will be delayed if PermissionBubbleManager::
-  // RequireUserGesture(true) has been called on the manager.
+  // Get whether this request was accompanied by a user gesture. Gestured
+  // requests will have priority over non-gestured ones.
   virtual bool HasUserGesture() const = 0;
 
   // Get the hostname on whose behalf this permission request is being made.

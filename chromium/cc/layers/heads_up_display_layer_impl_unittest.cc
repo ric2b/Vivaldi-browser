@@ -2,13 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "cc/layers/append_quads_data.h"
 #include "cc/layers/heads_up_display_layer_impl.h"
-#include "cc/test/fake_impl_proxy.h"
+#include "cc/test/fake_impl_task_runner_provider.h"
 #include "cc/test/fake_layer_tree_host_impl.h"
 #include "cc/test/fake_output_surface.h"
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/test/test_task_graph_runner.h"
+#include "cc/trees/layer_tree_impl.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace cc {
@@ -31,27 +34,32 @@ void CheckDrawLayer(HeadsUpDisplayLayerImpl* layer,
 }
 
 TEST(HeadsUpDisplayLayerImplTest, ResourcelessSoftwareDrawAfterResourceLoss) {
-  FakeImplProxy proxy;
+  FakeImplTaskRunnerProvider task_runner_provider;
   TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  FakeLayerTreeHostImpl host_impl(&proxy, &shared_bitmap_manager,
+  scoped_ptr<OutputSurface> output_surface = FakeOutputSurface::Create3d();
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
                                   &task_graph_runner);
   host_impl.CreatePendingTree();
-  host_impl.InitializeRenderer(FakeOutputSurface::Create3d());
-  scoped_ptr<HeadsUpDisplayLayerImpl> layer =
-    HeadsUpDisplayLayerImpl::Create(host_impl.pending_tree(), 1);
-  layer->SetBounds(gfx::Size(100, 100));
+  host_impl.SetVisible(true);
+  host_impl.InitializeRenderer(output_surface.get());
+  scoped_ptr<HeadsUpDisplayLayerImpl> layer_ptr =
+      HeadsUpDisplayLayerImpl::Create(host_impl.pending_tree(), 1);
+  layer_ptr->SetBounds(gfx::Size(100, 100));
+
+  HeadsUpDisplayLayerImpl* layer = layer_ptr.get();
+
+  host_impl.pending_tree()->SetRootLayer(std::move(layer_ptr));
+  host_impl.pending_tree()->BuildPropertyTreesForTesting();
 
   // Check regular hardware draw is ok.
-  CheckDrawLayer(
-      layer.get(), host_impl.resource_provider(), DRAW_MODE_HARDWARE);
+  CheckDrawLayer(layer, host_impl.resource_provider(), DRAW_MODE_HARDWARE);
 
   // Simulate a resource loss on transitioning to resourceless software mode.
   layer->ReleaseResources();
 
   // Should skip resourceless software draw and not crash in UpdateHudTexture.
-  CheckDrawLayer(layer.get(),
-                 host_impl.resource_provider(),
+  CheckDrawLayer(layer, host_impl.resource_provider(),
                  DRAW_MODE_RESOURCELESS_SOFTWARE);
 }
 

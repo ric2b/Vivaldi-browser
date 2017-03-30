@@ -5,9 +5,12 @@
 #include "chrome/browser/extensions/api/hotword_private/hotword_private_api.h"
 
 #include <string>
+#include <utility>
 
 #include "base/lazy_instance.h"
 #include "base/prefs/pref_service.h"
+#include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/hotword_audio_history_handler.h"
@@ -17,11 +20,16 @@
 #include "chrome/browser/ui/app_list/app_list_service.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/speech_recognition_session_preamble.h"
 #include "extensions/browser/event_router.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
+
+#if defined(OS_CHROMEOS)
+#include "ash/system/chromeos/devicetype_utils.h"
+#endif
 
 namespace extensions {
 
@@ -75,54 +83,69 @@ void HotwordPrivateEventService::OnEnabledChanged(
          pref_name == std::string(prefs::kHotwordAlwaysOnSearchEnabled) ||
          pref_name == std::string(
              hotword_internal::kHotwordTrainingEnabled));
-  SignalEvent(OnEnabledChanged::kEventName);
+  SignalEvent(events::HOTWORD_PRIVATE_ON_ENABLED_CHANGED,
+              OnEnabledChanged::kEventName);
 }
 
 void HotwordPrivateEventService::OnHotwordSessionRequested() {
-  SignalEvent(api::hotword_private::OnHotwordSessionRequested::kEventName);
+  SignalEvent(events::HOTWORD_PRIVATE_ON_HOTWORD_SESSION_REQUESTED,
+              api::hotword_private::OnHotwordSessionRequested::kEventName);
 }
 
 void HotwordPrivateEventService::OnHotwordSessionStopped() {
-  SignalEvent(api::hotword_private::OnHotwordSessionStopped::kEventName);
+  SignalEvent(events::HOTWORD_PRIVATE_ON_HOTWORD_SESSION_STOPPED,
+              api::hotword_private::OnHotwordSessionStopped::kEventName);
 }
 
 void HotwordPrivateEventService::OnFinalizeSpeakerModel() {
-  SignalEvent(api::hotword_private::OnFinalizeSpeakerModel::kEventName);
+  SignalEvent(events::HOTWORD_PRIVATE_ON_FINALIZE_SPEAKER_MODEL,
+              api::hotword_private::OnFinalizeSpeakerModel::kEventName);
 }
 
 void HotwordPrivateEventService::OnSpeakerModelSaved() {
-  SignalEvent(api::hotword_private::OnSpeakerModelSaved::kEventName);
+  SignalEvent(events::HOTWORD_PRIVATE_ON_SPEAKER_MODEL_SAVED,
+              api::hotword_private::OnSpeakerModelSaved::kEventName);
 }
 
 void HotwordPrivateEventService::OnHotwordTriggered() {
-  SignalEvent(api::hotword_private::OnHotwordTriggered::kEventName);
+  SignalEvent(events::HOTWORD_PRIVATE_ON_HOTWORD_TRIGGERED,
+              api::hotword_private::OnHotwordTriggered::kEventName);
 }
 
 void HotwordPrivateEventService::OnDeleteSpeakerModel() {
-  SignalEvent(api::hotword_private::OnDeleteSpeakerModel::kEventName);
+  SignalEvent(events::HOTWORD_PRIVATE_ON_DELETE_SPEAKER_MODEL,
+              api::hotword_private::OnDeleteSpeakerModel::kEventName);
 }
 
 void HotwordPrivateEventService::OnSpeakerModelExists() {
-  SignalEvent(api::hotword_private::OnSpeakerModelExists::kEventName);
+  SignalEvent(events::HOTWORD_PRIVATE_ON_SPEAKER_MODEL_EXISTS,
+              api::hotword_private::OnSpeakerModelExists::kEventName);
 }
 
 void HotwordPrivateEventService::OnMicrophoneStateChanged(bool enabled) {
-  SignalEvent(api::hotword_private::OnMicrophoneStateChanged::kEventName,
+  SignalEvent(events::HOTWORD_PRIVATE_ON_MICROPHONE_STATE_CHANGED,
+              api::hotword_private::OnMicrophoneStateChanged::kEventName,
               api::hotword_private::OnMicrophoneStateChanged::Create(enabled));
 }
 
-void HotwordPrivateEventService::SignalEvent(const std::string& event_name) {
-  SignalEvent(event_name, make_scoped_ptr(new base::ListValue()));
+void HotwordPrivateEventService::SignalEvent(
+    events::HistogramValue histogram_value,
+    const std::string& event_name) {
+  SignalEvent(histogram_value, event_name,
+              make_scoped_ptr(new base::ListValue()));
 }
 
-void HotwordPrivateEventService::SignalEvent(const std::string& event_name,
-                                             scoped_ptr<base::ListValue> args) {
+void HotwordPrivateEventService::SignalEvent(
+    events::HistogramValue histogram_value,
+    const std::string& event_name,
+    scoped_ptr<base::ListValue> args) {
   EventRouter* router = EventRouter::Get(profile_);
   if (!router || !router->HasEventListener(event_name))
     return;
 
-  scoped_ptr<Event> event(new Event(events::UNKNOWN, event_name, args.Pass()));
-  router->BroadcastEvent(event.Pass());
+  scoped_ptr<Event> event(
+      new Event(histogram_value, event_name, std::move(args)));
+  router->BroadcastEvent(std::move(event));
 }
 
 bool HotwordPrivateSetEnabledFunction::RunSync() {
@@ -314,6 +337,15 @@ bool HotwordPrivateStopTrainingFunction::RunSync() {
 }
 
 bool HotwordPrivateGetLocalizedStringsFunction::RunSync() {
+#if defined(OS_CHROMEOS)
+  base::string16 device_type = ash::GetChromeOSDeviceName();
+#else
+  base::string16 product_name =
+      l10n_util::GetStringUTF16(IDS_SHORT_PRODUCT_NAME);
+  base::string16 device_type =
+      l10n_util::GetStringFUTF16(IDS_HOTWORD_BROWSER_NAME, product_name);
+#endif
+
   base::DictionaryValue* localized_strings = new base::DictionaryValue();
 
   localized_strings->SetString(
@@ -330,11 +362,13 @@ bool HotwordPrivateGetLocalizedStringsFunction::RunSync() {
       l10n_util::GetStringUTF16(IDS_HOTWORD_OPT_IN_INTRO_SUBTITLE));
   localized_strings->SetString(
       "introDescription",
-      l10n_util::GetStringUTF16(IDS_HOTWORD_OPT_IN_INTRO_DESCRIPTION));
+      l10n_util::GetStringFUTF16(IDS_HOTWORD_OPT_IN_INTRO_DESCRIPTION,
+                                 device_type));
   localized_strings->SetString(
       "introDescriptionAudioHistoryEnabled",
-      l10n_util::GetStringUTF16(
-          IDS_HOTWORD_OPT_IN_INTRO_DESCRIPTION_AUDIO_HISTORY_ENABLED));
+      l10n_util::GetStringFUTF16(
+          IDS_HOTWORD_OPT_IN_INTRO_DESCRIPTION_AUDIO_HISTORY_ENABLED,
+          device_type));
   localized_strings->SetString(
       "introStart",
       l10n_util::GetStringUTF16(IDS_HOTWORD_OPT_IN_INTRO_START));
@@ -363,11 +397,12 @@ bool HotwordPrivateGetLocalizedStringsFunction::RunSync() {
       "error",
       l10n_util::GetStringUTF16(IDS_HOTWORD_OPT_IN_ERROR));
   localized_strings->SetString(
-      "trainingTitle",
-      l10n_util::GetStringUTF16(IDS_HOTWORD_OPT_IN_TRAINING_TITLE));
+      "trainingTitle", l10n_util::GetStringFUTF16(
+                           IDS_HOTWORD_OPT_IN_TRAINING_TITLE, device_type));
   localized_strings->SetString(
       "trainingDescription",
-      l10n_util::GetStringUTF16(IDS_HOTWORD_OPT_IN_TRAINING_DESCRIPTION));
+      l10n_util::GetStringFUTF16(IDS_HOTWORD_OPT_IN_TRAINING_DESCRIPTION,
+                                 device_type));
   localized_strings->SetString(
       "trainingSpeak",
       l10n_util::GetStringUTF16(IDS_HOTWORD_OPT_IN_TRAINING_SPEAK));
@@ -394,7 +429,8 @@ bool HotwordPrivateGetLocalizedStringsFunction::RunSync() {
       l10n_util::GetStringUTF16(IDS_HOTWORD_OPT_IN_FINISHED_TITLE));
   localized_strings->SetString(
       "finishedListIntro",
-      l10n_util::GetStringUTF16(IDS_HOTWORD_OPT_IN_FINISHED_LIST_INTRO));
+      l10n_util::GetStringFUTF16(IDS_HOTWORD_OPT_IN_FINISHED_LIST_INTRO,
+                                 device_type));
   localized_strings->SetString(
       "finishedListItem1",
       l10n_util::GetStringUTF16(IDS_HOTWORD_OPT_IN_FINISHED_LIST_ITEM_1));

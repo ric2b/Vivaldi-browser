@@ -7,8 +7,8 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -49,7 +49,6 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
       int render_frame_id,
       bool is_main_frame,
       bool parent_is_main_frame,
-      int parent_render_frame_id,
       ResourceType resource_type,
       ui::PageTransition transition_type,
       bool should_replace_current_entry,
@@ -64,19 +63,21 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
       blink::WebPageVisibilityState visibility_state,
       ResourceContext* context,
       base::WeakPtr<ResourceMessageFilter> filter,
-      bool is_async);
+      bool report_raw_headers,
+      bool is_async,
+      bool is_using_lofi,
+      const std::string& original_headers);
   ~ResourceRequestInfoImpl() override;
 
   // ResourceRequestInfo implementation:
+  WebContentsGetter GetWebContentsGetterForRequest() const override;
   ResourceContext* GetContext() const override;
   int GetChildID() const override;
   int GetRouteID() const override;
   int GetOriginPID() const override;
-  int GetRequestID() const override;
   int GetRenderFrameID() const override;
   bool IsMainFrame() const override;
   bool ParentIsMainFrame() const override;
-  int GetParentRenderFrameID() const override;
   ResourceType GetResourceType() const override;
   int GetProcessType() const override;
   blink::WebReferrerPolicy GetReferrerPolicy() const override;
@@ -88,9 +89,12 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
                                 int* render_frame_id) const override;
   bool IsAsync() const override;
   bool IsDownload() const override;
+  bool IsUsingLoFi() const override;
+  bool ShouldReportRawHeaders() const;
 
   CONTENT_EXPORT void AssociateWithRequest(net::URLRequest* request);
 
+  CONTENT_EXPORT int GetRequestID() const;
   CONTENT_EXPORT GlobalRequestID GetGlobalRequestID() const;
   GlobalRoutingID GetGlobalRoutingID() const;
 
@@ -110,9 +114,9 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   // does not need to be updated.
   void UpdateForTransfer(int child_id,
                          int route_id,
+                         int render_frame_id,
                          int origin_pid,
                          int request_id,
-                         int parent_render_frame_id,
                          base::WeakPtr<ResourceMessageFilter> filter);
 
   // CrossSiteResourceHandler for this request.  May be null.
@@ -178,6 +182,7 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   void set_do_not_prompt_for_login(bool do_not_prompt) {
     do_not_prompt_for_login_ = do_not_prompt;
   }
+  const std::string& original_headers() const { return original_headers_; }
 
  private:
   FRIEND_TEST_ALL_PREFIXES(ResourceDispatcherHostTest,
@@ -197,7 +202,6 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   int render_frame_id_;
   bool is_main_frame_;
   bool parent_is_main_frame_;
-  int parent_render_frame_id_;
   bool should_replace_current_entry_;
   bool is_download_;
   bool is_stream_;
@@ -217,7 +221,10 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   // The filter might be deleted without deleting this object if the process
   // exits during a transfer.
   base::WeakPtr<ResourceMessageFilter> filter_;
+  bool report_raw_headers_;
   bool is_async_;
+  bool is_using_lofi_;
+  const std::string original_headers_;
 
   DISALLOW_COPY_AND_ASSIGN(ResourceRequestInfoImpl);
 };

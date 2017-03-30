@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "remoting/test/remote_connection_observer.h"
@@ -25,10 +26,6 @@ namespace test {
 struct RemoteApplicationDetails;
 class TestChromotingClient;
 
-// Allows for custom handling of ExtensionMessage messages.
-typedef base::Callback<void(const protocol::ExtensionMessage& message)>
-    HostMessageReceivedCallback;
-
 // Creates a connection to a remote host which is available for tests to use.
 // A TestChromotingClient is required from caller.
 class AppRemotingConnectionHelper
@@ -45,18 +42,15 @@ class AppRemotingConnectionHelper
   // NOTE: Initialize() must be called before calling this method.
   bool StartConnection();
 
-  // Stubs used to send messages to the remote host. Caller should not release
-  // the objects.
+  // Stubs used to send messages to the remote host.
   protocol::ClipboardStub* clipboard_forwarder();
   protocol::HostStub* host_stub();
   protocol::InputStub* input_stub();
 
-  // Setter for |host_message_received_callback_|.
-  void SetHostMessageReceivedCallback(
-      HostMessageReceivedCallback host_message_received_callback);
+  TestChromotingClient* test_chromoting_client() { return client_.get(); }
 
-  // Reset |host_message_received_callback_ to null|.
-  void ResetHostMessageReceivedCallback();
+  // Returns true if connection is ready for tests.
+  bool ConnectionIsReadyForTest() { return connection_is_ready_for_tests_; }
 
  private:
   // RemoteConnectionObserver interface.
@@ -74,10 +68,6 @@ class AppRemotingConnectionHelper
 
   // Contains the details for the application being tested.
   const RemoteApplicationDetails& application_details_;
-
-  // Called when an ExtensionMessage is received from the host.  Used to
-  // override default message handling.
-  HostMessageReceivedCallback host_message_received_callback_;
 
   // Indicates whether the remote connection is ready to be used for testing.
   // True when a chromoting connection to the remote host has been established

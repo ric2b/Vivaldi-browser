@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "build/build_config.h"
 #include "media/base/media_switches.h"
 
 namespace switches {
@@ -9,16 +10,32 @@ namespace switches {
 // Allow users to specify a custom buffer size for debugging purpose.
 const char kAudioBufferSize[] = "audio-buffer-size";
 
-// Disables the new vsync driven video renderering path.
-const char kDisableNewVideoRenderer[] = "disable-new-video-renderer";
-
 // Set number of threads to use for video decoding.
 const char kVideoThreads[] = "video-threads";
 
+// Suspend media pipeline on background tabs.
+const char kEnableMediaSuspend[] = "enable-media-suspend";
+const char kDisableMediaSuspend[] = "disable-media-suspend";
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+// Attempts to turn on hardware accelerated video decoding. Relevant when
+// platform decoders are used.
+const char kEnablePlatformAcceleratedVideoDecoding[] =
+    "enable-platform-accelerated-video-decoding";
+#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
+
 #if defined(OS_ANDROID)
+// Sets the MediaSource player that uses UI thread for frame processing.
+const char kDisableMediaThreadForMediaPlayback[] =
+    "disable-media-thread-for-media-playback";
+
 // Sets the MediaSource player that uses the separate media thread
 const char kEnableMediaThreadForMediaPlayback[] =
     "enable-media-thread-for-media-playback";
+
+// Use WebMediaPlayerImpl instead of WebMediaPlayerAndroid. This is a temporary
+// switch for experimenting with unifying the Android playback pipeline.
+const char kEnableUnifiedMediaPipeline[] = "enable-unified-media-pipeline";
 #endif
 
 #if defined(OS_LINUX) || defined(OS_FREEBSD) || defined(OS_SOLARIS)
@@ -87,16 +104,11 @@ const char kWaveOutBuffers[] = "waveout-buffers";
 const char kUseCras[] = "use-cras";
 #endif
 
-// Enables the audio thread hang monitor.  Allows us to find users in the field
-// who have stuck audio threads.  See crbug.com/422522 and crbug.com/478932.
-// TODO(dalecurtis): This should be removed once those issues are resolved.
-const char kEnableAudioHangMonitor[] = "enable-audio-hang-monitor";
-
 // Use fake device for Media Stream to replace actual camera and microphone.
 const char kUseFakeDeviceForMediaStream[] = "use-fake-device-for-media-stream";
 
 // Use an .y4m file to play as the webcam. See the comments in
-// media/video/capture/file_video_capture_device.h for more details.
+// media/capture/video/file_video_capture_device.h for more details.
 const char kUseFileForFakeVideoCapture[] = "use-file-for-fake-video-capture";
 
 // Play a .wav file as the microphone. Note that for WebRTC calls we'll treat
@@ -118,5 +130,13 @@ const char kRequireAudioHardwareForTesting[] =
 // declare the underflow state for the video stream when audio is present.
 // TODO(dalecurtis): Remove once experiments for http://crbug.com/470940 finish.
 const char kVideoUnderflowThresholdMs[] = "video-underflow-threshold-ms";
+
+// Disables the new rendering algorithm for webrtc, which is designed to improve
+// the rendering smoothness.
+const char kDisableRTCSmoothnessAlgorithm[] =
+    "disable-rtc-smoothness-algorithm";
+
+// Use shared block-based buffering for media.
+const char kUseNewMediaCache[] = "use-new-media-cache";
 
 }  // namespace switches

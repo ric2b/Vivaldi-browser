@@ -5,7 +5,14 @@
 #ifndef CONTENT_BROWSER_FRAME_HOST_RENDER_WIDGET_HOST_VIEW_CHILD_FRAME_H_
 #define CONTENT_BROWSER_FRAME_HOST_RENDER_WIDGET_HOST_VIEW_CHILD_FRAME_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <vector>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 #include "cc/resources/returned_resource.h"
 #include "cc/surfaces/surface_factory_client.h"
 #include "cc/surfaces/surface_id_allocator.h"
@@ -21,6 +28,8 @@ namespace cc {
 class SurfaceFactory;
 enum class SurfaceDrawStatus;
 }
+
+struct ViewHostMsg_TextInputState_Params;
 
 namespace content {
 class CrossProcessFrameConnector;
@@ -76,10 +85,8 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
     const int owner_wiew_id) override;
   void UpdateCursor(const WebCursor& cursor) override;
   void SetIsLoading(bool is_loading) override;
-  void TextInputTypeChanged(ui::TextInputType type,
-                            ui::TextInputMode input_mode,
-                            bool can_compose_inline,
-                            int flags) override;
+  void TextInputStateChanged(
+      const ViewHostMsg_TextInputState_Params& params) override;
   void ImeCancelComposition() override;
   void ImeCompositionRangeChanged(
       const gfx::Range& range,
@@ -96,19 +103,22 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   void CopyFromCompositingSurface(
       const gfx::Rect& src_subrect,
       const gfx::Size& dst_size,
-      ReadbackRequestCallback& callback,
+      const ReadbackRequestCallback& callback,
       const SkColorType preferred_color_type) override;
   void CopyFromCompositingSurfaceToVideoFrame(
       const gfx::Rect& src_subrect,
       const scoped_refptr<media::VideoFrame>& target,
-      const base::Callback<void(bool)>& callback) override;
+      const base::Callback<void(const gfx::Rect&, bool)>& callback) override;
   bool CanCopyToVideoFrame() const override;
   bool HasAcceleratedSurface(const gfx::Size& desired_size) override;
-  void OnSwapCompositorFrame(uint32 output_surface_id,
+  void OnSwapCompositorFrame(uint32_t output_surface_id,
                              scoped_ptr<cc::CompositorFrame> frame) override;
+  // Since the URL of content rendered by this class is not displayed in
+  // the URL bar, this method does not need an implementation.
+  void ClearCompositorFrame() override {}
   void GetScreenInfo(blink::WebScreenInfo* results) override;
+  bool GetScreenColorProfile(std::vector<char>* color_profile) override;
   gfx::Rect GetBoundsInRootWindow() override;
-  gfx::GLSurfaceHandle GetCompositingSurface() override;
 #if defined(USE_AURA)
   void ProcessAckedTouchEvent(const TouchEventWithLatencyInfo& touch,
                               InputEventAckState ack_result) override;
@@ -116,6 +126,11 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   bool LockMouse() override;
   void UnlockMouse() override;
   uint32_t GetSurfaceIdNamespace() override;
+  void ProcessKeyboardEvent(const NativeWebKeyboardEvent& event) override;
+  void ProcessMouseEvent(const blink::WebMouseEvent& event) override;
+  void ProcessMouseWheelEvent(const blink::WebMouseWheelEvent& event) override;
+  void TransformPointToRootCoordSpace(const gfx::Point& point,
+                                      gfx::Point* transformed_point) override;
 
 #if defined(OS_MACOSX)
   // RenderWidgetHostView implementation.
@@ -134,10 +149,8 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 #endif  // defined(OS_MACOSX)
 
   // RenderWidgetHostViewBase implementation.
-#if defined(OS_ANDROID)
   void LockCompositingSurface() override;
   void UnlockCompositingSurface() override;
-#endif  // defined(OS_ANDROID)
 
 #if defined(OS_WIN)
   void SetParentNativeViewAccessible(
@@ -149,10 +162,12 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
   // cc::SurfaceFactoryClient implementation.
   void ReturnResources(const cc::ReturnedResourceArray& resources) override;
+  void SetBeginFrameSource(cc::SurfaceId surface_id,
+                           cc::BeginFrameSource* begin_frame_source) override;
 
   // Declared 'public' instead of 'protected' here to allow derived classes
   // to Bind() to it.
-  void SurfaceDrawn(uint32 output_surface_id, cc::SurfaceDrawStatus drawn);
+  void SurfaceDrawn(uint32_t output_surface_id, cc::SurfaceDrawStatus drawn);
 
  protected:
   friend class RenderWidgetHostView;
@@ -176,11 +191,11 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   scoped_ptr<cc::SurfaceIdAllocator> id_allocator_;
   scoped_ptr<cc::SurfaceFactory> surface_factory_;
   cc::SurfaceId surface_id_;
-  uint32 next_surface_sequence_;
-  uint32 last_output_surface_id_;
+  uint32_t next_surface_sequence_;
+  uint32_t last_output_surface_id_;
   gfx::Size current_surface_size_;
   float current_surface_scale_factor_;
-  uint32 ack_pending_count_;
+  uint32_t ack_pending_count_;
   cc::ReturnedResourceArray surface_returned_resources_;
 
   // frame_connector_ provides a platform abstraction. Messages

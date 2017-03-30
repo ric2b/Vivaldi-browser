@@ -13,7 +13,6 @@
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_utils.h"
-#include "ash/system/user/config.h"
 #include "ash/system/user/rounded_image_view.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/scoped_vector.h"
@@ -60,7 +59,7 @@ const base::char16 kDisplayNameMark[] = {0x2060, 0};
 #if defined(OS_CHROMEOS)
 class MediaIndicator : public views::View, public MediaCaptureObserver {
  public:
-  explicit MediaIndicator(MultiProfileIndex index)
+  explicit MediaIndicator(UserIndex index)
       : index_(index), label_(new views::Label) {
     SetLayoutManager(new views::FillLayout);
     views::ImageView* icon = new views::ImageView;
@@ -83,11 +82,8 @@ class MediaIndicator : public views::View, public MediaCaptureObserver {
 
   // MediaCaptureObserver:
   void OnMediaCaptureChanged() override {
-    Shell* shell = Shell::GetInstance();
-    content::BrowserContext* context =
-        shell->session_state_delegate()->GetBrowserContextByIndex(index_);
     MediaCaptureState state =
-        Shell::GetInstance()->media_delegate()->GetMediaCaptureState(context);
+        Shell::GetInstance()->media_delegate()->GetMediaCaptureState(index_);
     int res_id = 0;
     switch (state) {
       case MEDIA_CAPTURE_AUDIO_VIDEO:
@@ -114,7 +110,7 @@ class MediaIndicator : public views::View, public MediaCaptureObserver {
   }
 
  private:
-  MultiProfileIndex index_;
+  UserIndex index_;
   views::Label* label_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaIndicator);
@@ -338,13 +334,13 @@ void PublicAccountUserDetails::CalculatePreferredSize(int max_allowed_width) {
 
 UserCardView::UserCardView(user::LoginStatus login_status,
                            int max_width,
-                           int multiprofile_index) {
+                           int user_index) {
   SetLayoutManager(new views::BoxLayout(
       views::BoxLayout::kHorizontal, 0, 0, kTrayPopupPaddingBetweenItems));
   if (login_status == user::LOGGED_IN_PUBLIC) {
     AddPublicModeUserContent(max_width);
   } else {
-    AddUserContent(login_status, multiprofile_index);
+    AddUserContent(login_status, user_index);
   }
 }
 
@@ -355,7 +351,7 @@ void UserCardView::GetAccessibleState(ui::AXViewState* state) {
   std::vector<base::string16> labels;
   for (int i = 0; i < child_count(); ++i)
     GetAccessibleLabelFromDescendantViews(child_at(i), labels);
-  state->name = JoinString(labels, base::ASCIIToUTF16(" "));
+  state->name = base::JoinString(labels, base::ASCIIToUTF16(" "));
 }
 
 void UserCardView::AddPublicModeUserContent(int max_width) {
@@ -367,20 +363,17 @@ void UserCardView::AddPublicModeUserContent(int max_width) {
 }
 
 void UserCardView::AddUserContent(user::LoginStatus login_status,
-                                  int multiprofile_index) {
-  views::View* icon = CreateIcon(login_status, multiprofile_index);
+                                  int user_index) {
+  views::View* icon = CreateIcon(login_status, user_index);
   AddChildView(icon);
   views::Label* user_name = NULL;
   SessionStateDelegate* delegate =
       Shell::GetInstance()->session_state_delegate();
-  if (!multiprofile_index) {
+  if (!user_index) {
     base::string16 user_name_string =
         login_status == user::LOGGED_IN_GUEST
             ? l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_GUEST_LABEL)
-            : delegate->GetUserInfo(multiprofile_index)->GetDisplayName();
-    if (user_name_string.empty() && IsMultiAccountSupportedAndUserActive())
-      user_name_string = base::ASCIIToUTF16(
-          delegate->GetUserInfo(multiprofile_index)->GetEmail());
+            : delegate->GetUserInfo(user_index)->GetDisplayName();
     if (!user_name_string.empty()) {
       user_name = new views::Label(user_name_string);
       user_name->SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -388,15 +381,13 @@ void UserCardView::AddUserContent(user::LoginStatus login_status,
   }
 
   views::Label* user_email = NULL;
-  if (login_status != user::LOGGED_IN_GUEST &&
-      (multiprofile_index || !IsMultiAccountSupportedAndUserActive())) {
+  if (login_status != user::LOGGED_IN_GUEST) {
     SystemTrayDelegate* tray_delegate =
         Shell::GetInstance()->system_tray_delegate();
     base::string16 user_email_string =
         tray_delegate->IsUserSupervised()
             ? l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_SUPERVISED_LABEL)
-            : base::UTF8ToUTF16(
-                  delegate->GetUserInfo(multiprofile_index)->GetEmail());
+            : base::UTF8ToUTF16(delegate->GetUserInfo(user_index)->GetEmail());
     if (!user_email_string.empty()) {
       user_email = new views::Label(user_email_string);
       user_email->SetFontList(
@@ -407,7 +398,7 @@ void UserCardView::AddUserContent(user::LoginStatus login_status,
   }
 
   // Adjust text properties dependent on if it is an active or inactive user.
-  if (multiprofile_index) {
+  if (user_index) {
     // Fade the text of non active users to 50%.
     SkColor text_color = user_email->enabled_color();
     text_color = SkColorSetA(text_color, SkColorGetA(text_color) / 2);
@@ -430,7 +421,7 @@ void UserCardView::AddUserContent(user::LoginStatus login_status,
     if (user_email) {
 #if defined(OS_CHROMEOS)
       // Only non active user can have a media indicator.
-      MediaIndicator* media_indicator = new MediaIndicator(multiprofile_index);
+      MediaIndicator* media_indicator = new MediaIndicator(user_index);
       views::View* email_indicator_view = new views::View;
       email_indicator_view->SetLayoutManager(new views::BoxLayout(
           views::BoxLayout::kHorizontal, 0, 0, kTrayPopupPaddingBetweenItems));
@@ -451,9 +442,9 @@ void UserCardView::AddUserContent(user::LoginStatus login_status,
 }
 
 views::View* UserCardView::CreateIcon(user::LoginStatus login_status,
-                                      int multiprofile_index) {
+                                      int user_index) {
   RoundedImageView* icon =
-      new RoundedImageView(kTrayAvatarCornerRadius, multiprofile_index == 0);
+      new RoundedImageView(kTrayAvatarCornerRadius, user_index == 0);
   if (login_status == user::LOGGED_IN_GUEST) {
     icon->SetImage(*ui::ResourceBundle::GetSharedInstance()
                         .GetImageNamed(IDR_AURA_UBER_TRAY_GUEST_ICON)
@@ -462,9 +453,7 @@ views::View* UserCardView::CreateIcon(user::LoginStatus login_status,
   } else {
     SessionStateDelegate* delegate =
         Shell::GetInstance()->session_state_delegate();
-    content::BrowserContext* context =
-        delegate->GetBrowserContextByIndex(multiprofile_index);
-    icon->SetImage(delegate->GetUserInfo(context)->GetImage(),
+    icon->SetImage(delegate->GetUserInfo(user_index)->GetImage(),
                    gfx::Size(kTrayAvatarSize, kTrayAvatarSize));
   }
   return icon;

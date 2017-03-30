@@ -4,6 +4,8 @@
 
 #include "content/renderer/context_menu_params_builder.h"
 
+#include <stddef.h>
+
 #include "content/common/ssl_status_serialization.h"
 #include "content/public/common/context_menu_params.h"
 #include "content/public/renderer/content_renderer_client.h"
@@ -64,7 +66,7 @@ ContextMenuParams ContextMenuParamsBuilder::Build(
 
   // Deserialize the SSL info.
   if (!data.securityInfo.isEmpty())
-    params.security_info = DeserializeSecurityInfo(data.securityInfo);
+    CHECK(DeserializeSecurityInfo(data.securityInfo, &params.security_info));
 
   return params;
 }

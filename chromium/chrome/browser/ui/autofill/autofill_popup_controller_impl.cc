@@ -7,13 +7,17 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/command_line.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/autofill/autofill_popup_view.h"
 #include "chrome/browser/ui/autofill/popup_constants.h"
 #include "components/autofill/core/browser/autofill_popup_delegate.h"
 #include "components/autofill/core/browser/popup_item_ids.h"
 #include "components/autofill/core/browser/suggestion.h"
+#include "components/autofill/core/common/autofill_util.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "grit/components_scaled_resources.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -60,10 +64,10 @@ const DataResource kDataResources[] = {
   { "jcbCC", IDR_AUTOFILL_CC_GENERIC },
   { "masterCardCC", IDR_AUTOFILL_CC_MASTERCARD },
   { "visaCC", IDR_AUTOFILL_CC_VISA },
+#if defined(OS_ANDROID)
   { "scanCreditCardIcon", IDR_AUTOFILL_CC_SCAN_NEW },
-#if defined(OS_MACOSX) && !defined(OS_IOS)
-  { "macContactsIcon", IDR_AUTOFILL_MAC_CONTACTS_ICON },
-#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
+  { "settings", IDR_AUTOFILL_SETTINGS },
+#endif
 };
 
 }  // namespace
@@ -349,12 +353,20 @@ void AutofillPopupControllerImpl::AcceptSuggestion(size_t index) {
 
 int AutofillPopupControllerImpl::GetIconResourceID(
     const base::string16& resource_name) const {
+  int result = -1;
   for (size_t i = 0; i < arraysize(kDataResources); ++i) {
-    if (resource_name == base::ASCIIToUTF16(kDataResources[i].name))
-      return kDataResources[i].id;
+    if (resource_name == base::ASCIIToUTF16(kDataResources[i].name)) {
+      result = kDataResources[i].id;
+      break;
+    }
   }
 
-  return -1;
+#if defined(OS_ANDROID)
+  if (result == IDR_AUTOFILL_CC_SCAN_NEW && IsKeyboardAccessoryEnabled())
+    result = IDR_AUTOFILL_CC_SCAN_NEW_KEYBOARD_ACCESSORY;
+#endif  // OS_ANDROID
+
+  return result;
 }
 
 bool AutofillPopupControllerImpl::IsWarning(size_t index) const {
@@ -372,11 +384,6 @@ gfx::Rect AutofillPopupControllerImpl::GetRowBounds(size_t index) {
       top,
       popup_bounds_.width() - 2 * kPopupBorderThickness,
       GetRowHeightFromId(suggestions_[index].frontend_id));
-}
-
-void AutofillPopupControllerImpl::SetPopupBounds(const gfx::Rect& bounds) {
-  popup_bounds_ = bounds;
-  UpdateBoundsAndRedrawPopup();
 }
 
 const gfx::Rect& AutofillPopupControllerImpl::popup_bounds() const {
@@ -569,7 +576,6 @@ bool AutofillPopupControllerImpl::HasSuggestions() {
          id == POPUP_ITEM_ID_AUTOCOMPLETE_ENTRY ||
          id == POPUP_ITEM_ID_PASSWORD_ENTRY ||
          id == POPUP_ITEM_ID_DATALIST_ENTRY ||
-         id == POPUP_ITEM_ID_MAC_ACCESS_CONTACTS ||
          id == POPUP_ITEM_ID_SCAN_CREDIT_CARD;
 }
 

@@ -4,10 +4,14 @@
 
 #include "chrome/common/service_process_util.h"
 
+#include <stdint.h>
+
 #include <algorithm>
 
+#include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/path_service.h"
 #include "base/sha1.h"
@@ -16,22 +20,30 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/version.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/chrome_version_info.h"
 #include "components/cloud_devices/common/cloud_devices_switches.h"
+#include "components/version_info/version_info.h"
 #include "content/public/common/content_paths.h"
+#include "content/public/common/content_switches.h"
 #include "google_apis/gaia/gaia_switches.h"
 #include "ui/base/ui_base_switches.h"
+
+#if defined(OS_WIN)
+#include "components/startup_metric_utils/common/pre_read_field_trial_utils_win.h"
+#endif  // defined(OS_WIN)
+
+#include "app/vivaldi_apptools.h"
 
 #if !defined(OS_MACOSX)
 
 namespace {
 
 // This should be more than enough to hold a version string assuming each part
-// of the version string is an int64.
-const uint32 kMaxVersionStringLength = 256;
+// of the version string is an int64_t.
+const uint32_t kMaxVersionStringLength = 256;
 
 // The structure that gets written to shared memory.
 struct ServiceProcessSharedData {
@@ -77,8 +89,7 @@ ServiceProcessRunningState GetServiceProcessRunningState(
     return SERVICE_OLDER_VERSION_RUNNING;
 
   // Get the version of the currently *running* instance of Chrome.
-  chrome::VersionInfo version_info;
-  Version running_version(version_info.Version());
+  Version running_version(version_info::GetVersionNumber());
   if (!running_version.IsValid()) {
     NOTREACHED() << "Failed to parse version info";
     // Our own version is invalid. This is an error case. Pretend that we
@@ -102,8 +113,7 @@ ServiceProcessRunningState GetServiceProcessRunningState(
 std::string GetServiceProcessScopedVersionedName(
     const std::string& append_str) {
   std::string versioned_str;
-  chrome::VersionInfo version_info;
-  versioned_str.append(version_info.Version());
+  versioned_str.append(version_info::GetVersionNumber());
   versioned_str.append(append_str);
   return GetServiceProcessScopedName(versioned_str);
 }
@@ -157,10 +167,15 @@ scoped_ptr<base::CommandLine> CreateServiceProcessCommandLine() {
   command_line->AppendSwitchASCII(switches::kProcessType,
                                   switches::kServiceProcess);
 
-  if (base::CommandLine::ForCurrentProcess()->IsRunningVivaldi())
-	  command_line->AppendSwitchNoDup(switches::kRunningVivaldi);
+#if defined(OS_WIN)
+  if (startup_metric_utils::GetPreReadOptions().use_prefetch_argument)
+    command_line->AppendArg(switches::kPrefetchArgumentOther);
+#endif  // defined(OS_WIN)
+
+  if (vivaldi::IsVivaldiRunning())
+    command_line->AppendSwitchNoDup(switches::kRunningVivaldi);
   else
-	  command_line->AppendSwitchNoDup(switches::kDisableVivaldi);
+    command_line->AppendSwitchNoDup(switches::kDisableVivaldi);
 
   static const char* const kSwitchesToCopy[] = {
     switches::kCloudPrintSetupProxy,
@@ -185,7 +200,7 @@ scoped_ptr<base::CommandLine> CreateServiceProcessCommandLine() {
   command_line->CopySwitchesFrom(*base::CommandLine::ForCurrentProcess(),
                                  kSwitchesToCopy,
                                  arraysize(kSwitchesToCopy));
-  return command_line.Pass();
+  return command_line;
 }
 
 ServiceProcessState::ServiceProcessState() : state_(NULL) {
@@ -242,11 +257,10 @@ bool ServiceProcessState::HandleOtherVersion() {
 }
 
 bool ServiceProcessState::CreateSharedData() {
-  chrome::VersionInfo version_info;
-  if (version_info.Version().length() >= kMaxVersionStringLength) {
-    NOTREACHED() << "Version string length is << " <<
-        version_info.Version().length() << "which is longer than" <<
-        kMaxVersionStringLength;
+  if (version_info::GetVersionNumber().length() >= kMaxVersionStringLength) {
+    NOTREACHED() << "Version string length is << "
+                 << version_info::GetVersionNumber().length()
+                 << " which is longer than" << kMaxVersionStringLength;
     return false;
   }
 
@@ -255,7 +269,7 @@ bool ServiceProcessState::CreateSharedData() {
   if (!shared_mem_service_data.get())
     return false;
 
-  uint32 alloc_size = sizeof(ServiceProcessSharedData);
+  uint32_t alloc_size = sizeof(ServiceProcessSharedData);
   // TODO(viettrungluu): Named shared memory is deprecated (crbug.com/345734).
   if (!shared_mem_service_data->CreateNamedDeprecated
           (GetServiceProcessSharedMemName(), true, alloc_size))
@@ -268,8 +282,9 @@ bool ServiceProcessState::CreateSharedData() {
   ServiceProcessSharedData* shared_data =
       reinterpret_cast<ServiceProcessSharedData*>(
           shared_mem_service_data->memory());
-  memcpy(shared_data->service_process_version, version_info.Version().c_str(),
-         version_info.Version().length());
+  memcpy(shared_data->service_process_version,
+         version_info::GetVersionNumber().c_str(),
+         version_info::GetVersionNumber().length());
   shared_data->service_process_pid = base::GetCurrentProcId();
   shared_mem_service_data_.reset(shared_mem_service_data.release());
   return true;

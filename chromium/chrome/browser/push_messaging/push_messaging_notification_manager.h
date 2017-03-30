@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 
@@ -18,6 +19,7 @@ class Profile;
 namespace content {
 struct NotificationDatabaseData;
 struct PlatformNotificationData;
+class WebContents;
 }
 
 // Developers may be required to display a Web Notification in response to an
@@ -40,28 +42,39 @@ class PushMessagingNotificationManager {
   // Enforces the requirements implied for push subscriptions which must display
   // a Web Notification in response to an incoming message.
   void EnforceUserVisibleOnlyRequirements(
-      const GURL& requesting_origin,
+      const GURL& origin,
       int64_t service_worker_registration_id,
       const base::Closure& message_handled_closure);
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(PushMessagingNotificationManagerTest, IsTabVisible);
+  FRIEND_TEST_ALL_PREFIXES(PushMessagingNotificationManagerTest,
+                           IsTabVisibleViewSource);
+
   static void DidGetNotificationsFromDatabaseIOProxy(
       const base::WeakPtr<PushMessagingNotificationManager>& ui_weak_ptr,
-      const GURL& requesting_origin,
+      const GURL& origin,
       int64_t service_worker_registration_id,
       const base::Closure& message_handled_closure,
       bool success,
       const std::vector<content::NotificationDatabaseData>& data);
 
   void DidGetNotificationsFromDatabase(
-      const GURL& requesting_origin,
+      const GURL& origin,
       int64_t service_worker_registration_id,
       const base::Closure& message_handled_closure,
       bool success,
       const std::vector<content::NotificationDatabaseData>& data);
 
+  // Checks whether |profile| is the one owning this instance,
+  // |active_web_contents| exists and its main frame is visible, and the URL
+  // currently visible to the user is for |origin|.
+  bool IsTabVisible(Profile* profile,
+                    content::WebContents* active_web_contents,
+                    const GURL& origin);
+
   void DidGetNotificationsShownAndNeeded(
-      const GURL& requesting_origin,
+      const GURL& origin,
       int64_t service_worker_registration_id,
       bool notification_shown,
       bool notification_needed,
@@ -72,14 +85,14 @@ class PushMessagingNotificationManager {
 
   static void DidWriteNotificationDataIOProxy(
       const base::WeakPtr<PushMessagingNotificationManager>& ui_weak_ptr,
-      const GURL& requesting_origin,
+      const GURL& origin,
       const content::PlatformNotificationData& notification_data,
       const base::Closure& message_handled_closure,
       bool success,
       int64_t persistent_notification_id);
 
   void DidWriteNotificationData(
-      const GURL& requesting_origin,
+      const GURL& origin,
       const content::PlatformNotificationData& notification_data,
       const base::Closure& message_handled_closure,
       bool success,

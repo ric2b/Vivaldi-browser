@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grit base_dir="." latest_public_release="0" current_release="1"
+      source_lang_id="en" enc_check="möl">
+  <release seq="1" allow_pseudo="false">
+    <includes>
+      <!-- The HTML for the about:terms page -->
+      <include name="IDS_TERMS_HTML" file="../../../installer/win/EULA.html" type="BINDATA" />
+    </includes>
+    <messages fallback_to_english="true">
+      <message name="IDS_WELCOME_PAGE_URL" translateable="false">
+        chrome-extension://mpognobbkildjkofajifpdfhcoklimli/components/welcome/welcome.html
+      </message>
+      <message name="IDS_CHROME_WELCOME_URL" translateable="false">
+         https://vivaldi.net?welcome=1&amp;lang=[GRITLANGCODE]
+      </message>
+    </messages>
+  </release>
+</grit>

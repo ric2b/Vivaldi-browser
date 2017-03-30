@@ -7,13 +7,14 @@
 
 #include <set>
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/timer/elapsed_timer.h"
-#include "chrome/browser/sessions/tab_restore_service.h"
-#include "chrome/browser/sessions/tab_restore_service_observer.h"
 #include "components/favicon/core/favicon_service.h"
-#include "components/sync_driver/glue/synced_session.h"
+#include "components/sessions/core/tab_restore_service.h"
+#include "components/sessions/core/tab_restore_service_observer.h"
+#include "components/sync_sessions/synced_session.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/models/simple_menu_model.h"
 
@@ -44,7 +45,7 @@ class AcceleratorProvider;
 // opened tabs of other devices.
 class RecentTabsSubMenuModel : public ui::SimpleMenuModel,
                                public ui::SimpleMenuModel::Delegate,
-                               public TabRestoreServiceObserver {
+                               public sessions::TabRestoreServiceObserver {
  public:
   // Command Id for recently closed items header or disabled item to which the
   // accelerator string will be appended.
@@ -134,8 +135,9 @@ class RecentTabsSubMenuModel : public ui::SimpleMenuModel,
   sync_driver::OpenTabsUIDelegate* GetOpenTabsUIDelegate();
 
   // Overridden from TabRestoreServiceObserver:
-  void TabRestoreServiceChanged(TabRestoreService* service) override;
-  void TabRestoreServiceDestroyed(TabRestoreService* service) override;
+  void TabRestoreServiceChanged(sessions::TabRestoreService* service) override;
+  void TabRestoreServiceDestroyed(
+      sessions::TabRestoreService* service) override;
 
   Browser* browser_;  // Weak.
 

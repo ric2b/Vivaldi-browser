@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_FRAME_OPAQUE_BROWSER_FRAME_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_FRAME_OPAQUE_BROWSER_FRAME_VIEW_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/frame/browser_frame.h"
@@ -30,7 +31,7 @@ class Label;
 class OpaqueBrowserFrameView : public BrowserNonClientFrameView,
                                public views::ButtonListener,
                                public views::MenuButtonListener,
-                               public chrome::TabIconViewModel,
+                               public TabIconViewModel,
                                public OpaqueBrowserFrameViewLayoutDelegate {
  public:
   // Constructs a non-client view for an BrowserFrame.
@@ -39,7 +40,7 @@ class OpaqueBrowserFrameView : public BrowserNonClientFrameView,
 
   // BrowserNonClientFrameView:
   gfx::Rect GetBoundsForTabStrip(views::View* tabstrip) const override;
-  int GetTopInset() const override;
+  int GetTopInset(bool restored) const override;
   int GetThemeBackgroundXInset() const override;
   void UpdateThrobber(bool running) override;
   gfx::Size GetMinimumSize() const override;
@@ -65,7 +66,7 @@ class OpaqueBrowserFrameView : public BrowserNonClientFrameView,
   void OnMenuButtonClicked(views::View* source,
                            const gfx::Point& point) override;
 
-  // chrome::TabIconViewModel:
+  // TabIconViewModel:
   bool ShouldTabIconViewAnimate() const override;
   gfx::ImageSkia GetFaviconForTabIconView() override;
 
@@ -74,7 +75,6 @@ class OpaqueBrowserFrameView : public BrowserNonClientFrameView,
   bool ShouldShowWindowTitle() const override;
   base::string16 GetWindowTitle() const override;
   int GetIconSize() const override;
-  bool ShouldLeaveOffsetNearTopBorder() const override;
   gfx::Size GetBrowserViewMinimumSize() const override;
   bool ShouldShowCaptionButtons() const override;
   bool ShouldShowAvatar() const override;
@@ -85,6 +85,7 @@ class OpaqueBrowserFrameView : public BrowserNonClientFrameView,
   bool IsFullscreen() const override;
   bool IsTabStripVisible() const override;
   int GetTabStripHeight() const override;
+  bool IsToolbarVisible() const override;
   gfx::Size GetTabstripPreferredSize() const override;
 
  protected:
@@ -115,8 +116,8 @@ class OpaqueBrowserFrameView : public BrowserNonClientFrameView,
                                               ViewID view_id);
 
   // Returns the thickness of the border that makes up the window frame edges.
-  // This does not include any client edge.  If |restored| is true, acts as if
-  // the window is restored regardless of the real mode.
+  // This does not include any client edge.  If |restored| is true, this is
+  // calculated as if the window was restored, regardless of its current state.
   int FrameBorderThickness(bool restored) const;
 
   // Returns the height of the top resize area.  This is smaller than the frame
@@ -143,10 +144,7 @@ class OpaqueBrowserFrameView : public BrowserNonClientFrameView,
   void PaintRestoredFrameBorder(gfx::Canvas* canvas);
   void PaintMaximizedFrameBorder(gfx::Canvas* canvas);
   void PaintToolbarBackground(gfx::Canvas* canvas);
-  void PaintRestoredClientEdge(gfx::Canvas* canvas);
-
-  // Returns the bounds of the client area for the specified view size.
-  gfx::Rect CalculateClientAreaBounds(int width, int height) const;
+  void PaintClientEdge(gfx::Canvas* canvas);
 
   // Our layout manager also calculates various bounds.
   OpaqueBrowserFrameViewLayout* layout_;

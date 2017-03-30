@@ -4,7 +4,6 @@
 
 #include "chrome/browser/chromeos/file_manager/volume_manager_factory.h"
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/memory/singleton.h"
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
@@ -26,7 +25,7 @@ VolumeManager* VolumeManagerFactory::Get(content::BrowserContext* context) {
 }
 
 VolumeManagerFactory* VolumeManagerFactory::GetInstance() {
-  return Singleton<VolumeManagerFactory>::get();
+  return base::Singleton<VolumeManagerFactory>::get();
 }
 
 content::BrowserContext* VolumeManagerFactory::GetBrowserContextToUse(

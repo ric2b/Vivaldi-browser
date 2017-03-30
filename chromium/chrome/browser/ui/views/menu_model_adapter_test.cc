@@ -4,6 +4,7 @@
 
 #include "base/callback.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
@@ -274,4 +275,5 @@ class MenuModelAdapterTest : public ViewEventTestBase,
   scoped_ptr<views::MenuRunner> menu_runner_;
 };
 
+// If this flakes, disable and log details in http://crbug.com/523255.
 VIEW_TEST(MenuModelAdapterTest, RebuildMenu)

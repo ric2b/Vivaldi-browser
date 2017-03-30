@@ -4,6 +4,8 @@
 
 #include "components/signin/core/browser/account_reconcilor.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
 #include "base/bind.h"
@@ -13,6 +15,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_client.h"
 #include "components/signin/core/browser/signin_metrics.h"
@@ -23,16 +26,17 @@
 
 namespace {
 
-class AccountEqualToFunc : public std::equal_to<gaia::ListedAccount> {
+class AccountEqualToFunc {
  public:
-  bool operator()(const gaia::ListedAccount& p1,
-                  const gaia::ListedAccount& p2) const;
+  AccountEqualToFunc(const gaia::ListedAccount& account) : account_(account) {}
+  bool operator()(const gaia::ListedAccount& other) const;
+
+ private:
+  gaia::ListedAccount account_;
 };
 
-bool AccountEqualToFunc::operator()(
-    const gaia::ListedAccount& p1,
-    const gaia::ListedAccount& p2) const {
-  return p1.valid == p2.valid && p1.id == p2.id;
+bool AccountEqualToFunc::operator()(const gaia::ListedAccount& other) const {
+  return account_.valid == other.valid && account_.id == other.id;
 }
 
 gaia::ListedAccount AccountForId(const std::string& account_id) {
@@ -249,6 +253,8 @@ void AccountReconcilor::PerformLogoutAllAccountsAction() {
 }
 
 void AccountReconcilor::StartReconcile() {
+  reconcile_start_time_ = base::Time::Now();
+
   if (!IsProfileConnected() || !client_->AreSigninCookiesAllowed()) {
     VLOG(1) << "AccountReconcilor::StartReconcile: !connected or no cookies";
     return;
@@ -349,6 +355,13 @@ void AccountReconcilor::OnNewProfileManagementFlagChanged(
   }
 }
 
+void AccountReconcilor::OnReceivedManageAccountsResponse(
+    signin::GAIAServiceType service_type) {
+  if (service_type == signin::GAIA_SERVICE_TYPE_ADDSESSION) {
+    cookie_manager_service_->TriggerListAccounts();
+  }
+}
+
 void AccountReconcilor::FinishReconcile() {
   VLOG(1) << "AccountReconcilor::FinishReconcile";
   DCHECK(add_to_cookie_.empty());
@@ -398,20 +411,17 @@ void AccountReconcilor::FinishReconcile() {
   int added_to_cookie = 0;
   for (size_t i = 0; i < add_to_cookie_copy.size(); ++i) {
     if (gaia_accounts_.end() !=
-            std::find_if(gaia_accounts_.begin(),
-                         gaia_accounts_.end(),
-                         std::bind1st(AccountEqualToFunc(),
-                                      AccountForId(add_to_cookie_copy[i])))) {
+        std::find_if(gaia_accounts_.begin(), gaia_accounts_.end(),
+                     AccountEqualToFunc(AccountForId(add_to_cookie_copy[i])))) {
       cookie_manager_service_->SignalComplete(
           add_to_cookie_copy[i],
           GoogleServiceAuthError::AuthErrorNone());
     } else {
       PerformMergeAction(add_to_cookie_copy[i]);
       if (original_gaia_accounts.end() ==
-              std::find_if(original_gaia_accounts.begin(),
-                           original_gaia_accounts.end(),
-                           std::bind1st(AccountEqualToFunc(),
-                                        AccountForId(add_to_cookie_copy[i])))) {
+          std::find_if(
+              original_gaia_accounts.begin(), original_gaia_accounts.end(),
+              AccountEqualToFunc(AccountForId(add_to_cookie_copy[i])))) {
         added_to_cookie++;
       }
     }
@@ -435,6 +445,13 @@ void AccountReconcilor::AbortReconcile() {
 }
 
 void AccountReconcilor::CalculateIfReconcileIsDone() {
+  base::TimeDelta duration = base::Time::Now() - reconcile_start_time_;
+  // Record the duration if reconciliation was underway and now it is over.
+  if (is_reconcile_started_ && add_to_cookie_.empty()) {
+    signin_metrics::LogSigninAccountReconciliationDuration(duration,
+        !error_during_last_reconcile_);
+  }
+
   is_reconcile_started_ = !add_to_cookie_.empty();
   if (!is_reconcile_started_)
     VLOG(1) << "AccountReconcilor::CalculateIfReconcileIsDone: done";

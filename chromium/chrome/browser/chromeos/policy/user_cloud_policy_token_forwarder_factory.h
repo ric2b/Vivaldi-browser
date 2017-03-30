@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_CHROMEOS_POLICY_USER_CLOUD_POLICY_TOKEN_FORWARDER_FACTORY_H_
 #define CHROME_BROWSER_CHROMEOS_POLICY_USER_CLOUD_POLICY_TOKEN_FORWARDER_FACTORY_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
@@ -24,7 +24,8 @@ class UserCloudPolicyTokenForwarderFactory
   static UserCloudPolicyTokenForwarderFactory* GetInstance();
 
  private:
-  friend struct DefaultSingletonTraits<UserCloudPolicyTokenForwarderFactory>;
+  friend struct base::DefaultSingletonTraits<
+      UserCloudPolicyTokenForwarderFactory>;
 
   UserCloudPolicyTokenForwarderFactory();
   ~UserCloudPolicyTokenForwarderFactory() override;

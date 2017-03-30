@@ -9,6 +9,7 @@
 #include <set>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "content/public/browser/web_ui.h"
@@ -22,13 +23,17 @@ class CONTENT_EXPORT WebUIImpl : public WebUI,
                                  public IPC::Listener,
                                  public base::SupportsWeakPtr<WebUIImpl> {
  public:
-  explicit WebUIImpl(WebContents* contents);
+  WebUIImpl(WebContents* contents, const std::string& frame_name);
   ~WebUIImpl() override;
 
-  // Called by WebContentsImpl when the RenderView is first created. This is
-  // *not* called for every page load because in some cases
-  // RenderFrameHostManager will reuse RenderView instances.
+  // Called when a RenderView is created for a WebUI (reload after a renderer
+  // crash) or when a WebUI is created for an RenderView (i.e. navigating from
+  // chrome://downloads to chrome://bookmarks) or when both are new (i.e.
+  // opening a new tab).
   void RenderViewCreated(RenderViewHost* render_view_host);
+
+  // Called when a RenderView is reused for the same WebUI type (i.e. reload).
+  void RenderViewReused(RenderViewHost* render_view_host, bool was_main_frame);
 
   // WebUI implementation:
   WebContents* GetWebContents() const override;
@@ -41,7 +46,7 @@ class CONTENT_EXPORT WebUIImpl : public WebUI,
   void SetLinkTransitionType(ui::PageTransition type) override;
   int GetBindings() const override;
   void SetBindings(int bindings) override;
-  void OverrideJavaScriptFrame(const std::string& frame_name) override;
+  bool HasRenderFrame() override;
   void AddMessageHandler(WebUIMessageHandler* handler) override;
   typedef base::Callback<void(const base::ListValue*)> MessageCallback;
   void RegisterMessageCallback(const std::string& message,
@@ -80,13 +85,13 @@ class CONTENT_EXPORT WebUIImpl : public WebUI,
   // Execute a string of raw JavaScript on the page.
   void ExecuteJavascript(const base::string16& javascript);
 
-  // Finds the frame in which to execute JavaScript (the one specified by
-  // OverrideJavaScriptFrame). May return NULL if no frame of the specified name
-  // exists in the page.
+  // Finds the frame in which to execute JavaScript based on |frame_name_|. If
+  // |frame_name_| is empty, the main frame is returned. May return NULL if no
+  // frame of the specified name exists in the page.
   RenderFrameHost* TargetFrame();
 
   // A helper function for TargetFrame; adds a frame to the specified set if its
-  // name matches frame_name_.
+  // name matches |frame_name_|.
   void AddToSetIfFrameNameMatches(std::set<RenderFrameHost*>* frame_set,
                                   RenderFrameHost* host);
 
@@ -107,9 +112,9 @@ class CONTENT_EXPORT WebUIImpl : public WebUI,
   // Non-owning pointer to the WebContents this WebUI is associated with.
   WebContents* web_contents_;
 
-  // The name of the iframe this WebUI is embedded in (empty if not explicitly
-  // overridden with OverrideJavaScriptFrame).
-  std::string frame_name_;
+  // The name of the frame this WebUI is embedded in. If empty, the main frame
+  // is used.
+  const std::string frame_name_;
 
   scoped_ptr<WebUIController> controller_;
 

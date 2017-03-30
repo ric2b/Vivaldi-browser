@@ -4,6 +4,8 @@
 
 #include "content/common/cc_messages.h"
 
+#include <utility>
+
 #include "base/test/launcher/unit_test_launcher.h"
 #include "base/test/test_suite.h"
 #include "cc/output/compositor_frame.h"
@@ -27,7 +29,8 @@ static const int kTimeCheckInterval = 10;
 
 class CCMessagesPerfTest : public testing::Test {
  protected:
-  static void RunTest(std::string test_name, const CompositorFrame& frame) {
+  static void RunTest(const std::string& test_name,
+                      const CompositorFrame& frame) {
     for (int i = 0; i < kNumWarmupRuns; ++i) {
       IPC::Message msg(1, 2, IPC::Message::PRIORITY_NORMAL);
       IPC::ParamTraits<CompositorFrame>::Write(&msg, frame);
@@ -73,7 +76,8 @@ TEST_F(CCMessagesPerfTest, DelegatedFrame_ManyQuads_1_4000) {
   }
 
   frame->delegated_frame_data.reset(new DelegatedFrameData);
-  frame->delegated_frame_data->render_pass_list.push_back(render_pass.Pass());
+  frame->delegated_frame_data->render_pass_list.push_back(
+      std::move(render_pass));
 
   RunTest("DelegatedFrame_ManyQuads_1_4000", *frame);
 }
@@ -90,7 +94,8 @@ TEST_F(CCMessagesPerfTest, DelegatedFrame_ManyQuads_1_100000) {
   }
 
   frame->delegated_frame_data.reset(new DelegatedFrameData);
-  frame->delegated_frame_data->render_pass_list.push_back(render_pass.Pass());
+  frame->delegated_frame_data->render_pass_list.push_back(
+      std::move(render_pass));
 
   RunTest("DelegatedFrame_ManyQuads_1_100000", *frame);
 }
@@ -107,7 +112,8 @@ TEST_F(CCMessagesPerfTest, DelegatedFrame_ManyQuads_4000_4000) {
   }
 
   frame->delegated_frame_data.reset(new DelegatedFrameData);
-  frame->delegated_frame_data->render_pass_list.push_back(render_pass.Pass());
+  frame->delegated_frame_data->render_pass_list.push_back(
+      std::move(render_pass));
 
   RunTest("DelegatedFrame_ManyQuads_4000_4000", *frame);
 }
@@ -124,7 +130,8 @@ TEST_F(CCMessagesPerfTest, DelegatedFrame_ManyQuads_100000_100000) {
   }
 
   frame->delegated_frame_data.reset(new DelegatedFrameData);
-  frame->delegated_frame_data->render_pass_list.push_back(render_pass.Pass());
+  frame->delegated_frame_data->render_pass_list.push_back(
+      std::move(render_pass));
 
   RunTest("DelegatedFrame_ManyQuads_100000_100000", *frame);
 }
@@ -142,7 +149,8 @@ TEST_F(CCMessagesPerfTest,
           render_pass->CreateAndAppendDrawQuad<PictureDrawQuad>();
       quad->shared_quad_state = render_pass->shared_quad_state_list.back();
     }
-    frame->delegated_frame_data->render_pass_list.push_back(render_pass.Pass());
+    frame->delegated_frame_data->render_pass_list.push_back(
+        std::move(render_pass));
   }
 
   RunTest("DelegatedFrame_ManyRenderPasses_10000_100", *frame);

@@ -8,12 +8,14 @@
 #include <dwmapi.h>
 #include <shellapi.h>
 #include <shlobj.h>
+#include <stddef.h>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -43,7 +45,7 @@ namespace {
 // TODO(asanka): Move this to ui/base/win/shell.{h,cc} and invoke it from the
 // utility process.
 void ShowItemInFolderOnFileThread(const base::FilePath& full_path) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::FILE));
+  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
   base::FilePath dir = full_path.DirName().AsEndingWithSeparator();
   // ParseDisplayName will fail if the directory is "C:", it must be "C:\\".
   if (dir.empty())
@@ -186,16 +188,9 @@ void OpenItemViaShellInUtilityProcess(const base::FilePath& full_path,
   }
 }
 
-void ActivateDesktopIfNecessary() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (chrome::GetActiveDesktop() == chrome::HOST_DESKTOP_TYPE_ASH)
-    chrome::ActivateDesktopHelper(chrome::ASH_KEEP_RUNNING);
-}
-
 }  // namespace
 
 void ShowItemInFolder(Profile* profile, const base::FilePath& full_path) {
-  ActivateDesktopIfNecessary();
   BrowserThread::PostTask(BrowserThread::FILE, FROM_HERE,
       base::Bind(&ShowItemInFolderOnFileThread, full_path));
 }
@@ -203,9 +198,6 @@ void ShowItemInFolder(Profile* profile, const base::FilePath& full_path) {
 namespace internal {
 
 void PlatformOpenVerifiedItem(const base::FilePath& path, OpenItemType type) {
-  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          base::Bind(&ActivateDesktopIfNecessary));
-
   if (base::FieldTrialList::FindFullName("IsolateShellOperations") ==
       "Enabled") {
     BrowserThread::PostTask(
@@ -227,11 +219,7 @@ void PlatformOpenVerifiedItem(const base::FilePath& path, OpenItemType type) {
 }  // namespace internal
 
 void OpenExternal(Profile* profile, const GURL& url) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
-
-  if (chrome::GetActiveDesktop() == chrome::HOST_DESKTOP_TYPE_ASH &&
-      !url.SchemeIsHTTPOrHTTPS())
-    chrome::ActivateDesktopHelper(chrome::ASH_KEEP_RUNNING);
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   BrowserThread::PostTask(BrowserThread::FILE, FROM_HERE,
                           base::Bind(&OpenExternalOnFileThread, url));

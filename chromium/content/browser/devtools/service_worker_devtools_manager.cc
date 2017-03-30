@@ -15,13 +15,12 @@ namespace content {
 ServiceWorkerDevToolsManager::ServiceWorkerIdentifier::ServiceWorkerIdentifier(
     const ServiceWorkerContextCore* context,
     base::WeakPtr<ServiceWorkerContextCore> context_weak,
-    int64 version_id,
+    int64_t version_id,
     const GURL& url)
     : context_(context),
       context_weak_(context_weak),
       version_id_(version_id),
-      url_(url) {
-}
+      url_(url) {}
 
 ServiceWorkerDevToolsManager::ServiceWorkerIdentifier::ServiceWorkerIdentifier(
     const ServiceWorkerIdentifier& other)
@@ -43,7 +42,7 @@ bool ServiceWorkerDevToolsManager::ServiceWorkerIdentifier::Matches(
 // static
 ServiceWorkerDevToolsManager* ServiceWorkerDevToolsManager::GetInstance() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return Singleton<ServiceWorkerDevToolsManager>::get();
+  return base::Singleton<ServiceWorkerDevToolsManager>::get();
 }
 
 DevToolsAgentHostImpl*
@@ -107,7 +106,8 @@ void ServiceWorkerDevToolsManager::WorkerReadyForInspection(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   const WorkerId id(worker_process_id, worker_route_id);
   AgentHostMap::iterator it = workers_.find(id);
-  DCHECK(it != workers_.end());
+  if (it == workers_.end())
+    return;
   scoped_refptr<ServiceWorkerDevToolsAgentHost> host = it->second;
   host->WorkerReadyForInspection();
   FOR_EACH_OBSERVER(Observer, observer_list_,
@@ -132,7 +132,8 @@ void ServiceWorkerDevToolsManager::WorkerDestroyed(int worker_process_id,
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   const WorkerId id(worker_process_id, worker_route_id);
   AgentHostMap::iterator it = workers_.find(id);
-  DCHECK(it != workers_.end());
+  if (it == workers_.end())
+    return;
   scoped_refptr<WorkerDevToolsAgentHost> agent_host(it->second);
   agent_host->WorkerDestroyed();
   FOR_EACH_OBSERVER(Observer, observer_list_, WorkerDestroyed(it->second));
@@ -170,8 +171,7 @@ ServiceWorkerDevToolsManager::FindExistingWorkerAgentHost(
     const ServiceWorkerIdentifier& service_worker_id) {
   AgentHostMap::iterator it = workers_.begin();
   for (; it != workers_.end(); ++it) {
-    if (static_cast<ServiceWorkerDevToolsAgentHost*>(
-            it->second)->Matches(service_worker_id))
+    if (it->second->Matches(service_worker_id))
       break;
   }
   return it;

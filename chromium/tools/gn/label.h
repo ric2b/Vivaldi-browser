@@ -5,6 +5,8 @@
 #ifndef TOOLS_GN_LABEL_H_
 #define TOOLS_GN_LABEL_H_
 
+#include <stddef.h>
+
 #include "base/containers/hash_tables.h"
 #include "tools/gn/source_dir.h"
 
@@ -71,14 +73,12 @@ class Label {
     return !operator==(other);
   }
   bool operator<(const Label& other) const {
-    // TODO(brettw) could be optimized to avoid an extra full string check
-    // (one for operator==, one for <).
-    if (dir_ != other.dir_)
-      return dir_ < other.dir_;
-    if (name_ != other.name_)
-      return name_ < other.name_;
-    if (toolchain_dir_ != other.toolchain_dir_)
-      return toolchain_dir_ < other.toolchain_dir_;
+    if (int c = dir_.value().compare(other.dir_.value()))
+      return c < 0;
+    if (int c = name_.compare(other.name_))
+      return c < 0;
+    if (int c = toolchain_dir_.value().compare(other.toolchain_dir_.value()))
+      return c < 0;
     return toolchain_name_ < other.toolchain_name_;
   }
 

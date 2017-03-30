@@ -9,6 +9,7 @@
 
 #include <map>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "gpu/command_buffer/service/shader_translator.h"
 #include "third_party/angle/include/GLSLANG/ShaderLang.h"
@@ -35,8 +36,7 @@ class GPU_EXPORT ShaderTranslatorCache
       sh::GLenum shader_type,
       ShShaderSpec shader_spec,
       const ShBuiltInResources* resources,
-      ShaderTranslatorInterface::GlslImplementationType
-          glsl_implementation_type,
+      ShShaderOutput shader_output_language,
       ShCompileOptions driver_bug_workarounds);
 
  private:
@@ -49,21 +49,19 @@ class GPU_EXPORT ShaderTranslatorCache
     sh::GLenum shader_type;
     ShShaderSpec shader_spec;
     ShBuiltInResources resources;
-    ShaderTranslatorInterface::GlslImplementationType
-        glsl_implementation_type;
+    ShShaderOutput shader_output_language;
     ShCompileOptions driver_bug_workarounds;
 
     ShaderTranslatorInitParams(sh::GLenum shader_type,
                                ShShaderSpec shader_spec,
                                const ShBuiltInResources& resources,
-                               ShaderTranslatorInterface::GlslImplementationType
-                                   glsl_implementation_type,
+                               ShShaderOutput shader_output_language,
                                ShCompileOptions driver_bug_workarounds) {
       memset(this, 0, sizeof(*this));
       this->shader_type = shader_type;
       this->shader_spec = shader_spec;
       this->resources = resources;
-      this->glsl_implementation_type = glsl_implementation_type;
+      this->shader_output_language = shader_output_language;
       this->driver_bug_workarounds = driver_bug_workarounds;
     }
 

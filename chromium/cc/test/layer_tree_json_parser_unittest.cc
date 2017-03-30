@@ -4,8 +4,10 @@
 
 #include "cc/test/layer_tree_json_parser.h"
 
+#include <stddef.h>
+
 #include "cc/layers/layer.h"
-#include "cc/test/fake_impl_proxy.h"
+#include "cc/test/fake_impl_task_runner_provider.h"
 #include "cc/test/fake_layer_tree_host.h"
 #include "cc/test/fake_layer_tree_host_impl.h"
 #include "cc/test/geometry_test_utils.h"
@@ -31,9 +33,8 @@ bool LayerTreesMatch(LayerImpl* const layer_impl,
   RETURN_IF_EXPECTATION_FAILS(EXPECT_EQ(layer_impl->bounds(), layer->bounds()));
   RETURN_IF_EXPECTATION_FAILS(
       EXPECT_EQ(layer_impl->position(), layer->position()));
-  RETURN_IF_EXPECTATION_FAILS(
-      EXPECT_TRANSFORMATION_MATRIX_EQ(layer_impl->draw_transform(),
-                                      layer->draw_transform()));
+  RETURN_IF_EXPECTATION_FAILS(EXPECT_TRANSFORMATION_MATRIX_EQ(
+      layer_impl->transform(), layer->transform()));
   RETURN_IF_EXPECTATION_FAILS(EXPECT_EQ(layer_impl->contents_opaque(),
                                         layer->contents_opaque()));
   RETURN_IF_EXPECTATION_FAILS(EXPECT_EQ(layer_impl->scrollable(),
@@ -51,7 +52,7 @@ bool LayerTreesMatch(LayerImpl* const layer_impl,
 
   for (size_t i = 0; i < layer_impl->children().size(); ++i) {
     RETURN_IF_EXPECTATION_FAILS(EXPECT_TRUE(LayerTreesMatch(
-        layer_impl->children()[i], layer->children()[i].get())));
+        layer_impl->children()[i].get(), layer->children()[i].get())));
   }
 
   return true;
@@ -64,10 +65,10 @@ class LayerTreeJsonParserSanityCheck : public testing::Test {
 };
 
 TEST_F(LayerTreeJsonParserSanityCheck, Basic) {
-  FakeImplProxy proxy;
+  FakeImplTaskRunnerProvider task_runner_provider;
   TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  FakeLayerTreeHostImpl host_impl(&proxy, &shared_bitmap_manager,
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
                                   &task_graph_runner);
   LayerTreeImpl* tree = host_impl.active_tree();
 
@@ -79,14 +80,14 @@ TEST_F(LayerTreeJsonParserSanityCheck, Basic) {
   parent->SetBounds(gfx::Size(50, 50));
   child->SetBounds(gfx::Size(40, 40));
 
-  parent->SetPosition(gfx::Point(25, 25));
+  parent->SetPosition(gfx::PointF(25.f, 25.f));
 
   child->SetHaveWheelEventHandlers(true);
   child->SetHaveScrollEventHandlers(true);
 
-  parent->AddChild(child.Pass());
-  root_impl->AddChild(parent.Pass());
-  tree->SetRootLayer(root_impl.Pass());
+  parent->AddChild(std::move(child));
+  root_impl->AddChild(std::move(parent));
+  tree->SetRootLayer(std::move(root_impl));
 
   std::string json = host_impl.LayerTreeAsJson();
   scoped_refptr<Layer> root = ParseTreeFromJson(json, NULL);
@@ -95,10 +96,10 @@ TEST_F(LayerTreeJsonParserSanityCheck, Basic) {
 }
 
 TEST_F(LayerTreeJsonParserSanityCheck, EventHandlerRegions) {
-  FakeImplProxy proxy;
+  FakeImplTaskRunnerProvider task_runner_provider;
   TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  FakeLayerTreeHostImpl host_impl(&proxy, &shared_bitmap_manager,
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
                                   &task_graph_runner);
   LayerTreeImpl* tree = host_impl.active_tree();
 
@@ -113,8 +114,8 @@ TEST_F(LayerTreeJsonParserSanityCheck, EventHandlerRegions) {
   touch_region.Union(gfx::Rect(40, 10, 20, 20));
   touch_layer->SetTouchEventHandlerRegion(touch_region);
 
-  root_impl->AddChild(touch_layer.Pass());
-  tree->SetRootLayer(root_impl.Pass());
+  root_impl->AddChild(std::move(touch_layer));
+  tree->SetRootLayer(std::move(root_impl));
 
   std::string json = host_impl.LayerTreeAsJson();
   scoped_refptr<Layer> root = ParseTreeFromJson(json, NULL);

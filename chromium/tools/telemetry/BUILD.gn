@@ -2,8 +2,21 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+group("telemetry_test_support") {
+  # Generic telemetry deps
+  data = [
+    "//build/android/devil/",
+    "//third_party/catapult/",
+    "//tools/telemetry/",
+  ]
+}
+
 executable("bitmaptools") {
   sources = [
     "telemetry/internal/image_processing/bitmaptools.cc",
+  ]
+
+  deps = [
+    "//build/config/sanitizers:deps",
   ]
 }

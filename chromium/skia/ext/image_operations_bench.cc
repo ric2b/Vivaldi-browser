@@ -14,16 +14,19 @@
 // This number is somewhat reasonable way to measure this, given our current
 // implementation which somewhat scales this way.
 
+#include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 
-#include "base/basictypes.h"
 #include "base/command_line.h"
 #include "base/format_macros.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "skia/ext/image_operations.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkRect.h"
@@ -41,7 +44,6 @@ const StringMethodPair resize_methods[] = {
   ADD_METHOD(BEST),
   ADD_METHOD(BOX),
   ADD_METHOD(HAMMING1),
-  ADD_METHOD(LANCZOS2),
   ADD_METHOD(LANCZOS3),
 };
 
@@ -50,7 +52,7 @@ const StringMethodPair resize_methods[] = {
 bool StringToMethod(const std::string& arg,
                     skia::ImageOperations::ResizeMethod* method) {
   for (size_t i = 0; i < arraysize(resize_methods); ++i) {
-    if (base::strcasecmp(arg.c_str(), resize_methods[i].name) == 0) {
+    if (base::EqualsCaseInsensitiveASCII(arg, resize_methods[i].name)) {
       *method = resize_methods[i].method;
       return true;
     }
@@ -119,8 +121,8 @@ class Dimensions {
   // On failure, will set its state in such a way that IsValid will return
   // false.
   void FromString(const std::string& arg) {
-    std::vector<std::string> strings;
-    base::SplitString(std::string(arg), 'x', &strings);
+    std::vector<base::StringPiece> strings = base::SplitStringPiece(
+        arg, "x", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
     if (strings.size() != 2 ||
         base::StringToInt(strings[0], &width_) == false ||
         base::StringToInt(strings[1], &height_) == false) {
@@ -241,15 +243,15 @@ bool Benchmark::Run() const {
                                          dest_.width(), dest_.height());
   }
 
-  const int64 elapsed_us = (base::TimeTicks::Now() - start).InMicroseconds();
+  const int64_t elapsed_us = (base::TimeTicks::Now() - start).InMicroseconds();
 
-  const uint64 num_bytes = static_cast<uint64>(num_iterations_) *
-      (GetBitmapSize(&source) + GetBitmapSize(&dest));
+  const uint64_t num_bytes = static_cast<uint64_t>(num_iterations_) *
+                             (GetBitmapSize(&source) + GetBitmapSize(&dest));
 
   printf("%" PRIu64 " MB/s,\telapsed = %" PRIu64 " source=%d dest=%d\n",
-         static_cast<uint64>(elapsed_us == 0 ? 0 : num_bytes / elapsed_us),
-         static_cast<uint64>(elapsed_us),
-         GetBitmapSize(&source), GetBitmapSize(&dest));
+         static_cast<uint64_t>(elapsed_us == 0 ? 0 : num_bytes / elapsed_us),
+         static_cast<uint64_t>(elapsed_us), GetBitmapSize(&source),
+         GetBitmapSize(&dest));
 
   return true;
 }

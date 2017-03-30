@@ -19,11 +19,11 @@ NotificationPermissionContextFactory::GetForProfile(Profile* profile) {
 // static
 NotificationPermissionContextFactory*
 NotificationPermissionContextFactory::GetInstance() {
-  return Singleton<NotificationPermissionContextFactory>::get();
+  return base::Singleton<NotificationPermissionContextFactory>::get();
 }
 
 NotificationPermissionContextFactory::NotificationPermissionContextFactory()
-    : BrowserContextKeyedServiceFactory(
+    : PermissionContextFactoryBase(
           "NotificationPermissionContext",
           BrowserContextDependencyManager::GetInstance()) {}
 
@@ -32,10 +32,4 @@ NotificationPermissionContextFactory::~NotificationPermissionContextFactory() {}
 KeyedService* NotificationPermissionContextFactory::BuildServiceInstanceFor(
     content::BrowserContext* profile) const {
   return new NotificationPermissionContext(static_cast<Profile*>(profile));
-}
-
-content::BrowserContext*
-NotificationPermissionContextFactory::GetBrowserContextToUse(
-    content::BrowserContext* context) const {
-  return chrome::GetBrowserContextOwnInstanceInIncognito(context);
 }

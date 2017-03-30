@@ -7,19 +7,19 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "components/autofill/core/common/save_password_progress_logger.h"
 
 namespace password_manager {
 
-class PasswordManagerClient;
+class LogManager;
 
 // This is the SavePasswordProgressLogger specialization for the browser code,
-// where the PasswordManagerClient can be directly called.
+// where the LogManager can be directly called.
 class BrowserSavePasswordProgressLogger
     : public autofill::SavePasswordProgressLogger {
  public:
-  explicit BrowserSavePasswordProgressLogger(
-      const PasswordManagerClient* client);
+  explicit BrowserSavePasswordProgressLogger(const LogManager* log_manager);
   ~BrowserSavePasswordProgressLogger() override;
 
   // Browser-specific addition to the base class' Log* methods. The input is
@@ -31,9 +31,9 @@ class BrowserSavePasswordProgressLogger
   void SendLog(const std::string& log) override;
 
  private:
-  // The PasswordManagerClient to which logs can be sent for display. The client
-  // must outlive this logger.
-  const PasswordManagerClient* const client_;
+  // The LogManager to which logs can be sent for display. The log_manager must
+  // outlive this logger.
+  const LogManager* const log_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(BrowserSavePasswordProgressLogger);
 };

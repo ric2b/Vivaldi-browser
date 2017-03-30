@@ -17,7 +17,6 @@ const char kNewProfileManagementFieldTrialName[] = "NewProfileManagement";
 // below assumes the order of the values in this enum.  That is, new profile
 // management is included in consistent identity.
 enum State {
-  STATE_OLD_AVATAR_MENU,
   STATE_NEW_AVATAR_MENU,
   STATE_NEW_PROFILE_MANAGEMENT,
   STATE_ACCOUNT_CONSISTENCY,
@@ -25,26 +24,20 @@ enum State {
 
 State GetProcessState() {
   // Find the state of both command line args.
-  bool is_new_avatar_menu = base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableNewAvatarMenu);
   bool is_new_profile_management =
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnableNewProfileManagement);
   bool is_consistent_identity =
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnableAccountConsistency);
-  bool not_new_avatar_menu = base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kDisableNewAvatarMenu);
   bool not_new_profile_management =
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisableNewProfileManagement);
   bool not_consistent_identity =
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisableAccountConsistency);
-  int count_args = (is_new_avatar_menu ? 1 : 0) +
-      (is_new_profile_management ? 1 : 0) +
+  int count_args = (is_new_profile_management ? 1 : 0) +
       (is_consistent_identity ? 1 : 0) +
-      (not_new_avatar_menu ? 1 : 0) +
       (not_new_profile_management ? 1 : 0) +
       (not_consistent_identity ? 1 : 0);
   bool invalid_commandline = count_args > 1;
@@ -67,17 +60,12 @@ State GetProcessState() {
         base::FieldTrialList::FindFullName(kNewProfileManagementFieldTrialName);
   }
 
-  // Forcing the old avatar menu takes precedent over other args.
   // Enable command line args take precedent over disable command line args.
   // Consistent identity args take precedent over new profile management args.
-  if (not_new_avatar_menu) {
-    return STATE_OLD_AVATAR_MENU;
-  } else if (is_consistent_identity) {
+  if (is_consistent_identity) {
     return STATE_ACCOUNT_CONSISTENCY;
   } else if (is_new_profile_management) {
     return STATE_NEW_PROFILE_MANAGEMENT;
-  } else if (is_new_avatar_menu) {
-    return STATE_NEW_AVATAR_MENU;
   } else if (not_new_profile_management) {
     return STATE_NEW_AVATAR_MENU;
   } else if (not_consistent_identity) {
@@ -106,7 +94,7 @@ State GetProcessState() {
   return state;
 }
 
-bool CheckFlag(std::string command_switch, State min_state) {
+bool CheckFlag(const std::string& command_switch, State min_state) {
   // Individiual flag settings take precedence.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(command_switch))
     return true;
@@ -122,16 +110,6 @@ bool IsEnableAccountConsistency() {
   return GetProcessState() >= STATE_ACCOUNT_CONSISTENCY;
 }
 
-bool IsEnableWebviewBasedSignin() {
-  // For now, the webview is enabled only for desktop.
-#if defined(OS_CHROMEOS)
-  return false;
-#else
-  return !base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableIframeBasedSignin);
-#endif
-}
-
 bool IsExtensionsMultiAccount() {
   return CheckFlag(switches::kExtensionsMultiAccount,
                    STATE_ACCOUNT_CONSISTENCY);
@@ -139,15 +117,6 @@ bool IsExtensionsMultiAccount() {
 
 bool IsGoogleProfileInfo() {
   return CheckFlag(switches::kGoogleProfileInfo, STATE_NEW_AVATAR_MENU);
-}
-
-bool IsNewAvatarMenu() {
-  // NewAvatarMenu is only available on desktop.
-#if defined(OS_ANDROID) || defined(OS_IOS) || defined(OS_CHROMEOS)
-  return false;
-#else
-  return GetProcessState() >= STATE_NEW_AVATAR_MENU;
-#endif
 }
 
 bool IsNewProfileManagement() {
@@ -159,14 +128,9 @@ bool IsNewProfileManagementPreviewEnabled() {
   return false;
 }
 
-void EnableNewAvatarMenuForTesting(base::CommandLine* command_line) {
-  command_line->AppendSwitch(switches::kEnableNewAvatarMenu);
-  DCHECK(!command_line->HasSwitch(switches::kDisableNewAvatarMenu));
-}
-
-void DisableNewAvatarMenuForTesting(base::CommandLine* command_line) {
-  command_line->AppendSwitch(switches::kDisableNewAvatarMenu);
-  DCHECK(!command_line->HasSwitch(switches::kEnableNewAvatarMenu));
+bool UsePasswordSeparatedSigninFlow() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kEnablePasswordSeparatedSigninFlow);
 }
 
 void EnableNewProfileManagementForTesting(base::CommandLine* command_line) {

@@ -8,22 +8,32 @@
 #include <stdint.h>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/callback_forward.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "components/metrics/proto/system_profile.pb.h"
 
+namespace base {
+class FilePath;
+}
+
 namespace metrics {
 
 class MetricsLogUploader;
+class MetricsService;
 
 // An abstraction of operations that depend on the embedder's (e.g. Chrome)
 // environment.
 class MetricsServiceClient {
  public:
   virtual ~MetricsServiceClient() {}
+
+  // Returns the MetricsService instance that this client is associated with.
+  // With the exception of testing contexts, the returned instance must be valid
+  // for the lifetime of this object (typically, the embedder's client
+  // implementation will own the MetricsService instance being returned).
+  virtual MetricsService* GetMetricsService() = 0;
 
   // Registers the client id with other services (e.g. crash reporting), called
   // when metrics recording gets enabled.
@@ -38,7 +48,7 @@ class MetricsServiceClient {
 
   // Returns the product value to use in uploaded reports, which will be used to
   // set the ChromeUserMetricsExtension.product field. See comments on that
-  // field on why it's an int32 rather than an enum.
+  // field on why it's an int32_t rather than an enum.
   virtual int32_t GetProduct() = 0;
 
   // Returns the current application locale (e.g. "en-US").
@@ -57,14 +67,16 @@ class MetricsServiceClient {
   // Called by the metrics service when a log has been uploaded.
   virtual void OnLogUploadComplete() = 0;
 
-  // Starts gathering metrics, calling |done_callback| when initial metrics
-  // gathering is complete.
-  virtual void StartGatheringMetrics(const base::Closure& done_callback) = 0;
+  // Gathers metrics that will be filled into the system profile protobuf,
+  // calling |done_callback| when complete.
+  virtual void InitializeSystemProfileMetrics(
+      const base::Closure& done_callback) = 0;
 
   // Called prior to a metrics log being closed, allowing the client to collect
   // extra histograms that will go in that log. Asynchronous API - the client
   // implementation should call |done_callback| when complete.
-  virtual void CollectFinalMetrics(const base::Closure& done_callback) = 0;
+  virtual void CollectFinalMetricsForLog(
+      const base::Closure& done_callback) = 0;
 
   // Creates a MetricsLogUploader with the specified parameters (see comments on
   // MetricsLogUploader for details).
@@ -77,6 +89,14 @@ class MetricsServiceClient {
   // Returns the name of a key under HKEY_CURRENT_USER that can be used to store
   // backups of metrics data. Unused except on Windows.
   virtual base::string16 GetRegistryBackupKey();
+
+  // Called on plugin loading errors.
+  virtual void OnPluginLoadingError(const base::FilePath& plugin_path) {}
+
+  // Called on renderer crashes in some embedders (e.g., those that do not use
+  // //content and thus do not have //content's notification system available
+  // as a mechanism for observing renderer crashes).
+  virtual void OnRendererProcessCrash() {}
 };
 
 }  // namespace metrics

@@ -5,6 +5,9 @@
 #ifndef GPU_COMMAND_BUFFER_CLIENT_GLES2_IMPLEMENTATION_H_
 #define GPU_COMMAND_BUFFER_CLIENT_GLES2_IMPLEMENTATION_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <list>
 #include <map>
 #include <queue>
@@ -13,11 +16,11 @@
 #include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/trace_event/memory_dump_provider.h"
 #include "gpu/command_buffer/client/buffer_tracker.h"
 #include "gpu/command_buffer/client/client_context_state.h"
 #include "gpu/command_buffer/client/context_support.h"
@@ -122,7 +125,8 @@ class GLES2ImplementationErrorMessageCallback {
 // shared memory and synchronization issues.
 class GLES2_IMPL_EXPORT GLES2Implementation
     : NON_EXPORTED_BASE(public GLES2Interface),
-      NON_EXPORTED_BASE(public ContextSupport) {
+      NON_EXPORTED_BASE(public ContextSupport),
+      NON_EXPORTED_BASE(public base::trace_event::MemoryDumpProvider) {
  public:
   enum MappedMemoryLimit {
     kNoLimit = MappedMemoryManager::kNoLimit,
@@ -141,7 +145,8 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   };
 
   // The maxiumum result size from simple GL get commands.
-  static const size_t kMaxSizeOfSimpleResult = 16 * sizeof(uint32);  // NOLINT.
+  static const size_t kMaxSizeOfSimpleResult =
+      16 * sizeof(uint32_t);  // NOLINT.
 
   // used for testing only. If more things are reseved add them here.
   static const unsigned int kStartingOffset = kMaxSizeOfSimpleResult;
@@ -150,7 +155,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   static const unsigned int kSizeToFlush = 256 * 1024;
 
   // The bucket used for results. Public for testing only.
-  static const uint32 kResultBucketId = 1;
+  static const uint32_t kResultBucketId = 1;
 
   // Alignment of allocations.
   static const unsigned int kAlignment = 4;
@@ -200,6 +205,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   // ContextSupport implementation.
   void Swap() override;
   void PartialSwapBuffers(const gfx::Rect& sub_buffer) override;
+  void CommitOverlayPlanes() override;
   void ScheduleOverlayPlane(int plane_z_order,
                             gfx::OverlayTransform plane_transform,
                             unsigned overlay_texture_id,
@@ -207,10 +213,13 @@ class GLES2_IMPL_EXPORT GLES2Implementation
                             const gfx::RectF& uv_rect) override;
   GLuint InsertFutureSyncPointCHROMIUM() override;
   void RetireSyncPointCHROMIUM(GLuint sync_point) override;
+  uint64_t ShareGroupTracingGUID() const override;
 
-  void GetProgramInfoCHROMIUMHelper(GLuint program, std::vector<int8>* result);
+  void GetProgramInfoCHROMIUMHelper(GLuint program,
+                                    std::vector<int8_t>* result);
   GLint GetAttribLocationHelper(GLuint program, const char* name);
   GLint GetUniformLocationHelper(GLuint program, const char* name);
+  GLint GetFragDataIndexEXTHelper(GLuint program, const char* name);
   GLint GetFragDataLocationHelper(GLuint program, const char* name);
   bool GetActiveAttribHelper(
       GLuint program, GLuint index, GLsizei bufsize, GLsizei* length,
@@ -218,18 +227,18 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   bool GetActiveUniformHelper(
       GLuint program, GLuint index, GLsizei bufsize, GLsizei* length,
       GLint* size, GLenum* type, char* name);
-  void GetUniformBlocksCHROMIUMHelper(
-      GLuint program, std::vector<int8>* result);
-  void GetUniformsES3CHROMIUMHelper(
-      GLuint program, std::vector<int8>* result);
+  void GetUniformBlocksCHROMIUMHelper(GLuint program,
+                                      std::vector<int8_t>* result);
+  void GetUniformsES3CHROMIUMHelper(GLuint program,
+                                    std::vector<int8_t>* result);
   GLuint GetUniformBlockIndexHelper(GLuint program, const char* name);
   bool GetActiveUniformBlockNameHelper(
       GLuint program, GLuint index, GLsizei bufsize,
       GLsizei* length, char* name);
   bool GetActiveUniformBlockivHelper(
       GLuint program, GLuint index, GLenum pname, GLint* params);
-  void GetTransformFeedbackVaryingsCHROMIUMHelper(
-      GLuint program, std::vector<int8>* result);
+  void GetTransformFeedbackVaryingsCHROMIUMHelper(GLuint program,
+                                                  std::vector<int8_t>* result);
   bool GetTransformFeedbackVaryingHelper(
       GLuint program, GLuint index, GLsizei bufsize, GLsizei* length,
       GLint* size, GLenum* type, char* name);
@@ -248,11 +257,16 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   void FreeEverything();
 
   // ContextSupport implementation.
-  void SignalSyncPoint(uint32 sync_point,
+  void SignalSyncPoint(uint32_t sync_point,
                        const base::Closure& callback) override;
-  void SignalQuery(uint32 query, const base::Closure& callback) override;
-  void SetSurfaceVisible(bool visible) override;
+  void SignalSyncToken(const gpu::SyncToken& sync_token,
+                       const base::Closure& callback) override;
+  void SignalQuery(uint32_t query, const base::Closure& callback) override;
   void SetAggressivelyFreeResources(bool aggressively_free_resources) override;
+
+  // base::trace_event::MemoryDumpProvider implementation.
+  bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
+                    base::trace_event::ProcessMemoryDump* pmd) override;
 
   void SetErrorMessageCallback(
       GLES2ImplementationErrorMessageCallback* callback) {
@@ -403,11 +417,9 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   }
 
   void* GetResultBuffer();
-  int32 GetResultShmId();
-  uint32 GetResultShmOffset();
+  int32_t GetResultShmId();
+  uint32_t GetResultShmOffset();
 
-  // Lazily determines if GL_ANGLE_pack_reverse_row_order is available
-  bool IsAnglePackReverseRowOrderAvailable();
   bool IsChromiumFramebufferMultisampleAvailable();
 
   bool IsExtensionAvailableHelper(
@@ -434,20 +446,20 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   // a transfer buffer to function which is currently managed by this class.
 
   // Gets the contents of a bucket.
-  bool GetBucketContents(uint32 bucket_id, std::vector<int8>* data);
+  bool GetBucketContents(uint32_t bucket_id, std::vector<int8_t>* data);
 
   // Sets the contents of a bucket.
-  void SetBucketContents(uint32 bucket_id, const void* data, size_t size);
+  void SetBucketContents(uint32_t bucket_id, const void* data, size_t size);
 
   // Sets the contents of a bucket as a string.
-  void SetBucketAsCString(uint32 bucket_id, const char* str);
+  void SetBucketAsCString(uint32_t bucket_id, const char* str);
 
   // Gets the contents of a bucket as a string. Returns false if there is no
   // string available which is a separate case from the empty string.
-  bool GetBucketAsString(uint32 bucket_id, std::string* str);
+  bool GetBucketAsString(uint32_t bucket_id, std::string* str);
 
   // Sets the contents of a bucket as a string.
-  void SetBucketAsString(uint32 bucket_id, const std::string& str);
+  void SetBucketAsString(uint32_t bucket_id, const std::string& str);
 
   // Returns true if id is reserved.
   bool IsBufferReservedId(GLuint id);
@@ -510,6 +522,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   void DeleteFramebuffersStub(GLsizei n, const GLuint* framebuffers);
   void DeleteRenderbuffersStub(GLsizei n, const GLuint* renderbuffers);
   void DeleteTexturesStub(GLsizei n, const GLuint* textures);
+  void DeletePathsCHROMIUMStub(GLuint first_client_id, GLsizei range);
   void DeleteProgramStub(GLsizei n, const GLuint* programs);
   void DeleteShaderStub(GLsizei n, const GLuint* shaders);
   void DeleteVertexArraysOESStub(GLsizei n, const GLuint* arrays);
@@ -538,7 +551,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation
                                                   GLenum usage);
 
   // Helper for GetVertexAttrib
-  bool GetVertexAttribHelper(GLuint index, GLenum pname, uint32* param);
+  bool GetVertexAttribHelper(GLuint index, GLenum pname, uint32_t* param);
 
   GLuint GetMaxValueInBufferCHROMIUMHelper(
       GLuint buffer_id, GLsizei count, GLenum type, GLuint offset);
@@ -550,22 +563,43 @@ class GLES2_IMPL_EXPORT GLES2Implementation
 
   // The pixels pointer should already account for unpack skip
   // images/rows/pixels.
-  void TexSubImage2DImpl(
-      GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width,
-      GLsizei height, GLenum format, GLenum type, uint32 unpadded_row_size,
-      const void* pixels, uint32 pixels_padded_row_size, GLboolean internal,
-      ScopedTransferBufferPtr* buffer, uint32 buffer_padded_row_size);
-  void TexSubImage3DImpl(
-      GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset,
-      GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type,
-      uint32 unpadded_row_size, const void* pixels,
-      uint32 pixels_padded_row_size, GLboolean internal,
-      ScopedTransferBufferPtr* buffer, uint32 buffer_padded_row_size);
+  void TexSubImage2DImpl(GLenum target,
+                         GLint level,
+                         GLint xoffset,
+                         GLint yoffset,
+                         GLsizei width,
+                         GLsizei height,
+                         GLenum format,
+                         GLenum type,
+                         uint32_t unpadded_row_size,
+                         const void* pixels,
+                         uint32_t pixels_padded_row_size,
+                         GLboolean internal,
+                         ScopedTransferBufferPtr* buffer,
+                         uint32_t buffer_padded_row_size);
+  void TexSubImage3DImpl(GLenum target,
+                         GLint level,
+                         GLint xoffset,
+                         GLint yoffset,
+                         GLint zoffset,
+                         GLsizei width,
+                         GLsizei height,
+                         GLsizei depth,
+                         GLenum format,
+                         GLenum type,
+                         uint32_t unpadded_row_size,
+                         const void* pixels,
+                         uint32_t pixels_padded_row_size,
+                         GLboolean internal,
+                         ScopedTransferBufferPtr* buffer,
+                         uint32_t buffer_padded_row_size);
 
   // Helpers for query functions.
   bool GetHelper(GLenum pname, GLint* params);
   GLuint GetBoundBufferHelper(GLenum target);
   bool GetBooleanvHelper(GLenum pname, GLboolean* params);
+  bool GetBufferParameteri64vHelper(
+      GLenum target, GLenum pname, GLint64* params);
   bool GetBufferParameterivHelper(GLenum target, GLenum pname, GLint* params);
   bool GetFloatvHelper(GLenum pname, GLfloat* params);
   bool GetFramebufferAttachmentParameterivHelper(
@@ -595,6 +629,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   bool SetCapabilityState(GLenum cap, bool enabled);
 
   IdHandlerInterface* GetIdHandler(int id_namespace) const;
+  RangeIdHandlerInterface* GetRangeIdHandler(int id_namespace) const;
   // IdAllocators for objects that can't be shared among contexts.
   // For now, used only for Queries. TODO(hj.r.chung) Should be added for
   // Framebuffer and Vertex array objects.
@@ -619,32 +654,6 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   // a token.
   void RemoveTransferBuffer(BufferTracker::Buffer* buffer);
 
-  // Returns true if the async upload token has passed.
-  //
-  // NOTE: This will detect wrapped async tokens by checking if the most
-  // significant  bit of async token to check is 1 but the last read is 0, i.e.
-  // the uint32 wrapped.
-  bool HasAsyncUploadTokenPassed(uint32 token) const {
-    return async_upload_sync_->HasAsyncUploadTokenPassed(token);
-  }
-
-  // Get the next async upload token.
-  uint32 NextAsyncUploadToken();
-
-  // Ensure that the shared memory used for synchronizing async upload tokens
-  // has been mapped.
-  //
-  // Returns false on error, true on success.
-  bool EnsureAsyncUploadSync();
-
-  // Checks the last read asynchronously upload token and frees any unmanaged
-  // transfer buffer that has its async token passed.
-  void PollAsyncUploads();
-
-  // Free every async upload buffer. If some async upload buffer is still in use
-  // wait for them to finish before freeing.
-  void FreeAllAsyncUploadBuffers();
-
   bool GetBoundPixelTransferBuffer(
       GLenum target, const char* function_name, GLuint* buffer_id);
   BufferTracker::Buffer* GetBoundPixelUnpackTransferBufferIfValid(
@@ -660,6 +669,17 @@ class GLES2_IMPL_EXPORT GLES2Implementation
 
   const std::string& GetLogPrefix() const;
 
+  bool PrepareInstancedPathCommand(const char* function_name,
+                                   GLsizei num_paths,
+                                   GLenum path_name_type,
+                                   const void* paths,
+                                   GLenum transform_type,
+                                   const GLfloat* transform_values,
+                                   ScopedTransferBufferPtr* buffer,
+                                   uint32_t* out_paths_shm_id,
+                                   size_t* out_paths_offset,
+                                   uint32_t* out_transforms_shm_id,
+                                   size_t* out_transforms_offset);
 #if defined(GL_CLIENT_FAIL_GL_ERRORS)
   void CheckGLError();
   void FailGLError(GLenum error);
@@ -682,10 +702,9 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   DebugMarkerManager debug_marker_manager_;
   std::string this_in_hex_;
 
-  std::queue<int32> swap_buffers_tokens_;
-  std::queue<int32> rate_limit_tokens_;
+  std::queue<int32_t> swap_buffers_tokens_;
+  std::queue<int32_t> rate_limit_tokens_;
 
-  ExtensionStatus angle_pack_reverse_row_order_status_;
   ExtensionStatus chromium_framebuffer_multisample_;
 
   GLStaticState static_state_;
@@ -693,6 +712,15 @@ class GLES2_IMPL_EXPORT GLES2Implementation
 
   // pack alignment as last set by glPixelStorei
   GLint pack_alignment_;
+
+  // pack row length as last set by glPixelStorei
+  GLint pack_row_length_;
+
+  // pack skip pixels as last set by glPixelStorei
+  GLint pack_skip_pixels_;
+
+  // pack skip rows as last set by glPixelStorei
+  GLint pack_skip_rows_;
 
   // unpack alignment as last set by glPixelStorei
   GLint unpack_alignment_;
@@ -711,9 +739,6 @@ class GLES2_IMPL_EXPORT GLES2Implementation
 
   // unpack skip images as last set by glPixelStorei
   GLint unpack_skip_images_;
-
-  // pack reverse row order as last set by glPixelstorei
-  bool pack_reverse_row_order_;
 
   scoped_ptr<TextureUnit[]> texture_units_;
 
@@ -740,18 +765,6 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   GLuint bound_pixel_pack_transfer_buffer_id_;
   GLuint bound_pixel_unpack_transfer_buffer_id_;
 
-  // The current asynchronous pixel buffer upload token.
-  uint32 async_upload_token_;
-
-  // The shared memory used for synchronizing asynchronous upload tokens.
-  AsyncUploadSync* async_upload_sync_;
-  int32 async_upload_sync_shm_id_;
-  unsigned int async_upload_sync_shm_offset_;
-
-  // Unmanaged pixel transfer buffer memory pending asynchronous upload token.
-  typedef std::list<std::pair<void*, uint32> > DetachedAsyncUploadMemoryList;
-  DetachedAsyncUploadMemoryList detached_async_upload_memory_;
-
   // Client side management for vertex array objects. Needed to correctly
   // track client side arrays.
   scoped_ptr<VertexArrayObjectManager> vertex_array_object_manager_;
@@ -759,7 +772,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   GLuint reserved_ids_[2];
 
   // Current GL error bits.
-  uint32 error_bits_;
+  uint32_t error_bits_;
 
   // Whether or not to print debugging info.
   bool debug_;
@@ -773,9 +786,15 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   // Used to check for single threaded access.
   int use_count_;
 
+  // Maximum amount of extra memory from the mapped memory pool to use when
+  // needing to transfer something exceeding the default transfer buffer.
+  // This should be 0 for low memory devices since they are already memory
+  // constrained.
+  const uint32_t max_extra_transfer_buffer_size_;
+
   // Map of GLenum to Strings for glGetString.  We need to cache these because
   // the pointer passed back to the client has to remain valid for eternity.
-  typedef std::map<uint32, std::set<std::string> > GLStringMap;
+  typedef std::map<uint32_t, std::set<std::string>> GLStringMap;
   GLStringMap gl_strings_;
 
   // Similar cache for glGetRequestableExtensionsCHROMIUM. We don't
@@ -818,6 +837,11 @@ class GLES2_IMPL_EXPORT GLES2Implementation
 
   DISALLOW_COPY_AND_ASSIGN(GLES2Implementation);
 };
+
+inline bool GLES2Implementation::GetBufferParameteri64vHelper(
+    GLenum /* target */, GLenum /* pname */, GLint64* /* params */) {
+  return false;
+}
 
 inline bool GLES2Implementation::GetBufferParameterivHelper(
     GLenum /* target */, GLenum /* pname */, GLint* /* params */) {

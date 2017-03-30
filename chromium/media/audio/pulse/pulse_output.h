@@ -20,8 +20,11 @@
 #ifndef MEDIA_AUDIO_PULSE_PULSE_OUTPUT_H_
 #define MEDIA_AUDIO_PULSE_PULSE_OUTPUT_H_
 
+#include <stddef.h>
+
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "media/audio/audio_io.h"

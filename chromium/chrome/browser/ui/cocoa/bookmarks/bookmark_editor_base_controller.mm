@@ -9,11 +9,12 @@
 #include "base/auto_reset.h"
 #include "base/logging.h"
 #include "base/mac/bundle_locations.h"
+#include "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
-#include "chrome/browser/bookmarks/chrome_bookmark_client.h"
-#include "chrome/browser/bookmarks/chrome_bookmark_client_factory.h"
+#include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_all_tabs_controller.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_editor_controller.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_name_folder_controller.h"
@@ -21,6 +22,7 @@
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/bookmarks/managed/managed_bookmark_service.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
@@ -72,6 +74,12 @@ void BookmarkEditor::Show(gfx::NativeWindow parent_window,
                           Profile* profile,
                           const EditDetails& details,
                           Configuration configuration) {
+  if (chrome::ToolkitViewsDialogsEnabled()) {
+    chrome::ShowBookmarkEditorViews(parent_window, profile, details,
+                                    configuration);
+    return;
+  }
+
   if (details.type == EditDetails::EXISTING_NODE &&
       details.existing_node->is_folder()) {
     BookmarkNameFolderController* controller =
@@ -468,7 +476,7 @@ NSString* const kOkEnabledName = @"okEnabled";
 }
 
 - (NSIndexPath*)selectionPathForNode:(const BookmarkNode*)desiredNode {
-  // Back up the parent chaing for desiredNode, building up a stack
+  // Back up the parent chain for desiredNode, building up a stack
   // of ancestor nodes.  Then crawl down the folderTreeArray looking
   // for each ancestor in order while building up the selectionPath.
   std::stack<const BookmarkNode*> nodeStack;
@@ -505,14 +513,14 @@ NSString* const kOkEnabledName = @"okEnabled";
 }
 
 - (NSMutableArray*)addChildFoldersFromNode:(const BookmarkNode*)node {
-  ChromeBookmarkClient* client =
-      ChromeBookmarkClientFactory::GetForProfile(profile_);
+  bookmarks::ManagedBookmarkService* managed =
+      ManagedBookmarkServiceFactory::GetForProfile(profile_);
   NSMutableArray* childFolders = nil;
   int childCount = node->child_count();
   for (int i = 0; i < childCount; ++i) {
     const BookmarkNode* childNode = node->GetChild(i);
     if (childNode->is_folder() && childNode->IsVisible() &&
-        client->CanBeEditedByUser(childNode)) {
+        managed->CanBeEditedByUser(childNode)) {
       NSString* childName = base::SysUTF16ToNSString(childNode->GetTitle());
       NSMutableArray* children = [self addChildFoldersFromNode:childNode];
       BookmarkFolderInfo* folderInfo =
@@ -623,12 +631,8 @@ NSString* const kOkEnabledName = @"okEnabled";
     DCHECK(row >= 0);
 
     // Put the cell into single-line mode before putting it into edit mode.
-    // TODO(kushi.p): Remove this when the project hits a 10.6+ only state.
     NSCell* folderCell = [folderTreeView_ preparedCellAtColumn:0 row:row];
-    if ([folderCell
-          respondsToSelector:@selector(setUsesSingleLineMode:)]) {
-      [folderCell setUsesSingleLineMode:YES];
-    }
+    [folderCell setUsesSingleLineMode:YES];
 
     [folderTreeView_ editColumn:0 row:row withEvent:nil select:YES];
   }
@@ -652,6 +656,14 @@ NSString* const kOkEnabledName = @"okEnabled";
 
 - (void)selectTestNodeInBrowser:(const BookmarkNode*)node {
   [self selectNodeInBrowser:node];
+}
+
+- (BOOL)outlineView:(NSOutlineView*)outlineView
+    shouldEditTableColumn:(NSTableColumn*)tableColumn
+                     item:(id)item {
+  BookmarkFolderInfo* info =
+      base::mac::ObjCCast<BookmarkFolderInfo>([item representedObject]);
+  return info.newFolder;
 }
 
 @end  // BookmarkEditorBaseController
@@ -720,5 +732,4 @@ NSString* const kOkEnabledName = @"okEnabled";
   return [other isKindOfClass:[BookmarkFolderInfo class]] &&
       folderNode_ == [(BookmarkFolderInfo*)other folderNode];
 }
-
 @end

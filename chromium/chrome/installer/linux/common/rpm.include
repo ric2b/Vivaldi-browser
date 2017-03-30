@@ -3,10 +3,10 @@
 # Install the repository signing key (see also:
 # https://www.google.com/linuxrepositories/)
 install_rpm_key() {
-  # Check to see if key already exists.
+  # Check to see if the key already exists.
   rpm -q gpg-pubkey-bf1700f8-54c12a7e > /dev/null 2>&1
   if [ "$?" -eq "0" ]; then
-    # Key already exists
+    # Keys already exist
     return 0
   fi
 
@@ -65,6 +65,82 @@ CYh9hxdZFtb26Van/IEhL8rVugHah4UJOxQY/e5atpn3xWekfC5rAyKWJUok06kZ
 rRa0j5pHwF3/Eibv4rU1BZrDdymtYlEJj+YivgsO+Zx3bo3wbhX1N3cXreNCe+D4
 tM3ieUti7MisRAlo8D+k62oVxd+PxZ/9FQA=
 =qqBc
+-----END PGP PUBLIC KEY BLOCK-----
+KEYDATA
+    rpm --import "$TMPKEY"
+    rc=$?
+    rm -f "$TMPKEY"
+    if [ "$rc" -eq "0" ]; then
+      return 0
+    fi
+  fi
+  return 1
+}
+
+# Install another key (7b8b44a1) for use with rpm in the future
+install_future_rpm_key() {
+  # Check to see if the key already exists.
+  rpm -q gpg-pubkey-7b8b44a1-567002dc > /dev/null 2>&1
+  if [ "$?" -eq "0" ]; then
+    # Keys already exist
+    return 0
+  fi
+
+  # RPM on Mandriva 2009 is dumb and does not understand "rpm --import -"
+  TMPKEY=$(mktemp /tmp/google.sig.XXXXXX)
+  if [ -n "$TMPKEY" ]; then
+    cat > "$TMPKEY" <<KEYDATA
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+Version: GnuPG v1
+
+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
+=eFkk
 -----END PGP PUBLIC KEY BLOCK-----
 KEYDATA
     rpm --import "$TMPKEY"
@@ -142,7 +218,7 @@ name=@@PACKAGE@@
 baseurl=$REPOCONFIG/$DEFAULT_ARCH
 enabled=1
 gpgcheck=1
-gpgkey=https://dl.google.com/linux/linux_signing_key.pub
+gpgkey=http://repo.vivaldi.com/archive/linux_signing_key.pub
 REPOCONTENT
   fi
 }

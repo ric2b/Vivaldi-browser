@@ -4,11 +4,14 @@
 
 #include "base/memory/scoped_ptr.h"
 
+#include <stddef.h>
+
 #include <sstream>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -84,7 +87,7 @@ int OverloadedNewAndDelete::g_new_count = 0;
 int OverloadedNewAndDelete::g_delete_count = 0;
 
 scoped_ptr<ConDecLogger> PassThru(scoped_ptr<ConDecLogger> logger) {
-  return logger.Pass();
+  return logger;
 }
 
 void GrabAndDrop(scoped_ptr<ConDecLogger> logger) {
@@ -102,8 +105,8 @@ TEST(ScopedPtrTest, ScopedPtr) {
   int constructed = 0;
 
   // Ensure size of scoped_ptr<> doesn't increase unexpectedly.
-  COMPILE_ASSERT(sizeof(int*) >= sizeof(scoped_ptr<int>),
-                 scoped_ptr_larger_than_raw_ptr);
+  static_assert(sizeof(int*) >= sizeof(scoped_ptr<int>),
+                "scoped_ptr shouldn't be larger than the raw pointer");
 
   {
     scoped_ptr<ConDecLogger> scoper(new ConDecLogger(&constructed));
@@ -146,25 +149,25 @@ TEST(ScopedPtrTest, ScopedPtr) {
   }
   EXPECT_EQ(0, constructed);
 
-  // Test swap(), == and !=
+  // Test swap().
   {
     scoped_ptr<ConDecLogger> scoper1;
     scoped_ptr<ConDecLogger> scoper2;
-    EXPECT_TRUE(scoper1 == scoper2.get());
-    EXPECT_FALSE(scoper1 != scoper2.get());
+    EXPECT_TRUE(scoper1.get() == scoper2.get());
+    EXPECT_FALSE(scoper1.get() != scoper2.get());
 
     ConDecLogger* logger = new ConDecLogger(&constructed);
     scoper1.reset(logger);
     EXPECT_EQ(logger, scoper1.get());
     EXPECT_FALSE(scoper2.get());
-    EXPECT_FALSE(scoper1 == scoper2.get());
-    EXPECT_TRUE(scoper1 != scoper2.get());
+    EXPECT_FALSE(scoper1.get() == scoper2.get());
+    EXPECT_TRUE(scoper1.get() != scoper2.get());
 
     scoper2.swap(scoper1);
     EXPECT_EQ(logger, scoper2.get());
     EXPECT_FALSE(scoper1.get());
-    EXPECT_FALSE(scoper1 == scoper2.get());
-    EXPECT_TRUE(scoper1 != scoper2.get());
+    EXPECT_FALSE(scoper1.get() == scoper2.get());
+    EXPECT_TRUE(scoper1.get() != scoper2.get());
   }
   EXPECT_EQ(0, constructed);
 }
@@ -178,7 +181,7 @@ TEST(ScopedPtrTest, ScopedPtrDepthSubtyping) {
     EXPECT_EQ(1, constructed);
     EXPECT_TRUE(scoper.get());
 
-    scoped_ptr<ConDecLoggerParent> scoper_parent(scoper.Pass());
+    scoped_ptr<ConDecLoggerParent> scoper_parent(std::move(scoper));
     EXPECT_EQ(1, constructed);
     EXPECT_TRUE(scoper_parent.get());
     EXPECT_FALSE(scoper.get());
@@ -196,7 +199,7 @@ TEST(ScopedPtrTest, ScopedPtrDepthSubtyping) {
     EXPECT_TRUE(scoper.get());
 
     scoped_ptr<ConDecLoggerParent> scoper_parent;
-    scoper_parent = scoper.Pass();
+    scoper_parent = std::move(scoper);
     EXPECT_EQ(1, constructed);
     EXPECT_TRUE(scoper_parent.get());
     EXPECT_FALSE(scoper.get());
@@ -209,7 +212,7 @@ TEST(ScopedPtrTest, ScopedPtrDepthSubtyping) {
     EXPECT_EQ(1, constructed);
     EXPECT_TRUE(scoper.get());
 
-    scoped_ptr<const ConDecLogger> scoper_const(scoper.Pass());
+    scoped_ptr<const ConDecLogger> scoper_const(std::move(scoper));
     EXPECT_EQ(1, constructed);
     EXPECT_TRUE(scoper_const.get());
     EXPECT_FALSE(scoper.get());
@@ -227,7 +230,7 @@ TEST(ScopedPtrTest, ScopedPtrDepthSubtyping) {
     EXPECT_TRUE(scoper.get());
 
     scoped_ptr<const ConDecLogger> scoper_const;
-    scoper_const = scoper.Pass();
+    scoper_const = std::move(scoper);
     EXPECT_EQ(1, constructed);
     EXPECT_TRUE(scoper_const.get());
     EXPECT_FALSE(scoper.get());
@@ -251,7 +254,7 @@ TEST(ScopedPtrTest, ScopedPtrDepthSubtyping) {
     EXPECT_EQ(0, alternate_deletes);
 
     // Test this compiles and correctly overwrites the deleter state.
-    scoper = scoper_child.Pass();
+    scoper = std::move(scoper_child);
     EXPECT_TRUE(scoper);
     EXPECT_FALSE(scoper_child);
     EXPECT_EQ(1, deletes);
@@ -267,7 +270,8 @@ TEST(ScopedPtrTest, ScopedPtrDepthSubtyping) {
     EXPECT_TRUE(scoper_child);
     EXPECT_EQ(1, deletes);
     EXPECT_EQ(1, alternate_deletes);
-    scoped_ptr<double, CountingDeleter> scoper_construct(scoper_child.Pass());
+    scoped_ptr<double, CountingDeleter> scoper_construct(
+        std::move(scoper_child));
     EXPECT_TRUE(scoper_construct);
     EXPECT_FALSE(scoper_child);
     EXPECT_EQ(1, deletes);
@@ -327,12 +331,12 @@ TEST(ScopedPtrTest, ScopedPtrWithArray) {
   }
   EXPECT_EQ(0, constructed);
 
-  // Test swap(), ==, !=, and type-safe Boolean.
+  // Test swap() and type-safe Boolean.
   {
     scoped_ptr<ConDecLogger[]> scoper1;
     scoped_ptr<ConDecLogger[]> scoper2;
-    EXPECT_TRUE(scoper1 == scoper2.get());
-    EXPECT_FALSE(scoper1 != scoper2.get());
+    EXPECT_TRUE(scoper1.get() == scoper2.get());
+    EXPECT_FALSE(scoper1.get() != scoper2.get());
 
     ConDecLogger* loggers = new ConDecLogger[kNumLoggers];
     for (int i = 0; i < kNumLoggers; ++i) {
@@ -343,14 +347,14 @@ TEST(ScopedPtrTest, ScopedPtrWithArray) {
     EXPECT_EQ(loggers, scoper1.get());
     EXPECT_FALSE(scoper2);
     EXPECT_FALSE(scoper2.get());
-    EXPECT_FALSE(scoper1 == scoper2.get());
-    EXPECT_TRUE(scoper1 != scoper2.get());
+    EXPECT_FALSE(scoper1.get() == scoper2.get());
+    EXPECT_TRUE(scoper1.get() != scoper2.get());
 
     scoper2.swap(scoper1);
     EXPECT_EQ(loggers, scoper2.get());
     EXPECT_FALSE(scoper1.get());
-    EXPECT_FALSE(scoper1 == scoper2.get());
-    EXPECT_TRUE(scoper1 != scoper2.get());
+    EXPECT_FALSE(scoper1.get() == scoper2.get());
+    EXPECT_TRUE(scoper1.get() != scoper2.get());
   }
   EXPECT_EQ(0, constructed);
 
@@ -363,13 +367,13 @@ TEST(ScopedPtrTest, ScopedPtrWithArray) {
     }
     EXPECT_EQ(kNumLoggers, constructed);
 
-    // Test Pass() with constructor;
-    scoped_ptr<ConDecLogger[]> scoper2(scoper.Pass());
+    // Test moving with constructor;
+    scoped_ptr<ConDecLogger[]> scoper2(std::move(scoper));
     EXPECT_EQ(kNumLoggers, constructed);
 
-    // Test Pass() with assignment;
+    // Test moving with assignment;
     scoped_ptr<ConDecLogger[]> scoper3;
-    scoper3 = scoper2.Pass();
+    scoper3 = std::move(scoper2);
     EXPECT_EQ(kNumLoggers, constructed);
     EXPECT_FALSE(scoper);
     EXPECT_FALSE(scoper2);
@@ -378,27 +382,30 @@ TEST(ScopedPtrTest, ScopedPtrWithArray) {
   EXPECT_EQ(0, constructed);
 }
 
-TEST(ScopedPtrTest, PassBehavior) {
+TEST(ScopedPtrTest, MoveBehavior) {
   int constructed = 0;
   {
     ConDecLogger* logger = new ConDecLogger(&constructed);
     scoped_ptr<ConDecLogger> scoper(logger);
     EXPECT_EQ(1, constructed);
 
-    // Test Pass() with constructor;
-    scoped_ptr<ConDecLogger> scoper2(scoper.Pass());
+    // Test moving with constructor;
+    scoped_ptr<ConDecLogger> scoper2(std::move(scoper));
     EXPECT_EQ(1, constructed);
 
-    // Test Pass() with assignment;
+    // Test moving with assignment;
     scoped_ptr<ConDecLogger> scoper3;
-    scoper3 = scoper2.Pass();
+    scoper3 = std::move(scoper2);
     EXPECT_EQ(1, constructed);
     EXPECT_FALSE(scoper.get());
     EXPECT_FALSE(scoper2.get());
     EXPECT_TRUE(scoper3.get());
   }
 
-  // Test uncaught Pass() does not have side effects.
+#if !defined(OS_ANDROID) && !defined(OS_LINUX) && !defined(OS_MACOSX)
+  // Test uncaught Pass() does not have side effects, because Pass()
+  // is implemented by std::move().
+  // TODO(danakj): Remove this test case when we remove Pass().
   {
     ConDecLogger* logger = new ConDecLogger(&constructed);
     scoped_ptr<ConDecLogger> scoper(logger);
@@ -411,6 +418,7 @@ TEST(ScopedPtrTest, PassBehavior) {
     EXPECT_TRUE(rvalue);
   }
   EXPECT_EQ(0, constructed);
+#endif
 
   // Test that passing to function which does nothing does not leak.
   {
@@ -419,7 +427,7 @@ TEST(ScopedPtrTest, PassBehavior) {
     EXPECT_EQ(1, constructed);
 
     // Should auto-destruct logger by end of scope.
-    GrabAndDrop(scoper.Pass());
+    GrabAndDrop(std::move(scoper));
     EXPECT_FALSE(scoper.get());
   }
   EXPECT_EQ(0, constructed);
@@ -434,7 +442,7 @@ TEST(ScopedPtrTest, ReturnTypeBehavior) {
     scoped_ptr<ConDecLogger> scoper(logger);
     EXPECT_EQ(1, constructed);
 
-    PassThru(scoper.Pass());
+    PassThru(std::move(scoper));
     EXPECT_FALSE(scoper.get());
   }
   EXPECT_EQ(0, constructed);
@@ -446,7 +454,7 @@ TEST(ScopedPtrTest, ReturnTypeBehavior) {
     EXPECT_EQ(1, constructed);
 
     // Should auto-destruct logger by end of scope.
-    PassThru(scoper.Pass());
+    PassThru(std::move(scoper));
     EXPECT_FALSE(scoper.get());
   }
   EXPECT_EQ(0, constructed);
@@ -537,8 +545,8 @@ TEST(ScopedPtrTest, CustomDeleter) {
     // Pass the second deleter through a constructor and an operator=. Then
     // reinitialize the empty scopers to ensure that each one is deleting
     // properly.
-    scoped_ptr<double, CountingDeleter> scoper3(scoper2.Pass());
-    scoper = scoper3.Pass();
+    scoped_ptr<double, CountingDeleter> scoper3(std::move(scoper2));
+    scoper = std::move(scoper3);
     EXPECT_EQ(1, deletes);
 
     scoper2.reset(&dummy_value2);
@@ -549,33 +557,33 @@ TEST(ScopedPtrTest, CustomDeleter) {
   EXPECT_EQ(1, deletes);
   EXPECT_EQ(3, alternate_deletes);
 
-  // Test swap(), ==, !=, and type-safe Boolean.
+  // Test swap(), and type-safe Boolean.
   {
     scoped_ptr<double, CountingDeleter> scoper1(NULL,
                                                 CountingDeleter(&deletes));
     scoped_ptr<double, CountingDeleter> scoper2(NULL,
                                                 CountingDeleter(&deletes));
-    EXPECT_TRUE(scoper1 == scoper2.get());
-    EXPECT_FALSE(scoper1 != scoper2.get());
+    EXPECT_TRUE(scoper1.get() == scoper2.get());
+    EXPECT_FALSE(scoper1.get() != scoper2.get());
 
     scoper1.reset(&dummy_value);
     EXPECT_TRUE(scoper1);
     EXPECT_EQ(&dummy_value, scoper1.get());
     EXPECT_FALSE(scoper2);
     EXPECT_FALSE(scoper2.get());
-    EXPECT_FALSE(scoper1 == scoper2.get());
-    EXPECT_TRUE(scoper1 != scoper2.get());
+    EXPECT_FALSE(scoper1.get() == scoper2.get());
+    EXPECT_TRUE(scoper1.get() != scoper2.get());
 
     scoper2.swap(scoper1);
     EXPECT_EQ(&dummy_value, scoper2.get());
     EXPECT_FALSE(scoper1.get());
-    EXPECT_FALSE(scoper1 == scoper2.get());
-    EXPECT_TRUE(scoper1 != scoper2.get());
+    EXPECT_FALSE(scoper1.get() == scoper2.get());
+    EXPECT_TRUE(scoper1.get() != scoper2.get());
   }
 }
 
 // Sanity check test for overloaded new and delete operators. Does not do full
-// coverage of reset/release/Pass() operations as that is redundant with the
+// coverage of reset/release/move operations as that is redundant with the
 // above.
 TEST(ScopedPtrTest, OverloadedNewAndDelete) {
   {
@@ -583,7 +591,7 @@ TEST(ScopedPtrTest, OverloadedNewAndDelete) {
     scoped_ptr<OverloadedNewAndDelete> scoper(new OverloadedNewAndDelete());
     EXPECT_TRUE(scoper.get());
 
-    scoped_ptr<OverloadedNewAndDelete> scoper2(scoper.Pass());
+    scoped_ptr<OverloadedNewAndDelete> scoper2(std::move(scoper));
   }
   EXPECT_EQ(1, OverloadedNewAndDelete::delete_count());
   EXPECT_EQ(1, OverloadedNewAndDelete::new_count());
@@ -632,53 +640,13 @@ TEST(ScopedPtrTest, Conversion) {
   scoped_ptr<Sub> sub1(new Sub);
   scoped_ptr<Sub> sub2(new Sub);
 
-  // Upcast with Pass() works.
-  scoped_ptr<Super> super1 = sub1.Pass();
-  super1 = sub2.Pass();
+  // Upcast with move works.
+  scoped_ptr<Super> super1 = std::move(sub1);
+  super1 = std::move(sub2);
 
   // Upcast with an rvalue works.
   scoped_ptr<Super> super2 = SubClassReturn();
   super2 = SubClassReturn();
-}
-
-// Android death tests don't work properly with assert(). Yay.
-#if !defined(NDEBUG) && defined(GTEST_HAS_DEATH_TEST) && !defined(OS_ANDROID)
-TEST(ScopedPtrTest, SelfResetAbortsWithDefaultDeleter) {
-  scoped_ptr<int> x(new int);
-  EXPECT_DEATH(x.reset(x.get()), "");
-}
-
-TEST(ScopedPtrTest, SelfResetAbortsWithDefaultArrayDeleter) {
-  scoped_ptr<int[]> y(new int[4]);
-  EXPECT_DEATH(y.reset(y.get()), "");
-}
-
-TEST(ScopedPtrTest, SelfResetAbortsWithDefaultFreeDeleter) {
-  scoped_ptr<int, base::FreeDeleter> z(static_cast<int*>(malloc(sizeof(int))));
-  EXPECT_DEATH(z.reset(z.get()), "");
-}
-
-// A custom deleter that doesn't opt out should still crash.
-TEST(ScopedPtrTest, SelfResetAbortsWithCustomDeleter) {
-  struct CustomDeleter {
-    inline void operator()(int* x) { delete x; }
-  };
-  scoped_ptr<int, CustomDeleter> x(new int);
-  EXPECT_DEATH(x.reset(x.get()), "");
-}
-#endif
-
-TEST(ScopedPtrTest, SelfResetWithCustomDeleterOptOut) {
-  // A custom deleter should be able to opt out of self-reset abort behavior.
-  struct NoOpDeleter {
-#if !defined(NDEBUG)
-    typedef void AllowSelfReset;
-#endif
-    inline void operator()(int*) {}
-  };
-  scoped_ptr<int> owner(new int);
-  scoped_ptr<int, NoOpDeleter> x(owner.get());
-  x.reset(x.get());
 }
 
 // Logging a scoped_ptr<T> to an ostream shouldn't convert it to a boolean
@@ -692,4 +660,183 @@ TEST(ScopedPtrTest, LoggingDoesntConvertToBoolean) {
   s2 << x.get();
 
   EXPECT_EQ(s2.str(), s1.str());
+}
+
+TEST(ScopedPtrTest, ReferenceCycle) {
+  struct StructB;
+  struct StructA {
+    scoped_ptr<StructB> b;
+  };
+
+  struct StructB {
+    scoped_ptr<StructA> a;
+  };
+
+  // Create a reference cycle.
+  StructA* a = new StructA;
+  a->b.reset(new StructB);
+  a->b->a.reset(a);
+
+  // Break the cycle by calling reset(). This will cause |a| (and hence, |a->b|)
+  // to be deleted before the call to reset() returns. This tests that the
+  // implementation of scoped_ptr::reset() doesn't access |this| after it
+  // deletes the underlying pointer. This behaviour is consistent with the
+  // definition of unique_ptr::reset in C++11.
+  a->b.reset();
+
+  // Go again, but this time, break the cycle by invoking |a|'s destructor. This
+  // tests that the implementation of ~scoped_ptr doesn't infinitely recurse
+  // into the destructors of |a| and |a->b|. Note, deleting |a| instead will
+  // cause |a| to be double-free'd because |a->b| owns |a| and deletes it via
+  // its destructor.
+  a = new StructA;
+  a->b.reset(new StructB);
+  a->b->a.reset(a);
+  a->~StructA();
+}
+
+TEST(ScopedPtrTest, Operators) {
+  struct Parent {};
+  struct Child : public Parent {};
+
+  scoped_ptr<Parent> p(new Parent);
+  scoped_ptr<Parent> p2(new Parent);
+  scoped_ptr<Child> c(new Child);
+  scoped_ptr<Parent> pnull;
+
+  // Operator==.
+  EXPECT_TRUE(p == p);
+  EXPECT_FALSE(p == c);
+  EXPECT_FALSE(p == p2);
+  EXPECT_FALSE(p == pnull);
+
+  EXPECT_FALSE(p == nullptr);
+  EXPECT_FALSE(nullptr == p);
+  EXPECT_TRUE(pnull == nullptr);
+  EXPECT_TRUE(nullptr == pnull);
+
+  // Operator!=.
+  EXPECT_FALSE(p != p);
+  EXPECT_TRUE(p != c);
+  EXPECT_TRUE(p != p2);
+  EXPECT_TRUE(p != pnull);
+
+  EXPECT_TRUE(p != nullptr);
+  EXPECT_TRUE(nullptr != p);
+  EXPECT_FALSE(pnull != nullptr);
+  EXPECT_FALSE(nullptr != pnull);
+
+  // Compare two scoped_ptr<T>.
+  EXPECT_EQ(p.get() < p2.get(), p < p2);
+  EXPECT_EQ(p.get() <= p2.get(), p <= p2);
+  EXPECT_EQ(p.get() > p2.get(), p > p2);
+  EXPECT_EQ(p.get() >= p2.get(), p >= p2);
+  EXPECT_EQ(p2.get() < p.get(), p2 < p);
+  EXPECT_EQ(p2.get() <= p.get(), p2 <= p);
+  EXPECT_EQ(p2.get() > p.get(), p2 > p);
+  EXPECT_EQ(p2.get() >= p.get(), p2 >= p);
+
+  // And convertible scoped_ptr<T> and scoped_ptr<U>.
+  EXPECT_EQ(p.get() < c.get(), p < c);
+  EXPECT_EQ(p.get() <= c.get(), p <= c);
+  EXPECT_EQ(p.get() > c.get(), p > c);
+  EXPECT_EQ(p.get() >= c.get(), p >= c);
+  EXPECT_EQ(c.get() < p.get(), c < p);
+  EXPECT_EQ(c.get() <= p.get(), c <= p);
+  EXPECT_EQ(c.get() > p.get(), c > p);
+  EXPECT_EQ(c.get() >= p.get(), c >= p);
+
+  // Compare to nullptr.
+  EXPECT_TRUE(p > nullptr);
+  EXPECT_FALSE(nullptr > p);
+  EXPECT_FALSE(pnull > nullptr);
+  EXPECT_FALSE(nullptr > pnull);
+
+  EXPECT_TRUE(p >= nullptr);
+  EXPECT_FALSE(nullptr >= p);
+  EXPECT_TRUE(pnull >= nullptr);
+  EXPECT_TRUE(nullptr >= pnull);
+
+  EXPECT_FALSE(p < nullptr);
+  EXPECT_TRUE(nullptr < p);
+  EXPECT_FALSE(pnull < nullptr);
+  EXPECT_FALSE(nullptr < pnull);
+
+  EXPECT_FALSE(p <= nullptr);
+  EXPECT_TRUE(nullptr <= p);
+  EXPECT_TRUE(pnull <= nullptr);
+  EXPECT_TRUE(nullptr <= pnull);
+};
+
+TEST(ScopedPtrTest, ArrayOperators) {
+  struct Parent {};
+  struct Child : public Parent {};
+
+  scoped_ptr<Parent[]> p(new Parent[1]);
+  scoped_ptr<Parent[]> p2(new Parent[1]);
+  scoped_ptr<Child[]> c(new Child[1]);
+  scoped_ptr<Parent[]> pnull;
+
+  // Operator==.
+  EXPECT_TRUE(p == p);
+  EXPECT_FALSE(p == c);
+  EXPECT_FALSE(p == p2);
+  EXPECT_FALSE(p == pnull);
+
+  EXPECT_FALSE(p == nullptr);
+  EXPECT_FALSE(nullptr == p);
+  EXPECT_TRUE(pnull == nullptr);
+  EXPECT_TRUE(nullptr == pnull);
+
+  // Operator!=.
+  EXPECT_FALSE(p != p);
+  EXPECT_TRUE(p != c);
+  EXPECT_TRUE(p != p2);
+  EXPECT_TRUE(p != pnull);
+
+  EXPECT_TRUE(p != nullptr);
+  EXPECT_TRUE(nullptr != p);
+  EXPECT_FALSE(pnull != nullptr);
+  EXPECT_FALSE(nullptr != pnull);
+
+  // Compare two scoped_ptr<T>.
+  EXPECT_EQ(p.get() < p2.get(), p < p2);
+  EXPECT_EQ(p.get() <= p2.get(), p <= p2);
+  EXPECT_EQ(p.get() > p2.get(), p > p2);
+  EXPECT_EQ(p.get() >= p2.get(), p >= p2);
+  EXPECT_EQ(p2.get() < p.get(), p2 < p);
+  EXPECT_EQ(p2.get() <= p.get(), p2 <= p);
+  EXPECT_EQ(p2.get() > p.get(), p2 > p);
+  EXPECT_EQ(p2.get() >= p.get(), p2 >= p);
+
+  // And convertible scoped_ptr<T> and scoped_ptr<U>.
+  EXPECT_EQ(p.get() < c.get(), p < c);
+  EXPECT_EQ(p.get() <= c.get(), p <= c);
+  EXPECT_EQ(p.get() > c.get(), p > c);
+  EXPECT_EQ(p.get() >= c.get(), p >= c);
+  EXPECT_EQ(c.get() < p.get(), c < p);
+  EXPECT_EQ(c.get() <= p.get(), c <= p);
+  EXPECT_EQ(c.get() > p.get(), c > p);
+  EXPECT_EQ(c.get() >= p.get(), c >= p);
+
+  // Compare to nullptr.
+  EXPECT_TRUE(p > nullptr);
+  EXPECT_FALSE(nullptr > p);
+  EXPECT_FALSE(pnull > nullptr);
+  EXPECT_FALSE(nullptr > pnull);
+
+  EXPECT_TRUE(p >= nullptr);
+  EXPECT_FALSE(nullptr >= p);
+  EXPECT_TRUE(pnull >= nullptr);
+  EXPECT_TRUE(nullptr >= pnull);
+
+  EXPECT_FALSE(p < nullptr);
+  EXPECT_TRUE(nullptr < p);
+  EXPECT_FALSE(pnull < nullptr);
+  EXPECT_FALSE(nullptr < pnull);
+
+  EXPECT_FALSE(p <= nullptr);
+  EXPECT_TRUE(nullptr <= p);
+  EXPECT_TRUE(pnull <= nullptr);
+  EXPECT_TRUE(nullptr <= pnull);
 }

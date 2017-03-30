@@ -31,20 +31,26 @@ TEST(PermissionMenuModelTest, TestDefault) {
   permission.type = CONTENT_SETTINGS_TYPE_COOKIES;
   permission.setting = CONTENT_SETTING_ALLOW;
   permission.default_setting = CONTENT_SETTING_ALLOW;
+  permission.is_incognito = false;
   PermissionMenuModel model(
       GURL("http://www.google.com"), permission, callback.callback());
   EXPECT_EQ(3, model.GetItemCount());
 }
 
 TEST(PermissionMenuModelTest, TestDefaultMediaHttp) {
-  TestCallback callback;
-  WebsiteSettingsUI::PermissionInfo permission;
-  permission.type = CONTENT_SETTINGS_TYPE_MEDIASTREAM;
-  permission.setting = CONTENT_SETTING_ALLOW;
-  permission.default_setting = CONTENT_SETTING_ALLOW;
-  PermissionMenuModel model(
-      GURL("http://www.google.com"), permission, callback.callback());
-  EXPECT_EQ(2, model.GetItemCount());
+  for (int i = 0; i < 2; ++i) {
+    ContentSettingsType type = i ? CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC
+                                 : CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA;
+    TestCallback callback;
+    WebsiteSettingsUI::PermissionInfo permission;
+    permission.type = type;
+    permission.setting = CONTENT_SETTING_ALLOW;
+    permission.default_setting = CONTENT_SETTING_ALLOW;
+    permission.is_incognito = false;
+    PermissionMenuModel model(
+        GURL("http://www.google.com"), permission, callback.callback());
+    EXPECT_EQ(2, model.GetItemCount());
+  }
 }
 
 TEST(PermissionMenuModelTest, TestAllowBlock) {
@@ -61,6 +67,7 @@ TEST(PermissionMenuModelTest, TestFullscreenMouseLockFileUrl) {
   permission.type = CONTENT_SETTINGS_TYPE_FULLSCREEN;
   permission.setting = CONTENT_SETTING_ASK;
   permission.default_setting = CONTENT_SETTING_ASK;
+  permission.is_incognito = false;
   PermissionMenuModel fullscreen_model(GURL("file:///test.html"), permission,
                                        callback.callback());
   EXPECT_EQ(1, fullscreen_model.GetItemCount());
@@ -75,4 +82,22 @@ TEST(PermissionMenuModelTest, TestFullscreenMouseLockFileUrl) {
   EXPECT_EQ(
       l10n_util::GetStringUTF16(IDS_WEBSITE_SETTINGS_MENU_ITEM_DEFAULT_ASK),
       fullscreen_model.GetLabelAt(0));
+}
+
+TEST(PermissionMenuModelTest, TestIncognitoNotifications) {
+  TestCallback callback;
+  WebsiteSettingsUI::PermissionInfo permission;
+  permission.type = CONTENT_SETTINGS_TYPE_NOTIFICATIONS;
+  permission.setting = CONTENT_SETTING_ASK;
+  permission.default_setting = CONTENT_SETTING_ASK;
+
+  permission.is_incognito = false;
+  PermissionMenuModel regular_model(GURL("https://www.google.com"), permission,
+                                    callback.callback());
+  EXPECT_EQ(3, regular_model.GetItemCount());
+
+  permission.is_incognito = true;
+  PermissionMenuModel incognito_model(GURL("https://www.google.com"),
+                                      permission, callback.callback());
+  EXPECT_EQ(2, incognito_model.GetItemCount());
 }

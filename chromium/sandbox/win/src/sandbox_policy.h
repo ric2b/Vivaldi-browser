@@ -5,9 +5,11 @@
 #ifndef SANDBOX_WIN_SRC_SANDBOX_POLICY_H_
 #define SANDBOX_WIN_SRC_SANDBOX_POLICY_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/strings/string16.h"
 #include "sandbox/win/src/sandbox_types.h"
 #include "sandbox/win/src/security_level.h"
@@ -75,12 +77,12 @@ class TargetPolicy {
   // initial: the security level for the initial token. This is the token that
   //   is used by the process from the creation of the process until the moment
   //   the process calls TargetServices::LowerToken() or the process calls
-  //   win32's ReverToSelf(). Once this happens the initial token is no longer
+  //   win32's RevertToSelf(). Once this happens the initial token is no longer
   //   available and the lockdown token is in effect. Using an initial token is
   //   not compatible with AppContainer, see SetAppContainer.
   // lockdown: the security level for the token that comes into force after the
   //   process calls TargetServices::LowerToken() or the process calls
-  //   ReverToSelf(). See the explanation of each level in the TokenLevel
+  //   RevertToSelf(). See the explanation of each level in the TokenLevel
   //   definition.
   // Return value: SBOX_ALL_OK if the setting succeeds and false otherwise.
   //   Returns false if the lockdown value is more permissive than the initial
@@ -130,7 +132,8 @@ class TargetPolicy {
   //   http://msdn2.microsoft.com/en-us/library/ms684152.aspx
   //
   // Note: the recommended level is JOB_RESTRICTED or JOB_LOCKDOWN.
-  virtual ResultCode SetJobLevel(JobLevel job_level, uint32 ui_exceptions) = 0;
+  virtual ResultCode SetJobLevel(JobLevel job_level,
+                                 uint32_t ui_exceptions) = 0;
 
   // Sets a hard limit on the size of the commit set for the sandboxed process.
   // If the limit is reached, the process will be terminated with

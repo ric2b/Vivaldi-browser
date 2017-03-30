@@ -4,8 +4,14 @@
 
 #include "sync/engine/directory_update_handler.h"
 
+#include <stdint.h>
+
+#include <set>
+#include <string>
+#include <utility>
+
 #include "base/compiler_specific.h"
-#include "base/containers/scoped_ptr_map.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "sync/engine/syncer_proto_util.h"
@@ -33,7 +39,7 @@ namespace syncer {
 using syncable::Id;
 using syncable::UNITTEST;
 
-static const int64 kDefaultVersion = 1000;
+static const int64_t kDefaultVersion = 1000;
 
 // A test harness for tests that focus on processing updates.
 //
@@ -86,9 +92,7 @@ class DirectoryUpdateHandlerProcessUpdateTest : public ::testing::Test {
   }
 
   bool TypeRootExists(ModelType model_type) {
-    syncable::ReadTransaction trans(FROM_HERE, dir());
-    syncable::Entry e(&trans, syncable::GET_TYPE_ROOT, model_type);
-    return e.good() && !e.GetIsDel();
+    return dir()->InitialSyncEndedForType(model_type);
   }
 
  protected:
@@ -113,7 +117,7 @@ DirectoryUpdateHandlerProcessUpdateTest::CreateUpdate(
   e->set_name(id);
   e->set_version(kDefaultVersion);
   AddDefaultFieldValue(type, e->mutable_specifics());
-  return e.Pass();
+  return e;
 }
 
 void DirectoryUpdateHandlerProcessUpdateTest::UpdateSyncEntities(
@@ -463,17 +467,17 @@ class DirectoryUpdateHandlerApplyUpdateTest : public ::testing::Test {
     dir_maker_.SetUp();
     entry_factory_.reset(new TestEntryFactory(directory()));
 
-    update_handler_map_.insert(
+    update_handler_map_.insert(std::make_pair(
         BOOKMARKS,
         make_scoped_ptr(new DirectoryUpdateHandler(
-            directory(), BOOKMARKS, ui_worker_, &bookmarks_emitter_)));
-    update_handler_map_.insert(
+            directory(), BOOKMARKS, ui_worker_, &bookmarks_emitter_))));
+    update_handler_map_.insert(std::make_pair(
         PASSWORDS,
         make_scoped_ptr(new DirectoryUpdateHandler(
-            directory(), PASSWORDS, password_worker_, &passwords_emitter_)));
-    update_handler_map_.insert(
+            directory(), PASSWORDS, password_worker_, &passwords_emitter_))));
+    update_handler_map_.insert(std::make_pair(
         ARTICLES, make_scoped_ptr(new DirectoryUpdateHandler(
-                      directory(), ARTICLES, ui_worker_, &articles_emitter_)));
+                      directory(), ARTICLES, ui_worker_, &articles_emitter_))));
   }
 
   void TearDown() override { dir_maker_.TearDown(); }
@@ -525,7 +529,7 @@ class DirectoryUpdateHandlerApplyUpdateTest : public ::testing::Test {
   DirectoryTypeDebugInfoEmitter passwords_emitter_;
   DirectoryTypeDebugInfoEmitter articles_emitter_;
 
-  base::ScopedPtrMap<ModelType, scoped_ptr<UpdateHandler>> update_handler_map_;
+  std::map<ModelType, scoped_ptr<UpdateHandler>> update_handler_map_;
 };
 
 namespace {
@@ -534,17 +538,17 @@ sync_pb::EntitySpecifics DefaultBookmarkSpecifics() {
   AddDefaultFieldValue(BOOKMARKS, &result);
   return result;
 }
-} // namespace
+}  // namespace
 
 // Test update application for a few bookmark items.
 TEST_F(DirectoryUpdateHandlerApplyUpdateTest, SimpleBookmark) {
   sessions::StatusController status;
 
   std::string root_server_id = Id::GetRoot().GetServerId();
-  int64 parent_handle =
+  int64_t parent_handle =
       entry_factory()->CreateUnappliedNewBookmarkItemWithParent(
           "parent", DefaultBookmarkSpecifics(), root_server_id);
-  int64 child_handle =
+  int64_t child_handle =
       entry_factory()->CreateUnappliedNewBookmarkItemWithParent(
           "child", DefaultBookmarkSpecifics(), "parent");
 
@@ -579,9 +583,9 @@ TEST_F(DirectoryUpdateHandlerApplyUpdateTest,
        BookmarkChildrenBeforeParent) {
   // Start with some bookmarks whose parents are unknown.
   std::string root_server_id = Id::GetRoot().GetServerId();
-  int64 a_handle = entry_factory()->CreateUnappliedNewBookmarkItemWithParent(
+  int64_t a_handle = entry_factory()->CreateUnappliedNewBookmarkItemWithParent(
       "a_child_created_first", DefaultBookmarkSpecifics(), "parent");
-  int64 x_handle = entry_factory()->CreateUnappliedNewBookmarkItemWithParent(
+  int64_t x_handle = entry_factory()->CreateUnappliedNewBookmarkItemWithParent(
       "x_child_created_first", DefaultBookmarkSpecifics(), "parent");
 
   // Update application will fail.
@@ -634,7 +638,7 @@ TEST_F(DirectoryUpdateHandlerApplyUpdateTest,
 // Try to apply changes on an item that is both IS_UNSYNCED and
 // IS_UNAPPLIED_UPDATE.  Conflict resolution should be performed.
 TEST_F(DirectoryUpdateHandlerApplyUpdateTest, SimpleBookmarkConflict) {
-  int64 handle = entry_factory()->CreateUnappliedAndUnsyncedBookmarkItem("x");
+  int64_t handle = entry_factory()->CreateUnappliedAndUnsyncedBookmarkItem("x");
 
   int original_server_version = -10;
   {
@@ -673,7 +677,7 @@ TEST_F(DirectoryUpdateHandlerApplyUpdateTest, SimpleBookmarkConflict) {
 // the update to be applied.  The item must remain in the conflict state.
 TEST_F(DirectoryUpdateHandlerApplyUpdateTest, HierarchyAndSimpleConflict) {
   // Create a simply-conflicting item.  It will start with valid parent ids.
-  int64 handle = entry_factory()->CreateUnappliedAndUnsyncedBookmarkItem(
+  int64_t handle = entry_factory()->CreateUnappliedAndUnsyncedBookmarkItem(
       "orphaned_by_server");
   {
     // Manually set the SERVER_PARENT_ID to bad value.
@@ -709,7 +713,7 @@ TEST_F(DirectoryUpdateHandlerApplyUpdateTest, BookmarkFolderLoop) {
   // parent of 'Y'.
 
   // Create it as a child of root node.
-  int64 handle = entry_factory()->CreateSyncedItem("X", BOOKMARKS, true);
+  int64_t handle = entry_factory()->CreateSyncedItem("X", BOOKMARKS, true);
 
   {
     syncable::WriteTransaction trans(FROM_HERE, UNITTEST, directory());
@@ -753,7 +757,7 @@ TEST_F(DirectoryUpdateHandlerApplyUpdateTest, BookmarkFolderLoop) {
 TEST_F(DirectoryUpdateHandlerApplyUpdateTest,
        HierarchyConflictDeletedParent) {
   // Create a locally deleted parent item.
-  int64 parent_handle;
+  int64_t parent_handle;
   entry_factory()->CreateUnsyncedItem(
       Id::CreateFromServerId("parent"), TestIdFactory::root(),
       "parent", true, BOOKMARKS, &parent_handle);
@@ -766,7 +770,7 @@ TEST_F(DirectoryUpdateHandlerApplyUpdateTest,
   }
 
   // Create an incoming child from the server.
-  int64 child_handle = entry_factory()->CreateUnappliedNewItemWithParent(
+  int64_t child_handle = entry_factory()->CreateUnappliedNewItemWithParent(
       "child", DefaultBookmarkSpecifics(), "parent");
 
   // The server's update may seem valid to some other client, but on this client
@@ -792,7 +796,7 @@ TEST_F(DirectoryUpdateHandlerApplyUpdateTest,
 TEST_F(DirectoryUpdateHandlerApplyUpdateTest,
        HierarchyConflictDeleteNonEmptyDirectory) {
   // Create a server-deleted folder as a child of root node.
-  int64 parent_handle =
+  int64_t parent_handle =
       entry_factory()->CreateSyncedItem("parent", BOOKMARKS, true);
   {
     syncable::WriteTransaction trans(FROM_HERE, UNITTEST, directory());
@@ -837,9 +841,9 @@ TEST_F(DirectoryUpdateHandlerApplyUpdateTest,
 TEST_F(DirectoryUpdateHandlerApplyUpdateTest,
        HierarchyConflictUnknownParent) {
   // We shouldn't be able to do anything with either of these items.
-  int64 x_handle = entry_factory()->CreateUnappliedNewItemWithParent(
+  int64_t x_handle = entry_factory()->CreateUnappliedNewItemWithParent(
       "some_item", DefaultBookmarkSpecifics(), "unknown_parent");
-  int64 y_handle = entry_factory()->CreateUnappliedNewItemWithParent(
+  int64_t y_handle = entry_factory()->CreateUnappliedNewItemWithParent(
       "some_other_item", DefaultBookmarkSpecifics(), "some_item");
 
   sessions::StatusController status;
@@ -869,17 +873,17 @@ TEST_F(DirectoryUpdateHandlerApplyUpdateTest,
 TEST_F(DirectoryUpdateHandlerApplyUpdateTest, ItemsBothKnownAndUnknown) {
   // See what happens when there's a mixture of good and bad updates.
   std::string root_server_id = Id::GetRoot().GetServerId();
-  int64 u1_handle = entry_factory()->CreateUnappliedNewItemWithParent(
+  int64_t u1_handle = entry_factory()->CreateUnappliedNewItemWithParent(
       "first_unknown_item", DefaultBookmarkSpecifics(), "unknown_parent");
-  int64 k1_handle = entry_factory()->CreateUnappliedNewItemWithParent(
+  int64_t k1_handle = entry_factory()->CreateUnappliedNewItemWithParent(
       "first_known_item", DefaultBookmarkSpecifics(), root_server_id);
-  int64 u2_handle = entry_factory()->CreateUnappliedNewItemWithParent(
+  int64_t u2_handle = entry_factory()->CreateUnappliedNewItemWithParent(
       "second_unknown_item", DefaultBookmarkSpecifics(), "unknown_parent");
-  int64 k2_handle = entry_factory()->CreateUnappliedNewItemWithParent(
+  int64_t k2_handle = entry_factory()->CreateUnappliedNewItemWithParent(
       "second_known_item", DefaultBookmarkSpecifics(), "first_known_item");
-  int64 k3_handle = entry_factory()->CreateUnappliedNewItemWithParent(
+  int64_t k3_handle = entry_factory()->CreateUnappliedNewItemWithParent(
       "third_known_item", DefaultBookmarkSpecifics(), "fourth_known_item");
-  int64 k4_handle = entry_factory()->CreateUnappliedNewItemWithParent(
+  int64_t k4_handle = entry_factory()->CreateUnappliedNewItemWithParent(
       "fourth_known_item", DefaultBookmarkSpecifics(), root_server_id);
 
   sessions::StatusController status;
@@ -934,7 +938,7 @@ TEST_F(DirectoryUpdateHandlerApplyUpdateTest, DecryptablePassword) {
 
   cryptographer->Encrypt(data,
                          specifics.mutable_password()->mutable_encrypted());
-  int64 handle =
+  int64_t handle =
       entry_factory()->CreateUnappliedNewItem("item", specifics, false);
 
   sessions::StatusController status;
@@ -960,20 +964,14 @@ TEST_F(DirectoryUpdateHandlerApplyUpdateTest, UndecryptableData) {
   encrypted_bookmark.mutable_encrypted();
   AddDefaultFieldValue(BOOKMARKS, &encrypted_bookmark);
   std::string root_server_id = Id::GetRoot().GetServerId();
-  int64 folder_handle = entry_factory()->CreateUnappliedNewItemWithParent(
-      "folder",
-      encrypted_bookmark,
-      root_server_id);
-  int64 bookmark_handle = entry_factory()->CreateUnappliedNewItem(
-      "item2",
-      encrypted_bookmark,
-      false);
+  int64_t folder_handle = entry_factory()->CreateUnappliedNewItemWithParent(
+      "folder", encrypted_bookmark, root_server_id);
+  int64_t bookmark_handle = entry_factory()->CreateUnappliedNewItem(
+      "item2", encrypted_bookmark, false);
   sync_pb::EntitySpecifics encrypted_password;
   encrypted_password.mutable_password();
-  int64 password_handle = entry_factory()->CreateUnappliedNewItem(
-      "item3",
-      encrypted_password,
-      false);
+  int64_t password_handle = entry_factory()->CreateUnappliedNewItem(
+      "item3", encrypted_password, false);
 
   sessions::StatusController status;
   ApplyBookmarkUpdates(&status);
@@ -1009,8 +1007,8 @@ TEST_F(DirectoryUpdateHandlerApplyUpdateTest, UndecryptableData) {
 TEST_F(DirectoryUpdateHandlerApplyUpdateTest, SomeUndecryptablePassword) {
   Cryptographer* cryptographer;
 
-  int64 decryptable_handle = -1;
-  int64 undecryptable_handle = -1;
+  int64_t decryptable_handle = -1;
+  int64_t undecryptable_handle = -1;
 
   // Only decryptable password updates should be applied.
   {
@@ -1072,7 +1070,8 @@ TEST_F(DirectoryUpdateHandlerApplyUpdateTest,
   const bool is_folder = false;
   sync_pb::EntitySpecifics specifics;
   *specifics.mutable_article() = sync_pb::ArticleSpecifics();
-  int64 handle = entry_factory()->CreateSyncedItem("art1", ARTICLES, is_folder);
+  int64_t handle =
+      entry_factory()->CreateSyncedItem("art1", ARTICLES, is_folder);
 
   sync_pb::AttachmentIdProto local_attachment_id =
       CreateAttachmentIdProto(0, 0);
@@ -1116,7 +1115,8 @@ TEST_F(DirectoryUpdateHandlerApplyUpdateTest,
   const bool is_folder = false;
   sync_pb::EntitySpecifics specifics;
   *specifics.mutable_article() = sync_pb::ArticleSpecifics();
-  int64 handle = entry_factory()->CreateSyncedItem("art1", ARTICLES, is_folder);
+  int64_t handle =
+      entry_factory()->CreateSyncedItem("art1", ARTICLES, is_folder);
 
   sync_pb::AttachmentIdProto id1 = CreateAttachmentIdProto(0, 0);
   sync_pb::AttachmentIdProto id2 = CreateAttachmentIdProto(0, 0);

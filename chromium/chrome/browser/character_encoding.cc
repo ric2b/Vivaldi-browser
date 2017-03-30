@@ -4,10 +4,13 @@
 
 #include "chrome/browser/character_encoding.h"
 
+#include <stddef.h>
+
 #include <map>
 #include <set>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
@@ -183,7 +186,7 @@ const CanonicalNameDisplayNameMapType*
 // A static map object which contains all resourceid-nonsequenced canonical
 // encoding names.
 CanonicalEncodingMap* CanonicalEncodingMapSingleton() {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   static CanonicalEncodingMap* singleton = new CanonicalEncodingMap;
   return singleton;
 }

@@ -9,6 +9,7 @@
 
 #include "base/memory/scoped_ptr.h"
 #include "base/sequenced_task_runner_helpers.h"
+#include "content/public/renderer/render_view_observer.h"
 #include "third_party/WebKit/public/platform/WebCursorInfo.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
@@ -18,6 +19,7 @@
 #include "third_party/WebKit/public/web/WebViewClient.h"
 
 namespace blink {
+class WebFrameWidget;
 class WebMouseEvent;
 }
 
@@ -39,7 +41,8 @@ class Size;
 
 class WebViewPlugin : public blink::WebPlugin,
                       public blink::WebViewClient,
-                      public blink::WebFrameClient {
+                      public blink::WebFrameClient,
+                      public content::RenderViewObserver {
  public:
   class Delegate {
    public:
@@ -63,7 +66,8 @@ class WebViewPlugin : public blink::WebPlugin,
   // Convenience method to set up a new WebViewPlugin using |preferences|
   // and displaying |html_data|. |url| should be a (fake) data:text/html URL;
   // it is only used for navigation and never actually resolved.
-  static WebViewPlugin* Create(Delegate* delegate,
+  static WebViewPlugin* Create(content::RenderView* render_view,
+                               Delegate* delegate,
                                const content::WebPreferences& preferences,
                                const std::string& html_data,
                                const GURL& url);
@@ -78,80 +82,78 @@ class WebViewPlugin : public blink::WebPlugin,
   void RestoreTitleText();
 
   // WebPlugin methods:
-  virtual blink::WebPluginContainer* container() const;
-  virtual bool initialize(blink::WebPluginContainer*);
-  virtual void destroy();
+  blink::WebPluginContainer* container() const override;
+  bool initialize(blink::WebPluginContainer*) override;
+  void destroy() override;
 
-  virtual v8::Local<v8::Object> v8ScriptableObject(v8::Isolate* isolate);
+  v8::Local<v8::Object> v8ScriptableObject(v8::Isolate* isolate) override;
 
-  virtual void layoutIfNeeded() override;
-  virtual void paint(blink::WebCanvas* canvas,
-                     const blink::WebRect& rect) override;
+  void updateAllLifecyclePhases() override;
+  void paint(blink::WebCanvas* canvas, const blink::WebRect& rect) override;
 
   // Coordinates are relative to the containing window.
-  virtual void updateGeometry(
-      const blink::WebRect& window_rect,
-      const blink::WebRect& clip_rect,
-      const blink::WebRect& unobscured_rect,
-      const blink::WebVector<blink::WebRect>& cut_outs_rects,
-      bool is_visible);
+  void updateGeometry(const blink::WebRect& window_rect,
+                      const blink::WebRect& clip_rect,
+                      const blink::WebRect& unobscured_rect,
+                      const blink::WebVector<blink::WebRect>& cut_outs_rects,
+                      bool is_visible) override;
 
-  virtual void updateFocus(bool foucsed, blink::WebFocusType focus_type);
-  virtual void updateVisibility(bool) {}
+  void updateFocus(bool foucsed, blink::WebFocusType focus_type) override;
+  void updateVisibility(bool) override {}
 
-  virtual bool acceptsInputEvents();
-  virtual bool handleInputEvent(const blink::WebInputEvent& event,
-                                blink::WebCursorInfo& cursor_info);
+  bool acceptsInputEvents() override;
+  blink::WebInputEventResult handleInputEvent(
+      const blink::WebInputEvent& event,
+      blink::WebCursorInfo& cursor_info) override;
 
-  virtual void didReceiveResponse(const blink::WebURLResponse& response);
-  virtual void didReceiveData(const char* data, int data_length);
-  virtual void didFinishLoading();
-  virtual void didFailLoading(const blink::WebURLError& error);
-
-  // Called in response to WebPluginContainer::loadFrameRequest
-  virtual void didFinishLoadingFrameRequest(const blink::WebURL& url,
-                                            void* notifyData) {}
-  virtual void didFailLoadingFrameRequest(const blink::WebURL& url,
-                                          void* notify_data,
-                                          const blink::WebURLError& error) {}
+  void didReceiveResponse(const blink::WebURLResponse& response) override;
+  void didReceiveData(const char* data, int data_length) override;
+  void didFinishLoading() override;
+  void didFailLoading(const blink::WebURLError& error) override;
 
   // WebViewClient methods:
-  virtual bool acceptsLoadDrops();
+  bool acceptsLoadDrops() override;
 
-  virtual void setToolTipText(const blink::WebString&,
-                              blink::WebTextDirection);
+  void setToolTipText(const blink::WebString&,
+                      blink::WebTextDirection) override;
 
-  virtual void startDragging(blink::WebLocalFrame* frame,
-                             const blink::WebDragData& drag_data,
-                             blink::WebDragOperationsMask mask,
-                             const blink::WebImage& image,
-                             const blink::WebPoint& point);
+  void startDragging(blink::WebLocalFrame* frame,
+                     const blink::WebDragData& drag_data,
+                     blink::WebDragOperationsMask mask,
+                     const blink::WebImage& image,
+                     const blink::WebPoint& point) override;
 
   // TODO(ojan): Remove this override and have this class use a non-null
   // layerTreeView.
-  virtual bool allowsBrokenNullLayerTreeView() const;
+  bool allowsBrokenNullLayerTreeView() const override;
 
   // WebWidgetClient methods:
-  virtual void didInvalidateRect(const blink::WebRect&);
-  virtual void didUpdateLayoutSize(const blink::WebSize&);
-  virtual void didChangeCursor(const blink::WebCursorInfo& cursor);
-  virtual void scheduleAnimation();
+  void didInvalidateRect(const blink::WebRect&) override;
+  void didUpdateLayoutSize(const blink::WebSize&) override;
+  void didChangeCursor(const blink::WebCursorInfo& cursor) override;
+  void scheduleAnimation() override;
 
   // WebFrameClient methods:
-  virtual void didClearWindowObject(blink::WebLocalFrame* frame);
+  void didClearWindowObject(blink::WebLocalFrame* frame) override;
 
   // This method is defined in WebPlugin as well as in WebFrameClient, but with
   // different parameters. We only care about implementing the WebPlugin
   // version, so we implement this method and call the default in WebFrameClient
   // (which does nothing) to correctly overload it.
-  virtual void didReceiveResponse(blink::WebLocalFrame* frame,
-                                  unsigned identifier,
-                                  const blink::WebURLResponse& response);
+  void didReceiveResponse(blink::WebLocalFrame* frame,
+                          unsigned identifier,
+                          const blink::WebURLResponse& response) override;
 
  private:
   friend class base::DeleteHelper<WebViewPlugin>;
-  WebViewPlugin(Delegate* delegate, const content::WebPreferences& preferences);
-  virtual ~WebViewPlugin();
+  WebViewPlugin(content::RenderView* render_view,
+                Delegate* delegate,
+                const content::WebPreferences& preferences);
+  ~WebViewPlugin() override;
+
+  // content::RenderViewObserver methods:
+  void OnDestruct() override;
+  void OnZoomLevelChanged() override;
 
   // Manages its own lifetime.
   Delegate* delegate_;
@@ -163,6 +165,9 @@ class WebViewPlugin : public blink::WebPlugin,
 
   // Owned by us, deleted via |close()|.
   blink::WebView* web_view_;
+
+  // Owned by us, deleted via |close()|.
+  blink::WebFrameWidget* web_frame_widget_;
 
   // Owned by us, deleted via |close()|.
   blink::WebFrame* web_frame_;

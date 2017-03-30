@@ -4,6 +4,9 @@
 
 #include "components/omnibox/browser/suggestion_answer.h"
 
+#include <stddef.h>
+
+#include "base/i18n/rtl.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -22,6 +25,15 @@ static const char kAnswerJsonStatusText[] = "st";
 static const char kAnswerJsonTextType[] = "tt";
 static const char kAnswerJsonImage[] = "i";
 static const char kAnswerJsonImageData[] = "i.d";
+
+void AppendWithSpace(const SuggestionAnswer::TextField* text,
+                     base::string16* output) {
+  if (!text)
+    return;
+  if (!output->empty() && !text->text().empty())
+    *output += ' ';
+  *output += text->text();
+}
 
 }  // namespace
 
@@ -145,6 +157,17 @@ bool SuggestionAnswer::ImageLine::Equals(const ImageLine& line) const {
   return image_url_ == line.image_url_;
 }
 
+// TODO(jdonnelly): When updating the display of answers in RTL languages,
+// modify this to be consistent.
+base::string16 SuggestionAnswer::ImageLine::AccessibleText() const {
+  base::string16 result;
+  for (const TextField& text_field : text_fields_)
+    AppendWithSpace(&text_field, &result);
+  AppendWithSpace(additional_text_.get(), &result);
+  AppendWithSpace(status_text_.get(), &result);
+  return result;
+}
+
 // SuggestionAnswer ------------------------------------------------------------
 
 SuggestionAnswer::SuggestionAnswer() : type_(-1) {}
@@ -175,7 +198,7 @@ scoped_ptr<SuggestionAnswer> SuggestionAnswer::ParseAnswer(
       !ImageLine::ParseImageLine(second_line_json, &result->second_line_))
     return nullptr;
 
-  return result.Pass();
+  return result;
 }
 
 bool SuggestionAnswer::Equals(const SuggestionAnswer& answer) const {

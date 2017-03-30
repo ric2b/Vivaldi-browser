@@ -21,6 +21,10 @@ component("blink") {
     "web_compositor_animation_player_impl.h",
     "web_compositor_animation_timeline_impl.cc",
     "web_compositor_animation_timeline_impl.h",
+    "web_compositor_mutable_state_impl.cc",
+    "web_compositor_mutable_state_impl.h",
+    "web_compositor_mutable_state_provider_impl.cc",
+    "web_compositor_mutable_state_provider_impl.h",
     "web_compositor_support_impl.cc",
     "web_compositor_support_impl.h",
     "web_content_layer_impl.cc",
@@ -43,8 +47,6 @@ component("blink") {
     "web_layer_impl.h",
     "web_layer_impl_fixed_bounds.cc",
     "web_layer_impl_fixed_bounds.h",
-    "web_nine_patch_layer_impl.cc",
-    "web_nine_patch_layer_impl.h",
     "web_scroll_offset_animation_curve_impl.cc",
     "web_scroll_offset_animation_curve_impl.h",
     "web_scrollbar_layer_impl.cc",
@@ -80,6 +82,8 @@ if (!is_mac) {
   test("cc_blink_unittests") {
     sources = [
       "web_animation_unittest.cc",
+      "web_compositor_animation_player_unittest.cc",
+      "web_compositor_mutable_state_impl_unittest.cc",
       "web_float_animation_curve_unittest.cc",
       "web_layer_impl_fixed_bounds_unittest.cc",
 
@@ -92,13 +96,14 @@ if (!is_mac) {
       ":blink",
       "//base/test:test_support",
       "//base/third_party/dynamic_annotations",
-      "//skia",
-      "//testing/gtest",
-      "//third_party/WebKit/public:blink",
-      "//ui/gfx/geometry",
-      "//ui/gfx:test_support",
       "//cc",
       "//cc:test_support",
+      "//skia",
+      "//testing/gmock",
+      "//testing/gtest",
+      "//third_party/WebKit/public:blink",
+      "//ui/gfx:test_support",
+      "//ui/gfx/geometry",
     ]
   }
 }

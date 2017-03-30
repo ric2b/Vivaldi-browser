@@ -5,23 +5,19 @@
 #include "chrome/browser/browsing_data/browsing_data_quota_helper.h"
 
 #include "base/location.h"
-#include "base/single_thread_task_runner.h"
+#include "content/public/browser/browser_thread.h"
 
-BrowsingDataQuotaHelper::QuotaInfo::QuotaInfo()
-    : temporary_usage(0),
-      persistent_usage(0),
-      syncable_usage(0) {}
+using content::BrowserThread;
+
+BrowsingDataQuotaHelper::QuotaInfo::QuotaInfo() {}
 
 BrowsingDataQuotaHelper::QuotaInfo::QuotaInfo(const std::string& host)
-    : host(host),
-      temporary_usage(0),
-      persistent_usage(0),
-      syncable_usage(0) {}
+    : host(host) {}
 
 BrowsingDataQuotaHelper::QuotaInfo::QuotaInfo(const std::string& host,
-                                              int64 temporary_usage,
-                                              int64 persistent_usage,
-                                              int64 syncable_usage)
+                                              int64_t temporary_usage,
+                                              int64_t persistent_usage,
+                                              int64_t syncable_usage)
     : host(host),
       temporary_usage(temporary_usage),
       persistent_usage(persistent_usage),
@@ -32,13 +28,10 @@ BrowsingDataQuotaHelper::QuotaInfo::~QuotaInfo() {}
 // static
 void BrowsingDataQuotaHelperDeleter::Destruct(
     const BrowsingDataQuotaHelper* helper) {
-  helper->io_thread_->DeleteSoon(FROM_HERE, helper);
+  BrowserThread::DeleteSoon(BrowserThread::IO, FROM_HERE, helper);
 }
 
-BrowsingDataQuotaHelper::BrowsingDataQuotaHelper(
-    base::SingleThreadTaskRunner* io_thread)
-    : io_thread_(io_thread) {
-}
+BrowsingDataQuotaHelper::BrowsingDataQuotaHelper() {}
 
 BrowsingDataQuotaHelper::~BrowsingDataQuotaHelper() {
 }

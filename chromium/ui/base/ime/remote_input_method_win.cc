@@ -4,10 +4,13 @@
 
 #include "ui/base/ime/remote_input_method_win.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/win/metro.h"
 #include "base/win/scoped_handle.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/input_method_delegate.h"
@@ -60,16 +63,16 @@ std::string GetLocaleString(LCID Locale_id, LCTYPE locale_type) {
   //|chars_written| includes NUL terminator.
   const int chars_written =
       GetLocaleInfo(Locale_id, locale_type, buffer, arraysize(buffer));
-  if (chars_written <= 1 || arraysize(buffer) < chars_written)
+  if (chars_written <= 1 || static_cast<int>(arraysize(buffer)) < chars_written)
     return std::string();
   std::string result;
   base::WideToUTF8(buffer, chars_written - 1, &result);
   return result;
 }
 
-std::vector<int32> GetInputScopesAsInt(TextInputType text_input_type,
-                                       TextInputMode text_input_mode) {
-  std::vector<int32> result;
+std::vector<int32_t> GetInputScopesAsInt(TextInputType text_input_type,
+                                         TextInputMode text_input_mode) {
+  std::vector<int32_t> result;
   // An empty vector represents |text_input_type| is TEXT_INPUT_TYPE_NONE.
   if (text_input_type == TEXT_INPUT_TYPE_NONE)
     return result;
@@ -78,7 +81,7 @@ std::vector<int32> GetInputScopesAsInt(TextInputType text_input_type,
       tsf_inputscope::GetInputScopes(text_input_type, text_input_mode);
   result.reserve(input_scopes.size());
   for (size_t i = 0; i < input_scopes.size(); ++i)
-    result.push_back(static_cast<int32>(input_scopes[i]));
+    result.push_back(static_cast<int32_t>(input_scopes[i]));
   return result;
 }
 
@@ -91,7 +94,7 @@ std::vector<gfx::Rect> GetCompositionCharacterBounds(
   if (client->HasCompositionText()) {
     gfx::Range range;
     if (client->GetCompositionTextRange(&range)) {
-      for (uint32 i = 0; i < range.length(); ++i) {
+      for (uint32_t i = 0; i < range.length(); ++i) {
         gfx::Rect rect;
         if (!client->GetCompositionCharacterBounds(i, &rect))
           break;
@@ -144,7 +147,7 @@ class RemoteInputMethodWin : public InputMethod,
   }
 
   void SetFocusedTextInputClient(TextInputClient* client) override {
-    std::vector<int32> prev_input_scopes;
+    std::vector<int32_t> prev_input_scopes;
     std::swap(input_scopes_, prev_input_scopes);
     std::vector<gfx::Rect> prev_bounds;
     std::swap(composition_character_bounds_, prev_bounds);
@@ -179,36 +182,31 @@ class RemoteInputMethodWin : public InputMethod,
     return text_input_client_;
   }
 
-  bool DispatchKeyEvent(const ui::KeyEvent& event) override {
-    if (event.HasNativeEvent()) {
-      const base::NativeEvent& native_key_event = event.native_event();
-      if (native_key_event.message != WM_CHAR)
-        return false;
-      if (!text_input_client_)
-        return false;
-      text_input_client_->InsertChar(
-          static_cast<base::char16>(native_key_event.wParam),
-          ui::GetModifiersFromKeyState());
-      return true;
+  void DispatchKeyEvent(ui::KeyEvent* event) override {
+    if (event->HasNativeEvent()) {
+      const base::NativeEvent& native_key_event = event->native_event();
+      if (native_key_event.message == WM_CHAR && text_input_client_) {
+        text_input_client_->InsertChar(*event);
+        event->StopPropagation();
+      }
+      return;
     }
 
-    if (event.is_char()) {
+    if (event->is_char()) {
       if (text_input_client_) {
-        text_input_client_->InsertChar(
-            event.GetCharacter(),
-            ui::GetModifiersFromKeyState());
+        text_input_client_->InsertChar(*event);
       }
-      return true;
+      event->StopPropagation();
+      return;
     }
-    if (!delegate_)
-      return false;
-    return delegate_->DispatchKeyEventPostIME(event);
+    if (delegate_)
+      ignore_result(delegate_->DispatchKeyEventPostIME(event));
   }
 
   void OnTextInputTypeChanged(const TextInputClient* client) override {
     if (!text_input_client_ || text_input_client_ != client)
       return;
-    std::vector<int32> prev_input_scopes;
+    std::vector<int32_t> prev_input_scopes;
     std::swap(input_scopes_, prev_input_scopes);
     input_scopes_ = GetInputScopesAsInt(client->GetTextInputType(),
                                         client->GetTextInputMode());
@@ -248,10 +246,6 @@ class RemoteInputMethodWin : public InputMethod,
     if (region.empty())
       return language;
     return language.append(1, '-').append(region);
-  }
-
-  bool IsActive() override {
-    return true;  // always turned on
   }
 
   TextInputType GetTextInputType() const override {
@@ -324,8 +318,12 @@ class RemoteInputMethodWin : public InputMethod,
       // According to the comment in text_input_client.h,
       // TextInputClient::InsertText should never be called when the
       // text input type is TEXT_INPUT_TYPE_NONE.
-      for (size_t i = 0; i < text.size(); ++i)
-        text_input_client_->InsertChar(text[i], 0);
+
+      for (size_t i = 0; i < text.size(); ++i) {
+        ui::KeyEvent char_event(text[i], static_cast<ui::KeyboardCode>(text[i]),
+                                ui::EF_NONE);
+        text_input_client_->InsertChar(char_event);
+      }
       return;
     }
     text_input_client_->InsertText(text);
@@ -344,7 +342,7 @@ class RemoteInputMethodWin : public InputMethod,
   internal::RemoteInputMethodDelegateWin* remote_delegate_;
 
   TextInputClient* text_input_client_;
-  std::vector<int32> input_scopes_;
+  std::vector<int32_t> input_scopes_;
   std::vector<gfx::Rect> composition_character_bounds_;
   bool is_candidate_popup_open_;
   bool is_ime_;
@@ -367,9 +365,8 @@ bool IsRemoteInputMethodWinRequired(gfx::AcceleratedWidget widget) {
       PROCESS_QUERY_LIMITED_INFORMATION, FALSE, process_id));
   if (!process_handle.IsValid())
     return false;
-  return base::win::IsProcessImmersive(process_handle.Get()) ||
-         base::CommandLine::ForCurrentProcess()->HasSwitch(
-             switches::kViewerConnect);
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kViewerConnect);
 }
 
 RemoteInputMethodPrivateWin::RemoteInputMethodPrivateWin() {}

@@ -5,7 +5,8 @@
 #ifndef EXTENSIONS_RENDERER_SCRIPT_INJECTION_H_
 #define EXTENSIONS_RENDERER_SCRIPT_INJECTION_H_
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
@@ -53,8 +54,7 @@ class ScriptInjection {
   ScriptInjection(scoped_ptr<ScriptInjector> injector,
                   content::RenderFrame* render_frame,
                   scoped_ptr<const InjectionHost> injection_host,
-                  UserScript::RunLocation run_location,
-                  int tab_id);
+                  UserScript::RunLocation run_location);
   ~ScriptInjection();
 
   // Try to inject the script at the |current_location|. This returns
@@ -78,15 +78,18 @@ class ScriptInjection {
   // Resets the pointer of the injection host when the host is gone.
   void OnHostRemoved();
 
+  void invalidate_render_frame() { render_frame_ = nullptr; }
+
   // Accessors.
   content::RenderFrame* render_frame() const { return render_frame_; }
   const HostID& host_id() const { return injection_host_->id(); }
-  int64 request_id() const { return request_id_; }
+  int64_t request_id() const { return request_id_; }
 
  private:
-  // Sends a message to the browser, either that the script injection would
-  // like to inject, or to notify the browser that it is currently injecting.
-  void SendInjectionMessage(bool request_permission);
+  class FrameWatcher;
+
+  // Sends a message to the browser to request permission to inject.
+  void RequestPermissionFromBrowser();
 
   // Injects the script. Returns INJECTION_FINISHED if injection has finished,
   // otherwise INJECTION_BLOCKED.
@@ -117,12 +120,9 @@ class ScriptInjection {
   // The location in the document load at which we inject the script.
   UserScript::RunLocation run_location_;
 
-  // The tab id associated with the frame.
-  int tab_id_;
-
   // This injection's request id. This will be -1 unless the injection is
   // currently waiting on permission.
-  int64 request_id_;
+  int64_t request_id_;
 
   // Whether or not the injection is complete, either via injecting the script
   // or because it will never complete.
@@ -136,6 +136,9 @@ class ScriptInjection {
 
   // The callback to run upon completing asynchronously.
   CompletionCallback async_completion_callback_;
+
+  // A helper class to hold the render frame and watch for its deletion.
+  scoped_ptr<FrameWatcher> frame_watcher_;
 
   base::WeakPtrFactory<ScriptInjection> weak_ptr_factory_;
 

@@ -4,17 +4,21 @@
 
 #include "chrome/browser/ui/views/frame/browser_frame_mac.h"
 
+#import "chrome/browser/ui/cocoa/browser_window_command_handler.h"
+#import "chrome/browser/ui/cocoa/chrome_command_dispatcher_delegate.h"
 #include "chrome/browser/ui/views/frame/browser_frame.h"
 #include "chrome/browser/ui/views/frame/browser_shutdown.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #import "chrome/browser/ui/views/frame/native_widget_mac_frameless_nswindow.h"
+#include "components/web_modal/web_contents_modal_dialog_host.h"
 #import "ui/base/cocoa/window_size_constants.h"
 
 BrowserFrameMac::BrowserFrameMac(BrowserFrame* browser_frame,
                                  BrowserView* browser_view)
     : views::NativeWidgetMac(browser_frame),
-      browser_view_(browser_view) {
-}
+      browser_view_(browser_view),
+      command_dispatcher_delegate_(
+          [[ChromeCommandDispatcherDelegate alloc] init]) {}
 
 BrowserFrameMac::~BrowserFrameMac() {
 }
@@ -27,6 +31,17 @@ void BrowserFrameMac::OnWindowWillClose() {
   // See comment in DesktopBrowserFrameAura::OnHostClosed().
   DestroyBrowserWebContents(browser_view_->browser());
   NativeWidgetMac::OnWindowWillClose();
+}
+
+int BrowserFrameMac::SheetPositionY() {
+  web_modal::WebContentsModalDialogHost* dialog_host =
+      browser_view_->GetWebContentsModalDialogHost();
+  NSView* view = dialog_host->GetHostView();
+  // Get the position of the host view relative to the window since
+  // ModalDialogHost::GetDialogPosition() is relative to the host view.
+  int host_view_y =
+      [view convertPoint:NSMakePoint(0, NSHeight([view frame])) toView:nil].y;
+  return host_view_y - dialog_host->GetDialogPosition(gfx::Size()).y();
 }
 
 void BrowserFrameMac::InitNativeWidget(
@@ -44,16 +59,21 @@ void BrowserFrameMac::InitNativeWidget(
   [root_view addSubview:content_view positioned:NSWindowBelow relativeTo:nil];
 }
 
-gfx::NativeWindow BrowserFrameMac::CreateNSWindow(
+NativeWidgetMacNSWindow* BrowserFrameMac::CreateNSWindow(
     const views::Widget::InitParams& params) {
   NSUInteger style_mask = NSTitledWindowMask | NSClosableWindowMask |
                           NSMiniaturizableWindowMask | NSResizableWindowMask |
                           NSTexturedBackgroundWindowMask;
-  return [[[NativeWidgetMacFramelessNSWindow alloc]
-      initWithContentRect:ui::kWindowSizeDeterminedLater
-                styleMask:style_mask
-                  backing:NSBackingStoreBuffered
-                    defer:NO] autorelease];
+  base::scoped_nsobject<NativeWidgetMacFramelessNSWindow> ns_window(
+      [[NativeWidgetMacFramelessNSWindow alloc]
+          initWithContentRect:ui::kWindowSizeDeterminedLater
+                    styleMask:style_mask
+                      backing:NSBackingStoreBuffered
+                        defer:NO]);
+  [ns_window setCommandDispatcherDelegate:command_dispatcher_delegate_];
+  [ns_window setCommandHandler:[[[BrowserWindowCommandHandler alloc] init]
+                                   autorelease]];
+  return ns_window.autorelease();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

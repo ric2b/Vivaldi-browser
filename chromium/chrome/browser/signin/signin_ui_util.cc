@@ -7,42 +7,39 @@
 #include "base/prefs/pref_service.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
 #include "chrome/browser/signin/signin_error_controller_factory.h"
 #include "chrome/browser/signin/signin_global_error.h"
 #include "chrome/browser/signin/signin_global_error_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/sync_global_error.h"
 #include "chrome/browser/sync/sync_global_error_factory.h"
 #include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/common/profile_management_switches.h"
+#include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/text_elider.h"
 
+namespace signin_ui_util {
+
 namespace {
+
 // Maximum width of a username - we trim emails that are wider than this so
 // the wrench menu doesn't get ridiculously wide.
 const int kUsernameMaxWidth = 200;
-}  // namespace
 
-namespace signin_ui_util {
-
-GlobalError* GetSignedInServiceError(Profile* profile) {
-  std::vector<GlobalError*> errors = GetSignedInServiceErrors(profile);
-  if (errors.empty())
-    return NULL;
-  return errors[0];
-}
-
+// Returns all errors reported by signed in services.
 std::vector<GlobalError*> GetSignedInServiceErrors(Profile* profile) {
   std::vector<GlobalError*> errors;
   // Chrome OS doesn't use SigninGlobalError or SyncGlobalError. Other platforms
@@ -68,6 +65,17 @@ std::vector<GlobalError*> GetSignedInServiceErrors(Profile* profile) {
   return errors;
 }
 
+// If a signed in service is reporting an error, returns the GlobalError
+// object associated with that service, or NULL if no errors are reported.
+GlobalError* GetSignedInServiceError(Profile* profile) {
+  std::vector<GlobalError*> errors = GetSignedInServiceErrors(profile);
+  if (errors.empty())
+    return NULL;
+  return errors[0];
+}
+
+}  // namespace
+
 base::string16 GetSigninMenuLabel(Profile* profile) {
   GlobalError* error = signin_ui_util::GetSignedInServiceError(profile);
   if (error)
@@ -79,12 +87,12 @@ base::string16 GetSigninMenuLabel(Profile* profile) {
 
   // Even if the user is signed in, don't display the "signed in as..."
   // label if we're still setting up sync.
-  if (!service || !service->FirstSetupInProgress()) {
+  if (!service || !service->IsFirstSetupInProgress()) {
     std::string username;
     SigninManagerBase* signin_manager =
         SigninManagerFactory::GetForProfileIfExists(profile);
     if (signin_manager)
-      username = signin_manager->GetAuthenticatedUsername();
+      username = signin_manager->GetAuthenticatedAccountInfo().email;
     if (!username.empty() && !signin_manager->AuthInProgress()) {
       const base::string16 elided = gfx::ElideText(base::UTF8ToUTF16(username),
           gfx::FontList(), kUsernameMaxWidth, gfx::ELIDE_EMAIL);
@@ -157,15 +165,10 @@ void GetStatusLabelsForAuthError(Profile* profile,
 }
 
 void InitializePrefsForProfile(Profile* profile) {
-  if (profile->IsNewProfile() && switches::IsNewAvatarMenu()) {
+  if (profile->IsNewProfile()) {
     // Suppresses the upgrade tutorial for a new profile.
     profile->GetPrefs()->SetInteger(
         prefs::kProfileAvatarTutorialShown, kUpgradeWelcomeTutorialShowMax + 1);
-
-#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS) && !defined(OS_IOS)
-    profile->GetPrefs()->SetInteger(
-        prefs::kAccountIdMigrationState, AccountTrackerService::MIGRATION_DONE);
-#endif
   }
 }
 

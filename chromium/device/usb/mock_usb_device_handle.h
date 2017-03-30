@@ -7,6 +7,9 @@
 
 #include "device/usb/usb_device_handle.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace device {
@@ -15,43 +18,8 @@ class MockUsbDeviceHandle : public UsbDeviceHandle {
  public:
   MockUsbDeviceHandle(UsbDevice* device);
 
+  scoped_refptr<UsbDevice> GetDevice() const override;
   MOCK_METHOD0(Close, void());
-  MOCK_METHOD10(ControlTransfer,
-                void(UsbEndpointDirection direction,
-                     TransferRequestType request_type,
-                     TransferRecipient recipient,
-                     uint8 request,
-                     uint16 value,
-                     uint16 index,
-                     scoped_refptr<net::IOBuffer> buffer,
-                     size_t length,
-                     unsigned int timeout,
-                     const TransferCallback& callback));
-  MOCK_METHOD6(BulkTransfer,
-               void(UsbEndpointDirection direction,
-                    uint8 endpoint,
-                    scoped_refptr<net::IOBuffer> buffer,
-                    size_t length,
-                    unsigned int timeout,
-                    const TransferCallback& callback));
-  MOCK_METHOD6(InterruptTransfer,
-               void(UsbEndpointDirection direction,
-                    uint8 endpoint,
-                    scoped_refptr<net::IOBuffer> buffer,
-                    size_t length,
-                    unsigned int timeout,
-                    const TransferCallback& callback));
-  MOCK_METHOD8(IsochronousTransfer,
-               void(UsbEndpointDirection direction,
-                    uint8 endpoint,
-                    scoped_refptr<net::IOBuffer> buffer,
-                    size_t length,
-                    unsigned int packets,
-                    unsigned int packet_length,
-                    unsigned int timeout,
-                    const TransferCallback& callback));
-  MOCK_METHOD1(ResetDevice, void(const ResultCallback& callback));
-  MOCK_METHOD2(GetStringDescriptor, bool(uint8_t, base::string16*));
   MOCK_METHOD2(SetConfiguration,
                void(int configuration_value, const ResultCallback& callback));
   MOCK_METHOD2(ClaimInterface,
@@ -61,8 +29,38 @@ class MockUsbDeviceHandle : public UsbDeviceHandle {
                void(int interface_number,
                     int alternate_setting,
                     const ResultCallback& callback));
-
-  scoped_refptr<UsbDevice> GetDevice() const override;
+  MOCK_METHOD1(ResetDevice, void(const ResultCallback& callback));
+  MOCK_METHOD2(ClearHalt,
+               void(uint8_t endpoint, const ResultCallback& callback));
+  MOCK_METHOD10(ControlTransfer,
+                void(UsbEndpointDirection direction,
+                     TransferRequestType request_type,
+                     TransferRecipient recipient,
+                     uint8_t request,
+                     uint16_t value,
+                     uint16_t index,
+                     scoped_refptr<net::IOBuffer> buffer,
+                     size_t length,
+                     unsigned int timeout,
+                     const TransferCallback& callback));
+  MOCK_METHOD8(IsochronousTransfer,
+               void(UsbEndpointDirection direction,
+                    uint8_t endpoint,
+                    scoped_refptr<net::IOBuffer> buffer,
+                    size_t length,
+                    unsigned int packets,
+                    unsigned int packet_length,
+                    unsigned int timeout,
+                    const TransferCallback& callback));
+  MOCK_METHOD6(GenericTransfer,
+               void(UsbEndpointDirection direction,
+                    uint8_t endpoint,
+                    scoped_refptr<net::IOBuffer> buffer,
+                    size_t length,
+                    unsigned int timeout,
+                    const TransferCallback& callback));
+  MOCK_METHOD2(FindInterfaceByEndpoint,
+               bool(uint8_t endpoint_address, uint8_t* interface_number));
 
  private:
   ~MockUsbDeviceHandle() override;

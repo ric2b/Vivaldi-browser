@@ -4,9 +4,9 @@
 
 #include "ash/magnifier/magnification_controller.h"
 
+#include "ash/display/display_manager.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/test/display_manager_test_api.h"
 #include "base/strings/stringprintf.h"
 #include "ui/aura/env.h"
 #include "ui/aura/test/aura_test_utils.h"
@@ -264,6 +264,33 @@ TEST_F(MagnificationControllerTest, PointOfInterest) {
 
   generator.MoveMouseToInHost(gfx::Point(500, 400));
   EXPECT_EQ("450,350", CurrentPointOfInterest());
+}
+
+TEST_F(MagnificationControllerTest, FollowFocusChanged) {
+  // Enables magnifier and confirm the viewport is at center.
+  GetMagnificationController()->SetEnabled(true);
+  EXPECT_EQ(2.0f, GetMagnificationController()->GetScale());
+  EXPECT_EQ("200,150 400x300", GetViewport().ToString());
+
+  // Don't move viewport when focusing edit box.
+  GetMagnificationController()->HandleFocusedNodeChanged(
+      true, gfx::Rect(0, 0, 10, 10));
+  EXPECT_EQ("200,150 400x300", GetViewport().ToString());
+
+  // Move viewport to element in upper left.
+  GetMagnificationController()->HandleFocusedNodeChanged(
+      false, gfx::Rect(0, 0, 10, 10));
+  EXPECT_EQ("0,0 400x300", GetViewport().ToString());
+
+  // Move viewport to element in lower right.
+  GetMagnificationController()->HandleFocusedNodeChanged(
+      false, gfx::Rect(790, 590, 10, 10));
+  EXPECT_EQ("400,300 400x300", GetViewport().ToString());
+
+  // Don't follow focus onto empty rectangle.
+  GetMagnificationController()->HandleFocusedNodeChanged(
+      false, gfx::Rect(0, 0, 0, 0));
+  EXPECT_EQ("400,300 400x300", GetViewport().ToString());
 }
 
 TEST_F(MagnificationControllerTest, PanWindow2xLeftToRight) {
@@ -670,7 +697,7 @@ TEST_F(MagnificationControllerTest, CenterTextCaretInViewport) {
 TEST_F(MagnificationControllerTest, EnableMagnifierInUnifiedDesktop) {
   if (!SupportsMultipleDisplays())
     return;
-  test::DisplayManagerTestApi::EnableUnifiedDesktopForTest();
+  Shell::GetInstance()->display_manager()->SetUnifiedDesktopEnabled(true);
 
   EXPECT_EQ(1.0f, GetMagnificationController()->GetScale());
 

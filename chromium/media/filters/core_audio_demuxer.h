@@ -11,7 +11,6 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread.h"
@@ -43,6 +42,7 @@ class MEDIA_EXPORT CoreAudioDemuxer : public Demuxer {
   DemuxerStream* GetStream(DemuxerStream::Type type) override;
   base::TimeDelta GetStartTime() const override;
   base::Time GetTimelineOffset() const override;
+  int64_t GetMemoryUsage() const override;
 
   void ResetDataSourceOffset();
   void ReadDataSourceIfNeeded();
@@ -68,7 +68,7 @@ class MEDIA_EXPORT CoreAudioDemuxer : public Demuxer {
       UInt32 number_packets,
       const void* input_data,
       AudioStreamPacketDescription* packet_descriptions);
-  void SetAudioDuration(int64 duration);
+  void SetAudioDuration(int64_t duration);
 
   void ReadDataSourceWithCallback(const DataSource::ReadCB& read_cb);
   void ReadAudioFormatInfo(const PipelineStatusCB& status_cb);
@@ -84,7 +84,7 @@ class MEDIA_EXPORT CoreAudioDemuxer : public Demuxer {
   scoped_ptr<BlockingUrlProtocol> url_protocol_;
   AudioStreamBasicDescription input_format_info_;
   AudioFileStreamID audio_stream_id_;
-  uint8 buffer_[kStreamInfoBufferSize];
+  uint8_t buffer_[kStreamInfoBufferSize];
   UInt32 bit_rate_;
   bool input_format_found_;
 

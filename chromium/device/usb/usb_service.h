@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/bind_helpers.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
@@ -33,6 +34,8 @@ class UsbService : public base::NonThreadSafe {
 
   class Observer {
    public:
+    virtual ~Observer();
+
     // These events are delivered from the thread on which the UsbService object
     // was created.
     virtual void OnDeviceAdded(scoped_refptr<UsbDevice> device);
@@ -40,12 +43,17 @@ class UsbService : public base::NonThreadSafe {
     // For observers that need to process device removal after others have run.
     // Should not depend on any other service's knowledge of connected devices.
     virtual void OnDeviceRemovedCleanup(scoped_refptr<UsbDevice> device);
+
+    // Notifies the observer that the UsbService it depends on is shutting down.
+    virtual void WillDestroyUsbService();
   };
 
   // The file task runner reference is used for blocking I/O operations.
-  // Returns NULL when initialization fails.
-  static UsbService* GetInstance(
+  // Returns nullptr when initialization fails.
+  static scoped_ptr<UsbService> Create(
       scoped_refptr<base::SequencedTaskRunner> blocking_task_runner);
+
+  virtual ~UsbService();
 
   virtual scoped_refptr<UsbDevice> GetDevice(const std::string& guid) = 0;
 
@@ -57,7 +65,6 @@ class UsbService : public base::NonThreadSafe {
 
  protected:
   UsbService();
-  virtual ~UsbService();
 
   void NotifyDeviceAdded(scoped_refptr<UsbDevice> device);
   void NotifyDeviceRemoved(scoped_refptr<UsbDevice> device);

@@ -5,11 +5,15 @@
 #ifndef MEDIA_CAST_SENDER_SIZE_ADAPTABLE_VIDEO_ENCODER_BASE_H_
 #define MEDIA_CAST_SENDER_SIZE_ADAPTABLE_VIDEO_ENCODER_BASE_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "media/cast/cast_config.h"
 #include "media/cast/cast_environment.h"
+#include "media/cast/constants.h"
 #include "media/cast/sender/video_encoder.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -37,7 +41,6 @@ class SizeAdaptableVideoEncoderBase : public VideoEncoder {
       const FrameEncodedCallback& frame_encoded_callback) final;
   void SetBitRate(int new_bit_rate) final;
   void GenerateKeyFrame() final;
-  void LatestFrameIdToReference(uint32 frame_id) final;
   scoped_ptr<VideoFrameFactory> CreateVideoFrameFactory() final;
   void EmitFrames() final;
 
@@ -52,9 +55,7 @@ class SizeAdaptableVideoEncoderBase : public VideoEncoder {
   const gfx::Size& frame_size() const {
     return frame_size_;
   }
-  uint32 last_frame_id() const {
-    return last_frame_id_;
-  }
+  uint32_t last_frame_id() const { return last_frame_id_; }
 
   // Returns a callback that calls OnEncoderStatusChange().  The callback is
   // canceled by invalidating its bound weak pointer just before a replacement
@@ -106,7 +107,7 @@ class SizeAdaptableVideoEncoderBase : public VideoEncoder {
   int frames_in_encoder_;
 
   // The ID of the last frame that was emitted from |encoder_|.
-  uint32 last_frame_id_;
+  uint32_t last_frame_id_;
 
   // NOTE: Weak pointers must be invalidated before all other member variables.
   base::WeakPtrFactory<SizeAdaptableVideoEncoderBase> weak_factory_;

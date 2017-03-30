@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/views/tabs/tab_renderer_data.h"
 
 #include "base/process/kill.h"
+#include "build/build_config.h"
 
 TabRendererData::TabRendererData()
     : network_state(NETWORK_STATE_NONE),
@@ -24,10 +25,11 @@ bool TabRendererData::IsCrashed() const {
   return (crashed_status == base::TERMINATION_STATUS_PROCESS_WAS_KILLED ||
 #if defined(OS_CHROMEOS)
           crashed_status ==
-          base::TERMINATION_STATUS_PROCESS_WAS_KILLED_BY_OOM ||
+              base::TERMINATION_STATUS_PROCESS_WAS_KILLED_BY_OOM ||
 #endif
           crashed_status == base::TERMINATION_STATUS_PROCESS_CRASHED ||
-          crashed_status == base::TERMINATION_STATUS_ABNORMAL_TERMINATION);
+          crashed_status == base::TERMINATION_STATUS_ABNORMAL_TERMINATION ||
+          crashed_status == base::TERMINATION_STATUS_LAUNCH_FAILED);
 }
 
 bool TabRendererData::Equals(const TabRendererData& data) {

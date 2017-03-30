@@ -4,9 +4,11 @@
 
 #include "cc/surfaces/surface_factory.h"
 
+#include "base/trace_event/trace_event.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/surfaces/surface.h"
+#include "cc/surfaces/surface_factory_client.h"
 #include "cc/surfaces/surface_manager.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -25,6 +27,7 @@ SurfaceFactory::~SurfaceFactory() {
                << " entries in map on destruction.";
   }
   DestroyAll();
+  client_->SetBeginFrameSource(SurfaceId(), nullptr);
 }
 
 void SurfaceFactory::DestroyAll() {
@@ -37,7 +40,7 @@ void SurfaceFactory::Create(SurfaceId surface_id) {
   scoped_ptr<Surface> surface(new Surface(surface_id, this));
   manager_->RegisterSurface(surface.get());
   DCHECK(!surface_map_.count(surface_id));
-  surface_map_.add(surface_id, surface.Pass());
+  surface_map_.add(surface_id, std::move(surface));
 }
 
 void SurfaceFactory::Destroy(SurfaceId surface_id) {
@@ -47,15 +50,23 @@ void SurfaceFactory::Destroy(SurfaceId surface_id) {
   manager_->Destroy(surface_map_.take_and_erase(it));
 }
 
-void SurfaceFactory::SubmitFrame(SurfaceId surface_id,
-                                 scoped_ptr<CompositorFrame> frame,
-                                 const DrawCallback& callback) {
+void SurfaceFactory::SetBeginFrameSource(SurfaceId surface_id,
+                                         BeginFrameSource* begin_frame_source) {
+  client_->SetBeginFrameSource(surface_id, begin_frame_source);
+}
+
+void SurfaceFactory::SubmitCompositorFrame(SurfaceId surface_id,
+                                           scoped_ptr<CompositorFrame> frame,
+                                           const DrawCallback& callback) {
+  TRACE_EVENT0("cc", "SurfaceFactory::SubmitCompositorFrame");
   OwningSurfaceMap::iterator it = surface_map_.find(surface_id);
   DCHECK(it != surface_map_.end());
   DCHECK(it->second->factory().get() == this);
-  it->second->QueueFrame(frame.Pass(), callback);
-  if (!manager_->SurfaceModified(surface_id))
+  it->second->QueueFrame(std::move(frame), callback);
+  if (!manager_->SurfaceModified(surface_id)) {
+    TRACE_EVENT_INSTANT0("cc", "Damage not visible.", TRACE_EVENT_SCOPE_THREAD);
     it->second->RunDrawCallbacks(SurfaceDrawStatus::DRAW_SKIPPED);
+  }
 }
 
 void SurfaceFactory::RequestCopyOfSurface(
@@ -67,8 +78,13 @@ void SurfaceFactory::RequestCopyOfSurface(
     return;
   }
   DCHECK(it->second->factory().get() == this);
-  it->second->RequestCopyOfOutput(copy_request.Pass());
+  it->second->RequestCopyOfOutput(std::move(copy_request));
   manager_->SurfaceModified(surface_id);
+}
+
+void SurfaceFactory::WillDrawSurface(SurfaceId id,
+                                     const gfx::Rect& damage_rect) {
+  client_->WillDrawSurface(id, damage_rect);
 }
 
 void SurfaceFactory::ReceiveFromChild(

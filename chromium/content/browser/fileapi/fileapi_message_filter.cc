@@ -5,16 +5,19 @@
 #include "content/browser/fileapi/fileapi_message_filter.h"
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/fileapi/blob_storage_host.h"
@@ -53,9 +56,8 @@ namespace content {
 
 namespace {
 
-const uint32 kFilteredMessageClasses[] = {
-  BlobMsgStart,
-  FileSystemMsgStart,
+const uint32_t kFilteredMessageClasses[] = {
+    BlobMsgStart, FileSystemMsgStart,
 };
 
 void RevokeFilePermission(int child_id, const base::FilePath& path) {
@@ -106,7 +108,7 @@ FileAPIMessageFilter::FileAPIMessageFilter(
   DCHECK(stream_context);
 }
 
-void FileAPIMessageFilter::OnChannelConnected(int32 peer_pid) {
+void FileAPIMessageFilter::OnChannelConnected(int32_t peer_pid) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   if (request_context_getter_.get()) {
@@ -316,7 +318,10 @@ void FileAPIMessageFilter::OnReadMetadata(
   }
 
   operations_[request_id] = operation_runner()->GetMetadata(
-      url, base::Bind(&FileAPIMessageFilter::DidGetMetadata, this, request_id));
+      url, FileSystemOperation::GET_METADATA_FIELD_IS_DIRECTORY |
+               FileSystemOperation::GET_METADATA_FIELD_SIZE |
+               FileSystemOperation::GET_METADATA_FIELD_LAST_MODIFIED,
+      base::Bind(&FileAPIMessageFilter::DidGetMetadata, this, request_id));
 }
 
 void FileAPIMessageFilter::OnCreate(
@@ -383,11 +388,10 @@ void FileAPIMessageFilter::OnReadDirectory(
                       this, request_id));
 }
 
-void FileAPIMessageFilter::OnWrite(
-    int request_id,
-    const GURL& path,
-    const std::string& blob_uuid,
-    int64 offset) {
+void FileAPIMessageFilter::OnWrite(int request_id,
+                                   const GURL& path,
+                                   const std::string& blob_uuid,
+                                   int64_t offset) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (!request_context_) {
     // We can't write w/o a request context, trying to do so will crash.
@@ -408,14 +412,13 @@ void FileAPIMessageFilter::OnWrite(
       blob_storage_context_->context()->GetBlobDataFromUUID(blob_uuid);
 
   operations_[request_id] = operation_runner()->Write(
-      request_context_, url, blob.Pass(), offset,
+      request_context_, url, std::move(blob), offset,
       base::Bind(&FileAPIMessageFilter::DidWrite, this, request_id));
 }
 
-void FileAPIMessageFilter::OnTruncate(
-    int request_id,
-    const GURL& path,
-    int64 length) {
+void FileAPIMessageFilter::OnTruncate(int request_id,
+                                      const GURL& path,
+                                      int64_t length) {
   FileSystemURL url(context_->CrackURL(path));
   if (!ValidateFileSystemURL(request_id, url))
     return;
@@ -493,9 +496,11 @@ void FileAPIMessageFilter::OnCreateSnapshotFile(
   FileSystemBackend* backend = context_->GetFileSystemBackend(url.type());
   if (backend->SupportsStreaming(url)) {
     operations_[request_id] = operation_runner()->GetMetadata(
-        url,
-        base::Bind(&FileAPIMessageFilter::DidGetMetadataForStreaming,
-                   this, request_id));
+        url, FileSystemOperation::GET_METADATA_FIELD_IS_DIRECTORY |
+                 FileSystemOperation::GET_METADATA_FIELD_SIZE |
+                 FileSystemOperation::GET_METADATA_FIELD_LAST_MODIFIED,
+        base::Bind(&FileAPIMessageFilter::DidGetMetadataForStreaming, this,
+                   request_id));
   } else {
     operations_[request_id] = operation_runner()->CreateSnapshotFile(
         url,
@@ -597,8 +602,8 @@ void FileAPIMessageFilter::OnStartBuildingStream(
     const GURL& url, const std::string& content_type) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   // Only an internal Blob URL is expected here. See the BlobURL of the Blink.
-  if (!base::StartsWithASCII(url.path(), "blobinternal%3A///",
-                             true /* case_sensitive */)) {
+  if (!base::StartsWith(url.path(), "blobinternal%3A///",
+                        base::CompareCase::SENSITIVE)) {
     NOTREACHED() << "Malformed Stream URL: " << url.spec();
     bad_message::ReceivedBadMessage(this,
                                     bad_message::FAMF_MALFORMED_STREAM_URL);
@@ -753,7 +758,7 @@ void FileAPIMessageFilter::DidReadDirectory(
 
 void FileAPIMessageFilter::DidWrite(int request_id,
                                     base::File::Error result,
-                                    int64 bytes,
+                                    int64_t bytes,
                                     bool complete) {
   if (result == base::File::FILE_OK) {
     Send(new FileSystemMsg_DidWrite(request_id, bytes, complete));

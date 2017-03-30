@@ -5,13 +5,15 @@
 #ifndef COMPONENTS_DATA_REDUCTION_PROXY_CORE_BROWSER_DATA_REDUCTION_PROXY_SETTINGS_H_
 #define COMPONENTS_DATA_REDUCTION_PROXY_CORE_BROWSER_DATA_REDUCTION_PROXY_SETTINGS_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_member.h"
 #include "base/threading/thread_checker.h"
@@ -55,11 +57,18 @@ enum LoFiImplicitOptOutAction {
   LO_FI_OPT_OUT_ACTION_INDEX_BOUNDARY,
 };
 
+// Values of the UMA DataReductionProxy.EnabledState histogram.
+// This enum must remain synchronized with DataReductionProxyEnabledState
+// in metrics/histograms/histograms.xml.
+enum DataReductionSettingsEnabledAction {
+  DATA_REDUCTION_SETTINGS_ACTION_OFF_TO_ON = 0,
+  DATA_REDUCTION_SETTINGS_ACTION_ON_TO_OFF,
+  DATA_REDUCTION_SETTINGS_ACTION_BOUNDARY,
+};
+
 // Central point for configuring the data reduction proxy.
 // This object lives on the UI thread and all of its methods are expected to
 // be called from there.
-// TODO(marq): Convert this to be a KeyedService with an
-// associated factory class, and refactor the Java call sites accordingly.
 class DataReductionProxySettings : public DataReductionProxyServiceObserver {
  public:
   typedef base::Callback<bool(const std::string&, const std::string&)>
@@ -68,10 +77,12 @@ class DataReductionProxySettings : public DataReductionProxyServiceObserver {
   DataReductionProxySettings();
   virtual ~DataReductionProxySettings();
 
-  // Initializes the data reduction proxy with profile prefs and a
-  // |DataReductionProxyIOData|. The caller must ensure that all parameters
-  // remain alive for the lifetime of the |DataReductionProxySettings| instance.
+  // Initializes the Data Reduction Proxy with the name of the preference that
+  // controls enabling it, profile prefs and a |DataReductionProxyIOData|. The
+  // caller must ensure that all parameters remain alive for the lifetime of
+  // the |DataReductionProxySettings| instance.
   void InitDataReductionProxySettings(
+      const std::string& data_reduction_proxy_enabled_pref_name,
       PrefService* prefs,
       DataReductionProxyIOData* io_data,
       scoped_ptr<DataReductionProxyService> data_reduction_proxy_service);
@@ -116,6 +127,9 @@ class DataReductionProxySettings : public DataReductionProxyServiceObserver {
   // the last main frame request.
   bool WasLoFiLoadImageRequestedBefore();
 
+  // Increments the number of times the Lo-Fi snackbar has been shown.
+  void IncrementLoFiSnackbarShown();
+
   // Sets |lo_fi_load_image_requested_| to true, which means a "Load image"
   // context menu request has been made since the last main frame request.
   void SetLoFiLoadImageRequested();
@@ -131,14 +145,14 @@ class DataReductionProxySettings : public DataReductionProxyServiceObserver {
 
   // Returns the time in microseconds that the last update was made to the
   // daily original and received content lengths.
-  int64 GetDataReductionLastUpdateTime();
+  int64_t GetDataReductionLastUpdateTime();
 
   // Returns aggregate received and original content lengths over the specified
   // number of days, as well as the time these stats were last updated.
   void GetContentLengths(unsigned int days,
-                         int64* original_content_length,
-                         int64* received_content_length,
-                         int64* last_update_time);
+                         int64_t* original_content_length,
+                         int64_t* received_content_length,
+                         int64_t* last_update_time);
 
   // Records that the data reduction proxy is unreachable or not.
   void SetUnreachable(bool unreachable);
@@ -233,6 +247,8 @@ class DataReductionProxySettings : public DataReductionProxyServiceObserver {
                            TestLoFiImplicitOptOutHistograms);
   FRIEND_TEST_ALL_PREFIXES(DataReductionProxySettingsTest,
                            TestLoFiSessionStateHistograms);
+  FRIEND_TEST_ALL_PREFIXES(DataReductionProxySettingsTest,
+                           TestSettingsEnabledStateHistograms);
 
   // Override of DataReductionProxyService::Observer.
   void OnServiceInitialized() override;
@@ -254,6 +270,13 @@ class DataReductionProxySettings : public DataReductionProxyServiceObserver {
 
   // Update IO thread objects in response to UI thread changes.
   void UpdateIOData(bool at_startup);
+
+  // For tests.
+  void set_data_reduction_proxy_enabled_pref_name_for_test(
+      const std::string& data_reduction_proxy_enabled_pref_name) {
+    data_reduction_proxy_enabled_pref_name_ =
+        data_reduction_proxy_enabled_pref_name;
+  }
 
   bool unreachable_;
 
@@ -290,6 +313,10 @@ class DataReductionProxySettings : public DataReductionProxyServiceObserver {
   BooleanPrefMember spdy_proxy_auth_enabled_;
 
   scoped_ptr<DataReductionProxyService> data_reduction_proxy_service_;
+
+  // The name of the preference that controls enabling and disabling the Data
+  // Reduction Proxy.
+  std::string data_reduction_proxy_enabled_pref_name_;
 
   PrefService* prefs_;
 

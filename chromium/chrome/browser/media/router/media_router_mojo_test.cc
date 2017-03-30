@@ -4,7 +4,9 @@
 
 #include "chrome/browser/media/router/media_router_mojo_test.h"
 
-#include "base/run_loop.h"
+#include <utility>
+
+#include "mojo/message_pump/message_pump_mojo.h"
 
 namespace media_router {
 namespace {
@@ -25,9 +27,9 @@ MockMediaRouteProvider::~MockMediaRouteProvider() {
 }
 
 MediaRouterMojoTest::MediaRouterMojoTest()
-    : message_loop_(mojo::common::MessagePumpMojo::Create()),
-      extension_id_("ext-123"),
-      mock_media_router_(new MediaRouterMojoImpl(&mock_event_page_tracker_)) {
+    : extension_id_("ext-123"),
+      mock_media_router_(new MediaRouterMojoImpl(&mock_event_page_tracker_)),
+      message_loop_(mojo::common::MessagePumpMojo::Create()) {
   mock_media_router_->set_instance_id_for_test(kInstanceId);
 }
 
@@ -37,7 +39,7 @@ MediaRouterMojoTest::~MediaRouterMojoTest() {
 void MediaRouterMojoTest::ConnectProviderManagerService() {
   // Bind the |media_route_provider| interface to |media_route_provider_|.
   auto request = mojo::GetProxy(&media_router_proxy_);
-  mock_media_router_->BindToMojoRequest(request.Pass(), extension_id_);
+  mock_media_router_->BindToMojoRequest(std::move(request), extension_id_);
 
   // Bind the Mojo MediaRouter interface used by |mock_media_router_| to
   // |mock_media_route_provider_service_|.
@@ -45,7 +47,7 @@ void MediaRouterMojoTest::ConnectProviderManagerService() {
   binding_.reset(new mojo::Binding<interfaces::MediaRouteProvider>(
       &mock_media_route_provider_, mojo::GetProxy(&mojo_media_router)));
   media_router_proxy_->RegisterMediaRouteProvider(
-      mojo_media_router.Pass(),
+      std::move(mojo_media_router),
       base::Bind(&ExpectAsyncResultEqual<std::string, mojo::String>,
                  kInstanceId));
 }
@@ -53,14 +55,12 @@ void MediaRouterMojoTest::ConnectProviderManagerService() {
 void MediaRouterMojoTest::SetUp() {
   ON_CALL(mock_event_page_tracker_, IsEventPageSuspended(extension_id_))
       .WillByDefault(testing::Return(false));
-
   ConnectProviderManagerService();
-
   message_loop_.RunUntilIdle();
 }
 
 void MediaRouterMojoTest::ProcessEventLoop() {
-  base::RunLoop().RunUntilIdle();
+  message_loop_.RunUntilIdle();
 }
 
 }  // namespace media_router

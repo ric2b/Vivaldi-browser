@@ -5,14 +5,19 @@
 #ifndef MEDIA_BLINK_WEBCONTENTDECRYPTIONMODULESESSION_IMPL_H_
 #define MEDIA_BLINK_WEBCONTENTDECRYPTIONMODULESESSION_IMPL_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/threading/thread_checker.h"
 #include "media/base/media_keys.h"
+#include "media/blink/new_session_cdm_result_promise.h"
 #include "third_party/WebKit/public/platform/WebContentDecryptionModuleSession.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 
@@ -26,38 +31,39 @@ class WebContentDecryptionModuleSessionImpl
  public:
   WebContentDecryptionModuleSessionImpl(
       const scoped_refptr<CdmSessionAdapter>& adapter);
-  virtual ~WebContentDecryptionModuleSessionImpl();
+  ~WebContentDecryptionModuleSessionImpl() override;
 
   // blink::WebContentDecryptionModuleSession implementation.
-  virtual void setClientInterface(Client* client);
-  virtual blink::WebString sessionId() const;
+  void setClientInterface(Client* client) override;
+  blink::WebString sessionId() const override;
 
-  virtual void initializeNewSession(
+  void initializeNewSession(
       blink::WebEncryptedMediaInitDataType init_data_type,
       const unsigned char* initData,
       size_t initDataLength,
       blink::WebEncryptedMediaSessionType session_type,
-      blink::WebContentDecryptionModuleResult result);
-  virtual void load(const blink::WebString& session_id,
-                    blink::WebContentDecryptionModuleResult result);
-  virtual void update(const uint8* response,
-                      size_t response_length,
-                      blink::WebContentDecryptionModuleResult result);
-  virtual void close(blink::WebContentDecryptionModuleResult result);
-  virtual void remove(blink::WebContentDecryptionModuleResult result);
+      blink::WebContentDecryptionModuleResult result) override;
+  void load(const blink::WebString& session_id,
+            blink::WebContentDecryptionModuleResult result) override;
+  void update(const uint8_t* response,
+              size_t response_length,
+              blink::WebContentDecryptionModuleResult result) override;
+  void close(blink::WebContentDecryptionModuleResult result) override;
+  void remove(blink::WebContentDecryptionModuleResult result) override;
 
   // Callbacks.
   void OnSessionMessage(MediaKeys::MessageType message_type,
-                        const std::vector<uint8>& message);
+                        const std::vector<uint8_t>& message);
   void OnSessionKeysChange(bool has_additional_usable_key,
                            CdmKeysInfo keys_info);
   void OnSessionExpirationUpdate(const base::Time& new_expiry_time);
   void OnSessionClosed();
 
  private:
-  // Called when a new session is created.
-  blink::WebContentDecryptionModuleResult::SessionStatus OnSessionInitialized(
-      const std::string& session_id);
+  // Called when a new session is created or loaded. |status| is set as
+  // appropriate, depending on whether the session already exists or not.
+  void OnSessionInitialized(const std::string& session_id,
+                            SessionInitStatus* status);
 
   scoped_refptr<CdmSessionAdapter> adapter_;
 
@@ -74,6 +80,7 @@ class WebContentDecryptionModuleSessionImpl
   // closed() event.
   bool is_closed_;
 
+  base::ThreadChecker thread_checker_;
   // Since promises will live until they are fired, use a weak reference when
   // creating a promise in case this class disappears before the promise
   // actually fires.

@@ -8,6 +8,7 @@
 #include "ash/ash_export.h"
 #include "ash/shell_observer.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "ui/aura/window.h"
 #include "ui/events/event_handler.h"
 
@@ -63,8 +64,6 @@ class ASH_EXPORT OverlayEventFilter : public ui::EventHandler,
   void OnLockStateChanged(bool locked) override;
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(PartialScreenshotViewTest, DontStartOverOverlay);
-
   Delegate* delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(OverlayEventFilter);

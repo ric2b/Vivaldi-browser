@@ -19,11 +19,11 @@ class AndroidScreenRestorationSharedState(shared_page_state.SharedPageState):
     finally:
       self._EnsureScreenOn()
 
-  def CanRunOnBrowser(self, browser_info):
+  def CanRunOnBrowser(self, browser_info, _):
     if not browser_info.browser_type.startswith('android'):
       logging.warning('Browser is non-Android, skipping test')
       return False
     return True
 
   def _EnsureScreenOn(self):
-    self.platform.android_action_runner.EnsureScreenOn()
+    self.platform.android_action_runner.TurnScreenOn()

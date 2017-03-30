@@ -7,16 +7,19 @@
 #ifndef BASE_PROCESS_LAUNCH_H_
 #define BASE_PROCESS_LAUNCH_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/base_export.h"
-#include "base/basictypes.h"
 #include "base/environment.h"
+#include "base/macros.h"
 #include "base/process/process.h"
 #include "base/process/process_handle.h"
 #include "base/strings/string_piece.h"
+#include "build/build_config.h"
 
 #if defined(OS_POSIX)
 #include "base/posix/file_descriptor_shuffle.h"
@@ -164,16 +167,6 @@ struct BASE_EXPORT LaunchOptions {
   // process' controlling terminal.
   int ctrl_terminal_fd;
 #endif  // defined(OS_CHROMEOS)
-
-#if defined(OS_MACOSX)
-  // If this name is non-empty, the new child, after fork() but before exec(),
-  // will look up this server name in the bootstrap namespace. The resulting
-  // service port will be replaced as the bootstrap port in the child. Because
-  // the process's IPC space is cleared on exec(), any rights to the old
-  // bootstrap port will not be transferred to the new process.
-  std::string replacement_bootstrap_name;
-#endif
-
 #endif  // !defined(OS_WIN)
 };
 
@@ -236,7 +229,7 @@ BASE_EXPORT bool SetJobObjectLimitFlags(HANDLE job_object, DWORD limit_flags);
 
 // Output multi-process printf, cout, cerr, etc to the cmd.exe console that ran
 // chrome. This is not thread-safe: only call from main thread.
-BASE_EXPORT void RouteStdioToConsole();
+BASE_EXPORT void RouteStdioToConsole(bool create_console_if_not_found);
 #endif  // defined(OS_WIN)
 
 // Executes the application specified by |cl| and wait for it to exit. Stores
@@ -244,6 +237,10 @@ BASE_EXPORT void RouteStdioToConsole();
 // on success (application launched and exited cleanly, with exit code
 // indicating success).
 BASE_EXPORT bool GetAppOutput(const CommandLine& cl, std::string* output);
+
+// Like GetAppOutput, but also includes stderr.
+BASE_EXPORT bool GetAppOutputAndError(const CommandLine& cl,
+                                      std::string* output);
 
 #if defined(OS_WIN)
 // A Windows-specific version of GetAppOutput that takes a command line string
@@ -286,11 +283,6 @@ BASE_EXPORT void RaiseProcessToHighPriority();
 // in the child after forking will restore the standard exception handler.
 // See http://crbug.com/20371/ for more details.
 void RestoreDefaultExceptionHandler();
-
-// Look up the bootstrap server named |replacement_bootstrap_name| via the
-// current |bootstrap_port|. Then replace the task's bootstrap port with the
-// received right.
-void ReplaceBootstrapPort(const std::string& replacement_bootstrap_name);
 #endif  // defined(OS_MACOSX)
 
 // Creates a LaunchOptions object suitable for launching processes in a test

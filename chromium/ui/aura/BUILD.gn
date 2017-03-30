@@ -66,6 +66,8 @@ component("aura") {
     "input_state_lookup_win.h",
     "layout_manager.cc",
     "layout_manager.h",
+    "mus/mus_util.cc",
+    "mus/mus_util.h",
     "remote_window_tree_host_win.cc",
     "remote_window_tree_host_win.h",
     "scoped_window_targeter.cc",
@@ -86,8 +88,8 @@ component("aura") {
     "window_tree_host_mac.h",
     "window_tree_host_mac.mm",
     "window_tree_host_observer.h",
-    "window_tree_host_win.cc",
-    "window_tree_host_win.h",
+    "window_tree_host_platform.cc",
+    "window_tree_host_platform.h",
     "window_tree_host_x11.cc",
     "window_tree_host_x11.h",
   ]
@@ -107,6 +109,7 @@ component("aura") {
     "//ui/events/platform",
     "//ui/gfx",
     "//ui/gfx/geometry",
+    "//ui/platform_window",
   ]
 
   if (use_x11) {
@@ -138,12 +141,14 @@ component("aura") {
   }
 
   if (use_ozone) {
-    sources += [
-      "window_tree_host_ozone.cc",
-      "window_tree_host_ozone.h",
-    ]
-
     deps += [ "//ui/ozone" ]
+  }
+
+  if (is_android) {
+    deps += [
+      "//ui/platform_window/android",
+      "//ui/platform_window/android:platform_window_java",
+    ]
   }
 }
 
@@ -230,6 +235,7 @@ executable("demo") {
     ":test_support",
     "//base",
     "//base:i18n",
+    "//build/config/sanitizers:deps",
     "//skia",
     "//third_party/icu",
     "//ui/base",
@@ -258,6 +264,7 @@ executable("bench") {
     ":test_support",
     "//base",
     "//base:i18n",
+    "//build/config/sanitizers:deps",
     "//cc",
     "//gpu/command_buffer/client:gles2_interface",
     "//skia",
@@ -274,6 +281,15 @@ executable("bench") {
   if (use_x11) {
     deps += [ "//ui/gfx/x" ]
   }
+}
+
+# TODO(GYP): Delete this after we've converted everything to GN.
+# The _run targets exist only for compatibility w/ GYP.
+group("aura_unittests_run") {
+  testonly = true
+  deps = [
+    ":aura_unittests",
+  ]
 }
 
 test("aura_unittests") {
@@ -293,14 +309,18 @@ test("aura_unittests") {
     "//testing/gtest",
     "//ui/base:test_support",
     "//ui/compositor:test_support",
-    "//ui/events:test_support",
     "//ui/events:gesture_detection",
+    "//ui/events:test_support",
     "//ui/gfx",
     "//ui/gfx/geometry",
-    "//ui/gl",
+    "//ui/gl:test_support",
   ]
 
   if (is_linux) {
     deps += [ "//third_party/mesa" ]
   }
+
+  data_deps = [
+    "//third_party/mesa:osmesa",
+  ]
 }

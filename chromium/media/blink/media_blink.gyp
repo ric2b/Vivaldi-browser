@@ -3,6 +3,9 @@
 # found in the LICENSE file.
 
 {
+  'includes': [
+    '../media_variables.gypi'
+  ],
   'targets': [
     {
       # GN version: //media/blink
@@ -13,6 +16,7 @@
         '../../cc/cc.gyp:cc',
         '../../cc/blink/cc_blink.gyp:cc_blink',
         '../../gpu/blink/gpu_blink.gyp:gpu_blink',
+        '../../gpu/gpu.gyp:gpu',
         '../../ui/gfx/gfx.gyp:gfx_geometry',
         '../../net/net.gyp:net',
         '../../skia/skia.gyp:skia',
@@ -22,7 +26,7 @@
         '../../url/url.gyp:url_lib',
       ],
       'defines': [
-        'MEDIA_IMPLEMENTATION',
+        'MEDIA_BLINK_IMPLEMENTATION',
       ],
       # This sources list is duplicated in //media/blink/BUILD.gn
       'sources': [
@@ -43,12 +47,25 @@
         'cdm_session_adapter.h',
         'encrypted_media_player_support.cc',
         'encrypted_media_player_support.h',
+        'interval_map.h',
         'key_system_config_selector.cc',
         'key_system_config_selector.h',
+        'lru.h',
+        'media_blink_export.h',
+        'multibuffer.cc',
+        'multibuffer.h',
+        'multibuffer_data_source.cc',
+        'multibuffer_data_source.h',
+        'multibuffer_reader.cc',
+        'multibuffer_reader.h',
         'new_session_cdm_result_promise.cc',
         'new_session_cdm_result_promise.h',
+        'resource_multibuffer_data_provider.cc',
+        'resource_multibuffer_data_provider.h',
         'texttrack_impl.cc',
         'texttrack_impl.h',
+        'url_index.cc',
+        'url_index.h',
         'video_frame_compositor.cc',
         'video_frame_compositor.h',
         'webaudiosourceprovider_impl.cc',
@@ -76,7 +93,13 @@
         'websourcebuffer_impl.h',
       ],
       'conditions': [
-        ['OS=="android"', {
+        ['OS=="android" and media_use_ffmpeg==1', {
+          'sources': [
+            'webmediaplayer_cast_android.cc',
+            'webmediaplayer_cast_android.h',
+          ],
+        }],
+        ['OS=="android" and media_use_ffmpeg==0', {
           'sources!': [
             'encrypted_media_player_support.cc',
             'encrypted_media_player_support.h',
@@ -97,6 +120,8 @@
         '../../base/base.gyp:test_support_base',
         '../../cc/cc.gyp:cc',
         '../../cc/blink/cc_blink.gyp:cc_blink',
+        '../../components/scheduler/scheduler.gyp:scheduler',
+        '../../components/scheduler/scheduler.gyp:scheduler_test_support',
         '../../gin/gin.gyp:gin',
         '../../net/net.gyp:net',
         '../../testing/gmock.gyp:gmock',
@@ -112,16 +137,51 @@
         'buffered_data_source_unittest.cc',
         'buffered_resource_loader_unittest.cc',
         'cache_util_unittest.cc',
+        'interval_map_unittest.cc',
         'key_system_config_selector_unittest.cc',
+        'lru_unittest.cc',
         'mock_webframeclient.h',
         'mock_weburlloader.cc',
         'mock_weburlloader.h',
+        'multibuffer_data_source_unittest.cc',
+        'multibuffer_unittest.cc',
+        'resource_multibuffer_data_provider_unittest.cc',
         'run_all_unittests.cc',
+        'test_random.h',
         'test_response_generator.cc',
         'test_response_generator.h',
+        'url_index_unittest.cc',
         'video_frame_compositor_unittest.cc',
         'webaudiosourceprovider_impl_unittest.cc',
       ],
     },
-  ]
+  ],
+  'conditions': [
+    ['test_isolation_mode != "noop"', {
+      'targets': [
+        {
+          'target_name': 'media_blink_unittests_run',
+          'type': 'none',
+          'dependencies': [
+            'media_blink_unittests',
+          ],
+          'includes': [
+            '../../build/isolate.gypi',
+                      ],
+          'sources': [
+            'media_blink_unittests.isolate',
+          ],
+          'conditions': [
+            ['use_x11==1',
+              {
+                'dependencies': [
+                  '../../tools/xdisplaycheck/xdisplaycheck.gyp:xdisplaycheck',
+                ],
+              }
+            ],
+          ],
+        },
+      ],
+    }],
+  ],
 }

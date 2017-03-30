@@ -4,6 +4,9 @@
 
 #include "dbus/exported_object.h"
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
@@ -148,7 +151,7 @@ void ExportedObject::OnExported(OnExportedCallback on_exported_callback,
 
 void ExportedObject::SendSignalInternal(base::TimeTicks start_time,
                                         DBusMessage* signal_message) {
-  uint32 serial = 0;
+  uint32_t serial = 0;
   bus_->Send(signal_message, &serial);
   dbus_message_unref(signal_message);
   // Record time spent to send the the signal. This is not accurate as the
@@ -262,7 +265,7 @@ void ExportedObject::SendResponse(base::TimeTicks start_time,
                    base::Passed(&response),
                    start_time));
   } else {
-    OnMethodCompleted(method_call.Pass(), response.Pass(), start_time);
+    OnMethodCompleted(std::move(method_call), std::move(response), start_time);
   }
 }
 

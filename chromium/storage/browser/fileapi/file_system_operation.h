@@ -5,6 +5,8 @@
 #ifndef STORAGE_BROWSER_FILEAPI_FILE_SYSTEM_OPERATION_H_
 #define STORAGE_BROWSER_FILEAPI_FILE_SYSTEM_OPERATION_H_
 
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/callback.h"
@@ -205,15 +207,14 @@ class FileSystemOperation {
   typedef base::Callback<void(CopyProgressType type,
                               const FileSystemURL& source_url,
                               const FileSystemURL& destination_url,
-                              int64 size)>
-      CopyProgressCallback;
+                              int64_t size)> CopyProgressCallback;
 
   // Used for CopyFileLocal() to report progress update.
   // |size| is the cumulative copied bytes for the copy.
   // At the beginning the progress callback should be called with |size| = 0,
   // and also at the ending the progress callback should be called with |size|
   // set to the copied file size.
-  typedef base::Callback<void(int64 size)> CopyFileProgressCallback;
+  typedef base::Callback<void(int64_t size)> CopyFileProgressCallback;
 
   // The option for copy or move operation.
   enum CopyOrMoveOption {
@@ -227,9 +228,17 @@ class FileSystemOperation {
     OPTION_PRESERVE_LAST_MODIFIED,
   };
 
+  // Fields requested for the GetMetadata method. Used as a bitmask.
+  enum GetMetadataField {
+    GET_METADATA_FIELD_NONE = 0,
+    GET_METADATA_FIELD_SIZE = 1 << 0,
+    GET_METADATA_FIELD_IS_DIRECTORY = 1 << 1,
+    GET_METADATA_FIELD_LAST_MODIFIED = 1 << 2
+  };
+
   // Used for Write().
   typedef base::Callback<void(base::File::Error result,
-                              int64 bytes,
+                              int64_t bytes,
                               bool complete)> WriteCallback;
 
   // Creates a file at |path|. If |exclusive| is true, an error is raised
@@ -302,6 +311,7 @@ class FileSystemOperation {
 
   // Gets the metadata of a file or directory at |path|.
   virtual void GetMetadata(const FileSystemURL& path,
+                           int fields,
                            const GetMetadataCallback& callback) = 0;
 
   // Reads contents of a directory at |path|.
@@ -323,7 +333,8 @@ class FileSystemOperation {
   // Truncates a file at |path| to |length|. If |length| is larger than
   // the original file size, the file will be extended, and the extended
   // part is filled with null bytes.
-  virtual void Truncate(const FileSystemURL& path, int64 length,
+  virtual void Truncate(const FileSystemURL& path,
+                        int64_t length,
                         const StatusCallback& callback) = 0;
 
   // Tries to cancel the current operation [we support cancelling write or

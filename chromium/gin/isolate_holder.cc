@@ -4,8 +4,10 @@
 
 #include "gin/public/isolate_holder.h"
 
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <utility>
 
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
@@ -74,15 +76,16 @@ IsolateHolder::~IsolateHolder() {
 
 // static
 void IsolateHolder::Initialize(ScriptMode mode,
+                               V8ExtrasMode v8_extras_mode,
                                v8::ArrayBuffer::Allocator* allocator) {
   CHECK(allocator);
-  V8Initializer::Initialize(mode);
+  V8Initializer::Initialize(mode, v8_extras_mode);
   g_array_buffer_allocator = allocator;
 }
 
 void IsolateHolder::AddRunMicrotasksObserver() {
   DCHECK(!task_observer_.get());
-  task_observer_.reset(new RunMicrotasksObserver(isolate_));;
+  task_observer_.reset(new RunMicrotasksObserver(isolate_));
   base::MessageLoop::current()->AddTaskObserver(task_observer_.get());
 }
 
@@ -90,6 +93,12 @@ void IsolateHolder::RemoveRunMicrotasksObserver() {
   DCHECK(task_observer_.get());
   base::MessageLoop::current()->RemoveTaskObserver(task_observer_.get());
   task_observer_.reset();
+}
+
+void IsolateHolder::EnableIdleTasks(
+    scoped_ptr<V8IdleTaskRunner> idle_task_runner) {
+  DCHECK(isolate_data_.get());
+  isolate_data_->EnableIdleTasks(std::move(idle_task_runner));
 }
 
 }  // namespace gin

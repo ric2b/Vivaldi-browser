@@ -5,8 +5,10 @@
 #include "base/strings/stringprintf.h"
 
 #include <errno.h>
+#include <stddef.h>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace base {
@@ -148,10 +150,10 @@ TEST(StringPrintfTest, GrowBoundary) {
   EXPECT_STREQ(src, out.c_str());
 }
 
-// TODO(evanm): what's the proper cross-platform test here?
 #if defined(OS_WIN)
-// sprintf in Visual Studio fails when given U+FFFF. This tests that the
-// failure case is gracefuly handled.
+// vswprintf in Visual Studio 2013 fails when given U+FFFF. This tests that the
+// failure case is gracefuly handled. In Visual Studio 2015 the bad character
+// is passed through.
 TEST(StringPrintfTest, Invalid) {
   wchar_t invalid[2];
   invalid[0] = 0xffff;
@@ -159,7 +161,11 @@ TEST(StringPrintfTest, Invalid) {
 
   std::wstring out;
   SStringPrintf(&out, L"%ls", invalid);
+#if _MSC_VER >= 1900
+  EXPECT_STREQ(invalid, out.c_str());
+#else
   EXPECT_STREQ(L"", out.c_str());
+#endif
 }
 #endif
 

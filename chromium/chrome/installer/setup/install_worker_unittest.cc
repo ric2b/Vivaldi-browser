@@ -6,23 +6,23 @@
 
 #include <vector>
 
-#include "base/win/registry.h"
+#include "base/macros.h"
 #include "base/version.h"
+#include "base/win/registry.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/installer/setup/setup_util.h"
 #include "chrome/installer/util/create_reg_key_work_item.h"
 #include "chrome/installer/util/delete_reg_key_work_item.h"
 #include "chrome/installer/util/delete_tree_work_item.h"
-#include "chrome/installer/util/helper.h"
 #include "chrome/installer/util/google_update_constants.h"
+#include "chrome/installer/util/helper.h"
 #include "chrome/installer/util/installation_state.h"
 #include "chrome/installer/util/installer_state.h"
 #include "chrome/installer/util/set_reg_value_work_item.h"
 #include "chrome/installer/util/util_constants.h"
 #include "chrome/installer/util/work_item_list.h"
-
-#include "testing/gtest/include/gtest/gtest.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "testing/gtest/include/gtest/gtest.h"
 
 using base::win::RegKey;
 using installer::InstallationState;
@@ -599,20 +599,24 @@ TEST_F(InstallWorkerTest, GoogleUpdateWorkItemsTest) {
                                 InstallerState::MULTI_INSTALL));
 
   // Expect the multi Client State key to be created for the binaries.
+#if defined(GOOGLE_CHROME_BUILD)
   BrowserDistribution* multi_dist =
       BrowserDistribution::GetSpecificDistribution(
           BrowserDistribution::CHROME_BINARIES);
   std::wstring multi_app_guid(multi_dist->GetAppGuid());
   std::wstring multi_client_state_suffix(L"ClientState\\" + multi_app_guid);
-  EXPECT_CALL(work_item_list, AddCreateRegKeyWorkItem(
-                                  _, HasSubstr(multi_client_state_suffix), _))
-      .Times(AnyNumber());
+  std::wstring multi_medium_suffix(L"ClientStateMedium\\" + multi_app_guid);
 
   // Expect ClientStateMedium to be created for system-level installs.
   EXPECT_CALL(work_item_list,
-              AddCreateRegKeyWorkItem(
-                  _, HasSubstr(L"ClientStateMedium\\" + multi_app_guid), _))
+              AddCreateRegKeyWorkItem(_, HasSubstr(multi_medium_suffix), _))
       .Times(system_level ? 1 : 0);
+#else
+  std::wstring multi_client_state_suffix(L"Chromium Binaries");
+#endif
+  EXPECT_CALL(work_item_list, AddCreateRegKeyWorkItem(
+                                  _, HasSubstr(multi_client_state_suffix), _))
+      .Times(AnyNumber());
 
   // Expect to see a set value for the "TEST" brand code in the multi Client
   // State key.
@@ -685,20 +689,29 @@ TEST_F(InstallWorkerTest, AddUsageStatsWorkItems) {
       BrowserDistribution::GetSpecificDistribution(
           BrowserDistribution::CHROME_BROWSER);
   if (system_level) {
+#if defined(GOOGLE_CHROME_BUILD)
     EXPECT_CALL(work_item_list,
                 AddDeleteRegValueWorkItem(
                     _, StrEq(chrome_dist->GetStateMediumKey()), _,
                     StrEq(google_update::kRegUsageStatsField))).Times(1);
+#endif
     EXPECT_CALL(work_item_list,
                 AddDeleteRegValueWorkItem(
                     Eq(HKEY_CURRENT_USER), StrEq(chrome_dist->GetStateKey()), _,
                     StrEq(google_update::kRegUsageStatsField))).Times(1);
   }
+#if defined(GOOGLE_CHROME_BUILD)
+  const int kDeleteTimes = 1;
+#else
+  // Expect two deletes to the same key name since ClientState and
+  // ClientStateMedium are identical for Chromium.
+  const int kDeleteTimes = 2;
+#endif
   EXPECT_CALL(
       work_item_list,
       AddDeleteRegValueWorkItem(
           Eq(installer_state->root_key()), StrEq(chrome_dist->GetStateKey()), _,
-          StrEq(google_update::kRegUsageStatsField))).Times(1);
+          StrEq(google_update::kRegUsageStatsField))).Times(kDeleteTimes);
 
   AddUsageStatsWorkItems(*installation_state.get(),
                          *installer_state.get(),
@@ -788,30 +801,31 @@ TEST_F(InstallWorkerTest, WillProductBePresentAfterSetup) {
     }
 
     // Loop over operations: {uninstall, install/update}.
-    for (int i_op = 0; i_op < arraysize(op_list); ++i_op) {
+    for (InstallerState::Operation op : op_list) {
 
       // Loop over product types to operate on: {TYPE_BROWSER, TYPE_CF}.
       for (int i_type_op = 0; i_type_op < NUM_TYPE; ++i_type_op) {
         scoped_ptr<InstallerState> installer_state;
         if (i_type_op == TYPE_BROWSER) {
           installer_state.reset(BuildChromeInstallerState(
-              system_level, multi_install, *machine_state, op_list[i_op]));
+              system_level, multi_install, *machine_state, op));
         } else if (i_type_op == TYPE_CF) {
           // Skip the CF uninstall case due to limitations in
           // BuildChromeFrameInstallerState().
-          if (op_list[i_op] == InstallerState::UNINSTALL)
+          if (op == InstallerState::UNINSTALL)
             continue;
 
           installer_state.reset(BuildChromeFrameInstallerState(
-              system_level, multi_install, *machine_state, op_list[i_op]));
+              system_level, multi_install, *machine_state, op));
         } else {
           NOTREACHED();
         }
 
         // Calculate the machine state after operation, as bit mask.
         // If uninstall, remove product with bitwise AND; else add with OR.
-        int mach_after = (op_list[i_op] == InstallerState::UNINSTALL) ?
-            i_mach & ~(1 << i_type_op) : i_mach | (1 << i_type_op);
+        int mach_after = (op == InstallerState::UNINSTALL)
+                             ? i_mach & ~(1 << i_type_op)
+                             : i_mach | (1 << i_type_op);
 
         // Verify predicted presence of Chrome Binaries.
         bool bin_res = installer::WillProductBePresentAfterSetup(

@@ -6,8 +6,15 @@
 
 #include <algorithm>
 
+#if defined(OS_IOS)
+#include <CoreGraphics/CoreGraphics.h>
+#elif defined(OS_MACOSX)
+#include <ApplicationServices/ApplicationServices.h>
+#endif
+
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "ui/gfx/geometry/insets_f.h"
 #include "ui/gfx/geometry/safe_integer_conversions.h"
 
@@ -23,6 +30,16 @@ static void AdjustAlongAxis(float dst_origin,
   else
     *origin = std::min(dst_origin + dst_size, *origin + *size) - *size;
 }
+
+#if defined(OS_MACOSX)
+RectF::RectF(const CGRect& r)
+    : origin_(r.origin.x, r.origin.y), size_(r.size.width, r.size.height) {
+}
+
+CGRect RectF::ToCGRect() const {
+  return CGRectMake(x(), y(), width(), height());
+}
+#endif
 
 void RectF::Inset(const InsetsF& insets) {
   Inset(insets.left(), insets.top(), insets.right(), insets.bottom());

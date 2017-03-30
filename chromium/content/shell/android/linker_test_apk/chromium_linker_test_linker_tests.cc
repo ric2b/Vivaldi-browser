@@ -5,22 +5,23 @@
 // This file implements the native methods of
 // org.content.chromium.app.LinkerTests
 // Unlike the content of linker_jni.cc, it is part of the content library and
-// can
-// thus use base/ and the C++ STL.
+// can thus use base/ and the C++ STL.
 
 #include "content/shell/android/linker_test_apk/chromium_linker_test_linker_tests.h"
 
 #include <errno.h>
-#include <sys/mman.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <sys/mman.h>
 #include <string>
+#include <vector>
 
-#include "base/basictypes.h"
 #include "base/debug/proc_maps_linux.h"
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
-
 #include "jni/LinkerTests_jni.h"
+#include "third_party/re2/src/re2/re2.h"
 
 namespace content {
 
@@ -29,7 +30,6 @@ namespace {
 using base::debug::MappedMemoryRegion;
 
 jboolean RunChecks(bool in_browser_process, bool need_relros) {
-
   // IMPORTANT NOTE: The Python test control script reads the logcat for
   // lines like:
   //   BROWSER_LINKER_TEST: <status>
@@ -40,12 +40,16 @@ jboolean RunChecks(bool in_browser_process, bool need_relros) {
   const char* prefix =
       in_browser_process ? "BROWSER_LINKER_TEST: " : "RENDERER_LINKER_TEST: ";
 
-  // The RELRO section(s), after being copied into an ashmem region, will
-  // appear in /proc/self/maps as a mapped memory region for a file name
-  // that begins with the following prefix.
+  // The RELRO section(s) will appear in /proc/self/maps as a mapped memory
+  // region for a file with a recognizable name. For the LegacyLinker the
+  // full name will be something like:
   //
-  // Note that the full name will be something like:
   //   "/dev/ashmem/RELRO:<libname> (deleted)"
+  //
+  // and for the ModernLinker, something like:
+  //
+  //   "/data/data/org.chromium.chromium_linker_test_apk/
+  //       app_chromium_linker_test/RELRO:<libname> (deleted)"
   //
   // Where <libname> is the library name and '(deleted)' is actually
   // added by the kernel to indicate there is no corresponding file
@@ -54,7 +58,8 @@ jboolean RunChecks(bool in_browser_process, bool need_relros) {
   // For regular builds, there is only one library, and thus one RELRO
   // section, but for the component build, there are several libraries,
   // each one with its own RELRO.
-  static const char kRelroSectionPrefix[] = "/dev/ashmem/RELRO:";
+  static const char kLegacyRelroSectionPattern[] = "/dev/ashmem/RELRO:.*";
+  static const char kModernRelroSectionPattern[] = "/data/.*/RELRO:.*";
 
   // Parse /proc/self/maps and builds a list of region mappings in this
   // process.
@@ -72,13 +77,26 @@ jboolean RunChecks(bool in_browser_process, bool need_relros) {
     return false;
   }
 
-  size_t num_shared_relros = 0;
-  size_t num_bad_shared_relros = 0;
+  const RE2 legacy_linker_re(kLegacyRelroSectionPattern);
+  const RE2 modern_linker_re(kModernRelroSectionPattern);
+
+  int num_shared_relros = 0;
+  int num_bad_shared_relros = 0;
 
   for (size_t n = 0; n < regions.size(); ++n) {
     MappedMemoryRegion& region = regions[n];
 
-    if (region.path.find(kRelroSectionPrefix) != 0) {
+    const std::string path = region.path;
+    const bool is_legacy_relro = re2::RE2::FullMatch(path, legacy_linker_re);
+    const bool is_modern_relro = re2::RE2::FullMatch(path, modern_linker_re);
+
+    if (is_legacy_relro && is_modern_relro) {
+      LOG(ERROR) << prefix
+                 << "FAIL RELRO cannot be both Legacy and Modern (test error)";
+      return false;
+    }
+
+    if (!is_legacy_relro && !is_modern_relro) {
       // Ignore any mapping that isn't a shared RELRO.
       continue;
     }
@@ -89,12 +107,12 @@ jboolean RunChecks(bool in_browser_process, bool need_relros) {
     void* region_end = reinterpret_cast<void*>(region.end);
 
     // Check that it is mapped read-only.
-    const uint8 expected_flags = MappedMemoryRegion::READ;
-    const uint8 expected_mask = MappedMemoryRegion::READ |
-                                MappedMemoryRegion::WRITE |
-                                MappedMemoryRegion::EXECUTE;
+    const uint8_t expected_flags = MappedMemoryRegion::READ;
+    const uint8_t expected_mask = MappedMemoryRegion::READ |
+                                  MappedMemoryRegion::WRITE |
+                                  MappedMemoryRegion::EXECUTE;
 
-    uint8 region_flags = region.permissions & expected_mask;
+    uint8_t region_flags = region.permissions & expected_mask;
     if (region_flags != expected_flags) {
       LOG(ERROR)
           << prefix
@@ -106,6 +124,16 @@ jboolean RunChecks(bool in_browser_process, bool need_relros) {
                  region_flags,
                  expected_flags);
       num_bad_shared_relros++;
+      continue;
+    }
+
+    // Shared RELROs implemented by the Android M+ system linker are not in
+    // ashmem. The Android M+ system linker maps everything with MAP_PRIVATE
+    // rather than MAP_SHARED. Remapping such a RELRO section read-write will
+    // therefore succeed, but it is not a problem. The memory copy-on-writes,
+    // and updates are not visible to either the mapped file or other processes
+    // mapping the same file. So... we skip the remap test for ModernLinker.
+    if (is_modern_relro) {
       continue;
     }
 
@@ -144,7 +172,7 @@ jboolean RunChecks(bool in_browser_process, bool need_relros) {
              num_bad_shared_relros);
 
   if (num_bad_shared_relros > 0) {
-    LOG(ERROR) << prefix << "FAIL Bad Relros sections in this process";
+    LOG(ERROR) << prefix << "FAIL Bad RELROs sections in this process";
     return false;
   }
 
@@ -169,13 +197,13 @@ jboolean RunChecks(bool in_browser_process, bool need_relros) {
 }  // namespace
 
 jboolean CheckForSharedRelros(JNIEnv* env,
-                              jclass clazz,
+                              const JavaParamRef<jclass>& clazz,
                               jboolean in_browser_process) {
   return RunChecks(in_browser_process, true);
 }
 
 jboolean CheckForNoSharedRelros(JNIEnv* env,
-                                jclass clazz,
+                                const JavaParamRef<jclass>& clazz,
                                 jboolean in_browser_process) {
   return RunChecks(in_browser_process, false);
 }

@@ -7,6 +7,7 @@ component("surfaces") {
   output_name = "mojo_surfaces_lib"
 
   sources = [
+    "custom_surface_converter.h",
     "mojo_surfaces_export.h",
     "surfaces_type_converters.cc",
     "surfaces_type_converters.h",
@@ -26,11 +27,12 @@ component("surfaces") {
     "//base",
     "//cc",
     "//cc/surfaces",
-    "//components/view_manager/public/interfaces",
+    "//cc/surfaces:surface_id",
+    "//components/mus/public/interfaces",
     "//gpu",
-    "//ui/gfx/geometry",
     "//mojo/environment:chromium",
+    "//mojo/public/c/system:for_component",
     "//skia",
-    "//third_party/mojo/src/mojo/public/c/system:for_component",
+    "//ui/gfx/geometry",
   ]
 }

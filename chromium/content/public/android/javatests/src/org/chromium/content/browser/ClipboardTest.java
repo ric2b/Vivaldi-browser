@@ -18,8 +18,6 @@ import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_shell_apk.ContentShellTestBase;
 
-import java.util.concurrent.Callable;
-
 /**
  * Tests rich text clipboard functionality.
  */
@@ -37,7 +35,7 @@ public class ClipboardTest extends ContentShellTestBase {
     protected void setUp() throws Exception {
         super.setUp();
         launchContentShellWithUrl(TEST_PAGE_DATA_URL);
-        assertTrue("Page failed to load", waitForActiveShellToBeDoneLoading());
+        waitForActiveShellToBeDoneLoading();
     }
 
     /**
@@ -62,17 +60,12 @@ public class ClipboardTest extends ContentShellTestBase {
         copy(webContents);
 
         // Waits until data has been made available on the Android clipboard.
-        assertTrue(CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
-                return ThreadUtils.runOnUiThreadBlockingNoException(new Callable<Boolean>() {
-                    @Override
-                    public Boolean call() throws Exception {
-                        return hasPrimaryClip(clipboardManager);
-                    }
-                });
+                return hasPrimaryClip(clipboardManager);
             }
-        }));
+        });
 
         // Verify that the data on the clipboard is what we expect it to be. For Android JB MR2
         // and higher we expect HTML content, for other versions the plain-text representation.

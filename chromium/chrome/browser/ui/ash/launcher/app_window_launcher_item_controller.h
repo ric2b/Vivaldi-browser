@@ -5,9 +5,12 @@
 #ifndef CHROME_BROWSER_UI_ASH_LAUNCHER_APP_WINDOW_LAUNCHER_ITEM_CONTROLLER_H_
 #define CHROME_BROWSER_UI_ASH_LAUNCHER_APP_WINDOW_LAUNCHER_ITEM_CONTROLLER_H_
 
+#include <stddef.h>
+
 #include <list>
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/scoped_observer.h"
 #include "chrome/browser/ui/ash/launcher/launcher_item_controller.h"
@@ -65,6 +68,7 @@ class AppWindowLauncherItemController : public LauncherItemController,
   ui::MenuModel* CreateContextMenu(aura::Window* root_window) override;
   ash::ShelfMenuModel* CreateApplicationMenu(int event_flags) override;
   bool IsDraggable() override;
+  bool CanPin() const override;
   bool ShouldShowTooltip() override;
   void Close() override;
 
@@ -78,10 +82,6 @@ class AppWindowLauncherItemController : public LauncherItemController,
 
   // Activates the window at position |index|.
   void ActivateIndexedApp(size_t index);
-
-  // Install the app. Only valid for ephemeral apps, which can be promoted to
-  // regular installed apps.
-  void InstallApp();
 
  private:
   typedef std::list<extensions::AppWindow*> AppWindowList;

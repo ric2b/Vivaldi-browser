@@ -5,8 +5,12 @@
 #ifndef CONTENT_BROWSER_STORAGE_PARTITION_IMPL_H_
 #define CONTENT_BROWSER_STORAGE_PARTITION_IMPL_H_
 
+#include <stdint.h>
+
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "content/browser/appcache/chrome_appcache_service.h"
 #include "content/browser/background_sync/background_sync_context_impl.h"
@@ -18,7 +22,6 @@
 #include "content/browser/navigator_connect/navigator_connect_context_impl.h"
 #include "content/browser/notifications/platform_notification_context_impl.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
-#include "content/browser/service_worker/stashed_port_manager.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/storage_partition.h"
 #include "storage/browser/quota/special_storage_policy.h"
@@ -31,7 +34,7 @@ class StoragePartitionImpl : public StoragePartition {
 
   // Quota managed data uses a different bitmask for types than
   // StoragePartition uses. This method generates that mask.
-  CONTENT_EXPORT static int GenerateQuotaClientMask(uint32 remove_mask);
+  CONTENT_EXPORT static int GenerateQuotaClientMask(uint32_t remove_mask);
 
   CONTENT_EXPORT void OverrideQuotaManagerForTesting(
       storage::QuotaManager* quota_manager);
@@ -48,8 +51,7 @@ class StoragePartitionImpl : public StoragePartition {
   storage::DatabaseTracker* GetDatabaseTracker() override;
   DOMStorageContextWrapper* GetDOMStorageContext() override;
   IndexedDBContextImpl* GetIndexedDBContext() override;
-  // TODO(jsbell): Expose this on the public API as well. crbug.com/466371
-  CacheStorageContextImpl* GetCacheStorageContext();
+  CacheStorageContextImpl* GetCacheStorageContext() override;
   ServiceWorkerContextWrapper* GetServiceWorkerContext() override;
   GeofencingManager* GetGeofencingManager() override;
   HostZoomMap* GetHostZoomMap() override;
@@ -57,16 +59,15 @@ class StoragePartitionImpl : public StoragePartition {
   ZoomLevelDelegate* GetZoomLevelDelegate() override;
   NavigatorConnectContextImpl* GetNavigatorConnectContext() override;
   PlatformNotificationContextImpl* GetPlatformNotificationContext() override;
-  BackgroundSyncContextImpl* GetBackgroundSyncContext();
-  StashedPortManager* GetStashedPortManager();
+  BackgroundSyncContextImpl* GetBackgroundSyncContext() override;
 
-  void ClearDataForOrigin(uint32 remove_mask,
-                          uint32 quota_storage_remove_mask,
+  void ClearDataForOrigin(uint32_t remove_mask,
+                          uint32_t quota_storage_remove_mask,
                           const GURL& storage_origin,
                           net::URLRequestContextGetter* request_context_getter,
                           const base::Closure& callback) override;
-  void ClearData(uint32 remove_mask,
-                 uint32 quota_storage_remove_mask,
+  void ClearData(uint32_t remove_mask,
+                 uint32_t quota_storage_remove_mask,
                  const GURL& storage_origin,
                  const OriginMatcherFunction& origin_matcher,
                  const base::Time begin,
@@ -84,6 +85,8 @@ class StoragePartitionImpl : public StoragePartition {
   struct QuotaManagedDataDeletionHelper;
 
  private:
+  friend class BackgroundSyncManagerTest;
+  friend class BackgroundSyncServiceImplTest;
   friend class StoragePartitionImplMap;
   FRIEND_TEST_ALL_PREFIXES(StoragePartitionShaderClearTest, ClearShaderCache);
   FRIEND_TEST_ALL_PREFIXES(StoragePartitionImplTest,
@@ -144,11 +147,10 @@ class StoragePartitionImpl : public StoragePartition {
       HostZoomLevelContext* host_zoom_level_context,
       NavigatorConnectContextImpl* navigator_connect_context,
       PlatformNotificationContextImpl* platform_notification_context,
-      BackgroundSyncContextImpl* background_sync_context,
-      StashedPortManager* stashed_port_manager);
+      BackgroundSyncContextImpl* background_sync_context);
 
-  void ClearDataImpl(uint32 remove_mask,
-                     uint32 quota_storage_remove_mask,
+  void ClearDataImpl(uint32_t remove_mask,
+                     uint32_t quota_storage_remove_mask,
                      const GURL& remove_origin,
                      const OriginMatcherFunction& origin_matcher,
                      net::URLRequestContextGetter* rq_context,
@@ -191,7 +193,6 @@ class StoragePartitionImpl : public StoragePartition {
   scoped_refptr<NavigatorConnectContextImpl> navigator_connect_context_;
   scoped_refptr<PlatformNotificationContextImpl> platform_notification_context_;
   scoped_refptr<BackgroundSyncContextImpl> background_sync_context_;
-  scoped_refptr<StashedPortManager> stashed_port_manager_;
 
   // Raw pointer that should always be valid. The BrowserContext owns the
   // StoragePartitionImplMap which then owns StoragePartitionImpl. When the

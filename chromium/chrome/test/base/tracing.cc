@@ -6,6 +6,7 @@
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_util.h"
@@ -46,7 +47,7 @@ class StringTraceSink : public content::TracingController::TraceDataSink {
 class InProcessTraceController {
  public:
   static InProcessTraceController* GetInstance() {
-    return Singleton<InProcessTraceController>::get();
+    return base::Singleton<InProcessTraceController>::get();
   }
 
   InProcessTraceController()
@@ -56,9 +57,9 @@ class InProcessTraceController {
 
   bool BeginTracing(const std::string& category_patterns) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
-    return content::TracingController::GetInstance()->EnableRecording(
+    return content::TracingController::GetInstance()->StartTracing(
         base::trace_event::TraceConfig(category_patterns, ""),
-        content::TracingController::EnableRecordingDoneCallback());
+        content::TracingController::StartTracingDoneCallback());
   }
 
   bool BeginTracingWithWatch(const std::string& category_patterns,
@@ -74,7 +75,7 @@ class InProcessTraceController {
                        base::Unretained(this)))) {
       return false;
     }
-    if (!content::TracingController::GetInstance()->EnableRecording(
+    if (!content::TracingController::GetInstance()->StartTracing(
             base::trace_event::TraceConfig(category_patterns, ""),
             base::Bind(&InProcessTraceController::OnEnableTracingComplete,
                        base::Unretained(this)))) {
@@ -108,7 +109,7 @@ class InProcessTraceController {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     using namespace base::debug;
 
-    if (!content::TracingController::GetInstance()->DisableRecording(
+    if (!content::TracingController::GetInstance()->StopTracing(
             new StringTraceSink(
                 json_trace_output,
                 base::Bind(&InProcessTraceController::OnTracingComplete,
@@ -126,7 +127,7 @@ class InProcessTraceController {
   }
 
  private:
-  friend struct DefaultSingletonTraits<InProcessTraceController>;
+  friend struct base::DefaultSingletonTraits<InProcessTraceController>;
 
   void OnEnableTracingComplete() {
     message_loop_runner_->Quit();
@@ -151,7 +152,7 @@ class InProcessTraceController {
 
   scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
 
-  base::OneShotTimer<InProcessTraceController> timer_;
+  base::OneShotTimer timer_;
 
   bool is_waiting_on_watch_;
   int watch_notification_count_;

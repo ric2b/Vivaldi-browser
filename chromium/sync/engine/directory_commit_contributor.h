@@ -5,8 +5,11 @@
 #ifndef SYNC_ENGINE_DIRECTORY_COMMIT_CONTRIBUTOR_H_
 #define SYNC_ENGINE_DIRECTORY_COMMIT_CONTRIBUTOR_H_
 
+#include <stddef.h>
+
 #include <map>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "sync/engine/commit_contributor.h"
 #include "sync/engine/directory_commit_contribution.h"
@@ -45,6 +48,6 @@ class DirectoryCommitContributor : public CommitContributor {
   DISALLOW_COPY_AND_ASSIGN(DirectoryCommitContributor);
 };
 
-}  // namespace
+}  // namespace syncer
 
 #endif  // SYNC_ENGINE_DIRECTORY_COMMIT_CONTRIBUTOR_H_

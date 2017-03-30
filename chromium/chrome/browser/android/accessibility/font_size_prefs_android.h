@@ -7,6 +7,7 @@
 
 #include <jni.h>
 #include "base/android/scoped_java_ref.h"
+#include "base/macros.h"
 #include "base/observer_list.h"
 
 class PrefChangeRegistrar;
@@ -27,13 +28,23 @@ class FontSizePrefsAndroid {
   FontSizePrefsAndroid(JNIEnv* env, jobject obj);
   ~FontSizePrefsAndroid();
 
-  void SetFontScaleFactor(JNIEnv* env, jobject obj, jfloat font);
-  float GetFontScaleFactor(JNIEnv* env, jobject obj);
-  void SetForceEnableZoom(JNIEnv* env, jobject obj, jboolean enabled);
-  bool GetForceEnableZoom(JNIEnv* env, jobject obj);
+  void SetFontScaleFactor(JNIEnv* env,
+                          const base::android::JavaRef<jobject>& obj,
+                          jfloat font);
+  float GetFontScaleFactor(JNIEnv* env,
+                           const base::android::JavaRef<jobject>& obj);
+  void SetForceEnableZoom(JNIEnv* env,
+                          const base::android::JavaRef<jobject>& obj,
+                          jboolean enabled);
+  bool GetForceEnableZoom(JNIEnv* env,
+                          const base::android::JavaRef<jobject>& obj);
 
-  void AddObserver(JNIEnv* env, jobject obj, jlong obs);
-  void RemoveObserver(JNIEnv* env, jobject obj, jlong obs);
+  void AddObserver(JNIEnv* env,
+                   const base::android::JavaRef<jobject>& obj,
+                   jlong obs);
+  void RemoveObserver(JNIEnv* env,
+                      const base::android::JavaRef<jobject>& obj,
+                      jlong obs);
 
   static bool Register(JNIEnv* env);
 
@@ -59,7 +70,8 @@ class FontSizePrefsObserverAndroid : public FontSizePrefsAndroid::Observer {
  public:
   FontSizePrefsObserverAndroid(JNIEnv* env, jobject obj);
   virtual ~FontSizePrefsObserverAndroid();
-  void DestroyObserverAndroid(JNIEnv* env, jobject obj);
+  void DestroyObserverAndroid(JNIEnv* env,
+                              const base::android::JavaParamRef<jobject>& obj);
 
   static bool Register(JNIEnv* env);
 

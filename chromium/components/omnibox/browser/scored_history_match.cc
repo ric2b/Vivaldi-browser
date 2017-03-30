@@ -107,12 +107,17 @@ void InitDaysAgoToRecencyScoreArray() {
 const size_t ScoredHistoryMatch::kMaxVisitsToScore = 10;
 bool ScoredHistoryMatch::also_do_hup_like_scoring_ = false;
 int ScoredHistoryMatch::bookmark_value_ = 1;
-bool ScoredHistoryMatch::fix_frequency_bugs_ = false;
+bool ScoredHistoryMatch::fix_typed_visit_bug_ = false;
+bool ScoredHistoryMatch::fix_few_visits_bug_ = false;
 bool ScoredHistoryMatch::allow_tld_matches_ = false;
 bool ScoredHistoryMatch::allow_scheme_matches_ = false;
 size_t ScoredHistoryMatch::num_title_words_to_allow_ = 10u;
 bool ScoredHistoryMatch::hqp_experimental_scoring_enabled_ = false;
-float ScoredHistoryMatch::topicality_threshold_ = -1;
+float ScoredHistoryMatch::topicality_threshold_ = 0.8f;
+// Default HQP relevance buckets. See GetFinalRelevancyScore()
+// for more details on these numbers.
+char ScoredHistoryMatch::hqp_relevance_buckets_str_[] =
+    "0.0:400,1.5:600,5.0:900,10.5:1203,15.0:1300,20.0:1399";
 std::vector<ScoredHistoryMatch::ScoreMaxRelevance>*
     ScoredHistoryMatch::hqp_relevance_buckets_ = nullptr;
 
@@ -138,7 +143,7 @@ ScoredHistoryMatch::ScoredHistoryMatch(
     const RowWordStarts& word_starts,
     bool is_url_bookmarked,
     base::Time now)
-    : HistoryMatch(row, 0, false, false), raw_score(0), can_inline(false) {
+    : HistoryMatch(row, 0, false, false), raw_score(0) {
   // NOTE: Call Init() before doing any validity checking to ensure that the
   // class is always initialized after an instance has been constructed. In
   // particular, this ensures that the class is initialized after an instance
@@ -170,16 +175,17 @@ ScoredHistoryMatch::ScoredHistoryMatch(
     ++term_num;
   }
 
-  // Sort matches by offset and eliminate any which overlap.
-  // TODO(mpearson): Investigate whether this has any meaningful
-  // effect on scoring.  (It's necessary at some point: removing
-  // overlaps and sorting is needed to decide what to highlight in the
-  // suggestion string.  But this sort and de-overlap doesn't have to
-  // be done before scoring.)
-  url_matches = SortAndDeoverlapMatches(url_matches);
-  title_matches = SortAndDeoverlapMatches(title_matches);
+  // Sort matches by offset, which is needed for GetTopicalityScore() to
+  // function correctly.
+  if (OmniboxFieldTrial::HQPAllowDupMatchesForScoring()) {
+    url_matches = SortMatches(url_matches);
+    title_matches = SortMatches(title_matches);
+  } else {
+    url_matches = SortAndDeoverlapMatches(url_matches);
+    title_matches = SortAndDeoverlapMatches(title_matches);
+  }
 
-  // We can inline autocomplete a match if:
+  // We can likely inline autocomplete a match if:
   //  1) there is only one search term
   //  2) AND the match begins immediately after one of the prefixes in
   //     URLPrefix such as http://www and https:// (note that one of these
@@ -193,6 +199,15 @@ ScoredHistoryMatch::ScoredHistoryMatch(
   // prefixes match, we'll choose to inline following the longest one.
   // For a URL like "http://www.washingtonmutual.com", this means
   // typing "w" will inline "ashington..." instead of "ww.washington...".
+  // We cannot be sure about inlining at this stage because this test depends
+  // on the cleaned up URL, which is not necessarily the same as the URL string
+  // used in HistoryQuick provider to construct the match.  For instance, the
+  // cleaned up URL has special characters unescaped so as to allow matches
+  // with them.  This aren't unescaped when HistoryQuick displays the URL;
+  // hence a match in the URL that involves matching the unescaped special
+  // characters may not be able to be inlined given how HistoryQuick displays
+  // it.  This happens in HistoryQuickProvider::QuickMatchToACMatch().
+  bool likely_can_inline = false;
   if (!url_matches.empty() && (terms_vector.size() == 1) &&
       !base::IsUnicodeWhitespace(*lower_string.rbegin())) {
     const base::string16 gurl_spec = base::UTF8ToUTF16(gurl.spec());
@@ -240,9 +255,9 @@ ScoredHistoryMatch::ScoredHistoryMatch(
         const URLPrefix* best_prefix =
             URLPrefix::BestURLPrefix(gurl_spec, base::string16());
         DCHECK(best_prefix);
-        // If the URL is inlineable, we must have a match.  Note the prefix that
-        // makes it inlineable may be empty.
-        can_inline = true;
+        // If the URL is likely to be inlineable, we must have a match.  Note
+        // the prefix that makes it inlineable may be empty.
+        likely_can_inline = true;
         innermost_match = (best_inlineable_prefix->num_components ==
                            best_prefix->num_components);
       }
@@ -255,7 +270,7 @@ ScoredHistoryMatch::ScoredHistoryMatch(
   raw_score = base::saturated_cast<int>(GetFinalRelevancyScore(
       topicality_score, frequency_score, *hqp_relevance_buckets_));
 
-  if (also_do_hup_like_scoring_ && can_inline) {
+  if (also_do_hup_like_scoring_ && likely_can_inline) {
     // HistoryURL-provider-like scoring gives any match that is
     // capable of being inlined a certain minimum score.  Some of these
     // are given a higher score that lets them be shown in inline.
@@ -298,6 +313,13 @@ ScoredHistoryMatch::ScoredHistoryMatch(
 
     // Incorporate hup_like_score into raw_score.
     raw_score = std::max(raw_score, hup_like_score);
+  }
+
+  // If we haven't yet removed overlaps / duplicates in the matches variables,
+  // do so now.
+  if (OmniboxFieldTrial::HQPAllowDupMatchesForScoring()) {
+    url_matches = DeoverlapMatches(url_matches);
+    title_matches = DeoverlapMatches(title_matches);
   }
 
   // Now that we're done processing this entry, correct the offsets of the
@@ -393,7 +415,8 @@ void ScoredHistoryMatch::Init() {
   initialized = true;
   also_do_hup_like_scoring_ = OmniboxFieldTrial::HQPAlsoDoHUPLikeScoring();
   bookmark_value_ = OmniboxFieldTrial::HQPBookmarkValue();
-  fix_frequency_bugs_ = OmniboxFieldTrial::HQPFixFrequencyScoringBugs();
+  fix_typed_visit_bug_ = OmniboxFieldTrial::HQPFixTypedVisitBug();
+  fix_few_visits_bug_ = OmniboxFieldTrial::HQPFixFewVisitsBug();
   allow_tld_matches_ = OmniboxFieldTrial::HQPAllowMatchInTLDValue();
   allow_scheme_matches_ = OmniboxFieldTrial::HQPAllowMatchInSchemeValue();
   num_title_words_to_allow_ = OmniboxFieldTrial::HQPNumTitleWordsToAllow();
@@ -540,8 +563,7 @@ float ScoredHistoryMatch::GetTopicalityScore(
   const float final_topicality_score = topicality_score / num_terms;
 
   // Demote the URL if the topicality score is less than threshold.
-  if (hqp_experimental_scoring_enabled_ &&
-      (final_topicality_score < topicality_threshold_)) {
+  if (final_topicality_score < topicality_threshold_) {
     return 0.0;
   }
 
@@ -570,7 +592,7 @@ float ScoredHistoryMatch::GetFrequency(const base::Time& now,
   const size_t max_visit_to_score =
       std::min(visits.size(), ScoredHistoryMatch::kMaxVisitsToScore);
   for (size_t i = 0; i < max_visit_to_score; ++i) {
-    const ui::PageTransition page_transition = fix_frequency_bugs_ ?
+    const ui::PageTransition page_transition = fix_typed_visit_bug_ ?
       ui::PageTransitionStripQualifier(visits[i].second) : visits[i].second;
     int value_of_transition =
         (page_transition == ui::PAGE_TRANSITION_TYPED) ? 20 : 1;
@@ -580,7 +602,7 @@ float ScoredHistoryMatch::GetFrequency(const base::Time& now,
         GetRecencyScore((now - visits[i].first).InDays());
     summed_visit_points += (value_of_transition * bucket_weight);
   }
-  if (fix_frequency_bugs_)
+  if (fix_few_visits_bug_)
     return summed_visit_points / ScoredHistoryMatch::kMaxVisitsToScore;
   return visits.size() * summed_visit_points /
       ScoredHistoryMatch::kMaxVisitsToScore;
@@ -645,7 +667,8 @@ float ScoredHistoryMatch::GetFinalRelevancyScore(
 void ScoredHistoryMatch::InitHQPExperimentalParams() {
   // These are default HQP relevance scoring buckets.
   // See GetFinalRelevancyScore() for details.
-  std::string hqp_relevance_buckets_str = "0.0:400,1.5:600,12.0:1300,20.0:1399";
+  std::string hqp_relevance_buckets_str = std::string(
+      hqp_relevance_buckets_str_);
 
   // Fetch the experiment params if they are any.
   hqp_experimental_scoring_enabled_ =

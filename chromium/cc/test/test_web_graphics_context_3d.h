@@ -5,12 +5,16 @@
 #ifndef CC_TEST_TEST_WEB_GRAPHICS_CONTEXT_3D_H_
 #define CC_TEST_TEST_WEB_GRAPHICS_CONTEXT_3D_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/containers/hash_tables.h"
 #include "base/containers/scoped_ptr_hash_map.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -19,6 +23,7 @@
 #include "cc/output/context_provider.h"
 #include "cc/test/ordered_texture_map.h"
 #include "cc/test/test_texture.h"
+#include "gpu/command_buffer/common/sync_token.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -270,10 +275,15 @@ class TestWebGraphicsContext3D {
                                            GLuint io_surface_id,
                                            GLuint plane) {}
 
-  virtual unsigned insertSyncPoint();
-  virtual void waitSyncPoint(unsigned sync_point);
+  virtual GLuint insertSyncPoint();
+  virtual GLuint64 insertFenceSync();
+  virtual void genSyncToken(GLuint64 fence_sync, GLbyte* sync_token);
+  virtual void waitSyncToken(const GLbyte* sync_token);
+  virtual void verifySyncTokens(GLbyte** sync_tokens, GLsizei count);
 
-  unsigned last_waited_sync_point() const { return last_waited_sync_point_; }
+  const gpu::SyncToken& last_waited_sync_token() const {
+    return last_waited_sync_token_;
+  }
 
   const ContextProvider::Capabilities& test_capabilities() const {
     return test_capabilities_;
@@ -310,6 +320,9 @@ class TestWebGraphicsContext3D {
   }
   void set_have_post_sub_buffer(bool have) {
     test_capabilities_.gpu.post_sub_buffer = have;
+  }
+  void set_have_commit_overlay_planes(bool have) {
+    test_capabilities_.gpu.commit_overlay_planes = have;
   }
   void set_have_discard_framebuffer(bool have) {
     test_capabilities_.gpu.discard_framebuffer = have;
@@ -401,7 +414,7 @@ class TestWebGraphicsContext3D {
     ~Buffer();
 
     GLenum target;
-    scoped_ptr<uint8[]> pixels;
+    scoped_ptr<uint8_t[]> pixels;
     size_t size;
 
    private:
@@ -412,7 +425,7 @@ class TestWebGraphicsContext3D {
     Image();
     ~Image();
 
-    scoped_ptr<uint8[]> pixels;
+    scoped_ptr<uint8_t[]> pixels;
 
    private:
     DISALLOW_COPY_AND_ASSIGN(Image);
@@ -472,8 +485,8 @@ class TestWebGraphicsContext3D {
   TestContextSupport* test_support_;
   gfx::Rect update_rect_;
   UpdateType last_update_type_;
-  unsigned next_insert_sync_point_;
-  unsigned last_waited_sync_point_;
+  GLuint64 next_insert_fence_sync_;
+  gpu::SyncToken last_waited_sync_token_;
   int unpack_alignment_;
 
   unsigned bound_buffer_;

@@ -4,6 +4,7 @@
 
 #include "content/child/npapi/npobject_stub.h"
 
+#include "build/build_config.h"
 #include "content/child/npapi/np_channel_base.h"
 #include "content/child/npapi/npobject_util.h"
 #include "content/child/plugin_messages.h"
@@ -259,7 +260,7 @@ void NPObjectStub::OnSetProperty(const NPIdentifier_Param& name,
       static base::FilePath plugin_path =
           base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
               switches::kPluginPath);
-      static std::wstring filename = base::StringToLowerASCII(
+      static std::wstring filename = base::ToLowerASCII(
           plugin_path.BaseName().value());
       static NPIdentifier fullscreen =
           WebBindings::getStringIdentifier("fullScreen");

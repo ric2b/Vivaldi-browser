@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/command_line.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/api/mdns/mdns_api.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -57,7 +58,7 @@ class MDnsAPITest : public ExtensionApiTest {
         .Times(1);
     // Transfers ownership of the registry instance.
     api->SetDnsSdRegistryForTesting(
-        make_scoped_ptr<DnsSdRegistry>(dns_sd_registry_).Pass());
+        make_scoped_ptr<DnsSdRegistry>(dns_sd_registry_));
   }
 
  protected:

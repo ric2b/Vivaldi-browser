@@ -5,7 +5,7 @@
 #ifndef IOS_CHROME_BROWSER_EXPERIMENTAL_FLAGS_H_
 #define IOS_CHROME_BROWSER_EXPERIMENTAL_FLAGS_H_
 
-#include <stdlib.h>
+#include <string>
 
 // This file can be empty. Its purpose is to contain the relatively short lived
 // declarations required for experimental flags.
@@ -18,15 +18,44 @@ bool IsAlertOnBackgroundUploadEnabled();
 // Whether the new bookmark collection experience is enabled.
 bool IsBookmarkCollectionEnabled();
 
-// Whether to extract salient images from pages at load time if bookmarked.
-bool IsBookmarkImageFetchingOnVisitEnabled();
+// Sets whether or not the field trial for WKWebView should be enabled. This
+// must be called at most once, and before IsWKWebViewEnabled. If this is never
+// called, IsWKWebViewEnabled will assume ineligibility.
+// Note that an explicit command line flag will ignore this setting; it controls
+// only whether the trial state will be checked in the default state.
+void SetWKWebViewTrialEligibility(bool eligible);
 
-// Whether the app uses WKWebView instead of UIWebView.
+// Whether the lru snapshot cache experiment is enabled.
+bool IsLRUSnapshotCacheEnabled();
+
+// TODO(crbug.com/579697): This always returns true; cleanup codepaths that use
+// this.
 bool IsWKWebViewEnabled();
 
-// Returns the size in MB of the memory wedge to insert during a cold start.
-// If 0, no memory wedge should be inserted.
-size_t MemoryWedgeSizeInMB();
+// Whether the user would be put into a control group for the WKWebView
+// experiment assuming they were eligible. Calling this will *not* activate a
+// trial, so is safe to call without checking eligibility.
+bool IsTargetedToWKWebViewExperimentControlGroup();
+
+// Whether the user is part of a control group for the WKWebView experiment.
+bool IsInWKWebViewExperimentControlGroup();
+
+// Returns a string containing extra params that should be sent along with
+// omnibox search requests.  The returned value contains a leading "&".
+std::string GetWKWebViewSearchParams();
+
+// Whether viewing and copying passwords is enabled.
+bool IsViewCopyPasswordsEnabled();
+
+// Whether password generation is enabled.
+bool IsPasswordGenerationEnabled();
+
+// Whether password generation fields are determined using local heuristics
+// only.
+bool UseOnlyLocalHeuristicsForPasswordGeneration();
+
+// Whether the Tab Switcher is enabled for iPad or not.
+bool IsTabSwitcherEnabled();
 
 }  // namespace experimental_flags
 

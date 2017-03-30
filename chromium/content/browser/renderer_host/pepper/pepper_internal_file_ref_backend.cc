@@ -4,6 +4,8 @@
 
 #include "content/browser/renderer_host/pepper/pepper_internal_file_ref_backend.h"
 
+#include <string.h>
+
 #include <string>
 
 #include "base/callback.h"
@@ -170,9 +172,11 @@ int32_t PepperInternalFileRefBackend::Query(
 
   GetFileSystemContext()->operation_runner()->GetMetadata(
       GetFileSystemURL(),
+      storage::FileSystemOperation::GET_METADATA_FIELD_IS_DIRECTORY |
+          storage::FileSystemOperation::GET_METADATA_FIELD_SIZE |
+          storage::FileSystemOperation::GET_METADATA_FIELD_LAST_MODIFIED,
       base::Bind(&PepperInternalFileRefBackend::GetMetadataComplete,
-                 weak_factory_.GetWeakPtr(),
-                 reply_context));
+                 weak_factory_.GetWeakPtr(), reply_context));
   return PP_OK_COMPLETIONPENDING;
 }
 

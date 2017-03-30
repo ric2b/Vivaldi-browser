@@ -7,6 +7,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/public/browser/content_browser_client.h"
@@ -43,9 +44,9 @@ class LayoutTestURLRequestContextGetter : public ShellURLRequestContextGetter {
   ~LayoutTestURLRequestContextGetter() override;
 
   // ShellURLRequestContextGetter implementation.
-  net::NetworkDelegate* CreateNetworkDelegate() override;
-  net::ProxyConfigService* GetProxyConfigService() override;
-  net::ProxyService* GetProxyService() override;
+  scoped_ptr<net::NetworkDelegate> CreateNetworkDelegate() override;
+  scoped_ptr<net::ProxyConfigService> GetProxyConfigService() override;
+  scoped_ptr<net::ProxyService> GetProxyService() override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(LayoutTestURLRequestContextGetter);

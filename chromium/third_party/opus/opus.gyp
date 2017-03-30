@@ -73,7 +73,7 @@
         'opus_srcs.gypi',
         # Disable LTO due to ELF section name out of range
         # crbug.com/422251
-        '../../build/android/disable_lto.gypi',
+        '../../build/android/disable_gcc_lto.gypi',
       ],
       'sources': ['<@(opus_common_sources)'],
       'conditions': [
@@ -93,11 +93,6 @@
             4334,  # Disable 32-bit shift warning in src/opus_encoder.c .
           ],
         }],
-        ['os_posix==1', {
-          'link_settings': {
-            'libraries': [ '-lm' ],
-          },
-        }],
         ['os_posix==1 and OS!="android"', {
           # Suppress a warning given by opus_decoder.c that tells us
           # optimizations are turned off.
@@ -108,6 +103,13 @@
             'WARNING_CFLAGS': [
               '-Wno-#pragma-messages',
             ],
+          },
+          'link_settings': {
+            # This appears in the OS!="android" section because all Android
+            # targets already link libm (in common.gypi), and it's important
+            # that it appears after libc++ on the link command line.
+            # https://code.google.com/p/android-developer-preview/issues/detail?id=3193
+            'libraries': [ '-lm' ],
           },
         }],
         ['os_posix==1 and (target_arch=="arm" or target_arch=="arm64")', {
@@ -123,6 +125,11 @@
           'defines': [
             'FIXED_POINT',
           ],
+          'direct_dependent_settings': {
+            'defines': [
+              'OPUS_FIXED_POINT',
+            ],
+          },
           'include_dirs': [
             'src/silk/fixed',
           ],

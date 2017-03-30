@@ -5,6 +5,7 @@
 #include "components/history/core/browser/web_history_service.h"
 
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -12,10 +13,10 @@
 #include "chrome/browser/history/web_history_service_factory.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
-#include "chrome/browser/sync/profile_sync_service_mock.h"
+#include "chrome/browser/sync/profile_sync_test_util.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -222,7 +223,7 @@ class WebHistoryServiceTest : public testing::Test {
 
   void SetUp() override {
     ProfileSyncServiceFactory::GetInstance()->SetTestingFactoryAndUse(
-      &profile_, &ProfileSyncServiceMock::BuildMockProfileSyncService);
+        &profile_, &BuildMockProfileSyncService);
     // Use SetTestingFactoryAndUse to force creation and initialization.
     WebHistoryServiceFactory::GetInstance()->SetTestingFactoryAndUse(
       &profile_, &BuildWebHistoryService);
@@ -250,7 +251,6 @@ class WebHistoryServiceTest : public testing::Test {
   }
 
  private:
-
   content::TestBrowserThreadBundle thread_bundle_;
   TestingProfile profile_;
 

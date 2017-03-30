@@ -18,8 +18,10 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/info_map.h"
 #include "extensions/browser/notification_types.h"
+#include "extensions/browser/null_app_sorting.h"
 #include "extensions/browser/quota_service.h"
 #include "extensions/browser/runtime_data.h"
+#include "extensions/browser/service_worker_manager.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/file_util.h"
 
@@ -34,8 +36,7 @@ void PerformApplicationShutdown()
 }
 
 ShellExtensionSystem::ShellExtensionSystem(BrowserContext* browser_context)
-    : browser_context_(browser_context) {
-}
+    : browser_context_(browser_context), weak_factory_(this) {}
 
 ShellExtensionSystem::~ShellExtensionSystem() {
 }
@@ -60,11 +61,15 @@ const Extension* ShellExtensionSystem::LoadApp(const base::FilePath& app_dir) {
   // * Call PermissionsUpdater::GrantActivePermissions().
   // * Call ExtensionService::SatisfyImports().
   // * Call ExtensionPrefs::OnExtensionInstalled().
-  // * Send NOTIFICATION_EXTENSION_WILL_BE_INSTALLED_DEPRECATED.
+  // * Call ExtensionRegistryObserver::OnExtensionWillbeInstalled().
 
   ExtensionRegistry::Get(browser_context_)->AddEnabled(extension.get());
 
-  RegisterExtensionWithRequestContexts(extension.get());
+  RegisterExtensionWithRequestContexts(
+      extension.get(),
+      base::Bind(
+          &ShellExtensionSystem::OnExtensionRegisteredWithRequestContexts,
+          weak_factory_.GetWeakPtr(), extension));
 
   content::NotificationService::current()->Notify(
       extensions::NOTIFICATION_EXTENSION_LOADED_DEPRECATED,
@@ -99,9 +104,11 @@ void ShellExtensionSystem::Shutdown() {
 }
 
 void ShellExtensionSystem::InitForRegularProfile(bool extensions_enabled) {
+  service_worker_manager_.reset(new ServiceWorkerManager(browser_context_));
   runtime_data_.reset(
       new RuntimeData(ExtensionRegistry::Get(browser_context_)));
   quota_service_.reset(new QuotaService);
+  app_sorting_.reset(new NullAppSorting);
 }
 
 ExtensionService* ShellExtensionSystem::extension_service() {
@@ -114,6 +121,10 @@ RuntimeData* ShellExtensionSystem::runtime_data() {
 
 ManagementPolicy* ShellExtensionSystem::management_policy() {
   return nullptr;
+}
+
+ServiceWorkerManager* ShellExtensionSystem::service_worker_manager() {
+  return service_worker_manager_.get();
 }
 
 SharedUserScriptMaster* ShellExtensionSystem::shared_user_script_master() {
@@ -138,16 +149,18 @@ QuotaService* ShellExtensionSystem::quota_service() {
   return quota_service_.get();
 }
 
+AppSorting* ShellExtensionSystem::app_sorting() {
+  return app_sorting_.get();
+}
+
 void ShellExtensionSystem::RegisterExtensionWithRequestContexts(
-    const Extension* extension) {
-  BrowserThread::PostTask(BrowserThread::IO,
-                          FROM_HERE,
-                          base::Bind(&InfoMap::AddExtension,
-                                     info_map(),
-                                     make_scoped_refptr(extension),
-                                     base::Time::Now(),
-                                     false,
-                                     false));
+    const Extension* extension,
+    const base::Closure& callback) {
+  BrowserThread::PostTaskAndReply(BrowserThread::IO, FROM_HERE,
+                                  base::Bind(&InfoMap::AddExtension, info_map(),
+                                             make_scoped_refptr(extension),
+                                             base::Time::Now(), false, false),
+                                  callback);
 }
 
 void ShellExtensionSystem::UnregisterExtensionWithRequestContexts(
@@ -166,6 +179,19 @@ ContentVerifier* ShellExtensionSystem::content_verifier() {
 scoped_ptr<ExtensionSet> ShellExtensionSystem::GetDependentExtensions(
     const Extension* extension) {
   return make_scoped_ptr(new ExtensionSet());
+}
+
+void ShellExtensionSystem::InstallUpdate(const std::string& extension_id,
+                                         const base::FilePath& temp_dir) {
+  NOTREACHED();
+  base::DeleteFile(temp_dir, true /* recursive */);
+}
+
+void ShellExtensionSystem::OnExtensionRegisteredWithRequestContexts(
+    scoped_refptr<Extension> extension) {
+  ExtensionRegistry* registry = ExtensionRegistry::Get(browser_context_);
+  registry->AddReady(extension);
+  registry->TriggerOnReady(extension.get());
 }
 
 }  // namespace extensions

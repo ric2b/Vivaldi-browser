@@ -1,0 +1,61 @@
+<link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-dialog/paper-dialog.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-input/paper-input.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-item/paper-icon-item.html">
+
+<dom-module id="settings-startup-urls-page">
+  <link rel="import" type="css" href="chrome://md-settings/settings_dialog.css">
+  <link rel="import" type="css" href="chrome://md-settings/settings_shared.css">
+  <link rel="import" type="css" href="on_startup_shared.css">
+  <template>
+    <template is="dom-repeat" items="[[startupPages_]]">
+      <div class="list-item">
+        <iron-icon class="secondary" icon="image:brightness-1"
+            item-icon></iron-icon>
+        <div class="middle">
+          <div class="text-elide">[[item.title]]</div>
+          <div class="text-elide secondary">[[item.url]]</div>
+        </div>
+        <iron-icon on-tap="onRemoveUrlTap_" icon="clear"></iron-icon>
+      </div>
+    </template>
+    <div class="list-item">
+      <paper-button class="link-button" on-tap="onAddPageTap_"
+          i18n-content="onStartupAddNewPage">
+      </paper-button>
+    </div>
+    <div class="list-item">
+      <paper-button class="link-button" on-tap="onUseCurrentPagesTap_"
+          i18n-content="onStartupUseCurrent">
+      </paper-button>
+    </div>
+
+    <paper-dialog modal id="addUrlDialog" class="layout vertical">
+      <div id="dialog-content">
+        <div class="top-row">
+          <div class="title" i18n-content="onStartupAddNewPage"></div>
+          <paper-icon-button icon="clear" on-tap="onCancelTap_" id="close">
+          </paper-icon-button>
+        </div>
+        <div class="body">
+          <div class="explanation">
+            <paper-input class="flex" always-float-label
+                i18n-values="label:onStartupSiteUrl" value="{{newUrl}}">
+            </paper-input>
+          </div>
+          <div class="button-container">
+            <div class="action-buttons">
+              <paper-button class="cancel-button" on-tap="onCancelTap_"
+                  id="cancel" i18n-content="cancel"></paper-button>
+              <paper-button class="action-button" id="addUrlButton"
+                  on-tap="onOkTap_" i18n-content="addLabel">
+              </paper-button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </paper-dialog>
+
+  </template>
+  <script src="startup_urls_page.js"></script>
+</dom-module>

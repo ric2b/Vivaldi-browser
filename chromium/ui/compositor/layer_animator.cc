@@ -4,10 +4,17 @@
 
 #include "ui/compositor/layer_animator.h"
 
+#include <stddef.h>
+
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/trace_event/trace_event.h"
+#include "cc/animation/animation_events.h"
 #include "cc/animation/animation_id_provider.h"
+#include "cc/animation/animation_player.h"
+#include "cc/animation/animation_timeline.h"
+#include "cc/animation/element_animations.h"
+#include "cc/layers/layer_settings.h"
 #include "cc/output/begin_frame_args.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/layer.h"
@@ -47,6 +54,10 @@ LayerAnimator::LayerAnimator(base::TimeDelta transition_duration)
       is_started_(false),
       disable_timer_for_test_(false),
       adding_animations_(false) {
+  if (Layer::UILayerSettings().use_compositor_animation_timelines) {
+    animation_player_ =
+        cc::AnimationPlayer::Create(cc::AnimationIdProvider::NextPlayerId());
+  }
 }
 
 LayerAnimator::~LayerAnimator() {
@@ -115,12 +126,93 @@ void LayerAnimator::SetDelegate(LayerAnimationDelegate* delegate) {
     if (collection)
       collection->StopAnimator(this);
   }
+  SwitchToLayer(delegate ? delegate->GetCcLayer() : nullptr);
   delegate_ = delegate;
   if (delegate_ && is_started_) {
     LayerAnimatorCollection* collection = GetLayerAnimatorCollection();
     if (collection)
       collection->StartAnimator(this);
   }
+}
+
+void LayerAnimator::SwitchToLayer(scoped_refptr<cc::Layer> new_layer) {
+  if (delegate_) {
+    if (animation_player_)
+      DetachLayerFromAnimationPlayer();
+    else
+      delegate_->GetCcLayer()->RemoveLayerAnimationEventObserver(this);
+  }
+  if (new_layer) {
+    if (animation_player_)
+      AttachLayerToAnimationPlayer(new_layer->id());
+    else
+      new_layer->AddLayerAnimationEventObserver(this);
+  }
+}
+
+void LayerAnimator::SetCompositor(Compositor* compositor) {
+  DCHECK(compositor);
+  if (animation_player_) {
+    cc::AnimationTimeline* timeline = compositor->GetAnimationTimeline();
+    DCHECK(timeline);
+    timeline->AttachPlayer(animation_player_);
+
+    DCHECK(delegate_->GetCcLayer());
+    AttachLayerToAnimationPlayer(delegate_->GetCcLayer()->id());
+  }
+}
+
+void LayerAnimator::ResetCompositor(Compositor* compositor) {
+  DCHECK(compositor);
+  if (animation_player_) {
+    DetachLayerFromAnimationPlayer();
+
+    cc::AnimationTimeline* timeline = compositor->GetAnimationTimeline();
+    DCHECK(timeline);
+    timeline->DetachPlayer(animation_player_);
+  }
+}
+
+void LayerAnimator::AttachLayerToAnimationPlayer(int layer_id) {
+  DCHECK(animation_player_);
+
+  if (!animation_player_->layer_id())
+    animation_player_->AttachLayer(layer_id);
+  else
+    DCHECK_EQ(animation_player_->layer_id(), layer_id);
+
+  if (animation_player_->element_animations()) {
+    animation_player_->element_animations()
+        ->layer_animation_controller()
+        ->AddEventObserver(this);
+  }
+}
+
+void LayerAnimator::DetachLayerFromAnimationPlayer() {
+  DCHECK(animation_player_);
+
+  if (animation_player_->element_animations()) {
+    animation_player_->element_animations()
+        ->layer_animation_controller()
+        ->RemoveEventObserver(this);
+  }
+
+  if (animation_player_->layer_id())
+    animation_player_->DetachLayer();
+}
+
+void LayerAnimator::AddThreadedAnimation(scoped_ptr<cc::Animation> animation) {
+  DCHECK(animation_player_);
+  animation_player_->AddAnimation(std::move(animation));
+}
+
+void LayerAnimator::RemoveThreadedAnimation(int animation_id) {
+  DCHECK(animation_player_);
+  animation_player_->RemoveAnimation(animation_id);
+}
+
+cc::AnimationPlayer* LayerAnimator::GetAnimationPlayerForTesting() const {
+  return animation_player_.get();
 }
 
 void LayerAnimator::StartAnimation(LayerAnimationSequence* animation) {
@@ -848,6 +940,10 @@ void LayerAnimator::PurgeDeletedAnimations() {
 
 LayerAnimatorCollection* LayerAnimator::GetLayerAnimatorCollection() {
   return delegate_ ? delegate_->GetLayerAnimatorCollection() : NULL;
+}
+
+void LayerAnimator::OnAnimationStarted(const cc::AnimationEvent& event) {
+  OnThreadedAnimationStarted(event);
 }
 
 LayerAnimator::RunningAnimation::RunningAnimation(

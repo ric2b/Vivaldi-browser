@@ -16,15 +16,16 @@ using content::BrowserContext;
 
 // static
 PasswordsPrivateDelegate* PasswordsPrivateDelegateFactory::GetForBrowserContext(
-    BrowserContext* browser_context) {
+    BrowserContext* browser_context,
+    bool create) {
   return static_cast<PasswordsPrivateDelegate*>(
-      GetInstance()->GetServiceForBrowserContext(browser_context, true));
+      GetInstance()->GetServiceForBrowserContext(browser_context, create));
 }
 
 // static
 PasswordsPrivateDelegateFactory*
     PasswordsPrivateDelegateFactory::GetInstance() {
-  return Singleton<PasswordsPrivateDelegateFactory>::get();
+  return base::Singleton<PasswordsPrivateDelegateFactory>::get();
 }
 
 PasswordsPrivateDelegateFactory::PasswordsPrivateDelegateFactory()

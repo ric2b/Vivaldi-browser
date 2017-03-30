@@ -7,6 +7,7 @@
 #include <limits>
 
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/rect.h"
@@ -35,7 +36,12 @@ class CanvasTest : public testing::Test {
   FontList font_list_;
 };
 
-TEST_F(CanvasTest, StringWidth) {
+#if defined(OS_ANDROID)
+#define MAYBE_StringWidth DISABLED_StringWidth
+#else
+#define MAYBE_StringWidth StringWidth
+#endif
+TEST_F(CanvasTest, MAYBE_StringWidth) {
   EXPECT_GT(GetStringWidth("Test"), 0);
 }
 
@@ -43,7 +49,12 @@ TEST_F(CanvasTest, StringWidthEmptyString) {
   EXPECT_EQ(0, GetStringWidth(""));
 }
 
-TEST_F(CanvasTest, StringSizeEmptyString) {
+#if defined(OS_ANDROID)
+#define MAYBE_StringSizeEmptyString DISABLED_StringSizeEmptyString
+#else
+#define MAYBE_StringSizeEmptyString StringSizeEmptyString
+#endif
+TEST_F(CanvasTest, MAYBE_StringSizeEmptyString) {
   gfx::Size size = SizeStringInt("", 0, 0);
   EXPECT_EQ(0, size.width());
   EXPECT_GT(size.height(), 0);

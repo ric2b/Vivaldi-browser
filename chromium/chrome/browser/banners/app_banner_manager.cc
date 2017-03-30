@@ -21,28 +21,53 @@ bool gDisableSecureCheckForTesting = false;
 
 namespace banners {
 
+void AppBannerManager::DisableSecureSchemeCheckForTesting() {
+  gDisableSecureCheckForTesting = true;
+}
+
+void AppBannerManager::SetEngagementWeights(double direct_engagement,
+                                            double indirect_engagement) {
+  AppBannerSettingsHelper::SetEngagementWeights(direct_engagement,
+                                                indirect_engagement);
+}
+
 bool AppBannerManager::URLsAreForTheSamePage(const GURL& first,
                                              const GURL& second) {
   return first.GetWithEmptyPath() == second.GetWithEmptyPath() &&
          first.path() == second.path() && first.query() == second.query();
 }
 
-AppBannerManager::AppBannerManager(int icon_size)
-    : ideal_icon_size_(icon_size),
-      data_fetcher_(nullptr),
+AppBannerManager::AppBannerManager()
+    : data_fetcher_(nullptr),
       weak_factory_(this) {
+  AppBannerSettingsHelper::UpdateFromFieldTrial();
 }
 
-AppBannerManager::AppBannerManager(content::WebContents* web_contents,
-                                   int icon_size)
+AppBannerManager::AppBannerManager(content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents),
-      ideal_icon_size_(icon_size),
       data_fetcher_(nullptr),
       weak_factory_(this) {
+  AppBannerSettingsHelper::UpdateFromFieldTrial();
 }
 
 AppBannerManager::~AppBannerManager() {
   CancelActiveFetcher();
+}
+
+void AppBannerManager::ReplaceWebContents(content::WebContents* web_contents) {
+  Observe(web_contents);
+  if (data_fetcher_.get())
+    data_fetcher_.get()->ReplaceWebContents(web_contents);
+}
+
+bool AppBannerManager::IsFetcherActive() {
+  return data_fetcher_ != nullptr && data_fetcher_->is_active();
+}
+
+void AppBannerManager::DidNavigateMainFrame(
+    const content::LoadCommittedDetails& details,
+    const content::FrameNavigateParams& params) {
+  last_transition_type_ = params.transition;
 }
 
 void AppBannerManager::DidFinishLoad(
@@ -65,9 +90,8 @@ void AppBannerManager::DidFinishLoad(
   }
 
   // Kick off the data retrieval pipeline.
-  data_fetcher_ = CreateAppBannerDataFetcher(weak_factory_.GetWeakPtr(),
-                                             ideal_icon_size_);
-  data_fetcher_->Start(validated_url);
+  data_fetcher_ = CreateAppBannerDataFetcher(weak_factory_.GetWeakPtr());
+  data_fetcher_->Start(validated_url, last_transition_type_);
 }
 
 bool AppBannerManager::HandleNonWebApp(const std::string& platform,
@@ -76,25 +100,11 @@ bool AppBannerManager::HandleNonWebApp(const std::string& platform,
   return false;
 }
 
-void AppBannerManager::ReplaceWebContents(content::WebContents* web_contents) {
-  Observe(web_contents);
-  if (data_fetcher_.get())
-    data_fetcher_.get()->ReplaceWebContents(web_contents);
-}
-
 void AppBannerManager::CancelActiveFetcher() {
   if (data_fetcher_ != nullptr) {
     data_fetcher_->Cancel();
     data_fetcher_ = nullptr;
   }
-}
-
-bool AppBannerManager::IsFetcherActive() {
-  return data_fetcher_ != nullptr && data_fetcher_->is_active();
-}
-
-void AppBannerManager::DisableSecureSchemeCheckForTesting() {
-  gDisableSecureCheckForTesting = true;
 }
 
 }  // namespace banners

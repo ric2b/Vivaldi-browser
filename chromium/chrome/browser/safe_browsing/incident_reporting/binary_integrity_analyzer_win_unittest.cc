@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/safe_browsing/incident_reporting/binary_integrity_analyzer.h"
+#include "chrome/browser/safe_browsing/incident_reporting/binary_integrity_analyzer_win.h"
 
 #include "base/bind.h"
 #include "base/files/file_util.h"
@@ -13,10 +13,10 @@
 #include "chrome/browser/safe_browsing/incident_reporting/incident.h"
 #include "chrome/browser/safe_browsing/incident_reporting/mock_incident_receiver.h"
 #include "chrome/common/chrome_paths.h"
+#include "chrome/common/chrome_version.h"
 #include "chrome/common/safe_browsing/csd.pb.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "version.h"  // NOLINT
 
 using ::testing::_;
 using ::testing::StrictMock;
@@ -56,7 +56,7 @@ class BinaryIntegrityAnalyzerWinTest : public ::testing::Test {
 };
 
 BinaryIntegrityAnalyzerWinTest::BinaryIntegrityAnalyzerWinTest() {
-  temp_dir_.CreateUniqueTempDir();
+  EXPECT_TRUE(temp_dir_.CreateUniqueTempDir());
   base::CreateDirectory(temp_dir_.path().AppendASCII(CHROME_VERSION_STRING));
 
   // We retrieve DIR_TEST_DATA here because it is based on DIR_EXE and we are
@@ -101,19 +101,30 @@ TEST_F(BinaryIntegrityAnalyzerWinTest, VerifyBinaryIntegrity) {
 
   ASSERT_TRUE(base::CopyFile(signed_binary_path, chrome_elf_path));
 
+  // Run check on an integral binary.
   scoped_ptr<MockIncidentReceiver> mock_receiver(
       new StrictMock<MockIncidentReceiver>());
+  scoped_ptr<Incident> incident_to_clear;
+  EXPECT_CALL(*mock_receiver, DoClearIncidentForProcess(_))
+      .WillOnce(TakeIncident(&incident_to_clear));
+
   VerifyBinaryIntegrity(mock_receiver.Pass());
 
+  ASSERT_TRUE(incident_to_clear);
+  ASSERT_EQ(IncidentType::BINARY_INTEGRITY, incident_to_clear->GetType());
+
+  // Run check on an infected binary.
   ASSERT_TRUE(EraseFileContent(chrome_elf_path));
 
-  mock_receiver.reset(new MockIncidentReceiver());
+  mock_receiver.reset(new StrictMock<MockIncidentReceiver>());
   scoped_ptr<Incident> incident;
   EXPECT_CALL(*mock_receiver, DoAddIncidentForProcess(_))
       .WillOnce(TakeIncident(&incident));
 
   VerifyBinaryIntegrity(mock_receiver.Pass());
 
+  // Verify that the cleared and reported incidents have the same key.
+  ASSERT_EQ(incident->GetKey(), incident_to_clear->GetKey());
   // Verify that the incident report contains the expected data.
   scoped_ptr<ClientIncidentReport_IncidentData> incident_data(
       incident->TakePayload());

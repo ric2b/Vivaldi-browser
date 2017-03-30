@@ -4,9 +4,12 @@
 
 #include "chrome/browser/ui/webui/options/supervised_user_import_handler.h"
 
+#include <stddef.h>
+
 #include <set>
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
@@ -37,7 +40,7 @@ scoped_ptr<base::ListValue> GetAvatarIcons() {
     avatar_icons->Append(new base::StringValue(avatar_url));
   }
 
-  return avatar_icons.Pass();
+  return avatar_icons;
 }
 
 bool ProfileIsLegacySupervised(const base::FilePath& profile_path) {
@@ -70,20 +73,24 @@ void SupervisedUserImportHandler::GetLocalizedValues(
 
   static OptionsStringResource resources[] = {
       { "supervisedUserImportTitle",
-          IDS_IMPORT_EXISTING_SUPERVISED_USER_TITLE },
-      { "supervisedUserImportText", IDS_IMPORT_EXISTING_SUPERVISED_USER_TEXT },
-      { "createNewUserLink", IDS_CREATE_NEW_USER_LINK },
-      { "supervisedUserImportOk", IDS_IMPORT_EXISTING_SUPERVISED_USER_OK },
+          IDS_IMPORT_EXISTING_LEGACY_SUPERVISED_USER_TITLE },
+      { "supervisedUserImportText",
+          IDS_IMPORT_EXISTING_LEGACY_SUPERVISED_USER_TEXT },
+      { "createNewUserLink", IDS_CREATE_NEW_LEGACY_SUPERVISED_USER_LINK },
+      { "supervisedUserImportOk",
+          IDS_IMPORT_EXISTING_LEGACY_SUPERVISED_USER_OK },
       { "supervisedUserImportSigninError",
-          IDS_SUPERVISED_USER_IMPORT_SIGN_IN_ERROR },
+          IDS_LEGACY_SUPERVISED_USER_IMPORT_SIGN_IN_ERROR },
       { "supervisedUserAlreadyOnThisDevice",
-          IDS_SUPERVISED_USER_ALREADY_ON_THIS_DEVICE },
-      { "noExistingSupervisedUsers", IDS_SUPERVISED_USER_NO_EXISTING_ERROR },
+          IDS_LEGACY_SUPERVISED_USER_ALREADY_ON_THIS_DEVICE },
+      { "noExistingSupervisedUsers",
+          IDS_LEGACY_SUPERVISED_USER_NO_EXISTING_ERROR },
       { "supervisedUserSelectAvatarTitle",
-          IDS_SUPERVISED_USER_SELECT_AVATAR_TITLE },
+          IDS_LEGACY_SUPERVISED_USER_SELECT_AVATAR_TITLE },
       { "supervisedUserSelectAvatarText",
-          IDS_SUPERVISED_USER_SELECT_AVATAR_TEXT },
-      { "supervisedUserSelectAvatarOk", IDS_SUPERVISED_USER_SELECT_AVATAR_OK },
+          IDS_LEGACY_SUPERVISED_USER_SELECT_AVATAR_TEXT },
+      { "supervisedUserSelectAvatarOk",
+          IDS_LEGACY_SUPERVISED_USER_SELECT_AVATAR_OK },
   };
 
   RegisterStrings(localized_strings, resources, arraysize(resources));

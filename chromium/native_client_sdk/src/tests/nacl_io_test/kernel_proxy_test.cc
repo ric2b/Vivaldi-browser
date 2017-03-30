@@ -23,6 +23,7 @@
 #include "nacl_io/kernel_intercept.h"
 #include "nacl_io/kernel_proxy.h"
 #include "nacl_io/memfs/mem_fs.h"
+#include "nacl_io/nacl_abi_types.h"
 #include "nacl_io/osmman.h"
 #include "nacl_io/ostime.h"
 #include "nacl_io/path.h"
@@ -33,6 +34,7 @@ using namespace sdk_util;
 
 using ::testing::_;
 using ::testing::DoAll;
+using ::testing::AnyNumber;
 using ::testing::Invoke;
 using ::testing::Return;
 using ::testing::SaveArg;
@@ -608,7 +610,7 @@ TEST_F(KernelProxyTest, Lstat) {
   EXPECT_TRUE(S_ISREG(buf.st_mode));
 
   EXPECT_EQ(0, ki_lstat("/bar", &buf));
-  EXPECT_EQ(0, buf.st_size);
+  EXPECT_GT(buf.st_size, 0);
   EXPECT_TRUE(S_ISDIR(buf.st_mode));
 
   EXPECT_EQ(-1, ki_lstat("/no-such-file", &buf));
@@ -1092,8 +1094,9 @@ TEST_F(KernelProxyErrorTest, WriteError) {
       .WillOnce(DoAll(SetArgPointee<3>(0),  // Wrote 0 bytes.
                       Return(1234)));       // Returned error 1234.
 
-  EXPECT_CALL(*mock_node, IsaDir()).Times(1);
-  EXPECT_CALL(*mock_node, Destroy()).Times(1);
+  EXPECT_CALL(*mock_node, IsaDir()).Times(AnyNumber());
+  EXPECT_CALL(*mock_node, GetType()).Times(AnyNumber());
+  EXPECT_CALL(*mock_node, Destroy()).Times(AnyNumber());
 
   int fd = ki_open("/dummy", O_WRONLY, 0);
   EXPECT_NE(0, fd);
@@ -1115,7 +1118,8 @@ TEST_F(KernelProxyErrorTest, ReadError) {
       .WillOnce(DoAll(SetArgPointee<3>(0),  // Read 0 bytes.
                       Return(1234)));       // Returned error 1234.
 
-  EXPECT_CALL(*mock_node, Destroy()).Times(1);
+  EXPECT_CALL(*mock_node, Destroy()).Times(AnyNumber());
+  EXPECT_CALL(*mock_node, GetType()).Times(AnyNumber());
 
   int fd = ki_open("/dummy", O_RDONLY, 0);
   EXPECT_NE(0, fd);

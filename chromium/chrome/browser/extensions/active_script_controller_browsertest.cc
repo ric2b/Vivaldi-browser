@@ -2,8 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
+#include <utility>
+#include <vector>
+
 #include "base/files/file_path.h"
 #include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/extensions/active_script_controller.h"
 #include "chrome/browser/extensions/extension_action.h"
@@ -83,7 +89,7 @@ class ActiveScriptControllerBrowserTest : public ExtensionBrowserTest {
                                    InjectionType injection_type);
 
  private:
-  ScopedVector<TestExtensionDir> test_extension_dirs_;
+  std::vector<scoped_ptr<TestExtensionDir>> test_extension_dirs_;
   std::vector<const Extension*> extensions_;
 };
 
@@ -151,7 +157,7 @@ const Extension* ActiveScriptControllerBrowserTest::CreateExtension(
 
   const Extension* extension = LoadExtension(dir->unpacked_path());
   if (extension) {
-    test_extension_dirs_.push_back(dir.release());
+    test_extension_dirs_.push_back(std::move(dir));
     extensions_.push_back(extension);
   }
 
@@ -348,7 +354,7 @@ IN_PROC_BROWSER_TEST_F(ActiveScriptControllerBrowserTest,
   // Navigate to an URL (which matches the explicit host specified in the
   // extension content_scripts_explicit_hosts). All four extensions should
   // inject the script.
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/extensions/test_file.html"));
 
@@ -376,7 +382,7 @@ IN_PROC_BROWSER_TEST_F(ActiveScriptControllerBrowserTest,
       ActiveScriptController::GetForWebContents(web_contents);
   ASSERT_TRUE(active_script_controller);
 
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/extensions/test_file.html"));
 
@@ -424,7 +430,7 @@ IN_PROC_BROWSER_TEST_F(ActiveScriptControllerBrowserTest,
                                        false /* won't reply */));
   inject_success_listener.set_extension_id(extension->id());
 
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   GURL url = embedded_test_server()->GetURL("/extensions/test_file.html");
   ui_test_utils::NavigateToURL(browser(), url);
 
@@ -488,7 +494,7 @@ IN_PROC_BROWSER_TEST_F(FlagOffActiveScriptControllerBrowserTest,
           EXECUTE_SCRIPT),
   };
 
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/extensions/test_file.html"));
 

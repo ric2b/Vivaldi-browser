@@ -7,15 +7,17 @@
 
 #include "components/sessions/core/serialized_navigation_driver.h"
 
-#include "components/sessions/sessions_export.h"
+#include "components/sessions/core/sessions_export.h"
 
+namespace base {
 template <typename T> struct DefaultSingletonTraits;
+}
 
 namespace sessions {
 
 // Provides an implementation of SerializedNavigationDriver that is backed by
 // content classes.
-class SESSIONS_EXPORT_PRIVATE ContentSerializedNavigationDriver
+class SESSIONS_EXPORT ContentSerializedNavigationDriver
     : public SerializedNavigationDriver {
  public:
   ~ContentSerializedNavigationDriver() override;
@@ -38,7 +40,7 @@ class SESSIONS_EXPORT_PRIVATE ContentSerializedNavigationDriver
 
  private:
   ContentSerializedNavigationDriver();
-  friend struct DefaultSingletonTraits<ContentSerializedNavigationDriver>;
+  friend struct base::DefaultSingletonTraits<ContentSerializedNavigationDriver>;
 };
 
 }  // namespace sessions

@@ -4,7 +4,9 @@
 
 #include "components/domain_reliability/scheduler.h"
 
+#include <stdint.h>
 #include <algorithm>
+#include <utility>
 
 #include "base/metrics/field_trial.h"
 #include "base/strings/string_number_conversions.h"
@@ -28,7 +30,7 @@ const char* kUploadRetryIntervalFieldTrialName = "DomRel-UploadRetryInterval";
 // Fixed elements of backoff policy
 const double kMultiplyFactor = 2.0;
 const double kJitterFactor = 0.1;
-const int64 kMaximumBackoffMs = 60 * 1000 * 1000;
+const int64_t kMaximumBackoffMs = 60 * 1000 * 1000;
 
 unsigned GetUnsignedFieldTrialValueOrDefault(std::string field_trial_name,
                                              unsigned default_value) {
@@ -178,7 +180,7 @@ scoped_ptr<base::Value> DomainReliabilityScheduler::GetWebUIData() const {
     last->SetInteger("collector_index",
         static_cast<int>(last_upload_collector_index_));
     last->SetBoolean("success", last_upload_success_);
-    data->Set("last_upload", last.Pass());
+    data->Set("last_upload", std::move(last));
   }
 
   scoped_ptr<base::ListValue> collectors_value(new base::ListValue());
@@ -190,9 +192,9 @@ scoped_ptr<base::Value> DomainReliabilityScheduler::GetWebUIData() const {
     // Using release instead of Pass because Pass can't implicitly upcast.
     collectors_value->Append(value.release());
   }
-  data->Set("collectors", collectors_value.Pass());
+  data->Set("collectors", std::move(collectors_value));
 
-  return data.Pass();
+  return std::move(data);
 }
 
 void DomainReliabilityScheduler::MakeDeterministicForTesting() {

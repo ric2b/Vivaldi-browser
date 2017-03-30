@@ -4,12 +4,13 @@
 
 #include "chrome/browser/chromeos/input_method/input_method_manager_impl.h"
 
+#include <stdint.h>
 #include <algorithm>  // std::find
-
 #include <sstream>
+#include <utility>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
+#include "base/hash.h"
 #include "base/location.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram.h"
@@ -22,7 +23,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/input_method/candidate_window_controller.h"
 #include "chrome/browser/chromeos/input_method/component_extension_ime_manager_impl.h"
-#include "chrome/browser/chromeos/input_method/input_method_engine.h"
 #include "chrome/browser/chromeos/input_method/input_method_switch_recorder.h"
 #include "chrome/browser/chromeos/language_preferences.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
@@ -37,6 +37,7 @@
 #include "ui/base/ime/chromeos/fake_ime_keyboard.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/input_method_delegate.h"
+#include "ui/base/ime/ime_bridge.h"
 #include "ui/chromeos/ime/input_method_menu_item.h"
 #include "ui/chromeos/ime/input_method_menu_manager.h"
 #include "ui/keyboard/keyboard_controller.h"
@@ -198,7 +199,7 @@ InputMethodManagerImpl::StateImpl::GetActiveInputMethods() const {
     result->push_back(
         InputMethodUtil::GetFallbackInputMethodDescriptor());
   }
-  return result.Pass();
+  return result;
 }
 
 const std::vector<std::string>&
@@ -444,7 +445,7 @@ bool InputMethodManagerImpl::StateImpl::MethodAwaitsExtensionLoad(
 void InputMethodManagerImpl::StateImpl::AddInputMethodExtension(
     const std::string& extension_id,
     const InputMethodDescriptors& descriptors,
-    InputMethodEngineInterface* engine) {
+    ui::IMEEngineHandlerInterface* engine) {
   if (manager_->ui_session_ == STATE_TERMINATING)
     return;
 
@@ -471,7 +472,7 @@ void InputMethodManagerImpl::StateImpl::AddInputMethodExtension(
   if (IsActive()) {
     if (extension_id == extension_ime_util::GetExtensionIDFromInputMethodID(
                             current_input_method.id())) {
-      IMEBridge::Get()->SetCurrentEngineHandler(engine);
+      ui::IMEBridge::Get()->SetCurrentEngineHandler(engine);
       engine->Enable(extension_ime_util::GetComponentIDByInputMethodID(
           current_input_method.id()));
     }
@@ -506,9 +507,9 @@ void InputMethodManagerImpl::StateImpl::RemoveInputMethodExtension(
   extra_input_methods.swap(new_extra_input_methods);
 
   if (IsActive()) {
-    if (IMEBridge::Get()->GetCurrentEngineHandler() ==
+    if (ui::IMEBridge::Get()->GetCurrentEngineHandler() ==
         manager_->engine_map_[profile][extension_id]) {
-      IMEBridge::Get()->SetCurrentEngineHandler(NULL);
+      ui::IMEBridge::Get()->SetCurrentEngineHandler(NULL);
     }
     manager_->engine_map_[profile].erase(extension_id);
   }
@@ -605,12 +606,13 @@ void InputMethodManagerImpl::StateImpl::SetInputMethodLoginDefaultFromVPD(
   if (layout.empty())
     return;
 
-  std::vector<std::string> layouts;
-  base::SplitString(layout, ',', &layouts);
+  std::vector<std::string> layouts = base::SplitString(
+      layout, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   manager_->MigrateInputMethods(&layouts);
 
   PrefService* prefs = g_browser_process->local_state();
-  prefs->SetString(prefs::kHardwareKeyboardLayout, JoinString(layouts, ","));
+  prefs->SetString(prefs::kHardwareKeyboardLayout,
+                   base::JoinString(layouts, ","));
 
   // This asks the file thread to save the prefs (i.e. doesn't block).
   // The latest values of Local State reside in memory so we can safely
@@ -843,7 +845,7 @@ InputMethodManagerImpl::GetActiveIMEState() {
 InputMethodManagerImpl::InputMethodManagerImpl(
     scoped_ptr<InputMethodDelegate> delegate,
     bool enable_extension_loading)
-    : delegate_(delegate.Pass()),
+    : delegate_(std::move(delegate)),
       ui_session_(STATE_LOGIN_SCREEN),
       state_(NULL),
       util_(delegate_.get()),
@@ -857,29 +859,10 @@ InputMethodManagerImpl::InputMethodManagerImpl(
   // Initializes the system IME list.
   scoped_ptr<ComponentExtensionIMEManagerDelegate> comp_delegate(
       new ComponentExtensionIMEManagerImpl());
-  component_extension_ime_manager_->Initialize(comp_delegate.Pass());
+  component_extension_ime_manager_->Initialize(std::move(comp_delegate));
   const InputMethodDescriptors& descriptors =
       component_extension_ime_manager_->GetAllIMEAsInputMethodDescriptor();
   util_.ResetInputMethods(descriptors);
-
-  // Initializes the stat id map.
-  std::map<int, std::vector<std::string> > buckets;
-  for (InputMethodDescriptors::const_iterator it = descriptors.begin();
-       it != descriptors.end(); ++it) {
-    char first_char;
-    int cat_id = static_cast<int>(
-        GetInputMethodCategory(it->id(), &first_char));
-    int key = cat_id * 1000 + first_char;
-    buckets[key].push_back(it->id());
-  }
-  for (std::map<int, std::vector<std::string>>::iterator i =
-       buckets.begin(); i != buckets.end(); ++i) {
-    std::sort(i->second.begin(), i->second.end());
-    for (size_t j = 0; j < i->second.size() && j < 100; ++j) {
-      int key = i->first * 100 + j;
-      stat_id_map_[i->second[j]] = key;
-    }
-  }
 }
 
 InputMethodManagerImpl::~InputMethodManagerImpl() {
@@ -888,12 +871,12 @@ InputMethodManagerImpl::~InputMethodManagerImpl() {
 }
 
 void InputMethodManagerImpl::RecordInputMethodUsage(
-    std::string input_method_id) {
+    const std::string& input_method_id) {
   UMA_HISTOGRAM_ENUMERATION("InputMethod.Category",
                             GetInputMethodCategory(input_method_id),
                             INPUT_METHOD_CATEGORY_MAX);
-  UMA_HISTOGRAM_SPARSE_SLOWLY("InputMethod.ID",
-                              stat_id_map_[input_method_id]);
+  UMA_HISTOGRAM_SPARSE_SLOWLY(
+      "InputMethod.ID2", static_cast<int32_t>(base::Hash(input_method_id)));
 }
 
 void InputMethodManagerImpl::AddObserver(
@@ -939,7 +922,7 @@ void InputMethodManagerImpl::SetUISessionState(UISessionState new_ui_session) {
 
 scoped_ptr<InputMethodDescriptors>
 InputMethodManagerImpl::GetSupportedInputMethods() const {
-  return scoped_ptr<InputMethodDescriptors>(new InputMethodDescriptors).Pass();
+  return scoped_ptr<InputMethodDescriptors>(new InputMethodDescriptors);
 }
 
 const InputMethodDescriptor* InputMethodManagerImpl::LookupInputMethod(
@@ -991,7 +974,7 @@ void InputMethodManagerImpl::ChangeInputMethodInternal(
 
   if (notify_menu) {
     // Clear property list.  Property list would be updated by
-    // extension IMEs via InputMethodEngine::(Set|Update)MenuItems.
+    // extension IMEs via IMEEngineHandlerInterface::(Set|Update)MenuItems.
     // If the current input method is a keyboard layout, empty
     // properties are sufficient.
     const ui::ime::InputMethodMenuItemList empty_menu_item_list;
@@ -1002,8 +985,8 @@ void InputMethodManagerImpl::ChangeInputMethodInternal(
   }
 
   // Disable the current engine handler.
-  IMEEngineHandlerInterface* engine =
-      IMEBridge::Get()->GetCurrentEngineHandler();
+  ui::IMEEngineHandlerInterface* engine =
+      ui::IMEBridge::Get()->GetCurrentEngineHandler();
   if (engine)
     engine->Disable();
 
@@ -1016,7 +999,7 @@ void InputMethodManagerImpl::ChangeInputMethodInternal(
       extension_ime_util::GetComponentIDByInputMethodID(descriptor.id());
   engine = engine_map_[profile][extension_id];
 
-  IMEBridge::Get()->SetCurrentEngineHandler(engine);
+  ui::IMEBridge::Get()->SetCurrentEngineHandler(engine);
 
   if (engine) {
     engine->Enable(component_id);
@@ -1074,8 +1057,8 @@ void InputMethodManagerImpl::ActivateInputMethodMenuItem(
 
   if (ui::ime::InputMethodMenuManager::GetInstance()->
       HasInputMethodMenuItemForKey(key)) {
-    IMEEngineHandlerInterface* engine =
-        IMEBridge::Get()->GetCurrentEngineHandler();
+    ui::IMEEngineHandlerInterface* engine =
+        ui::IMEBridge::Get()->GetCurrentEngineHandler();
     if (engine)
       engine->PropertyActivate(key);
     return;
@@ -1109,10 +1092,18 @@ scoped_refptr<InputMethodManager::State> InputMethodManagerImpl::CreateNewState(
     Profile* profile) {
   StateImpl* new_state = new StateImpl(this, profile);
 
-  // Active IM should be set to owner's default.
+  // Active IM should be set to owner/user's default.
   PrefService* prefs = g_browser_process->local_state();
-  const std::string initial_input_method_id =
-      prefs->GetString(chromeos::language_prefs::kPreferredKeyboardLayout);
+  PrefService* user_prefs = profile ? profile->GetPrefs() : nullptr;
+  std::string initial_input_method_id;
+  if (user_prefs) {
+    initial_input_method_id =
+        user_prefs->GetString(prefs::kLanguageCurrentInputMethod);
+  }
+  if (initial_input_method_id.empty()) {
+    initial_input_method_id =
+        prefs->GetString(chromeos::language_prefs::kPreferredKeyboardLayout);
+  }
 
   const InputMethodDescriptor* descriptor =
       GetInputMethodUtil()->GetInputMethodDescriptorFromId(
@@ -1138,14 +1129,14 @@ void InputMethodManagerImpl::SetImeKeyboardForTesting(ImeKeyboard* keyboard) {
 
 void InputMethodManagerImpl::InitializeComponentExtensionForTesting(
     scoped_ptr<ComponentExtensionIMEManagerDelegate> delegate) {
-  component_extension_ime_manager_->Initialize(delegate.Pass());
+  component_extension_ime_manager_->Initialize(std::move(delegate));
   util_.ResetInputMethods(
       component_extension_ime_manager_->GetAllIMEAsInputMethodDescriptor());
 }
 
 void InputMethodManagerImpl::CandidateClicked(int index) {
-  IMEEngineHandlerInterface* engine =
-      IMEBridge::Get()->GetCurrentEngineHandler();
+  ui::IMEEngineHandlerInterface* engine =
+      ui::IMEBridge::Get()->GetCurrentEngineHandler();
   if (engine)
     engine->CandidateClicked(index);
 }

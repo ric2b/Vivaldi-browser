@@ -678,6 +678,14 @@ class TCMallocImplementation : public MallocExtension {
       return true;
     }
 
+    if (strcmp(name, "generic.total_physical_bytes") == 0) {
+      TCMallocStats stats;
+      ExtractStats(&stats, NULL, NULL, NULL);
+      *value = stats.pageheap.system_bytes + stats.metadata_bytes -
+               stats.pageheap.unmapped_bytes - stats.metadata_unmapped_bytes;
+      return true;
+    }
+
     if (strcmp(name, "tcmalloc.slack_bytes") == 0) {
       // Kept for backwards compatibility.  Now defined externally as:
       //    pageheap_free_bytes + pageheap_unmapped_bytes.
@@ -1382,7 +1390,13 @@ inline void do_malloc_stats() {
 }
 
 inline int do_mallopt(int cmd, int value) {
-  return 1;     // Indicates error
+  if (cmd == TC_MALLOPT_IS_OVERRIDDEN_BY_TCMALLOC)
+    return TC_MALLOPT_IS_OVERRIDDEN_BY_TCMALLOC;
+
+  // 1 is the success return value according to man mallopt(). However (see the
+  // BUGS section in the manpage), most implementations return always 1.
+  // This code is just complying with that (buggy) expectation.
+  return 1;
 }
 
 #ifdef HAVE_STRUCT_MALLINFO

@@ -166,7 +166,7 @@ cr.define('print_preview', function() {
      * @private
      */
     this.fitToPage_ = new print_preview.ticket_items.FitToPage(
-        this.documentInfo_, this.destinationStore_);
+        this.appState_, this.documentInfo_, this.destinationStore_);
 
     /**
      * Print CSS backgrounds ticket item.
@@ -183,6 +183,14 @@ cr.define('print_preview', function() {
      */
     this.selectionOnly_ =
         new print_preview.ticket_items.SelectionOnly(this.documentInfo_);
+
+    /**
+     * Print friendly ticket item.
+     * @type {!print_preview.ticket_items.DistillPage}
+     * @private
+     */
+    this.distillPage_ = new print_preview.ticket_items.DistillPage(
+        this.documentInfo_);
 
     /**
      * Vendor ticket items.
@@ -265,6 +273,10 @@ cr.define('print_preview', function() {
 
     get headerFooter() {
       return this.headerFooter_;
+    },
+
+    get distillPage() {
+      return this.distillPage_;
     },
 
     get mediaSize() {
@@ -366,6 +378,12 @@ cr.define('print_preview', function() {
         this.collate_.updateValue(
             /** @type {!Object} */(this.appState_.getField(
             print_preview.AppState.Field.IS_COLLATE_ENABLED)));
+      }
+      if (this.appState_.hasField(
+          print_preview.AppState.Field.IS_FIT_TO_PAGE_ENABLED)) {
+        this.fitToPage_.updateValue(
+            /** @type {!Object} */(this.appState_.getField(
+            print_preview.AppState.Field.IS_FIT_TO_PAGE_ENABLED)));
       }
       if (this.appState_.hasField(
           print_preview.AppState.Field.IS_CSS_BACKGROUND_ENABLED)) {

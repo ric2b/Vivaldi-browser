@@ -36,6 +36,8 @@ URLRequestRedirectJob::URLRequestRedirectJob(URLRequest* request,
   DCHECK(!redirect_reason_.empty());
 }
 
+URLRequestRedirectJob::~URLRequestRedirectJob() {}
+
 void URLRequestRedirectJob::GetResponseInfo(HttpResponseInfo* info) {
   // Should only be called after the URLRequest has been notified there's header
   // information.
@@ -65,6 +67,11 @@ void URLRequestRedirectJob::Start() {
                             weak_factory_.GetWeakPtr()));
 }
 
+void URLRequestRedirectJob::Kill() {
+  weak_factory_.InvalidateWeakPtrs();
+  URLRequestJob::Kill();
+}
+
 bool URLRequestRedirectJob::CopyFragmentOnRedirect(const GURL& location) const {
   // The instantiators have full control over the desired redirection target,
   // including the reference fragment part of the URL.
@@ -78,9 +85,10 @@ int URLRequestRedirectJob::GetResponseCode() const {
   return response_code_;
 }
 
-URLRequestRedirectJob::~URLRequestRedirectJob() {}
-
 void URLRequestRedirectJob::StartAsync() {
+  DCHECK(request_);
+  DCHECK(request_->status().is_success());
+
   receive_headers_end_ = base::TimeTicks::Now();
   response_time_ = base::Time::Now();
 

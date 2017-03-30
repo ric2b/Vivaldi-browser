@@ -5,8 +5,10 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/threading/platform_thread.h"
+#include "build/build_config.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/webrtc_ip_handling_policy.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/test_utils.h"
@@ -24,20 +26,24 @@ namespace content {
 #define MAYBE_WebRtcBrowserTest WebRtcBrowserTest
 #endif
 
+// This class tests the scenario when permission to access mic or camera is
+// granted.
 class MAYBE_WebRtcBrowserTest : public WebRtcContentBrowserTest {
  public:
   MAYBE_WebRtcBrowserTest() {}
   ~MAYBE_WebRtcBrowserTest() override {}
 
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    WebRtcContentBrowserTest::SetUpCommandLine(command_line);
+    // Automatically grant device permission.
+    AppendUseFakeUIForMediaStreamFlag();
+  }
+
+ protected:
   // Convenience function since most peerconnection-call.html tests just load
   // the page, kick off some javascript and wait for the title to change to OK.
   void MakeTypicalPeerConnectionCall(const std::string& javascript) {
-    ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
-
-    GURL url(embedded_test_server()->GetURL("/media/peerconnection-call.html"));
-    NavigateToURL(shell(), url);
-
-    ExecuteJavascriptAndWaitForOk(javascript);
+    MakeTypicalCall(javascript, "/media/peerconnection-call.html");
   }
 
   // Convenience method for making calls that detect if audio os playing (which
@@ -108,7 +114,16 @@ IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest,
   MakeTypicalPeerConnectionCall("call({video: true, audio: true});");
 }
 
-IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest, CanSetupCallAndSendDtmf) {
+
+#if defined(OS_WIN) && !defined(NVALGRIND)
+// Times out on Dr. Memory bots: https://crbug.com/545740
+#define MAYBE_CanSetupCallAndSendDtmf DISABLED_CanSetupCallAndSendDtmf
+#else
+#define MAYBE_CanSetupCallAndSendDtmf CanSetupCallAndSendDtmf
+#endif
+
+IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest,
+                       MAYBE_CanSetupCallAndSendDtmf) {
   MakeTypicalPeerConnectionCall("callAndSendDtmf(\'123,abc\');");
 }
 
@@ -136,8 +151,8 @@ IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest,
 
 // This test makes a call between pc1 and pc2 where a video only stream is sent
 // from pc1 to pc2. The stream sent from pc1 to pc2 is cloned from the stream
-// received on pc2 to test that cloning of remote video tracks works as
-// intended and is sent back to pc1.
+// received on pc2 to test that cloning of remote video and audio tracks works
+// as intended and is sent back to pc1.
 IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest, CanForwardRemoteStream) {
 #if defined (OS_ANDROID)
   // This test fails on Nexus 5 devices.
@@ -147,7 +162,7 @@ IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest, CanForwardRemoteStream) {
       switches::kDisableWebRtcHWDecoding);
 #endif
   MakeTypicalPeerConnectionCall(
-      "callAndForwardRemoteStream({video: true, audio: false});");
+      "callAndForwardRemoteStream({video: true, audio: true});");
 }
 
 IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest,

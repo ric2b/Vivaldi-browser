@@ -6,20 +6,48 @@
 
 #include "media/base/win/mf_util.h"
 
+#include <map>
+
+#include "base/features/features.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/win/windows_version.h"
 
 namespace media {
 
 namespace {
 
-bool LoadMFLibrary(const char* library_name) {
+// Used in UMA histograms.  Don't remove or reorder values!
+enum MFStatus {
+  MF_NOT_SUPPORTED = 0,
+  MF_PLAT_AVAILABLE = 1,
+  MF_PLAT_NOT_AVAILABLE = 2,
+  MF_VIDEO_DECODER_AVAILABLE = 3,
+  MF_VIDEO_DECODER_NOT_AVAILABLE = 4,
+  MF_AAC_DECODER_AVAILABLE = 5,
+  MF_AAC_DECODER_NOT_AVAILABLE = 6,
+  MF_STATUS_COUNT
+};
+
+void ReportMFStatus(MFStatus status) {
+  UMA_HISTOGRAM_ENUMERATION("Opera.DSK.Media.MFStatus", status,
+                            MF_STATUS_COUNT);
+}
+
+bool CheckOSVersion() {
   if (base::win::GetVersion() < base::win::VERSION_VISTA) {
-    DLOG(WARNING) << "We don't support " << library_name
-                  << " on this Windows version";
+    DLOG(WARNING)
+        << "We don't support proprietary media codecs in this Windows version";
     return false;
   }
+
+  return true;
+}
+
+bool LoadMFLibrary(const char* library_name) {
+  if (!CheckOSVersion())
+    return false;
 
   if (::GetModuleHandleA(library_name) == NULL &&
       ::LoadLibraryA(library_name) == NULL) {
@@ -35,25 +63,56 @@ bool LoadMFLibrary(const char* library_name) {
 // threads in a safe manner.
 class PrimaryLoader {
  public:
-  PrimaryLoader()
-      : media_foundation_available_(LoadMFLibrary("mfplat.dll")),
-        audio_decoder_available_(
-            LoadMFLibrary(GetMFAudioDecoderLibraryName().c_str())),
-        video_decoder_available_(
-            LoadMFLibrary(GetMFVideoDecoderLibraryName().c_str()) &&
-            LoadMFLibrary("evr.dll")) {}
+  PrimaryLoader();
 
   bool is_media_foundation_available() const {
     return media_foundation_available_;
   }
-  bool is_audio_decoder_available() const { return audio_decoder_available_; }
+  bool is_audio_decoder_available(AudioCodec codec) const {
+    DCHECK_EQ(1u, audio_decoder_available_.count(codec));
+    return audio_decoder_available_.find(codec)->second;
+  }
   bool is_video_decoder_available() const { return video_decoder_available_; }
 
  private:
+  void ReportLoadResults();
+
   bool media_foundation_available_;
-  bool audio_decoder_available_;
+  std::map<AudioCodec, bool> audio_decoder_available_;
   bool video_decoder_available_;
 };
+
+PrimaryLoader::PrimaryLoader()
+    : media_foundation_available_(LoadMFLibrary("mfplat.dll")),
+      video_decoder_available_(
+          LoadMFLibrary(GetMFVideoDecoderLibraryName().c_str()) &&
+          LoadMFLibrary("evr.dll")) {
+  audio_decoder_available_[kCodecMP3] =
+      base::IsFeatureEnabled(base::kFeatureMseAudioMpegAac)
+          ? LoadMFLibrary(GetMFAudioDecoderLibraryName(kCodecMP3).c_str())
+          : false;
+  audio_decoder_available_[kCodecAAC] =
+      LoadMFLibrary(GetMFAudioDecoderLibraryName(kCodecAAC).c_str());
+
+  ReportLoadResults();
+}
+
+void PrimaryLoader::ReportLoadResults() {
+  if (!CheckOSVersion()) {
+    ReportMFStatus(MF_NOT_SUPPORTED);
+    return;
+  }
+
+  ReportMFStatus(media_foundation_available_ ? MF_PLAT_AVAILABLE
+                                             : MF_PLAT_NOT_AVAILABLE);
+  ReportMFStatus(video_decoder_available_ ? MF_VIDEO_DECODER_AVAILABLE
+                                          : MF_VIDEO_DECODER_NOT_AVAILABLE);
+  // TODO(wdzierzanowski): Start reporting MP3 decoder status once the feature
+  // is stable.
+  ReportMFStatus(audio_decoder_available_[kCodecAAC]
+                     ? MF_AAC_DECODER_AVAILABLE
+                     : MF_AAC_DECODER_NOT_AVAILABLE);
+}
 
 class SecondaryLoader {
  public:
@@ -85,15 +144,22 @@ bool LoadMFSourceReaderLibraries() {
   return g_secondary_loader.Get().is_source_reader_available();
 }
 
-bool LoadMFAudioDecoderLibraries() {
-  return g_primary_loader.Get().is_audio_decoder_available();
+void LoadMFAudioDecoderLibraries() {
+  g_primary_loader.Get();
+}
+
+bool LoadMFAudioDecoderLibrary(AudioCodec codec) {
+  return g_primary_loader.Get().is_audio_decoder_available(codec);
 }
 
 bool LoadMFVideoDecoderLibraries() {
   return g_primary_loader.Get().is_video_decoder_available();
 }
 
-std::string GetMFAudioDecoderLibraryName() {
+std::string GetMFAudioDecoderLibraryName(AudioCodec codec) {
+  if (codec == kCodecMP3)
+    return "mp3dmod.dll";
+
   std::string name;
   const base::win::Version version = base::win::GetVersion();
   if (version >= base::win::VERSION_WIN8)

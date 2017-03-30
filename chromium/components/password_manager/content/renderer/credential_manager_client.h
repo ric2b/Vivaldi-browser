@@ -5,9 +5,9 @@
 #ifndef COMPONENTS_PASSWORD_MANAGER_CONTENT_RENDERER_CREDENTIAL_MANAGER_CLIENT_H_
 #define COMPONENTS_PASSWORD_MANAGER_CONTENT_RENDERER_CREDENTIAL_MANAGER_CLIENT_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/id_map.h"
+#include "base/macros.h"
 #include "content/public/renderer/render_view_observer.h"
 #include "ipc/ipc_listener.h"
 #include "third_party/WebKit/public/platform/WebCredentialManagerClient.h"
@@ -54,23 +54,22 @@ class CredentialManagerClient : public blink::WebCredentialManagerClient,
   bool OnMessageReceived(const IPC::Message& message) override;
 
   // Message handlers for messages from the browser process:
-  virtual void OnAcknowledgeSignedIn(int request_id);
+  virtual void OnAcknowledgeStore(int request_id);
   virtual void OnAcknowledgeRequireUserMediation(int request_id);
   virtual void OnSendCredential(int request_id,
                                 const CredentialInfo& credential_info);
   virtual void OnRejectCredentialRequest(
       int request_id,
-      blink::WebCredentialManagerError::ErrorType error_type);
+      blink::WebCredentialManagerError error);
 
   // blink::WebCredentialManager:
-  virtual void dispatchSignedIn(
+  void dispatchStore(
       const blink::WebCredential& credential,
-      WebCredentialManagerClient::NotificationCallbacks* callbacks);
-  virtual void dispatchRequireUserMediation(NotificationCallbacks* callbacks);
-  virtual void dispatchRequest(
-      bool zero_click_only,
-      const blink::WebVector<blink::WebURL>& federations,
-      RequestCallbacks* callbacks);
+      WebCredentialManagerClient::NotificationCallbacks* callbacks) override;
+  void dispatchRequireUserMediation(NotificationCallbacks* callbacks) override;
+  void dispatchGet(bool zero_click_only,
+                   const blink::WebVector<blink::WebURL>& federations,
+                   RequestCallbacks* callbacks) override;
 
  private:
   typedef IDMap<blink::WebCredentialManagerClient::RequestCallbacks,
@@ -84,9 +83,9 @@ class CredentialManagerClient : public blink::WebCredentialManagerClient,
   // Track the various blink::WebCredentialManagerClient::*Callbacks objects
   // generated from Blink. This class takes ownership of these objects.
   NotificationCallbacksMap failed_sign_in_callbacks_;
-  NotificationCallbacksMap signed_in_callbacks_;
+  NotificationCallbacksMap store_callbacks_;
   NotificationCallbacksMap require_user_mediation_callbacks_;
-  RequestCallbacksMap request_callbacks_;
+  RequestCallbacksMap get_callbacks_;
 
   DISALLOW_COPY_AND_ASSIGN(CredentialManagerClient);
 };

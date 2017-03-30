@@ -4,6 +4,7 @@
 
 #include "apps/app_load_service.h"
 
+#include "app/vivaldi_apptools.h"
 #include "apps/app_load_service_factory.h"
 #include "apps/app_restore_service.h"
 #include "apps/launcher.h"
@@ -21,6 +22,8 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/notification_types.h"
 #include "extensions/common/extension.h"
+
+#include "extensions/tools/vivaldi_tools.h"
 
 using extensions::Extension;
 using extensions::ExtensionPrefs;
@@ -134,9 +137,7 @@ void AppLoadService::OnExtensionUnloaded(
   if (!extension->is_platform_app())
     return;
 #if defined(VIVALDI_BUILD)
-  const std::string vivaldi_ext_id = "mpognobbkildjkofajifpdfhcoklimli";
-
-  if (extension->id() == vivaldi_ext_id) {
+  if (vivaldi::IsVivaldiApp(extension->id())) {
     static int attempts = 5;  // avoid endless restart loop
     if (reason == extensions::UnloadedExtensionInfo::REASON_TERMINATE &&
         attempts > 0) {

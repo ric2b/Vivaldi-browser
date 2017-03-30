@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "extensions/browser/extension_registry_observer.h"
 #include "extensions/browser/uninstall_reason.h"
@@ -65,7 +66,6 @@ class TestObserver : public ExtensionRegistryObserver {
   void OnExtensionWillBeInstalled(content::BrowserContext* browser_context,
                                   const Extension* extension,
                                   bool is_update,
-                                  bool from_ephemeral,
                                   const std::string& old_name) override {
     installed_.push_back(extension);
   }
@@ -246,14 +246,13 @@ TEST_F(ExtensionRegistryTest, Observer) {
   scoped_refptr<const Extension> extension =
       test_util::CreateEmptyExtension("id");
 
-  registry.TriggerOnWillBeInstalled(extension.get(), false, false,
-                                    std::string());
+  registry.TriggerOnWillBeInstalled(extension.get(), false, std::string());
   EXPECT_TRUE(HasSingleExtension(observer.installed(), extension.get()));
 
   registry.AddEnabled(extension);
   registry.TriggerOnLoaded(extension.get());
 
-  registry.TriggerOnWillBeInstalled(extension.get(), true, false, "foo");
+  registry.TriggerOnWillBeInstalled(extension.get(), true, "foo");
 
   EXPECT_TRUE(HasSingleExtension(observer.loaded(), extension.get()));
   EXPECT_TRUE(observer.unloaded().empty());

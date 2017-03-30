@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <iostream>
 #include <map>
 #include <string>
@@ -9,6 +11,7 @@
 
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/values.h"
 #include "chrome/browser/supervised_user/supervised_user_bookmarks_handler.h"
@@ -152,10 +155,11 @@ const char BOOKMARKS_TREE_INVALID_PARENTS_JSON[] =
 
 // Builds the base::Values tree from a json string above.
 scoped_ptr<base::ListValue> CreateTree(const char* json) {
-  base::Value* value = base::JSONReader::DeprecatedRead(json);
-  EXPECT_NE(value, nullptr);
+  scoped_ptr<base::Value> value = base::JSONReader::Read(json);
+  EXPECT_NE(value.get(), nullptr);
   base::ListValue* list;
   EXPECT_TRUE(value->GetAsList(&list));
+  ignore_result(value.release());
   return make_scoped_ptr(list);
 }
 

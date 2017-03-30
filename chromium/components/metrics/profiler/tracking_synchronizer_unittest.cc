@@ -2,12 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "components/metrics/profiler/tracking_synchronizer.h"
+
+#include <utility>
+
+#include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/tracked_objects.h"
-#include "components/metrics/profiler/tracking_synchronizer.h"
+#include "components/metrics/profiler/tracking_synchronizer_delegate.h"
 #include "components/metrics/profiler/tracking_synchronizer_observer.h"
-#include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using tracked_objects::ProcessDataPhaseSnapshot;
@@ -16,6 +21,24 @@ using tracked_objects::TaskSnapshot;
 namespace metrics {
 
 namespace {
+
+class TestDelegate : public TrackingSynchronizerDelegate {
+ public:
+  ~TestDelegate() override {}
+
+  static scoped_ptr<TrackingSynchronizerDelegate> Create(
+      TrackingSynchronizer* synchronizer) {
+    return make_scoped_ptr(new TestDelegate());
+  }
+
+ private:
+  TestDelegate() {}
+
+  // TrackingSynchronizerDelegate:
+  void GetProfilerDataForChildProcesses(int sequence_number,
+                                        int current_profiling_phase) override {}
+  void OnProfilingPhaseCompleted(int profiling_phase) override {}
+};
 
 class TestObserver : public TrackingSynchronizerObserver {
  public:
@@ -31,7 +54,7 @@ class TestObserver : public TrackingSynchronizerObserver {
       const tracked_objects::ProcessDataPhaseSnapshot& process_data_phase,
       const ProfilerEvents& past_events) override {
     EXPECT_EQ(static_cast<base::ProcessId>(239), attributes.process_id);
-    EXPECT_EQ(content::ProcessType::PROCESS_TYPE_PLUGIN,
+    EXPECT_EQ(ProfilerEventProto::TrackedObject::PLUGIN,
               attributes.process_type);
     ASSERT_EQ(1u, process_data_phase.tasks.size());
 
@@ -82,7 +105,8 @@ class TestObserver : public TrackingSynchronizerObserver {
 class TestTrackingSynchronizer : public TrackingSynchronizer {
  public:
   explicit TestTrackingSynchronizer(scoped_ptr<base::TickClock> clock)
-      : TrackingSynchronizer(clock.Pass()) {}
+      : TrackingSynchronizer(std::move(clock),
+                             base::Bind(&TestDelegate::Create)) {}
 
   using TrackingSynchronizer::RegisterPhaseCompletion;
   using TrackingSynchronizer::SendData;
@@ -95,10 +119,6 @@ class TestTrackingSynchronizer : public TrackingSynchronizer {
 
 TEST(TrackingSynchronizerTest, ProfilerData) {
   // Testing how TrackingSynchronizer reports 2 phases of profiling.
-#if !defined(OS_IOS)
-  content::TestBrowserThreadBundle thread_bundle;
-#endif
-
   auto clock = new base::SimpleTestTickClock();  // Will be owned by
                                                  // |tracking_synchronizer|.
   clock->Advance(base::TimeDelta::FromMilliseconds(111));
@@ -127,7 +147,7 @@ TEST(TrackingSynchronizerTest, ProfilerData) {
   clock->Advance(base::TimeDelta::FromMilliseconds(444));
   TestObserver test_observer;
   tracking_synchronizer->SendData(
-      profiler_data, content::ProcessType::PROCESS_TYPE_PLUGIN, &test_observer);
+      profiler_data, ProfilerEventProto::TrackedObject::PLUGIN, &test_observer);
 }
 
 }  // namespace metrics

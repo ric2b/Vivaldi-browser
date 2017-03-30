@@ -9,12 +9,17 @@
 #include <set>
 #include <string>
 
+#include "base/macros.h"
 #include "base/observer_list.h"
-#include "base/prefs/pref_value_map.h"
-#include "base/time/time.h"
-#include "base/values.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "extensions/browser/extension_prefs_scope.h"
+
+class PrefValueMap;
+
+namespace base {
+class Time;
+class Value;
+}
 
 // Non-persistent data container that is shared by ExtensionPrefStores. All
 // extension pref values (incognito and regular) are stored herein and
@@ -158,7 +163,7 @@ class ExtensionPrefValueMap : public KeyedService {
  private:
   struct ExtensionEntry;
 
-  typedef std::map<std::string, ExtensionEntry*> ExtensionEntryMap;
+  typedef std::map<std::string, scoped_ptr<ExtensionEntry>> ExtensionEntryMap;
 
   const PrefValueMap* GetExtensionPrefValueMap(
       const std::string& ext_id,

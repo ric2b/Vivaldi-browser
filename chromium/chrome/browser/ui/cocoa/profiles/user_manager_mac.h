@@ -8,10 +8,12 @@
 #import <Cocoa/Cocoa.h>
 
 #include "base/mac/scoped_nsobject.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_window.h"
 
+@class ReauthDialogWindowController;
 @class UserManagerWindowController;
 
 namespace content {
@@ -45,12 +47,18 @@ class UserManagerMac {
 
   void LogTimeToOpen();
 
+  void ShowReauthDialog(content::BrowserContext* browser_context,
+                        const std::string& email);
+  void CloseReauthDialog();
+
  private:
   explicit UserManagerMac(Profile* profile);
   virtual ~UserManagerMac();
 
   // Controller of the window.
   base::scoped_nsobject<UserManagerWindowController> window_controller_;
+
+  base::scoped_nsobject<ReauthDialogWindowController> reauth_window_;
 
   base::Time user_manager_started_showing_;
 

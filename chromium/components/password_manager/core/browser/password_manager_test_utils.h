@@ -8,17 +8,29 @@
 #include <iosfwd>
 #include <vector>
 
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ref_counted.h"
 #include "components/autofill/core/common/password_form.h"
+#include "components/password_manager/core/browser/password_store.h"
 #include "testing/gmock/include/gmock/gmock.h"
-
-// TODO(sync): This file must eventually be refactored away -- crbug.com/87185.
 
 namespace password_manager {
 
+// This template allows creating methods with signature conforming to
+// TestingFactoryFunction of the appropriate platform instance of
+// KeyedServiceFactory. Context is the browser context prescribed by
+// TestingFactoryFunction. Store is the PasswordStore version needed in the
+// tests which use this method.
+template <class Context, class Store>
+scoped_refptr<RefcountedKeyedService> BuildPasswordStore(Context* context) {
+  scoped_refptr<password_manager::PasswordStore> store(new Store);
+  if (!store->Init(syncer::SyncableService::StartSyncFlare()))
+    return nullptr;
+  return store;
+}
+
 // These constants are used by CreatePasswordFormFromDataForTesting to supply
 // values not covered by PasswordFormData.
-extern const char kTestingAvatarUrlSpec[];
+extern const char kTestingIconUrlSpec[];
 extern const char kTestingFederationUrlSpec[];
 extern const int kTestingDaysAfterPasswordsAreSynced;
 
@@ -60,6 +72,14 @@ MATCHER_P(UnorderedPasswordFormElementsAre, expectations, "") {
   return ContainsEqualPasswordFormsUnordered(expectations, arg,
                                              result_listener->stream());
 }
+
+class MockPasswordStoreObserver : public PasswordStore::Observer {
+ public:
+  MockPasswordStoreObserver();
+  ~MockPasswordStoreObserver() override;
+
+  MOCK_METHOD1(OnLoginsChanged, void(const PasswordStoreChangeList& changes));
+};
 
 }  // namespace password_manager
 

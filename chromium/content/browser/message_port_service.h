@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/strings/string16.h"
 #include "content/common/content_export.h"
@@ -76,7 +76,7 @@ class CONTENT_EXPORT MessagePortService {
   void SendQueuedMessagesIfPossible(int message_port_id);
 
  private:
-  friend struct DefaultSingletonTraits<MessagePortService>;
+  friend struct base::DefaultSingletonTraits<MessagePortService>;
 
   MessagePortService();
   ~MessagePortService();

@@ -6,10 +6,12 @@
 #define CHROME_BROWSER_CHROMEOS_LOGIN_UI_SIMPLE_WEB_VIEW_DIALOG_H_
 
 #include <string>
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/command_updater_delegate.h"
 #include "chrome/browser/ui/toolbar/toolbar_model_delegate.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
+#include "components/security_state/security_state_model.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "ui/views/controls/button/image_button.h"
@@ -75,7 +77,6 @@ class SimpleWebViewDialog : public views::ButtonListener,
   content::WebContents* GetWebContents() override;
   ToolbarModel* GetToolbarModel() override;
   const ToolbarModel* GetToolbarModel() const override;
-  InstantController* GetInstant() override;
   views::Widget* CreateViewsBubble(
       views::BubbleDelegateView* bubble_delegate) override;
   PageActionImageView* CreatePageActionImageView(
@@ -83,9 +84,11 @@ class SimpleWebViewDialog : public views::ButtonListener,
       ExtensionAction* action) override;
   ContentSettingBubbleModelDelegate* GetContentSettingBubbleModelDelegate()
       override;
-  void ShowWebsiteSettings(content::WebContents* web_contents,
-                           const GURL& url,
-                           const content::SSLStatus& ssl) override;
+  void ShowWebsiteSettings(
+      content::WebContents* web_contents,
+      const GURL& url,
+      const security_state::SecurityStateModel::SecurityInfo& security_info)
+      override;
 
   // Implements ToolbarModelDelegate:
   content::WebContents* GetActiveWebContents() const override;

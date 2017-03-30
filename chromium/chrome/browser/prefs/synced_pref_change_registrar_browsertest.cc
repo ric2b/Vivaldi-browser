@@ -8,12 +8,13 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "chrome/browser/prefs/synced_pref_change_registrar.h"
+#include "chrome/browser/prefs/pref_service_syncable_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "chrome/test/base/testing_pref_service_syncable.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/syncable_prefs/synced_pref_change_registrar.h"
+#include "components/syncable_prefs/testing_pref_service_syncable.h"
 #include "content/public/test/test_utils.h"
 #include "sync/api/attachments/attachment_id.h"
 #include "sync/api/fake_sync_change_processor.h"
@@ -28,6 +29,7 @@
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "components/policy/core/common/policy_map.h"
+#include "components/policy/core/common/policy_types.h"
 #include "policy/policy_constants.h"
 #endif
 
@@ -84,11 +86,11 @@ class SyncedPrefChangeRegistrarTest : public InProcessBrowserTest {
     return prefs_->GetBoolean(name.c_str());
   }
 
-  PrefServiceSyncable* prefs() const {
+  syncable_prefs::PrefServiceSyncable* prefs() const {
     return prefs_;
   }
 
-  SyncedPrefChangeRegistrar* registrar() const {
+  syncable_prefs::SyncedPrefChangeRegistrar* registrar() const {
     return registrar_.get();
   }
 
@@ -103,7 +105,7 @@ class SyncedPrefChangeRegistrarTest : public InProcessBrowserTest {
 #endif
 
   void SetUpOnMainThread() override {
-    prefs_ = PrefServiceSyncable::FromProfile(browser()->profile());
+    prefs_ = PrefServiceSyncableFromProfile(browser()->profile());
     syncer_ = prefs_->GetSyncableService(syncer::PREFERENCES);
     syncer_->MergeDataAndStartSyncing(
         syncer::PREFERENCES,
@@ -111,16 +113,16 @@ class SyncedPrefChangeRegistrarTest : public InProcessBrowserTest {
         scoped_ptr<syncer::SyncChangeProcessor>(
             new syncer::FakeSyncChangeProcessor),
         scoped_ptr<syncer::SyncErrorFactory>(new syncer::SyncErrorFactoryMock));
-    registrar_.reset(new SyncedPrefChangeRegistrar(prefs_));
+    registrar_.reset(new syncable_prefs::SyncedPrefChangeRegistrar(prefs_));
   }
 
   void TearDownOnMainThread() override { registrar_.reset(); }
 
-  PrefServiceSyncable* prefs_;
+  syncable_prefs::PrefServiceSyncable* prefs_;
   syncer::SyncableService* syncer_;
   int next_sync_data_id_;
 
-  scoped_ptr<SyncedPrefChangeRegistrar> registrar_;
+  scoped_ptr<syncable_prefs::SyncedPrefChangeRegistrar> registrar_;
 #if defined(ENABLE_CONFIGURATION_POLICY)
   policy::MockConfigurationPolicyProvider policy_provider_;
 #endif
@@ -190,6 +192,7 @@ IN_PROC_BROWSER_TEST_F(SyncedPrefChangeRegistrarTest,
   policies.Set(policy::key::kShowHomeButton,
                policy::POLICY_LEVEL_MANDATORY,
                policy::POLICY_SCOPE_USER,
+               policy::POLICY_SOURCE_CLOUD,
                new base::FundamentalValue(true),
                NULL);
   UpdateChromePolicy(policies);
@@ -211,6 +214,7 @@ IN_PROC_BROWSER_TEST_F(SyncedPrefChangeRegistrarTest,
   policies.Set(policy::key::kShowHomeButton,
                policy::POLICY_LEVEL_MANDATORY,
                policy::POLICY_SCOPE_USER,
+               policy::POLICY_SOURCE_CLOUD,
                new base::FundamentalValue(true),
                NULL);
   UpdateChromePolicy(policies);

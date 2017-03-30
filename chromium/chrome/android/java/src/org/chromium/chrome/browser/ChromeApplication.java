@@ -25,27 +25,29 @@ import org.chromium.base.ApplicationState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ApplicationStatus.ApplicationStateListener;
 import org.chromium.base.BuildInfo;
-import org.chromium.base.CalledByNative;
+import org.chromium.base.CommandLineInitUtil;
 import org.chromium.base.PathUtils;
 import org.chromium.base.ResourceExtractor;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.SuppressFBWarnings;
-import org.chromium.base.library_loader.LibraryLoader;
-import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.accessibility.FontSizePrefs;
 import org.chromium.chrome.browser.banners.AppBannerManager;
 import org.chromium.chrome.browser.banners.AppDetailsDelegate;
+import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
+import org.chromium.chrome.browser.datausage.ExternalDataUseObserver;
 import org.chromium.chrome.browser.document.DocumentActivity;
 import org.chromium.chrome.browser.document.IncognitoDocumentActivity;
 import org.chromium.chrome.browser.download.DownloadManagerService;
 import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
 import org.chromium.chrome.browser.feedback.EmptyFeedbackReporter;
 import org.chromium.chrome.browser.feedback.FeedbackReporter;
+import org.chromium.chrome.browser.firstrun.ForcedSigninProcessor;
 import org.chromium.chrome.browser.gsa.GSAHelper;
 import org.chromium.chrome.browser.help.HelpAndFeedback;
 import org.chromium.chrome.browser.identity.UniqueIdentificationGeneratorFactory;
@@ -55,14 +57,13 @@ import org.chromium.chrome.browser.invalidation.UniqueIdInvalidationClientNameGe
 import org.chromium.chrome.browser.metrics.UmaUtils;
 import org.chromium.chrome.browser.metrics.VariationsSession;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
+import org.chromium.chrome.browser.net.qualityprovider.ExternalEstimateProviderAndroid;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
+import org.chromium.chrome.browser.notifications.NotificationUIManager;
 import org.chromium.chrome.browser.omaha.RequestGenerator;
-import org.chromium.chrome.browser.omaha.UpdateInfoBarHelper;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
+import org.chromium.chrome.browser.physicalweb.PhysicalWebBleClient;
 import org.chromium.chrome.browser.policy.PolicyAuditor;
-import org.chromium.chrome.browser.policy.PolicyManager;
-import org.chromium.chrome.browser.policy.PolicyManager.PolicyChangeListener;
-import org.chromium.chrome.browser.policy.providers.AppRestrictionsPolicyProvider;
 import org.chromium.chrome.browser.preferences.AccessibilityPreferences;
 import org.chromium.chrome.browser.preferences.LocationSettings;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
@@ -74,24 +75,27 @@ import org.chromium.chrome.browser.preferences.privacy.PrivacyPreferences;
 import org.chromium.chrome.browser.preferences.website.SingleWebsitePreferences;
 import org.chromium.chrome.browser.printing.PrintingControllerFactory;
 import org.chromium.chrome.browser.rlz.RevenueStats;
+import org.chromium.chrome.browser.services.AccountsChangedReceiver;
 import org.chromium.chrome.browser.services.AndroidEduOwnerCheckCallback;
 import org.chromium.chrome.browser.services.GoogleServicesManager;
 import org.chromium.chrome.browser.share.ShareHelper;
-import org.chromium.chrome.browser.smartcard.EmptyPKCS11AuthenticationManager;
-import org.chromium.chrome.browser.smartcard.PKCS11AuthenticationManager;
+import org.chromium.chrome.browser.sync.GmsCoreSyncListener;
 import org.chromium.chrome.browser.sync.SyncController;
 import org.chromium.chrome.browser.tab.AuthenticatorNavigationInterceptor;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.tabmodel.document.ActivityDelegate;
+import org.chromium.chrome.browser.tabmodel.document.ActivityDelegateImpl;
 import org.chromium.chrome.browser.tabmodel.document.DocumentTabModelSelector;
 import org.chromium.chrome.browser.tabmodel.document.StorageDelegate;
 import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.content.app.ContentApplication;
-import org.chromium.content.browser.BrowserStartupController;
 import org.chromium.content.browser.ChildProcessLauncher;
 import org.chromium.content.browser.ContentViewStatics;
 import org.chromium.content.browser.DownloadController;
+import org.chromium.policy.AppRestrictionsProvider;
+import org.chromium.policy.CombinedPolicyProvider;
+import org.chromium.policy.CombinedPolicyProvider.PolicyChangeListener;
 import org.chromium.printing.PrintingController;
 import org.chromium.sync.signin.AccountManagerDelegate;
 import org.chromium.sync.signin.AccountManagerHelper;
@@ -108,6 +112,7 @@ import java.util.Locale;
  * chrome layer.
  */
 public class ChromeApplication extends ContentApplication {
+    public static final String COMMAND_LINE_FILE = "chrome-command-line";
 
     private static final String TAG = "ChromiumApplication";
     private static final String PREF_BOOT_TIMESTAMP =
@@ -170,7 +175,6 @@ public class ChromeApplication extends ContentApplication {
 
     private final BackgroundProcessing mBackgroundProcessing = new BackgroundProcessing();
     private final PowerBroadcastReceiver mPowerBroadcastReceiver = new PowerBroadcastReceiver();
-    private final UpdateInfoBarHelper mUpdateInfoBarHelper = new UpdateInfoBarHelper();
 
     // Used to trigger variation changes (such as seed fetches) upon application foregrounding.
     private VariationsSession mVariationsSession;
@@ -183,7 +187,6 @@ public class ChromeApplication extends ContentApplication {
 
     private ChromeLifetimeController mChromeLifetimeController;
     private PrintingController mPrintingController;
-    private PolicyManager mPolicyManager = new PolicyManager();
 
     /**
      * This is called once per ChromeApplication instance, which get created per process
@@ -209,10 +212,10 @@ public class ChromeApplication extends ContentApplication {
             }
         });
 
-        // Set the default AccountManagerDelegate to ensure it is always used when the instance
-        // of the AccountManagerHelper is created. Must be done before AccountMangerHelper.get(...)
-        // is called.
-        AccountManagerHelper.setDefaultAccountManagerDelegate(createAccountManagerDelegate());
+        // Initialize the AccountManagerHelper with the correct AccountManagerDelegate. Must be done
+        // only once and before AccountMangerHelper.get(...) is called to avoid using the
+        // default AccountManagerDelegate.
+        AccountManagerHelper.initializeAccountManagerHelper(this, createAccountManagerDelegate());
 
         // Set the unique identification generator for invalidations.  The
         // invalidations system can start and attempt to fetch the client ID
@@ -260,9 +263,13 @@ public class ChromeApplication extends ContentApplication {
         updateAcceptLanguages();
         changeAppStatus(true);
         mVariationsSession.start(getApplicationContext());
+        mPowerBroadcastReceiver.onForegroundSessionStart();
 
-        mPowerBroadcastReceiver.registerReceiver(this);
-        mPowerBroadcastReceiver.runActions(this, true);
+        // Track the ratio of Chrome startups that are caused by notification clicks.
+        // TODO(johnme): Add other reasons (and switch to recordEnumeratedHistogram).
+        RecordHistogram.recordBooleanHistogram(
+                "Startup.BringToForegroundReason",
+                NotificationUIManager.wasNotificationRecentlyClicked());
     }
 
     /**
@@ -277,12 +284,7 @@ public class ChromeApplication extends ContentApplication {
         flushPersistentData();
         mIsStarted = false;
         changeAppStatus(false);
-
-        try {
-            mPowerBroadcastReceiver.unregisterReceiver(this);
-        } catch (IllegalArgumentException e) {
-            // This may happen when onStop get called very early in UI test.
-        }
+        mPowerBroadcastReceiver.onForegroundSessionEnd();
 
         ChildProcessLauncher.onSentToBackground();
         IntentHandler.clearPendingReferrer();
@@ -316,11 +318,14 @@ public class ChromeApplication extends ContentApplication {
     private void onForegroundActivityDestroyed() {
         if (ApplicationStatus.isEveryActivityDestroyed()) {
             mBackgroundProcessing.onDestroy();
+            if (mDevToolsServer != null) {
+                mDevToolsServer.destroy();
+                mDevToolsServer = null;
+            }
             stopApplicationActivityTracker();
             PartnerBrowserCustomizations.destroy();
-            ShareHelper.clearSharedScreenshots(this);
-            mPolicyManager.destroy();
-            mPolicyManager = null;
+            ShareHelper.clearSharedImages(this);
+            CombinedPolicyProvider.get().destroy();
         }
     }
 
@@ -376,23 +381,6 @@ public class ChromeApplication extends ContentApplication {
         });
     }
 
-    /**
-     * Returns the class name of the Settings activity.
-     *
-     * TODO(newt): delete this when ChromeShell is deleted.
-     */
-    public String getSettingsActivityName() {
-        return Preferences.class.getName();
-    }
-
-    /**
-     * Open Chrome Sync settings page.
-     * @param accountName the name of the account that is being synced.
-     */
-    public void openSyncSettings(String accountName) {
-        // TODO(aurimas): implement this once SyncCustomizationFragment is upstreamed.
-    }
-
     @CalledByNative
     protected void showAutofillSettings() {
         PreferencesLauncher.launchSettingsPage(this,
@@ -438,11 +426,20 @@ public class ChromeApplication extends ContentApplication {
         if (mInitializedSharedClasses) return;
         mInitializedSharedClasses = true;
 
+        ForcedSigninProcessor.start(this);
+        AccountsChangedReceiver.addObserver(new AccountsChangedReceiver.AccountsChangedObserver() {
+            @Override
+            public void onAccountsChanged(Context context, Intent intent) {
+                ThreadUtils.runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        ForcedSigninProcessor.start(ChromeApplication.this);
+                    }
+                });
+            }
+        });
         GoogleServicesManager.get(this).onMainActivityStart();
-        SyncController.get(this).onMainActivityStart();
         RevenueStats.getInstance();
-
-        getPKCS11AuthenticationManager().initialize(ChromeApplication.this);
 
         mDevToolsServer = new DevToolsServer(DEV_TOOLS_SERVER_SOCKET_PREFIX);
         mDevToolsServer.setRemoteDebuggingEnabled(
@@ -474,57 +471,14 @@ public class ChromeApplication extends ContentApplication {
         removeSessionCookies();
         ApplicationStatus.registerApplicationStateListener(createApplicationStateListener());
         AppBannerManager.setAppDetailsDelegate(createAppDetailsDelegate());
-        mChromeLifetimeController = new ChromeLifetimeController(this);
-
-        mPolicyManager.initializeNative();
-        registerPolicyProviders(mPolicyManager);
+        mChromeLifetimeController = new ChromeLifetimeController();
 
         PrefServiceBridge.getInstance().migratePreferences(this);
     }
 
     @Override
     public void initCommandLine() {
-        // TODO(newt): delete this when deleting ChromeShell.
-        ChromeCommandLineInitUtil.initChromeCommandLine(this);
-    }
-
-    /**
-     * Start the browser process asynchronously. This will set up a queue of UI
-     * thread tasks to initialize the browser process.
-     *
-     * Note that this can only be called on the UI thread.
-     *
-     * @param callback the callback to be called when browser startup is complete.
-     * @throws ProcessInitException
-     */
-    public void startChromeBrowserProcessesAsync(BrowserStartupController.StartupCallback callback)
-            throws ProcessInitException {
-        assert ThreadUtils.runningOnUiThread() : "Tried to start the browser on the wrong thread";
-        Context applicationContext = getApplicationContext();
-        BrowserStartupController.get(applicationContext, LibraryProcessType.PROCESS_BROWSER)
-                .startBrowserProcessesAsync(callback);
-    }
-
-    /**
-     * Loads native Libraries synchronously and starts Chrome browser processes.
-     * Must be called on the main thread. Makes sure the process is initialized as a
-     * Browser process instead of a ContentView process.
-     *
-     * @param initGoogleServicesManager when true the GoogleServicesManager is initialized.
-     */
-    public void startBrowserProcessesAndLoadLibrariesSync(boolean initGoogleServicesManager)
-            throws ProcessInitException {
-        ThreadUtils.assertOnUiThread();
-        initCommandLine();
-        Context context = getApplicationContext();
-        LibraryLoader libraryLoader = LibraryLoader.get(LibraryProcessType.PROCESS_BROWSER);
-        libraryLoader.ensureInitialized(context);
-        libraryLoader.asyncPrefetchLibrariesToMemory();
-        BrowserStartupController.get(context, LibraryProcessType.PROCESS_BROWSER)
-                .startBrowserProcessesSync(false);
-        if (initGoogleServicesManager) {
-            GoogleServicesManager.get(getApplicationContext());
-        }
+        CommandLineInitUtil.initCommandLine(this, COMMAND_LINE_FILE);
     }
 
     /**
@@ -586,10 +540,20 @@ public class ChromeApplication extends ContentApplication {
         return PartnerBrowserCustomizations.isIncognitoDisabled();
     }
 
-    // TODO(yfriedman): This is too widely available. Plumb this through ChromeNetworkDelegate
-    // instead.
-    protected PKCS11AuthenticationManager getPKCS11AuthenticationManager() {
-        return EmptyPKCS11AuthenticationManager.getInstance();
+    /**
+     * @return A provider of external estimates.
+     * @param nativePtr Pointer to the native ExternalEstimateProviderAndroid object.
+     */
+    public ExternalEstimateProviderAndroid createExternalEstimateProviderAndroid(long nativePtr) {
+        return new ExternalEstimateProviderAndroid(nativePtr) {};
+    }
+
+    /**
+     * @return An external observer of data use.
+     * @param nativePtr Pointer to the native ExternalDataUseObserver object.
+     */
+    public ExternalDataUseObserver createExternalDataUseObserver(long nativePtr) {
+        return new ExternalDataUseObserver(nativePtr);
     }
 
     /**
@@ -674,20 +638,28 @@ public class ChromeApplication extends ContentApplication {
         if (activity instanceof ChromeActivity) return new ChromeWindow((ChromeActivity) activity);
         return new ActivityWindowAndroid(activity);
     }
+
+    /**
+     * @return An instance of {@link CustomTabsConnection}. Should not be called
+     * outside of {@link CustomTabsConnection#getInstance()}.
+     */
+    public CustomTabsConnection createCustomTabsConnection() {
+        return new CustomTabsConnection(this);
+    }
+
+    /**
+     * @return A new PhysicalWebBleClient instance.
+     */
+    public PhysicalWebBleClient createPhysicalWebBleClient() {
+        return new PhysicalWebBleClient();
+    }
+
     /**
      * @return Instance of printing controller that is shared among all chromium activities. May
      *         return null if printing is not supported on the platform.
      */
     public PrintingController getPrintingController() {
         return mPrintingController;
-    }
-
-    /**
-     * @return The UpdateInfoBarHelper used to inform the user about updates.
-     */
-    public UpdateInfoBarHelper getUpdateInfoBarHelper() {
-        // TODO(aurimas): make UpdateInfoBarHelper have its own static instance.
-        return mUpdateInfoBarHelper;
     }
 
     /**
@@ -698,33 +670,28 @@ public class ChromeApplication extends ContentApplication {
         return new GSAHelper();
     }
 
-    @VisibleForTesting
-    public PolicyManager getPolicyManagerForTesting() {
-        return mPolicyManager;
-    }
-
-    /**
+   /**
      * Registers various policy providers with the policy manager.
      * Providers are registered in increasing order of precedence so overrides should call this
      * method in the end for this method to maintain the highest precedence.
-     * @param manager The {@link PolicyManager} to register the providers with.
+     * @param combinedProvider The {@link CombinedPolicyProvider} to register the providers with.
      */
-    protected void registerPolicyProviders(PolicyManager manager) {
-        manager.registerProvider(new AppRestrictionsPolicyProvider(getApplicationContext()));
+    public void registerPolicyProviders(CombinedPolicyProvider combinedProvider) {
+        combinedProvider.registerProvider(new AppRestrictionsProvider(getApplicationContext()));
     }
 
     /**
      * Add a listener to be notified upon policy changes.
      */
     public void addPolicyChangeListener(PolicyChangeListener listener) {
-        mPolicyManager.addPolicyChangeListener(listener);
+        CombinedPolicyProvider.get().addPolicyChangeListener(listener);
     }
 
     /**
      * Remove a listener to be notified upon policy changes.
      */
     public void removePolicyChangeListener(PolicyChangeListener listener) {
-        mPolicyManager.removePolicyChangeListener(listener);
+        CombinedPolicyProvider.get().removePolicyChangeListener(listener);
     }
 
     /**
@@ -752,6 +719,14 @@ public class ChromeApplication extends ContentApplication {
     }
 
     /**
+     * @return An instance of GmsCoreSyncListener to notify GmsCore of sync encryption key changes.
+     *         Will be null if one is unavailable.
+     */
+    public GmsCoreSyncListener createGmsCoreSyncListener() {
+        return null;
+    }
+
+    /**
      * @return An instance of AppDetailsDelegate that can be queried about app information for the
      *         App Banner feature.  Will be null if one is unavailable.
      */
@@ -769,8 +744,9 @@ public class ChromeApplication extends ContentApplication {
     public static DocumentTabModelSelector getDocumentTabModelSelector() {
         ThreadUtils.assertOnUiThread();
         if (sDocumentTabModelSelector == null) {
-            sDocumentTabModelSelector = new DocumentTabModelSelector(
-                    new ActivityDelegate(DocumentActivity.class, IncognitoDocumentActivity.class),
+            ActivityDelegateImpl activityDelegate = new ActivityDelegateImpl(
+                    DocumentActivity.class, IncognitoDocumentActivity.class);
+            sDocumentTabModelSelector = new DocumentTabModelSelector(activityDelegate,
                     new StorageDelegate(), new TabDelegate(false), new TabDelegate(true));
         }
         return sDocumentTabModelSelector;

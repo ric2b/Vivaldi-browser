@@ -8,15 +8,19 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/extensions/chrome_app_sorting.h"
 #include "chrome/browser/extensions/chrome_content_verifier_delegate.h"
 #include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/extensions/extension_error_reporter.h"
 #include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/extensions/extension_sync_service.h"
 #include "chrome/browser/extensions/extension_system_factory.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/install_verifier.h"
@@ -29,7 +33,6 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/webui/extensions/extension_icon_source.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/chrome_version_info.h"
 #include "chrome/common/extensions/features/feature_channel.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/url_data_source.h"
@@ -42,12 +45,13 @@
 #include "extensions/browser/info_map.h"
 #include "extensions/browser/quota_service.h"
 #include "extensions/browser/runtime_data.h"
+#include "extensions/browser/service_worker_manager.h"
 #include "extensions/browser/state_store.h"
 #include "extensions/common/constants.h"
 
 #if defined(ENABLE_NOTIFICATIONS)
-#include "chrome/browser/notifications/desktop_notification_service.h"
-#include "chrome/browser/notifications/desktop_notification_service_factory.h"
+#include "chrome/browser/notifications/notifier_state_tracker.h"
+#include "chrome/browser/notifications/notifier_state_tracker_factory.h"
 #include "ui/message_center/notifier_settings.h"
 #endif
 
@@ -62,6 +66,13 @@
 #endif
 
 using content::BrowserThread;
+
+// Statistics are logged to UMA with this string as part of histogram name. They
+// can all be found under Extensions.Database.Open.<client>. Changing this needs
+// to synchronize with histograms.xml, AND will also become incompatible with
+// older browsers still reporting the previous values.
+const char kStateDatabaseUMAClientName[] = "State";
+const char kRulesDatabaseUMAClientName[] = "Rules";
 
 namespace extensions {
 
@@ -81,16 +92,14 @@ void ExtensionSystemImpl::Shared::InitPrefs() {
   // loaded immediately so that the rules are ready before we issue network
   // requests.
   state_store_.reset(new StateStore(
-      profile_,
-      profile_->GetPath().AppendASCII(extensions::kStateStoreName),
-      true));
+      profile_, kStateDatabaseUMAClientName,
+      profile_->GetPath().AppendASCII(extensions::kStateStoreName), true));
   state_store_notification_observer_.reset(
       new StateStoreNotificationObserver(state_store_.get()));
 
   rules_store_.reset(new StateStore(
-      profile_,
-      profile_->GetPath().AppendASCII(extensions::kRulesStoreName),
-      false));
+      profile_, kRulesDatabaseUMAClientName,
+      profile_->GetPath().AppendASCII(extensions::kRulesStoreName), false));
 
 #if defined(OS_CHROMEOS)
   const user_manager::User* user =
@@ -130,6 +139,11 @@ void ExtensionSystemImpl::Shared::Init(bool extensions_enabled) {
   bool allow_noisy_errors = !command_line->HasSwitch(switches::kNoErrorDialogs);
   ExtensionErrorReporter::Init(allow_noisy_errors);
 
+  content_verifier_ = new ContentVerifier(
+      profile_, new ChromeContentVerifierDelegate(profile_));
+
+  service_worker_manager_.reset(new ServiceWorkerManager(profile_));
+
   shared_user_script_master_.reset(new SharedUserScriptMaster(profile_));
 
   // ExtensionService depends on RuntimeData.
@@ -151,8 +165,6 @@ void ExtensionSystemImpl::Shared::Init(bool extensions_enabled) {
   // load any extensions.
   {
     InstallVerifier::Get(profile_)->Init();
-    content_verifier_ = new ContentVerifier(
-        profile_, new ChromeContentVerifierDelegate(profile_));
     ContentVerifierDelegate::Mode mode =
         ChromeContentVerifierDelegate::GetDefaultMode();
 #if defined(OS_CHROMEOS)
@@ -196,7 +208,13 @@ void ExtensionSystemImpl::Shared::Init(bool extensions_enabled) {
           base::FilePath(t.token()));
     }
   }
+
+  app_sorting_.reset(new ChromeAppSorting(profile_));
+
   extension_service_->Init();
+
+  // Make sure ExtensionSyncService is created.
+  ExtensionSyncService::Get(profile_);
 
   // Make the chrome://extension-icon/ resource available.
   content::URLDataSource::Add(profile_, new ExtensionIconSource(profile_));
@@ -227,6 +245,10 @@ void ExtensionSystemImpl::Shared::Shutdown() {
     content_verifier_->Shutdown();
   if (extension_service_)
     extension_service_->Shutdown();
+}
+
+ServiceWorkerManager* ExtensionSystemImpl::Shared::service_worker_manager() {
+  return service_worker_manager_.get();
 }
 
 StateStore* ExtensionSystemImpl::Shared::state_store() {
@@ -262,6 +284,10 @@ InfoMap* ExtensionSystemImpl::Shared::info_map() {
 
 QuotaService* ExtensionSystemImpl::Shared::quota_service() {
   return quota_service_.get();
+}
+
+AppSorting* ExtensionSystemImpl::Shared::app_sorting() {
+  return app_sorting_.get();
 }
 
 ContentVerifier* ExtensionSystemImpl::Shared::content_verifier() {
@@ -310,6 +336,10 @@ ManagementPolicy* ExtensionSystemImpl::management_policy() {
   return shared_->management_policy();
 }
 
+ServiceWorkerManager* ExtensionSystemImpl::service_worker_manager() {
+  return shared_->service_worker_manager();
+}
+
 SharedUserScriptMaster* ExtensionSystemImpl::shared_user_script_master() {
   return shared_->shared_user_script_master();
 }
@@ -332,6 +362,10 @@ QuotaService* ExtensionSystemImpl::quota_service() {
   return shared_->quota_service();
 }
 
+AppSorting* ExtensionSystemImpl::app_sorting() {
+  return shared_->app_sorting();
+}
+
 ContentVerifier* ExtensionSystemImpl::content_verifier() {
   return shared_->content_verifier();
 }
@@ -342,8 +376,15 @@ scoped_ptr<ExtensionSet> ExtensionSystemImpl::GetDependentExtensions(
       extension);
 }
 
+void ExtensionSystemImpl::InstallUpdate(const std::string& extension_id,
+                                        const base::FilePath& temp_dir) {
+  NOTREACHED() << "Not yet implemented";
+  base::DeleteFile(temp_dir, true /* recursive */);
+}
+
 void ExtensionSystemImpl::RegisterExtensionWithRequestContexts(
-    const Extension* extension) {
+    const Extension* extension,
+    const base::Closure& callback) {
   base::Time install_time;
   if (extension->location() != Manifest::COMPONENT) {
     install_time = ExtensionPrefs::Get(profile_)->
@@ -357,17 +398,18 @@ void ExtensionSystemImpl::RegisterExtensionWithRequestContexts(
       message_center::NotifierId::APPLICATION,
       extension->id());
 
-  DesktopNotificationService* notification_service =
-      DesktopNotificationServiceFactory::GetForProfile(profile_);
+  NotifierStateTracker* notifier_state_tracker =
+      NotifierStateTrackerFactory::GetForProfile(profile_);
   notifications_disabled =
-      !notification_service->IsNotifierEnabled(notifier_id);
+      !notifier_state_tracker->IsNotifierEnabled(notifier_id);
 #endif
 
-  BrowserThread::PostTask(
+  BrowserThread::PostTaskAndReply(
       BrowserThread::IO, FROM_HERE,
       base::Bind(&InfoMap::AddExtension, info_map(),
-                 make_scoped_refptr(extension), install_time,
-                 incognito_enabled, notifications_disabled));
+                 make_scoped_refptr(extension), install_time, incognito_enabled,
+                 notifications_disabled),
+      callback);
 }
 
 void ExtensionSystemImpl::UnregisterExtensionWithRequestContexts(

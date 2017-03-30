@@ -5,6 +5,7 @@
 #include "net/cert/multi_threaded_cert_verifier.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -106,9 +107,9 @@ scoped_ptr<base::Value> CertVerifyResultCallback(
        ++it) {
     hashes->AppendString(it->ToString());
   }
-  results->Set("public_key_hashes", hashes.Pass());
+  results->Set("public_key_hashes", std::move(hashes));
 
-  return results.Pass();
+  return std::move(results);
 }
 
 }  // namespace
@@ -329,7 +330,7 @@ class CertVerifierJob {
         net_log_.source().ToEventParametersCallback());
 
     requests_.Append(request.get());
-    return request.Pass();
+    return request;
   }
 
  private:
@@ -455,7 +456,7 @@ int MultiThreadedCertVerifier::Verify(X509Certificate* cert,
     if (!new_job->Start(verify_proc_, cert, hostname, ocsp_response, flags,
                         crl_set, additional_trust_anchors)) {
       // TODO(wtc): log to the NetLog.
-      LOG(ERROR) << "CertVerifierWorker couldn't be started.";
+      LOG(ERROR) << "CertVerifierJob couldn't be started.";
       return ERR_INSUFFICIENT_RESOURCES;  // Just a guess.
     }
 
@@ -468,7 +469,7 @@ int MultiThreadedCertVerifier::Verify(X509Certificate* cert,
 
   scoped_ptr<CertVerifierRequest> request =
       job->CreateRequest(callback, verify_result, net_log);
-  *out_req = request.Pass();
+  *out_req = std::move(request);
   return ERR_IO_PENDING;
 }
 
@@ -483,7 +484,7 @@ MultiThreadedCertVerifier::RequestParams::RequestParams(
     const std::string& ocsp_response_arg,
     int flags_arg,
     const CertificateList& additional_trust_anchors)
-    : hostname(hostname_arg), flags(flags_arg) {
+    : hostname(hostname_arg), flags(flags_arg), start_time(base::Time::Now()) {
   hash_values.reserve(3 + additional_trust_anchors.size());
   SHA1HashValue ocsp_hash;
   base::SHA1HashBytes(
@@ -522,10 +523,34 @@ void MultiThreadedCertVerifier::SaveResultToCache(const RequestParams& key,
                                                   const CachedResult& result) {
   DCHECK(CalledOnValidThread());
 
-  base::Time now = base::Time::Now();
+  // When caching, this uses the time that validation started as the
+  // beginning of the validity, rather than the time that it ended (aka
+  // base::Time::Now()), to account for the fact that during validation,
+  // the clock may have changed.
+  //
+  // If the clock has changed significantly, then this result will ideally
+  // be evicted and the next time the certificate is encountered, it will
+  // be revalidated.
+  //
+  // Because of this, it's possible for situations to arise where the
+  // clock was correct at the start of validation, changed to an
+  // incorrect time during validation (such as too far in the past or
+  // future), and then was reset to the correct time. If this happens,
+  // it's likely that the result will not be a valid/correct result,
+  // but will still be used from the cache because the clock was reset
+  // to the correct time after the (bad) validation result completed.
+  //
+  // However, this solution optimizes for the case where the clock is
+  // bad at the start of validation, and subsequently is corrected. In
+  // that situation, the result is also incorrect, but because the clock
+  // was corrected after validation, if the cache validity period was
+  // computed at the end of validation, it would continue to serve an
+  // invalid result for kTTLSecs.
+  const base::Time start_time = key.start_time;
   cache_.Put(
-      key, result, CacheValidityPeriod(now),
-      CacheValidityPeriod(now, now + base::TimeDelta::FromSeconds(kTTLSecs)));
+      key, result, CacheValidityPeriod(start_time),
+      CacheValidityPeriod(start_time,
+                          start_time + base::TimeDelta::FromSeconds(kTTLSecs)));
 }
 
 scoped_ptr<CertVerifierJob> MultiThreadedCertVerifier::RemoveJob(

@@ -6,6 +6,7 @@
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -22,7 +23,7 @@
 
 namespace extensions {
 
-namespace OnMessage = core_api::test::OnMessage;
+namespace OnMessage = api::test::OnMessage;
 
 namespace {
 
@@ -113,6 +114,8 @@ class ExtensionWebUITest : public ExtensionApiTest {
         base::Bind(&content::FrameHasSourceUrl, frame_url));
   }
 };
+
+#if !defined(OS_WIN)  // flaky http://crbug.com/530722
 
 IN_PROC_BROWSER_TEST_F(ExtensionWebUITest, SanityCheckAvailableAPIsInFrame) {
   ASSERT_TRUE(RunTestOnExtensionsFrame("sanity_check_available_apis.js"));
@@ -220,7 +223,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebUITest, ReceivesExtensionOptionsOnClose) {
 //
 // Same setup as CanEmbedExtensionOptions but disable the extension before
 // embedding.
-IN_PROC_BROWSER_TEST_F(ExtensionWebUITest, DISABLED_EmbedDisabledExtension) {
+IN_PROC_BROWSER_TEST_F(ExtensionWebUITest, EmbedDisabledExtension) {
   scoped_ptr<ExtensionTestMessageListener> listener(
       new ExtensionTestMessageListener("ready", true));
 
@@ -241,6 +244,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebUITest, DISABLED_EmbedDisabledExtension) {
   listener.reset(new ExtensionTestMessageListener("createfailed", false));
   ASSERT_TRUE(listener->WaitUntilSatisfied());
 }
+
+#endif
 
 }  // namespace
 

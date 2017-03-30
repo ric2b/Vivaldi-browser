@@ -4,6 +4,9 @@
 
 #include "chrome/browser/chromeos/policy/user_cloud_policy_manager_chromeos.h"
 
+#include <set>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/logging.h"
@@ -14,6 +17,8 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/login/helper.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
+#include "chrome/browser/chromeos/login/users/affiliation.h"
+#include "chrome/browser/chromeos/login/users/chrome_user_manager_impl.h"
 #include "chrome/browser/chromeos/policy/policy_oauth2_token_fetcher.h"
 #include "chrome/browser/chromeos/policy/user_cloud_policy_manager_factory_chromeos.h"
 #include "chrome/browser/chromeos/policy/wildcard_login_checker.h"
@@ -65,7 +70,8 @@ void OnWildcardCheckCompleted(const std::string& username,
     // logged-in session is not possible. Fix this either by delaying the
     // cryptohome deletion operation or by getting rid of the in-session
     // wildcard check.
-    user_manager::UserManager::Get()->RemoveUserFromList(username);
+    user_manager::UserManager::Get()->RemoveUserFromList(
+        AccountId::FromUserEmail(username));
     chrome::AttemptUserExit();
   }
 }
@@ -87,8 +93,8 @@ UserCloudPolicyManagerChromeOS::UserCloudPolicyManagerChromeOS(
                          task_runner,
                          file_task_runner,
                          io_task_runner),
-      store_(store.Pass()),
-      external_data_manager_(external_data_manager.Pass()),
+      store_(std::move(store)),
+      external_data_manager_(std::move(external_data_manager)),
       component_policy_cache_path_(component_policy_cache_path),
       wait_for_policy_fetch_(wait_for_policy_fetch),
       policy_fetch_timeout_(false, false) {
@@ -107,8 +113,7 @@ UserCloudPolicyManagerChromeOS::~UserCloudPolicyManagerChromeOS() {}
 void UserCloudPolicyManagerChromeOS::Connect(
     PrefService* local_state,
     DeviceManagementService* device_management_service,
-    scoped_refptr<net::URLRequestContextGetter> system_request_context,
-    UserAffiliation user_affiliation) {
+    scoped_refptr<net::URLRequestContextGetter> system_request_context) {
   DCHECK(device_management_service);
   DCHECK(local_state);
   local_state_ = local_state;
@@ -123,13 +128,12 @@ void UserCloudPolicyManagerChromeOS::Connect(
     request_context = new SystemPolicyRequestContext(
         system_request_context, GetUserAgent());
   }
-  scoped_ptr<CloudPolicyClient> cloud_policy_client(
-      new CloudPolicyClient(std::string(), std::string(),
-                            kPolicyVerificationKeyHash, user_affiliation,
-                            device_management_service, request_context));
+  scoped_ptr<CloudPolicyClient> cloud_policy_client(new CloudPolicyClient(
+      std::string(), std::string(), kPolicyVerificationKeyHash,
+      device_management_service, request_context));
   CreateComponentCloudPolicyService(component_policy_cache_path_,
                                     request_context, cloud_policy_client.get());
-  core()->Connect(cloud_policy_client.Pass());
+  core()->Connect(std::move(cloud_policy_client));
   client()->AddObserver(this);
 
   external_data_manager_->Connect(request_context);
@@ -274,6 +278,22 @@ void UserCloudPolicyManagerChromeOS::OnClientError(
 void UserCloudPolicyManagerChromeOS::OnComponentCloudPolicyUpdated() {
   CloudPolicyManager::OnComponentCloudPolicyUpdated();
   StartRefreshSchedulerIfReady();
+}
+
+void UserCloudPolicyManagerChromeOS::OnStoreLoaded(
+    CloudPolicyStore* cloud_policy_store) {
+  CloudPolicyManager::OnStoreLoaded(cloud_policy_store);
+
+  em::PolicyData const* const policy_data = cloud_policy_store->policy();
+
+  if (policy_data) {
+    chromeos::AffiliationIDSet set_of_user_affiliation_ids(
+        policy_data->user_affiliation_ids().begin(),
+        policy_data->user_affiliation_ids().end());
+
+    chromeos::ChromeUserManager::Get()->SetUserAffiliation(
+        policy_data->username(), set_of_user_affiliation_ids);
+  }
 }
 
 void UserCloudPolicyManagerChromeOS::GetChromePolicy(PolicyMap* policy_map) {

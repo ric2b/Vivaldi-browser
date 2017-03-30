@@ -6,13 +6,13 @@
 #define UI_VIEWS_WIN_HWND_MESSAGE_HANDLER_H_
 
 #include <windows.h>
-#include <uxtheme.h>
+#include <stddef.h>
 
 #include <set>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
@@ -453,8 +453,6 @@ class VIEWS_EXPORT HWNDMessageHandler :
   // Receives Windows Session Change notifications.
   void OnSessionChange(WPARAM status_code);
 
-  MARGINS Vivaldi_GetDWMFrameMargins() const;
-
   typedef std::vector<ui::TouchEvent> TouchEvents;
   // Helper to handle the list of touch events passed in. We need this because
   // touch events on windows don't fire if we enter a modal loop in the context
@@ -486,6 +484,24 @@ class VIEWS_EXPORT HWNDMessageHandler :
   // Provides functionality to transition a frame to DWM.
   void PerformDwmTransition();
 
+  // Generates a touch event and adds it to the |touch_events| parameter.
+  // |point| is the point where the touch was initiated.
+  // |id| is the event id associated with the touch event.
+  // |event_time| is the current time used for latency calculation.
+  // |time_stamp| is the time delta associated with the message.
+  void GenerateTouchEvent(ui::EventType event_type,
+                          const gfx::Point& point,
+                          unsigned int id,
+                          base::TimeTicks event_time,
+                          base::TimeDelta time_stamp,
+                          TouchEvents* touch_events);
+
+  // Handles WM_NCLBUTTONDOWN and WM_NCMOUSEMOVE messages on the caption.
+  // Returns true if the message was handled.
+  bool HandleMouseInputForCaption(unsigned int message,
+                                  WPARAM w_param,
+                                  LPARAM l_param);
+
   HWNDMessageHandlerDelegate* delegate_;
 
   scoped_ptr<FullscreenHandler> fullscreen_handler_;
@@ -507,6 +523,12 @@ class VIEWS_EXPORT HWNDMessageHandler :
   // The last cursor that was active before the current one was selected. Saved
   // so that we can restore it.
   HCURSOR previous_cursor_;
+
+  // The icon created from the bitmap image of the window icon.
+  base::win::ScopedHICON window_icon_;
+
+  // The icon created from the bitmap image of the app icon.
+  base::win::ScopedHICON app_icon_;
 
   // Event handling ------------------------------------------------------------
 
@@ -594,6 +616,22 @@ class VIEWS_EXPORT HWNDMessageHandler :
   // Manages observation of Windows Session Change messages.
   scoped_ptr<WindowsSessionChangeObserver> windows_session_change_observer_;
 
+  // This class provides functionality to register the legacy window as a
+  // Direct Manipulation consumer. This allows us to support smooth scroll
+  // in Chrome on Windows 10.
+  scoped_ptr<gfx::win::DirectManipulationHelper> direct_manipulation_helper_;
+
+  // The location where the user clicked on the caption. We cache this when we
+  // receive the WM_NCLBUTTONDOWN message. We use this in the subsequent
+  // WM_NCMOUSEMOVE message to see if the mouse actually moved.
+  // Please refer to the HandleMouseEventInternal function for details on why
+  // this is needed.
+  gfx::Point caption_left_button_click_pos_;
+
+  // Set to true if the left mouse button has been pressed on the caption.
+  // Defaults to false.
+  bool left_button_down_on_caption_;
+
   // The WeakPtrFactories below must occur last in the class definition so they
   // get destroyed last.
 
@@ -602,11 +640,6 @@ class VIEWS_EXPORT HWNDMessageHandler :
 
   // The factory used with BEGIN_SAFE_MSG_MAP_EX.
   base::WeakPtrFactory<HWNDMessageHandler> weak_factory_;
-
-  // This class provides functionality to register the legacy window as a
-  // Direct Manipulation consumer. This allows us to support smooth scroll
-  // in Chrome on Windows 10.
-  scoped_ptr<gfx::win::DirectManipulationHelper> direct_manipulation_helper_;
 
   DISALLOW_COPY_AND_ASSIGN(HWNDMessageHandler);
 };

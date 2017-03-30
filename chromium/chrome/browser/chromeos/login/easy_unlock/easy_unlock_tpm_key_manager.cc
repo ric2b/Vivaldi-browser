@@ -6,6 +6,8 @@
 
 #include <cryptohi.h>
 #include <keyhi.h>
+#include <stdint.h>
+#include <utility>
 
 #include "base/base64.h"
 #include "base/bind.h"
@@ -52,7 +54,7 @@ void GetSystemSlotOnIOThread(
   crypto::ScopedPK11Slot system_slot =
       crypto::GetSystemNSSKeySlot(callback_on_origin_thread);
   if (system_slot)
-    callback_on_origin_thread.Run(system_slot.Pass());
+    callback_on_origin_thread.Run(std::move(system_slot));
 }
 
 // Relays |EnsureUserTpmInitializedOnIOThread| callback to
@@ -75,7 +77,7 @@ void EnsureUserTPMInitializedOnIOThread(
   crypto::ScopedPK11Slot private_slot = crypto::GetPrivateSlotForChromeOSUser(
       username_hash, callback_on_origin_thread);
   if (private_slot)
-    callback_on_origin_thread.Run(private_slot.Pass());
+    callback_on_origin_thread.Run(std::move(private_slot));
 }
 
 // Checks if a private RSA key associated with |public_key| can be found in
@@ -86,16 +88,16 @@ crypto::ScopedSECKEYPrivateKey GetPrivateKeyOnWorkerThread(
     const std::string& public_key) {
   CHECK(slot);
 
-  const uint8* public_key_uint8 =
-      reinterpret_cast<const uint8*>(public_key.data());
-  std::vector<uint8> public_key_vector(
-      public_key_uint8, public_key_uint8 + public_key.size());
+  const uint8_t* public_key_uint8 =
+      reinterpret_cast<const uint8_t*>(public_key.data());
+  std::vector<uint8_t> public_key_vector(public_key_uint8,
+                                         public_key_uint8 + public_key.size());
 
   crypto::ScopedSECKEYPrivateKey rsa_key(
       crypto::FindNSSKeyFromPublicKeyInfoInSlot(public_key_vector, slot));
   if (!rsa_key || SECKEY_GetPrivateKeyType(rsa_key.get()) != rsaKey)
     return nullptr;
-  return rsa_key.Pass();
+  return rsa_key;
 }
 
 // Signs |data| using a private key associated with |public_key| and stored in
@@ -184,7 +186,7 @@ void EasyUnlockTpmKeyManager::RegisterLocalStatePrefs(
 
 // static
 void EasyUnlockTpmKeyManager::ResetLocalStateForUser(
-    const std::string& user_id) {
+    const AccountId& account_id) {
   if (!g_browser_process)
     return;
   PrefService* local_state = g_browser_process->local_state();
@@ -192,20 +194,19 @@ void EasyUnlockTpmKeyManager::ResetLocalStateForUser(
     return;
 
   DictionaryPrefUpdate update(local_state, prefs::kEasyUnlockLocalStateTpmKeys);
-  update->RemoveWithoutPathExpansion(user_id, NULL);
+  update->RemoveWithoutPathExpansion(account_id.GetUserEmail(), NULL);
 }
 
 EasyUnlockTpmKeyManager::EasyUnlockTpmKeyManager(
-    const std::string& user_id,
+    const AccountId& account_id,
     const std::string& username_hash,
     PrefService* local_state)
-    : user_id_(user_id),
+    : account_id_(account_id),
       username_hash_(username_hash),
       local_state_(local_state),
       create_tpm_key_state_(CREATE_TPM_KEY_NOT_STARTED),
       get_tpm_slot_weak_ptr_factory_(this),
-      weak_ptr_factory_(this) {
-}
+      weak_ptr_factory_(this) {}
 
 EasyUnlockTpmKeyManager::~EasyUnlockTpmKeyManager() {
 }
@@ -213,13 +214,13 @@ EasyUnlockTpmKeyManager::~EasyUnlockTpmKeyManager() {
 bool EasyUnlockTpmKeyManager::PrepareTpmKey(
     bool check_private_key,
     const base::Closure& callback) {
-  CHECK(!user_id_.empty());
+  CHECK(account_id_.is_valid());
   CHECK(!username_hash_.empty());
 
   if (create_tpm_key_state_ == CREATE_TPM_KEY_DONE)
     return true;
 
-  std::string key = GetPublicTpmKey(user_id_);
+  std::string key = GetPublicTpmKey(account_id_);
   if (!check_private_key && !key.empty() &&
       create_tpm_key_state_ == CREATE_TPM_KEY_NOT_STARTED) {
     return true;
@@ -257,24 +258,24 @@ bool EasyUnlockTpmKeyManager::StartGetSystemSlotTimeoutMs(size_t timeout_ms) {
 }
 
 std::string EasyUnlockTpmKeyManager::GetPublicTpmKey(
-    const std::string& user_id) {
+    const AccountId& account_id) {
   if (!local_state_)
     return std::string();
   const base::DictionaryValue* dict =
       local_state_->GetDictionary(prefs::kEasyUnlockLocalStateTpmKeys);
   std::string key;
   if (dict)
-    dict->GetStringWithoutPathExpansion(user_id, &key);
+    dict->GetStringWithoutPathExpansion(account_id.GetUserEmail(), &key);
   std::string decoded;
   base::Base64Decode(key, &decoded);
   return decoded;
 }
 
 void EasyUnlockTpmKeyManager::SignUsingTpmKey(
-    const std::string& user_id,
+    const AccountId& account_id,
     const std::string& data,
     const base::Callback<void(const std::string& data)> callback) {
-  std::string key = GetPublicTpmKey(user_id);
+  const std::string key = GetPublicTpmKey(account_id);
   if (key.empty()) {
     callback.Run(std::string());
     return;
@@ -298,7 +299,7 @@ bool EasyUnlockTpmKeyManager::StartedCreatingTpmKeys() const {
          create_tpm_key_state_ == CREATE_TPM_KEY_DONE;
 }
 
-void EasyUnlockTpmKeyManager::SetKeyInLocalState(const std::string& user_id,
+void EasyUnlockTpmKeyManager::SetKeyInLocalState(const AccountId& account_id,
                                                  const std::string& value) {
   if (!local_state_)
     return;
@@ -307,7 +308,7 @@ void EasyUnlockTpmKeyManager::SetKeyInLocalState(const std::string& user_id,
   base::Base64Encode(value, &encoded);
   DictionaryPrefUpdate update(local_state_,
                               prefs::kEasyUnlockLocalStateTpmKeys);
-  update->SetStringWithoutPathExpansion(user_id, encoded);
+  update->SetStringWithoutPathExpansion(account_id.GetUserEmail(), encoded);
 }
 
 void EasyUnlockTpmKeyManager::OnUserTPMInitialized(
@@ -378,7 +379,7 @@ void EasyUnlockTpmKeyManager::OnTpmKeyCreated(const std::string& public_key) {
   get_tpm_slot_weak_ptr_factory_.InvalidateWeakPtrs();
 
   if (!public_key.empty())
-    SetKeyInLocalState(user_id_, public_key);
+    SetKeyInLocalState(account_id_, public_key);
 
   for (size_t i = 0; i < prepare_tpm_key_callbacks_.size(); ++i) {
     if (!prepare_tpm_key_callbacks_[i].is_null())

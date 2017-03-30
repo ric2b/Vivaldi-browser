@@ -82,6 +82,7 @@
     ['OS == "ios"', {
       'targets': [
         {
+          # GN version: //components/keyed_service/ios
           'target_name': 'keyed_service_ios',
           'type': '<(component)',
           'defines': [
@@ -97,8 +98,6 @@
             '..',
           ],
           'sources': [
-            'keyed_service/ios/browser_state_context_converter.cc',
-            'keyed_service/ios/browser_state_context_converter.h',
             'keyed_service/ios/browser_state_dependency_manager.cc',
             'keyed_service/ios/browser_state_dependency_manager.h',
             'keyed_service/ios/browser_state_keyed_service_factory.cc',

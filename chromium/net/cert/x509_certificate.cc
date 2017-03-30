@@ -4,6 +4,7 @@
 
 #include "net/cert/x509_certificate.h"
 
+#include <limits.h>
 #include <stdlib.h>
 
 #include <algorithm>
@@ -14,6 +15,7 @@
 #include "base/base64.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/histogram_macros.h"
@@ -301,7 +303,7 @@ X509Certificate* X509Certificate::CreateFromDERCertChain(
 
 // static
 X509Certificate* X509Certificate::CreateFromBytes(const char* data,
-                                                  int length) {
+                                                  size_t length) {
   OSCertHandle cert_handle = CreateOSCertHandleFromBytes(data, length);
   if (!cert_handle)
     return NULL;
@@ -399,7 +401,9 @@ X509Certificate* X509Certificate::CreateFromPickle(
 
 // static
 CertificateList X509Certificate::CreateCertificateListFromBytes(
-    const char* data, int length, int format) {
+    const char* data,
+    size_t length,
+    int format) {
   OSCertHandles certificates;
 
   // Check to see if it is in a PEM-encoded form. This check is performed
@@ -618,7 +622,7 @@ bool X509Certificate::VerifyHostname(
       DVLOG(1) << "Bad name in cert: " << *it;
       continue;
     }
-    std::string presented_name(base::StringToLowerASCII(*it));
+    std::string presented_name(base::ToLowerASCII(*it));
 
     // Remove trailing dot, if any.
     if (*presented_name.rbegin() == '.')

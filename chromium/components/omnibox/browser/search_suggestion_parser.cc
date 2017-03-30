@@ -4,7 +4,9 @@
 
 #include "components/omnibox/browser/search_suggestion_parser.h"
 
+#include <stddef.h>
 #include <algorithm>
+#include <utility>
 
 #include "base/i18n/icu_string_conversions.h"
 #include "base/json/json_string_value_serializer.h"
@@ -15,10 +17,11 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "components/omnibox/browser/autocomplete_i18n.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/url_prefix.h"
-#include "components/url_fixer/url_fixer.h"
-#include "net/base/net_util.h"
+#include "components/url_formatter/url_fixer.h"
+#include "components/url_formatter/url_formatter.h"
 #include "net/http/http_response_headers.h"
 #include "net/url_request/url_fetcher.h"
 #include "url/url_constants.h"
@@ -90,7 +93,7 @@ SearchSuggestionParser::SuggestResult::SuggestResult(
       suggest_query_params_(suggest_query_params),
       answer_contents_(answer_contents),
       answer_type_(answer_type),
-      answer_(answer.Pass()),
+      answer_(std::move(answer)),
       should_prefetch_(should_prefetch) {
   match_contents_ = match_contents;
   DCHECK(!match_contents_.empty());
@@ -150,7 +153,8 @@ void SearchSuggestionParser::SuggestResult::ClassifyMatchContents(
     // contents, and the input text has an overlap with contents.
     if (base::StartsWith(suggestion_, input_text,
                          base::CompareCase::SENSITIVE) &&
-        base::EndsWith(suggestion_, match_contents_, true) &&
+        base::EndsWith(suggestion_, match_contents_,
+                       base::CompareCase::SENSITIVE) &&
         (input_text.length() > contents_index)) {
       lookup_text = input_text.substr(contents_index);
     }
@@ -158,7 +162,7 @@ void SearchSuggestionParser::SuggestResult::ClassifyMatchContents(
   // Do a case-insensitive search for |lookup_text|.
   base::string16::const_iterator lookup_position = std::search(
       match_contents_.begin(), match_contents_.end(), lookup_text.begin(),
-      lookup_text.end(), base::CaseInsensitiveCompare<base::char16>());
+      lookup_text.end(), SimpleCaseInsensitiveCompareUCS2());
   if (!allow_bolding_all && (lookup_position == match_contents_.end())) {
     // Bail if the code below to update the bolding would bold the whole
     // string.  Note that the string may already be entirely bolded; if
@@ -224,13 +228,22 @@ SearchSuggestionParser::NavigationResult::NavigationResult(
     bool relevance_from_server,
     const base::string16& input_text,
     const std::string& languages)
-    : Result(from_keyword_provider, relevance, relevance_from_server, type,
+    : Result(from_keyword_provider,
+             relevance,
+             relevance_from_server,
+             type,
              deletion_url),
       url_(url),
       formatted_url_(AutocompleteInput::FormattedStringWithEquivalentMeaning(
-          url, net::FormatUrl(url, languages,
-                              net::kFormatUrlOmitAll & ~net::kFormatUrlOmitHTTP,
-                              net::UnescapeRule::SPACES, NULL, NULL, NULL),
+          url,
+          url_formatter::FormatUrl(url,
+                                   languages,
+                                   url_formatter::kFormatUrlOmitAll &
+                                       ~url_formatter::kFormatUrlOmitHTTP,
+                                   net::UnescapeRule::SPACES,
+                                   nullptr,
+                                   nullptr,
+                                   nullptr),
           scheme_classifier)),
       description_(description) {
   DCHECK(url_.is_valid());
@@ -260,11 +273,13 @@ SearchSuggestionParser::NavigationResult::CalculateAndClassifyMatchContents(
       formatted_url_.find(input_text) : prefix->prefix.length();
   bool trim_http = !AutocompleteInput::HasHTTPScheme(input_text) &&
                    (!prefix || (match_start != 0));
-  const net::FormatUrlTypes format_types =
-      net::kFormatUrlOmitAll & ~(trim_http ? 0 : net::kFormatUrlOmitHTTP);
+  const url_formatter::FormatUrlTypes format_types =
+      url_formatter::kFormatUrlOmitAll &
+      ~(trim_http ? 0 : url_formatter::kFormatUrlOmitHTTP);
 
-  base::string16 match_contents = net::FormatUrl(url_, languages, format_types,
-      net::UnescapeRule::SPACES, NULL, NULL, &match_start);
+  base::string16 match_contents = url_formatter::FormatUrl(
+      url_, languages, format_types, net::UnescapeRule::SPACES, nullptr,
+      nullptr, &match_start);
   // If the first match in the untrimmed string was inside a scheme that we
   // trimmed, look for a subsequent match.
   if (match_start == base::string16::npos)
@@ -363,9 +378,9 @@ scoped_ptr<base::Value> SearchSuggestionParser::DeserializeJsonData(
     JSONStringValueDeserializer deserializer(json_data);
     deserializer.set_allow_trailing_comma(true);
     int error_code = 0;
-    scoped_ptr<base::Value> data(deserializer.Deserialize(&error_code, NULL));
+    scoped_ptr<base::Value> data = deserializer.Deserialize(&error_code, NULL);
     if (error_code == 0)
-      return data.Pass();
+      return data;
   }
   return scoped_ptr<base::Value>();
 }
@@ -468,8 +483,8 @@ bool SearchSuggestionParser::ParseSuggestResults(
     if ((match_type == AutocompleteMatchType::NAVSUGGEST) ||
         (match_type == AutocompleteMatchType::NAVSUGGEST_PERSONALIZED)) {
       // Do not blindly trust the URL coming from the server to be valid.
-      GURL url(
-          url_fixer::FixupURL(base::UTF16ToUTF8(suggestion), std::string()));
+      GURL url(url_formatter::FixupURL(base::UTF16ToUTF8(suggestion),
+                                       std::string()));
       if (url.is_valid() && allow_navsuggest) {
         base::string16 title;
         if (descriptions != NULL)
@@ -535,8 +550,9 @@ bool SearchSuggestionParser::ParseSuggestResults(
           base::CollapseWhitespace(suggestion, false), match_type,
           base::CollapseWhitespace(match_contents, false),
           match_contents_prefix, annotation, answer_contents, answer_type_str,
-          answer.Pass(), suggest_query_params, deletion_url, is_keyword_result,
-          relevance, relevances != NULL, should_prefetch, trimmed_input));
+          std::move(answer), suggest_query_params, deletion_url,
+          is_keyword_result, relevance, relevances != NULL, should_prefetch,
+          trimmed_input));
     }
   }
   results->relevances_from_server = relevances != NULL;

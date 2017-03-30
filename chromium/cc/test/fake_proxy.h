@@ -13,19 +13,15 @@ namespace cc {
 
 class FakeProxy : public Proxy {
  public:
-  FakeProxy() : Proxy(NULL, NULL), layer_tree_host_(NULL) {}
-  explicit FakeProxy(
-      scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
-      scoped_refptr<base::SingleThreadTaskRunner> impl_task_runner)
-      : Proxy(main_task_runner, impl_task_runner), layer_tree_host_(NULL) {}
+  FakeProxy() : layer_tree_host_(nullptr) {}
 
   void SetLayerTreeHost(LayerTreeHost* host);
 
   void FinishAllRendering() override {}
   bool IsStarted() const override;
   bool CommitToActiveTree() const override;
-  void SetOutputSurface(scoped_ptr<OutputSurface>) override {}
-  void SetLayerTreeHostClientReady() override {}
+  void SetOutputSurface(OutputSurface* output_surface) override {}
+  void ReleaseOutputSurface() override;
   void SetVisible(bool visible) override {}
   void SetThrottleFrameProduction(bool throttle) override {}
   const RendererCapabilities& GetRendererCapabilities() const override;
@@ -39,15 +35,17 @@ class FakeProxy : public Proxy {
   void MainThreadHasStoppedFlinging() override {}
   bool BeginMainFrameRequested() const override;
   bool CommitRequested() const override;
-  void Start() override {}
+  void Start(
+      scoped_ptr<BeginFrameSource> external_begin_frame_source) override {}
   void Stop() override {}
-  void ForceSerializeOnSwapBuffers() override {}
   bool SupportsImplScrolling() const override;
-  void SetDebugState(const LayerTreeDebugState& debug_state) override {}
   bool MainFrameWillHappenForTesting() override;
   void SetChildrenNeedBeginFrames(bool children_need_begin_frames) override {}
   void SetAuthoritativeVSyncInterval(const base::TimeDelta& interval) override {
   }
+  void UpdateTopControlsState(TopControlsState constraints,
+                              TopControlsState current,
+                              bool animate) override {}
 
   virtual RendererCapabilities& GetRendererCapabilities();
 

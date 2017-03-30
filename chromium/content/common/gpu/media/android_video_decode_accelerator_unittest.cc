@@ -4,13 +4,17 @@
 
 #include "content/common/gpu/media/android_video_decode_accelerator.h"
 
+#include <stdint.h>
+
 #include "base/android/jni_android.h"
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/message_loop/message_loop.h"
+#include "content/common/gpu/media/android_copying_backing_strategy.h"
 #include "content/common/gpu/media/android_video_decode_accelerator.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder_mock.h"
-#include "media/base/android/media_codec_bridge.h"
+#include "media/base/android/media_codec_util.h"
 #include "media/base/android/media_jni_registrar.h"
 #include "media/video/picture.h"
 #include "media/video/video_decode_accelerator.h"
@@ -37,12 +41,12 @@ class MockVideoDecodeAcceleratorClient
   ~MockVideoDecodeAcceleratorClient() override {}
 
   // VideoDecodeAccelerator::Client implementation.
-  void ProvidePictureBuffers(uint32 requested_num_of_buffers,
+  void ProvidePictureBuffers(uint32_t requested_num_of_buffers,
                              const gfx::Size& dimensions,
-                             uint32 texture_target) override {}
-  void DismissPictureBuffer(int32 picture_buffer_id) override {}
+                             uint32_t texture_target) override {}
+  void DismissPictureBuffer(int32_t picture_buffer_id) override {}
   void PictureReady(const media::Picture& picture) override {}
-  void NotifyEndOfBitstreamBuffer(int32 bitstream_buffer_id) override {}
+  void NotifyEndOfBitstreamBuffer(int32_t bitstream_buffer_id) override {}
   void NotifyFlushDone() override {}
   void NotifyResetDone() override {}
   void NotifyError(media::VideoDecodeAccelerator::Error error) override {}
@@ -58,6 +62,11 @@ class AndroidVideoDecodeAcceleratorTest : public testing::Test {
     media::RegisterJni(env);
     // TODO(felipeg): fix GL bindings, so that the decoder can perform GL
     // calls.
+
+    // Start message loop because
+    // AndroidVideoDecodeAccelerator::ConfigureMediaCodec() starts a timer task.
+    message_loop_.reset(new base::MessageLoop());
+
     scoped_ptr<gpu::gles2::MockGLES2Decoder> decoder(
         new gpu::gles2::MockGLES2Decoder());
     scoped_ptr<MockVideoDecodeAcceleratorClient> client(
@@ -76,6 +85,7 @@ class AndroidVideoDecodeAcceleratorTest : public testing::Test {
 
  private:
   scoped_ptr<media::VideoDecodeAccelerator> accelerator_;
+  scoped_ptr<base::MessageLoop> message_loop_;
 };
 
 TEST_F(AndroidVideoDecodeAcceleratorTest, ConfigureUnsupportedCodec) {
@@ -83,7 +93,7 @@ TEST_F(AndroidVideoDecodeAcceleratorTest, ConfigureUnsupportedCodec) {
 }
 
 TEST_F(AndroidVideoDecodeAcceleratorTest, ConfigureSupportedCodec) {
-  if (!media::MediaCodecBridge::IsAvailable())
+  if (!media::MediaCodecUtil::IsMediaCodecAvailable())
     return;
   EXPECT_TRUE(Configure(media::kCodecVP8));
 }

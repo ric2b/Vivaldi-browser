@@ -4,12 +4,15 @@
 
 #include "components/filesystem/file_impl.h"
 
+#include <stddef.h>
 #include <stdint.h>
 #include <limits>
+#include <utility>
 
 #include "base/files/file_path.h"
 #include "base/files/scoped_file.h"
 #include "base/logging.h"
+#include "build/build_config.h"
 #include "components/filesystem/util.h"
 #include "mojo/platform_handle/platform_handle_functions.h"
 
@@ -25,13 +28,13 @@ const size_t kMaxReadSize = 1 * 1024 * 1024;  // 1 MB.
 
 FileImpl::FileImpl(mojo::InterfaceRequest<File> request,
                    const base::FilePath& path,
-                   uint32 flags)
-    : binding_(this, request.Pass()), file_(path, flags) {
+                   uint32_t flags)
+    : binding_(this, std::move(request)), file_(path, flags) {
   DCHECK(file_.IsValid());
 }
 
 FileImpl::FileImpl(mojo::InterfaceRequest<File> request, base::File file)
-    : binding_(this, request.Pass()), file_(file.Pass()) {
+    : binding_(this, std::move(request)), file_(std::move(file)) {
   DCHECK(file_.IsValid());
 }
 
@@ -85,7 +88,7 @@ void FileImpl::Read(uint32_t num_bytes_to_read,
 
   DCHECK_LE(static_cast<size_t>(num_bytes_read), num_bytes_to_read);
   bytes_read.resize(static_cast<size_t>(num_bytes_read));
-  callback.Run(FILE_ERROR_OK, bytes_read.Pass());
+  callback.Run(FILE_ERROR_OK, std::move(bytes_read));
 }
 
 // TODO(vtl): Move the implementation to a thread pool.
@@ -102,7 +105,7 @@ void FileImpl::Write(mojo::Array<uint8_t> bytes_to_write,
   // actually wrote that much).
   if (bytes_to_write.size() >
 #if defined(OS_WIN)
-      std::numeric_limits<INT>::max()) {
+      static_cast<size_t>(std::numeric_limits<int>::max())) {
 #else
       static_cast<size_t>(std::numeric_limits<ssize_t>::max())) {
 #endif
@@ -158,13 +161,14 @@ void FileImpl::Seek(int64_t offset,
     return;
   }
 
-  int64 position = file_.Seek(static_cast<base::File::Whence>(whence), offset);
+  int64_t position =
+      file_.Seek(static_cast<base::File::Whence>(whence), offset);
   if (position < 0) {
     callback.Run(FILE_ERROR_FAILED, 0);
     return;
   }
 
-  callback.Run(FILE_ERROR_OK, static_cast<int64>(position));
+  callback.Run(FILE_ERROR_OK, static_cast<int64_t>(position));
 }
 
 void FileImpl::Stat(const StatCallback& callback) {
@@ -179,7 +183,7 @@ void FileImpl::Stat(const StatCallback& callback) {
     return;
   }
 
-  callback.Run(FILE_ERROR_OK, MakeFileInformation(info).Pass());
+  callback.Run(FILE_ERROR_OK, MakeFileInformation(info));
 }
 
 void FileImpl::Truncate(int64_t size, const TruncateCallback& callback) {
@@ -256,7 +260,7 @@ void FileImpl::Dup(mojo::InterfaceRequest<File> file,
   }
 
   if (file.is_pending())
-    new FileImpl(file.Pass(), new_file.Pass());
+    new FileImpl(std::move(file), std::move(new_file));
   callback.Run(FILE_ERROR_OK);
 }
 
@@ -305,7 +309,7 @@ void FileImpl::AsHandle(const AsHandleCallback& callback) {
     return;
   }
 
-  callback.Run(FILE_ERROR_OK, ScopedHandle(mojo::Handle(mojo_handle)).Pass());
+  callback.Run(FILE_ERROR_OK, ScopedHandle(mojo::Handle(mojo_handle)));
 }
 
 }  // namespace filesystem

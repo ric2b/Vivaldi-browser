@@ -4,9 +4,11 @@
 
 #include "content/browser/media/android/media_resource_getter_impl.h"
 
+#include "base/android/context_utils.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "content/browser/child_process_security_policy_impl.h"
@@ -21,7 +23,6 @@
 #include "jni/MediaResourceGetter_jni.h"
 #include "media/base/android/media_url_interceptor.h"
 #include "net/base/auth.h"
-#include "net/cookies/cookie_monster.h"
 #include "net/cookies/cookie_store.h"
 #include "net/http/http_auth.h"
 #include "net/http/http_transaction_factory.h"
@@ -135,7 +136,9 @@ static void GetMediaMetadata(
 // Gets the metadata from a file descriptor. When finished, a task is posted to
 // the UI thread to run the callback function.
 static void GetMediaMetadataFromFd(
-    const int fd, const int64 offset, const int64 size,
+    const int fd,
+    const int64_t offset,
+    const int64_t size,
     const media::MediaResourceGetter::ExtractMediaMetadataCB& callback) {
   JNIEnv* env = base::android::AttachCurrentThread();
 
@@ -227,7 +230,7 @@ void MediaResourceGetterTask::RequestCookies(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   ChildProcessSecurityPolicyImpl* policy =
       ChildProcessSecurityPolicyImpl::GetInstance();
-  if (!policy->CanAccessCookiesForOrigin(render_process_id_, url)) {
+  if (!policy->CanAccessDataForOrigin(render_process_id_, url)) {
     callback.Run(std::string());
     return;
   }
@@ -239,14 +242,9 @@ void MediaResourceGetterTask::RequestCookies(
     return;
   }
 
-  net::CookieMonster* cookie_monster = cookie_store->GetCookieMonster();
-  if (cookie_monster) {
-    cookie_monster->GetAllCookiesForURLAsync(url, base::Bind(
-        &MediaResourceGetterTask::CheckPolicyForCookies, this,
-        url, first_party_for_cookies, callback));
-  } else {
-    callback.Run(std::string());
-  }
+  cookie_store->GetAllCookiesForURLAsync(
+      url, base::Bind(&MediaResourceGetterTask::CheckPolicyForCookies, this,
+                      url, first_party_for_cookies, callback));
 }
 
 void MediaResourceGetterTask::CheckPolicyForCookies(
@@ -370,7 +368,9 @@ void MediaResourceGetterImpl::ExtractMediaMetadata(
 }
 
 void MediaResourceGetterImpl::ExtractMediaMetadata(
-    const int fd, const int64 offset, const int64 size,
+    const int fd,
+    const int64_t offset,
+    const int64_t size,
     const ExtractMediaMetadataCB& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   base::SequencedWorkerPool* pool = content::BrowserThread::GetBlockingPool();

@@ -4,6 +4,9 @@
 
 #include "chrome/browser/safe_browsing/incident_reporting/module_integrity_verifier_win.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <functional>
 #include <map>
@@ -11,6 +14,7 @@
 
 #include "base/files/file_path.h"
 #include "base/files/memory_mapped_file.h"
+#include "base/macros.h"
 #include "base/native_library.h"
 #include "base/scoped_native_library.h"
 #include "base/strings/utf_string_conversions.h"
@@ -31,7 +35,7 @@ class ScopedModuleModifier {
   explicit ScopedModuleModifier(uint8_t* address) : address_(address) {
     uint8_t modification[ModificationLength];
     std::transform(address, address + ModificationLength, &modification[0],
-                   std::bind2nd(std::plus<uint8_t>(), 1U));
+                   [](uint8_t byte) { return byte + 1U; });
     SIZE_T bytes_written = 0;
     EXPECT_NE(0, WriteProcessMemory(GetCurrentProcess(),
                                     address,
@@ -44,7 +48,7 @@ class ScopedModuleModifier {
   ~ScopedModuleModifier() {
     uint8_t modification[ModificationLength];
     std::transform(address_, address_ + ModificationLength, &modification[0],
-                   std::bind2nd(std::minus<uint8_t>(), 1U));
+                   [](uint8_t byte) { return byte - 1U; });
     SIZE_T bytes_written = 0;
     EXPECT_NE(0, WriteProcessMemory(GetCurrentProcess(),
                                     address_,
@@ -111,8 +115,8 @@ class SafeBrowsingModuleVerifierWinTest : public testing::Test {
   }
 
   void GetDiskModuleHandle(HMODULE* disk_handle) {
-    *disk_handle =
-        reinterpret_cast<HMODULE>(const_cast<uint8*>(disk_dll_handle_.data()));
+    *disk_handle = reinterpret_cast<HMODULE>(
+        const_cast<uint8_t*>(disk_dll_handle_.data()));
   }
 
   // Returns the address of the named function exported by the test dll.
@@ -229,7 +233,10 @@ TEST_F(SafeBrowsingModuleVerifierWinTest, VerifyModuleModified) {
             (uint8_t)state.modification(1).modified_bytes()[0]);
 }
 
-TEST_F(SafeBrowsingModuleVerifierWinTest, VerifyModuleLongModification) {
+// Disabled because it fails about 80% of the time on XP.
+// http://crbug.com/549564
+TEST_F(SafeBrowsingModuleVerifierWinTest,
+       DISABLED_VerifyModuleLongModification) {
   ModuleState state;
   int num_bytes_different = 0;
 
@@ -247,7 +254,7 @@ TEST_F(SafeBrowsingModuleVerifierWinTest, VerifyModuleLongModification) {
                                   &disk_code_addr,
                                   &code_size));
 
-  const size_t kModificationSize = 256;
+  const int kModificationSize = 256;
   // Write the modification at the end so it's not overlapping relocations
   const size_t modification_offset = code_size - kModificationSize;
   ScopedModuleModifier<kModificationSize> mod(
@@ -275,7 +282,9 @@ TEST_F(SafeBrowsingModuleVerifierWinTest, VerifyModuleLongModification) {
       state.modification(0).modified_bytes());
 }
 
-TEST_F(SafeBrowsingModuleVerifierWinTest, VerifyModuleRelocOverlap) {
+// Disabled because it fails about 80% of the time on XP.
+// http://crbug.com/549564
+TEST_F(SafeBrowsingModuleVerifierWinTest, DISABLED_VerifyModuleRelocOverlap) {
   int num_bytes_different = 0;
   ModuleState state;
 
@@ -294,7 +303,7 @@ TEST_F(SafeBrowsingModuleVerifierWinTest, VerifyModuleRelocOverlap) {
                                   &code_size));
 
   // Modify the first hunk of the code, which contains many relocs.
-  const size_t kModificationSize = 256;
+  const int kModificationSize = 256;
   ScopedModuleModifier<kModificationSize> mod(mem_code_addr);
 
   state.Clear();
@@ -309,7 +318,8 @@ TEST_F(SafeBrowsingModuleVerifierWinTest, VerifyModuleRelocOverlap) {
   // Modifications across the relocs should have been coalesced into one.
   ASSERT_EQ(1, state.modification_size());
   ASSERT_EQ(kModificationSize, state.modification(0).byte_count());
-  ASSERT_EQ(kModificationSize, state.modification(0).modified_bytes().size());
+  ASSERT_EQ(static_cast<size_t>(kModificationSize),
+            state.modification(0).modified_bytes().size());
   EXPECT_EQ(std::string(mem_code_addr, mem_code_addr + kModificationSize),
             state.modification(0).modified_bytes());
 }

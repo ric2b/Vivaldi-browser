@@ -87,6 +87,10 @@ class WrappedSimpleIndexFile : public SimpleIndexFile {
     return index_file_;
   }
 
+  const base::FilePath& GetTempIndexFilePath() const {
+    return temp_index_file_;
+  }
+
   bool CreateIndexFileDirectory() const {
     return base::CreateDirectory(index_file_.DirName());
   }
@@ -104,14 +108,14 @@ class SimpleIndexFileTest : public testing::Test {
 
 TEST_F(SimpleIndexFileTest, Serialize) {
   SimpleIndex::EntrySet entries;
-  static const uint64 kHashes[] = { 11, 22, 33 };
+  static const uint64_t kHashes[] = {11, 22, 33};
   static const size_t kNumHashes = arraysize(kHashes);
   EntryMetadata metadata_entries[kNumHashes];
 
-  SimpleIndexFile::IndexMetadata index_metadata(static_cast<uint64>(kNumHashes),
-                                                456);
+  SimpleIndexFile::IndexMetadata index_metadata(
+      static_cast<uint64_t>(kNumHashes), 456);
   for (size_t i = 0; i < kNumHashes; ++i) {
-    uint64 hash = kHashes[i];
+    uint64_t hash = kHashes[i];
     metadata_entries[i] = EntryMetadata(Time(), hash);
     SimpleIndex::InsertInEntrySet(hash, metadata_entries[i], &entries);
   }
@@ -177,16 +181,16 @@ TEST_F(SimpleIndexFileTest, WriteThenLoadIndex) {
   ASSERT_TRUE(cache_dir.CreateUniqueTempDir());
 
   SimpleIndex::EntrySet entries;
-  static const uint64 kHashes[] = { 11, 22, 33 };
+  static const uint64_t kHashes[] = {11, 22, 33};
   static const size_t kNumHashes = arraysize(kHashes);
   EntryMetadata metadata_entries[kNumHashes];
   for (size_t i = 0; i < kNumHashes; ++i) {
-    uint64 hash = kHashes[i];
+    uint64_t hash = kHashes[i];
     metadata_entries[i] = EntryMetadata(Time(), hash);
     SimpleIndex::InsertInEntrySet(hash, metadata_entries[i], &entries);
   }
 
-  const uint64 kCacheSize = 456U;
+  const uint64_t kCacheSize = 456U;
   net::TestClosure closure;
   {
     WrappedSimpleIndexFile simple_index_file(cache_dir.path());
@@ -221,9 +225,8 @@ TEST_F(SimpleIndexFileTest, LoadCorruptIndex) {
   ASSERT_TRUE(simple_index_file.CreateIndexFileDirectory());
   const base::FilePath& index_path = simple_index_file.GetIndexFilePath();
   const std::string kDummyData = "nothing to be seen here";
-  EXPECT_EQ(
-      implicit_cast<int>(kDummyData.size()),
-      base::WriteFile(index_path, kDummyData.data(), kDummyData.size()));
+  EXPECT_EQ(static_cast<int>(kDummyData.size()),
+            base::WriteFile(index_path, kDummyData.data(), kDummyData.size()));
   base::Time fake_cache_mtime;
   ASSERT_TRUE(simple_util::GetMTime(simple_index_file.GetIndexFilePath(),
                                     &fake_cache_mtime));
@@ -263,9 +266,8 @@ TEST_F(SimpleIndexFileTest, SimpleCacheUpgrade) {
   const std::string index_file_contents("incorrectly serialized data");
   const base::FilePath old_index_file =
       cache_path.AppendASCII("the-real-index");
-  ASSERT_EQ(implicit_cast<int>(index_file_contents.size()),
-            base::WriteFile(old_index_file,
-                            index_file_contents.data(),
+  ASSERT_EQ(static_cast<int>(index_file_contents.size()),
+            base::WriteFile(old_index_file, index_file_contents.data(),
                             index_file_contents.size()));
 
   // Upgrade the cache.
@@ -290,8 +292,8 @@ TEST_F(SimpleIndexFileTest, SimpleCacheUpgrade) {
   // thread after that.
   MessageLoopHelper helper;
   CallbackTest cb_shutdown(&helper, false);
-  cache_thread.task_runner()->PostTask(
-      FROM_HERE,
+  cache_thread.task_runner()->PostTaskAndReply(
+      FROM_HERE, base::Bind(&base::DoNothing),
       base::Bind(&CallbackTest::Run, base::Unretained(&cb_shutdown), net::OK));
   helper.WaitUntilCacheIoFinished(1);
 
@@ -310,6 +312,35 @@ TEST_F(SimpleIndexFileTest, SimpleCacheUpgrade) {
                                       &when_index_last_saw_cache,
                                       &deserialize_result);
   EXPECT_TRUE(deserialize_result.did_load);
+}
+
+TEST_F(SimpleIndexFileTest, OverwritesStaleTempFile) {
+  base::ScopedTempDir cache_dir;
+  ASSERT_TRUE(cache_dir.CreateUniqueTempDir());
+  const base::FilePath cache_path = cache_dir.path();
+  WrappedSimpleIndexFile simple_index_file(cache_path);
+  ASSERT_TRUE(simple_index_file.CreateIndexFileDirectory());
+
+  // Create an temporary index file.
+  const base::FilePath& temp_index_path =
+      simple_index_file.GetTempIndexFilePath();
+  const std::string kDummyData = "nothing to be seen here";
+  EXPECT_EQ(
+      static_cast<int>(kDummyData.size()),
+      base::WriteFile(temp_index_path, kDummyData.data(), kDummyData.size()));
+  ASSERT_TRUE(base::PathExists(simple_index_file.GetTempIndexFilePath()));
+
+  // Write the index file.
+  SimpleIndex::EntrySet entries;
+  SimpleIndex::InsertInEntrySet(11, EntryMetadata(Time(), 11), &entries);
+  net::TestClosure closure;
+  simple_index_file.WriteToDisk(entries, 120U, base::TimeTicks(), false,
+                                closure.closure());
+  closure.WaitForResult();
+
+  // Check that the temporary file was deleted and the index file was created.
+  EXPECT_FALSE(base::PathExists(simple_index_file.GetTempIndexFilePath()));
+  EXPECT_TRUE(base::PathExists(simple_index_file.GetIndexFilePath()));
 }
 
 #endif  // defined(OS_POSIX)

@@ -8,6 +8,7 @@
 #include <set>
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
 
@@ -37,7 +38,8 @@ class CredentialManagerPendingRequireUserMediationTask
  public:
   CredentialManagerPendingRequireUserMediationTask(
       CredentialManagerPendingRequireUserMediationTaskDelegate* delegate,
-      const GURL& origin);
+      const GURL& origin,
+      const std::vector<std::string>& affiliated_realms);
   ~CredentialManagerPendingRequireUserMediationTask() override;
 
   // Adds an origin to require user mediation.
@@ -51,6 +53,7 @@ class CredentialManagerPendingRequireUserMediationTask
   CredentialManagerPendingRequireUserMediationTaskDelegate* const
       delegate_;  // Weak.
   std::set<std::string> origins_;
+  std::set<std::string> affiliated_realms_;
 
   DISALLOW_COPY_AND_ASSIGN(CredentialManagerPendingRequireUserMediationTask);
 };

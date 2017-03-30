@@ -5,8 +5,11 @@
 #ifndef CONTENT_BROWSER_APPCACHE_APPCACHE_URL_REQUEST_JOB_H_
 #define CONTENT_BROWSER_APPCACHE_APPCACHE_URL_REQUEST_JOB_H_
 
+#include <stdint.h>
+
 #include <string>
 
+#include "base/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "content/browser/appcache/appcache_entry.h"
 #include "content/browser/appcache/appcache_executable_handler.h"
@@ -31,17 +34,27 @@ class CONTENT_EXPORT AppCacheURLRequestJob
     : public net::URLRequestJob,
       public AppCacheStorage::Delegate {
  public:
+  // Callback that will be invoked before the request is restarted. The caller
+  // can use this opportunity to grab state from the AppCacheURLRequestJob to
+  // determine how it should behave when the request is restarted.
+  using OnPrepareToRestartCallback = base::Closure;
+
   AppCacheURLRequestJob(net::URLRequest* request,
                         net::NetworkDelegate* network_delegate,
                         AppCacheStorage* storage,
                         AppCacheHost* host,
-                        bool is_main_resource);
+                        bool is_main_resource,
+                        const OnPrepareToRestartCallback& restart_callback_);
+
+  ~AppCacheURLRequestJob() override;
 
   // Informs the job of what response it should deliver. Only one of these
   // methods should be called, and only once per job. A job will sit idle and
   // wait indefinitely until one of the deliver methods is called.
-  void DeliverAppCachedResponse(const GURL& manifest_url, int64 group_id,
-                                int64 cache_id, const AppCacheEntry& entry,
+  void DeliverAppCachedResponse(const GURL& manifest_url,
+                                int64_t group_id,
+                                int64_t cache_id,
+                                const AppCacheEntry& entry,
                                 bool is_fallback);
   void DeliverNetworkResponse();
   void DeliverErrorResponse();
@@ -66,8 +79,8 @@ class CONTENT_EXPORT AppCacheURLRequestJob
   // that this job has been instructed to deliver. These are only
   // valid to call if is_delivering_appcache_response.
   const GURL& manifest_url() const { return manifest_url_; }
-  int64 group_id() const { return group_id_; }
-  int64 cache_id() const { return cache_id_; }
+  int64_t group_id() const { return group_id_; }
+  int64_t cache_id() const { return cache_id_; }
   const AppCacheEntry& entry() const { return entry_; }
 
   // net::URLRequestJob's Kill method is made public so the users of this
@@ -89,12 +102,12 @@ class CONTENT_EXPORT AppCacheURLRequestJob
     return cache_entry_not_found_;
   }
 
- protected:
-  ~AppCacheURLRequestJob() override;
-
  private:
-  friend class content::AppCacheRequestHandlerTest;
-  friend class content::AppCacheURLRequestJobTest;
+  friend class AppCacheRequestHandlerTest;
+  friend class AppCacheURLRequestJobTest;
+
+  // Friend so it can get a weak pointer.
+  friend class AppCacheRequestHandler;
 
   enum DeliveryType {
     AWAITING_DELIVERY_ORDERS,
@@ -102,6 +115,8 @@ class CONTENT_EXPORT AppCacheURLRequestJob
     NETWORK_DELIVERY,
     ERROR_DELIVERY
   };
+
+  base::WeakPtr<AppCacheURLRequestJob> GetWeakPtr();
 
   // Returns true if one of the Deliver methods has been called.
   bool has_delivery_orders() const {
@@ -121,8 +136,8 @@ class CONTENT_EXPORT AppCacheURLRequestJob
 
   // AppCacheStorage::Delegate methods
   void OnResponseInfoLoaded(AppCacheResponseInfo* response_info,
-                            int64 response_id) override;
-  void OnCacheLoaded(AppCache* cache, int64 cache_id) override;
+                            int64_t response_id) override;
+  void OnCacheLoaded(AppCache* cache, int64_t cache_id) override;
 
   const net::HttpResponseInfo* http_info() const;
   bool is_range_request() const { return range_requested_.IsValid(); }
@@ -136,7 +151,7 @@ class CONTENT_EXPORT AppCacheURLRequestJob
   net::LoadState GetLoadState() const override;
   bool GetCharset(std::string* charset) override;
   void GetResponseInfo(net::HttpResponseInfo* info) override;
-  bool ReadRawData(net::IOBuffer* buf, int buf_size, int* bytes_read) override;
+  int ReadRawData(net::IOBuffer* buf, int buf_size) override;
 
   // Sets extra request headers for Job types that support request headers.
   // This is how we get informed of range-requests.
@@ -146,6 +161,10 @@ class CONTENT_EXPORT AppCacheURLRequestJob
   bool GetMimeType(std::string* mime_type) const override;
   int GetResponseCode() const override;
 
+  // Invokes |prepare_to_restart_callback_| and then calls
+  // net::URLRequestJob::NotifyRestartRequired.
+  void NotifyRestartRequired();
+
   AppCacheHost* host_;
   AppCacheStorage* storage_;
   base::TimeTicks start_time_tick_;
@@ -153,8 +172,8 @@ class CONTENT_EXPORT AppCacheURLRequestJob
   bool has_been_killed_;
   DeliveryType delivery_type_;
   GURL manifest_url_;
-  int64 group_id_;
-  int64 cache_id_;
+  int64_t group_id_;
+  int64_t cache_id_;
   AppCacheEntry entry_;
   bool is_fallback_;
   bool is_main_resource_;  // Used for histogram logging.
@@ -167,6 +186,7 @@ class CONTENT_EXPORT AppCacheURLRequestJob
   scoped_ptr<AppCacheResponseReader> reader_;
   scoped_refptr<AppCache> cache_;
   scoped_refptr<AppCacheGroup> group_;
+  const OnPrepareToRestartCallback on_prepare_to_restart_callback_;
   base::WeakPtrFactory<AppCacheURLRequestJob> weak_factory_;
 };
 

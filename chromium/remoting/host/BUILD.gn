@@ -2,17 +2,24 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/allocator.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
+import("//build/util/version.gni")
 import("//remoting/remoting_host.gni")
 import("//remoting/remoting_locales.gni")
+import("//remoting/remoting_options.gni")
 import("//remoting/remoting_srcs.gni")
 import("//remoting/remoting_version.gni")
 import("//remoting/tools/build/remoting_localize.gni")
 
 # GYP version: remoting/remoting_host:remoting_host_credits
 action("credits") {
-  about_credits_file = "$target_gen_dir/CREDITS.txt"
+  # We put this in $root_build_dir/gen/remoting instead of
+  # $root_build_dir/gen/remoting/host (target_gen_dir) for
+  # compatibility w/ GYP, since the installer needs the file to
+  # be at the same location.
+  about_credits_file = "$root_build_dir/gen/remoting/CREDITS.txt"
   script = "//tools/licenses.py"
 
   inputs = [
@@ -72,8 +79,9 @@ if (is_mac) {  # TODO(GYP) Mac build of remoting host.
       "//remoting/base",
       "//remoting/protocol",
       "//remoting/resources",
-      "//ui/events/platform",
+      "//ui/base",
       "//ui/events:dom_keycode_converter",
+      "//ui/events/platform",
     ]
 
     if (enable_configuration_policy) {
@@ -89,8 +97,8 @@ if (is_mac) {  # TODO(GYP) Mac build of remoting host.
         "//build/config/linux:x11",
         "//build/config/linux:xrandr",
       ]
-      if (!is_chromeos) {
-        deps += [ "//build/config/linux/gtk" ]
+      if (is_desktop_linux) {
+        deps += [ "//build/config/linux/gtk2" ]
       }
     } else {
       sources -= [
@@ -102,6 +110,7 @@ if (is_mac) {  # TODO(GYP) Mac build of remoting host.
       if (is_linux) {
         # These will already be filtered out on non-Linux.
         sources -= [
+          "linux/x11_util.cc",
           "linux/x_server_clipboard.cc",
           "linux/x_server_clipboard.h",
         ]
@@ -151,6 +160,7 @@ if (is_mac) {  # TODO(GYP) Mac build of remoting host.
 
       sources -= [
         "continue_window_linux.cc",
+        "curtain_mode_linux.cc",
         "disconnect_window_linux.cc",
       ]
     }
@@ -183,14 +193,7 @@ if (is_mac) {  # TODO(GYP) Mac build of remoting host.
     }
 
     if (enable_webrtc) {
-      deps += [
-        # TODO(GYP): crbug.com/481633. We should probably not have to depend on
-        # libjingle_webrtc; that should be pulled in automatically by
-        # libpeerconnection instead.
-        "//third_party/libjingle:libjingle_webrtc",
-        "//third_party/libjingle:libpeerconnection",
-        "//third_party/webrtc/modules/desktop_capture",
-      ]
+      deps += [ "//third_party/webrtc/modules/desktop_capture" ]
 
       sources +=
           rebase_path(remoting_host_srcs_gypi_values.remoting_cast_sources,
@@ -203,8 +206,6 @@ if (is_mac) {  # TODO(GYP) Mac build of remoting host.
     testonly = true
 
     sources = [
-      "fake_desktop_capturer.cc",
-      "fake_desktop_capturer.h",
       "fake_desktop_environment.cc",
       "fake_desktop_environment.h",
       "fake_host_extension.cc",
@@ -213,12 +214,18 @@ if (is_mac) {  # TODO(GYP) Mac build of remoting host.
       "fake_host_status_monitor.h",
       "fake_mouse_cursor_monitor.cc",
       "fake_mouse_cursor_monitor.h",
+      "fake_oauth_token_getter.cc",
+      "fake_oauth_token_getter.h",
+      "host_mock_objects.cc",
+      "setup/mock_oauth_client.cc",
+      "setup/mock_oauth_client.h",
     ]
 
     configs += [ "//remoting:version" ]
 
     deps = [
       "//remoting/proto",
+      "//testing/gmock",
       "//testing/gtest",
     ]
     public_deps = [
@@ -240,7 +247,7 @@ if (is_mac) {  # TODO(GYP) Mac build of remoting host.
     sources = [
       "audio_pump_unittest.cc",
       "audio_silence_detector_unittest.cc",
-      "capture_scheduler_unittest.cc",
+      "backoff_timer_unittest.cc",
       "chromeos/aura_desktop_capturer_unittest.cc",
       "chromeos/clipboard_aura_unittest.cc",
       "chromoting_host_context_unittest.cc",
@@ -250,12 +257,13 @@ if (is_mac) {  # TODO(GYP) Mac build of remoting host.
       "daemon_process_unittest.cc",
       "desktop_process_unittest.cc",
       "desktop_shape_tracker_unittest.cc",
+      "gcd_rest_client_unittest.cc",
+      "gcd_state_updater_unittest.cc",
       "gnubby_auth_handler_posix_unittest.cc",
       "heartbeat_sender_unittest.cc",
       "host_change_notification_listener_unittest.cc",
       "host_config_unittest.cc",
       "host_extension_session_manager_unittest.cc",
-      "host_mock_objects.cc",
       "host_status_logger_unittest.cc",
       "ipc_desktop_environment_unittest.cc",
       "it2me/it2me_confirmation_dialog_proxy_unittest.cc",
@@ -274,19 +282,18 @@ if (is_mac) {  # TODO(GYP) Mac build of remoting host.
       "register_support_host_request_unittest.cc",
       "remote_input_filter_unittest.cc",
       "resizing_host_observer_unittest.cc",
+      "resources_unittest.cc",
       "screen_resolution_unittest.cc",
       "server_log_entry_host_unittest.cc",
       "setup/me2me_native_messaging_host_unittest.cc",
-      "setup/mock_oauth_client.cc",
       "setup/oauth_helper_unittest.cc",
       "setup/pin_validator_unittest.cc",
       "shaped_desktop_capturer_unittest.cc",
+      "third_party_auth_config_unittest.cc",
       "token_validator_factory_impl_unittest.cc",
-      "video_frame_pump_unittest.cc",
+      "touch_injector_win_unittest.cc",
       "video_frame_recorder_unittest.cc",
       "win/rdp_client_unittest.cc",
-      "win/worker_process_launcher.cc",
-      "win/worker_process_launcher.h",
       "win/worker_process_launcher_unittest.cc",
     ]
 
@@ -302,9 +309,9 @@ if (is_mac) {  # TODO(GYP) Mac build of remoting host.
     deps = [
       ":host",
       ":test_support",
-      "//remoting/host/setup",
       "//remoting/host/it2me:common",
       "//remoting/host/native_messaging",
+      "//remoting/host/setup",
       "//remoting/proto",
       "//skia",
       "//testing/gmock",
@@ -318,7 +325,7 @@ if (is_mac) {  # TODO(GYP) Mac build of remoting host.
 
   if (is_win) {
     import("//build/toolchain/win/midl.gni")
-    import("//remoting/tools/build/message_compiler.gni")
+    import("//build/win/message_compiler.gni")
 
     # TODO(brettw) these should not be generated via exec_script. This should be
     # part of the build process rather than the metabuild. Instead, a script
@@ -400,6 +407,7 @@ if (is_mac) {  # TODO(GYP) Mac build of remoting host.
       ]
 
       deps = [
+        "//build/config/sanitizers:deps",
         "//remoting/host/setup",
       ]
 
@@ -407,28 +415,68 @@ if (is_mac) {  # TODO(GYP) Mac build of remoting host.
         deps += [ "//third_party/libjingle:libjingle_webrtc" ]
       }
     }
+
+    action_foreach("remoting_native_messaging_manifests") {
+      if (is_mac) {
+        assert(false, "not implemented on mac yet")
+      } else if (is_win) {
+        assert(false, "not implemented on win yet")
+      } else {
+        me2me_host_path =
+            "/opt/google/chrome-remote-desktop/native-messaging-host"
+        it2me_host_path =
+            "/opt/google/chrome-remote-desktop/remote-assistance-host"
+      }
+
+      script = "../tools/build/remoting_localize.py"
+
+      sources = [
+        "it2me/com.google.chrome.remote_assistance.json.jinja2",
+        "setup/com.google.chrome.remote_desktop.json.jinja2",
+      ]
+
+      inputs = [
+        branding_path,
+      ]
+
+      outputs = [
+        "$root_build_dir/remoting/{{source_name_part}}",
+      ]
+
+      args = [
+        "--define",
+        "ME2ME_HOST_PATH=$me2me_host_path",
+        "--define",
+        "IT2ME_HOST_PATH=$it2me_host_path",
+        "--variables",
+        branding_path,
+        "--template",
+        "{{source}}",
+        "--locale_output",
+        "remoting/{{source_name_part}}",
+        "en",
+      ]
+    }
+
+    # TODO(crbug.com/512899) This still needs to be ported to GN.
+    group("remoting_infoplist_strings") {
+    }
   }
 
   if (enable_me2me_host) {
     source_set("remoting_me2me_host_static") {
       sources = [
-        "curtain_mode.h",
-        "curtain_mode_linux.cc",
-        "curtain_mode_mac.cc",
-        "curtain_mode_win.cc",
         "pam_authorization_factory_posix.cc",
         "pam_authorization_factory_posix.h",
-        "posix/signal_handler.cc",
-        "posix/signal_handler.h",
         "remoting_me2me_host.cc",
       ]
+      defines = []
 
       configs += [ "//remoting:version" ]
 
       deps = [
         "//base",
         "//base:i18n",
-        "//components/policy",
         "//components/policy:policy_component_common",
         "//net",
         "//remoting/base",
@@ -437,15 +485,24 @@ if (is_mac) {  # TODO(GYP) Mac build of remoting host.
         "//third_party/webrtc/modules/desktop_capture",
       ]
 
+      if (enable_configuration_policy) {
+        deps += [ "//components/policy" ]
+      }
+
       if (enable_webrtc) {
         deps += [ "//third_party/libjingle:libjingle_webrtc" ]
       }
 
-      if (is_linux) {
-        deps += [ "//build/config/linux/gtk" ]
+      if (is_desktop_linux) {
+        deps += [ "//build/config/linux/gtk2" ]
       }
-      if (is_linux || is_mac) {
+      if ((is_linux && !is_chromeos) || is_mac) {
         libs = [ "pam" ]
+      }
+
+      if (is_mac && is_official_build) {
+        sources += [ "internal/internal_mac-inl.h" ]
+        defines += [ "USE_REMOTING_MACOSX_INTERNAL" ]
       }
     }
 
@@ -457,9 +514,137 @@ if (is_mac) {  # TODO(GYP) Mac build of remoting host.
         ]
 
         deps = [
-          ":remoting_me2me_host_static",
           ":credits",
+          ":remoting_me2me_host_static",
+          "//build/config/sanitizers:deps",
         ]
+      }
+
+      executable("native_messaging_host") {
+        sources = [
+          "setup/me2me_native_messaging_host_entry_point.cc",
+          "setup/me2me_native_messaging_host_main.cc",
+          "setup/me2me_native_messaging_host_main.h",
+        ]
+
+        deps = [
+          ":remoting_infoplist_strings",
+          "//base",
+          "//remoting/base:breakpad",
+          "//remoting/host",
+          "//remoting/host/native_messaging",
+          "//remoting/host/setup",
+        ]
+
+        configs += [ "//build/config/compiler:wexit_time_destructors" ]
+
+        # The |major|, |build| and |patch| versions are inherited from Chrome.
+        # Since Chrome's |minor| version is always '0', we replace it with a
+        # Chromoting-specific patch version.
+        defines = [ "VERSION=" + "$chrome_version_major" + "." +
+                    "$remoting_version_patch" + "." + "$chrome_version_build" +
+                    "." + "$chrome_version_patch" ]
+
+        if (is_linux && use_allocator != "none") {
+          deps += [ "//base/allocator" ]
+        } else if (is_mac || is_win) {
+          assert(false, "not implemented on mac or win yet")
+        }
+      }
+    }
+
+    if (is_chrome_branded && enable_me2me_host && !is_chromeos) {
+      # TODO(GYP): add support for archive_chromoting_tests variable?
+
+      import("//build/config/zip.gni")
+
+      build_deb_script = "installer/linux/build_deb.py"
+      deb_filename =
+          "$root_build_dir/" + exec_script(build_deb_script,
+                                           [
+                                             "-p",
+                                             "-s",
+                                             rebase_path("//"),
+                                           ],
+                                           "string",
+                                           [ "installer/linux/build-deb.sh" ])
+      changes_filename =
+          "$root_build_dir/" + get_path_info(deb_filename, "name") + ".changes"
+
+      packaging_outputs = [
+        deb_filename,
+        changes_filename,
+
+        # TODO(GYP): Check that these are generated by build_deb.py.
+        #"$root_build_dir/remoting_me2me_host.debug",
+        #"$root_build_dir/remoting_start_host.debug",
+        #"$root_build_dir/native_messaging_host.debug",
+        #"$root_build_dir/remote_assistance_host.debug",
+      ]
+
+      zip("remoting_me2me_host_archive") {
+        # Store the installer package(s) into a zip file so there is a
+        # consistent filename to reference for build archiving (i.e. in
+        # FILES.cfg). This also avoids possible conflicts with "wildcard"
+        # package handling in other build/signing scripts.
+        inputs = packaging_outputs
+        output = "$root_build_dir/remoting-me2me-host-linux.zip"
+        deps = [
+          ":remoting_me2me_host_copy",
+        ]
+      }
+
+      copy("remoting_me2me_host_copy") {
+        # Copy the debian package file, which has version info in it,
+        # to a consistewnt filename for use on Chromoting swarming bots.
+        sources = [
+          deb_filename,
+        ]
+        outputs = [
+          "$root_build_dir/remoting-me2me-host.deb",
+        ]
+        public_deps = [
+          ":remoting_me2me_host_deb_installer",
+        ]
+      }
+
+      action("remoting_me2me_host_deb_installer") {
+        script = build_deb_script
+        inputs = [
+          build_deb_script,
+          "installer/linux/Makefile",
+          "installer/linux/debian/chrome-remote-desktop.init",
+          "installer/linux/debian/chrome-remote-desktop.pam",
+          "installer/linux/debian/compat",
+          "installer/linux/debian/control",
+          "installer/linux/debian/copyright",
+          "installer/linux/debian/postinst",
+          "installer/linux/debian/preinst",
+          "installer/linux/debian/rules",
+        ]
+        outputs = packaging_outputs
+        sources = [
+          "installer/linux/build-deb.sh",
+        ]
+        args = [
+          "-s",
+          rebase_path("//"),
+          "-o",
+          rebase_path("$root_build_dir"),
+        ]
+
+        deps = [
+          ":native_messaging_host",
+          ":remoting_me2me_host",
+          ":remoting_native_messaging_manifests",
+          ":remoting_start_host",
+          "//remoting/host/it2me:remote_assistance_host",
+          "//remoting/resources",
+          "//third_party/icu:icudata",
+        ]
+      }
+    } else {
+      group("remoting_me2me_host_archive") {
       }
     }
   }

@@ -4,6 +4,9 @@
 
 #include "ui/ozone/platform/caca/caca_window_manager.h"
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/trace_event/trace_event.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkSurface.h"
@@ -137,7 +140,7 @@ scoped_ptr<ui::SurfaceOzoneCanvas> CacaWindowManager::CreateCanvasForWidget(
   scoped_ptr<CacaSurface> canvas(new CacaSurface(window));
   bool initialized = canvas->Initialize();
   DCHECK(initialized);
-  return canvas.Pass();
+  return canvas;
 }
 
 }  // namespace ui

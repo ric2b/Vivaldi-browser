@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/input_method/mock_input_method_manager.h"
 
+#include <utility>
+
 namespace chromeos {
 namespace input_method {
 
@@ -53,7 +55,7 @@ MockInputMethodManager::GetSupportedInputMethods() const {
   scoped_ptr<InputMethodDescriptors> result(new InputMethodDescriptors);
   result->push_back(
       InputMethodUtil::GetFallbackInputMethodDescriptor());
-  return result.Pass();
+  return result;
 }
 
 scoped_ptr<InputMethodDescriptors>
@@ -61,7 +63,7 @@ MockInputMethodManager::State::GetActiveInputMethods() const {
   scoped_ptr<InputMethodDescriptors> result(new InputMethodDescriptors);
   result->push_back(
       InputMethodUtil::GetFallbackInputMethodDescriptor());
-  return result.Pass();
+  return result;
 }
 
 const std::vector<std::string>&
@@ -116,8 +118,7 @@ void MockInputMethodManager::ActivateInputMethodMenuItem(
 void MockInputMethodManager::State::AddInputMethodExtension(
     const std::string& extension_id,
     const InputMethodDescriptors& descriptors,
-    InputMethodEngineInterface* instance) {
-}
+    ui::IMEEngineHandlerInterface* instance) {}
 
 void MockInputMethodManager::State::RemoveInputMethodExtension(
     const std::string& extension_id) {
@@ -196,7 +197,7 @@ ComponentExtensionIMEManager*
 
 void MockInputMethodManager::SetComponentExtensionIMEManager(
     scoped_ptr<ComponentExtensionIMEManager> comp_ime_manager) {
-  comp_ime_manager_ = comp_ime_manager.Pass();
+  comp_ime_manager_ = std::move(comp_ime_manager);
 }
 
 void MockInputMethodManager::set_application_locale(const std::string& value) {

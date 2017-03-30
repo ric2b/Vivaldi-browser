@@ -3,10 +3,10 @@
 // found in the LICENSE file.
 
 #include <string>
+#include <vector>
 
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/memory/scoped_vector.h"
 #include "net/base/net_util.h"
 #include "net/base/request_priority.h"
 #include "net/dns/mock_host_resolver.h"
@@ -65,7 +65,7 @@ class HttpNetworkTransactionSSLTest : public testing::Test {
     auth_handler_factory_.reset(new HttpAuthHandlerMock::Factory());
     session_params_.http_auth_handler_factory = auth_handler_factory_.get();
 
-    proxy_service_.reset(ProxyService::CreateDirect());
+    proxy_service_ = ProxyService::CreateDirect();
     session_params_.proxy_service = proxy_service_.get();
 
     session_params_.client_socket_factory = &mock_socket_factory_;
@@ -79,7 +79,7 @@ class HttpNetworkTransactionSSLTest : public testing::Test {
     HttpRequestInfo* request_info = new HttpRequestInfo;
     request_info->url = GURL(url);
     request_info->method = "GET";
-    request_info_vector_.push_back(request_info);
+    request_info_vector_.push_back(make_scoped_ptr(request_info));
     return request_info;
   }
 
@@ -96,7 +96,7 @@ class HttpNetworkTransactionSSLTest : public testing::Test {
   HttpServerPropertiesImpl http_server_properties_;
   TransportSecurityState transport_security_state_;
   HttpNetworkSession::Params session_params_;
-  ScopedVector<HttpRequestInfo> request_info_vector_;
+  std::vector<scoped_ptr<HttpRequestInfo>> request_info_vector_;
 };
 
 // Tests that HttpNetworkTransaction attempts to fallback from
@@ -127,16 +127,14 @@ TEST_F(HttpNetworkTransactionSSLTest, SSLFallback) {
   StaticSocketDataProvider data3(NULL, 0, NULL, 0);
   mock_socket_factory_.AddSocketDataProvider(&data3);
 
-  scoped_refptr<HttpNetworkSession> session(
-      new HttpNetworkSession(session_params_));
-  scoped_ptr<HttpNetworkTransaction> trans(
-      new HttpNetworkTransaction(DEFAULT_PRIORITY, session.get()));
+  HttpNetworkSession session(session_params_);
+  HttpNetworkTransaction trans(DEFAULT_PRIORITY, &session);
 
   TestCompletionCallback callback;
   // This will consume |ssl_data1|, |ssl_data2| and |ssl_data3|.
-  int rv = callback.GetResult(
-      trans->Start(GetRequestInfo("https://www.paypal.com/"),
-                   callback.callback(), BoundNetLog()));
+  int rv =
+      callback.GetResult(trans.Start(GetRequestInfo("https://www.paypal.com/"),
+                                     callback.callback(), BoundNetLog()));
   EXPECT_EQ(ERR_SSL_PROTOCOL_ERROR, rv);
 
   SocketDataProviderArray<SocketDataProvider>& mock_data =
@@ -144,7 +142,7 @@ TEST_F(HttpNetworkTransactionSSLTest, SSLFallback) {
   // Confirms that |ssl_data1|, |ssl_data2| and |ssl_data3| are consumed.
   EXPECT_EQ(3u, mock_data.next_index());
 
-  SSLConfig& ssl_config = GetServerSSLConfig(trans.get());
+  SSLConfig& ssl_config = GetServerSSLConfig(&trans);
   // |version_max| fallbacks to TLS 1.0.
   EXPECT_EQ(SSL_PROTOCOL_VERSION_TLS1, ssl_config.version_max);
   EXPECT_TRUE(ssl_config.version_fallback);

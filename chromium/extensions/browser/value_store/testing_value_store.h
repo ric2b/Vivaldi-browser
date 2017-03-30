@@ -5,7 +5,13 @@
 #ifndef EXTENSIONS_BROWSER_VALUE_STORE_TESTING_VALUE_STORE_H_
 #define EXTENSIONS_BROWSER_VALUE_STORE_TESTING_VALUE_STORE_H_
 
+#include <stddef.h>
+
+#include <string>
+#include <vector>
+
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "extensions/browser/value_store/value_store.h"
 
 // ValueStore for testing, with an in-memory storage but the ability to
@@ -17,7 +23,7 @@ class TestingValueStore : public ValueStore {
 
   // Sets the error code for requests. If OK, errors won't be thrown.
   // Defaults to OK.
-  void set_error_code(ErrorCode error_code) { error_code_ = error_code; }
+  void set_status_code(StatusCode status_code);
 
   // Accessors for the number of reads/writes done by this value store. Each
   // Get* operation (except for the BytesInUse ones) counts as one read, and
@@ -42,18 +48,12 @@ class TestingValueStore : public ValueStore {
   WriteResult Remove(const std::string& key) override;
   WriteResult Remove(const std::vector<std::string>& keys) override;
   WriteResult Clear() override;
-  // TestingValueStores can't get corrupted (they're all in-memory), so these
-  // just return true.
-  bool Restore() override;
-  bool RestoreKey(const std::string& key) override;
 
  private:
-  scoped_ptr<ValueStore::Error> TestingError();
-
   base::DictionaryValue storage_;
   int read_count_;
   int write_count_;
-  ErrorCode error_code_;
+  ValueStore::Status status_;
 
   DISALLOW_COPY_AND_ASSIGN(TestingValueStore);
 };

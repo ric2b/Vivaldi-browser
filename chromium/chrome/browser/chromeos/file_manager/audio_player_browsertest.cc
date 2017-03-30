@@ -29,7 +29,13 @@ typedef AudioPlayerBrowserTestBase<NOT_IN_GUEST_MODE> AudioPlayerBrowserTest;
 typedef AudioPlayerBrowserTestBase<IN_GUEST_MODE>
     AudioPlayerBrowserTestInGuestMode;
 
-IN_PROC_BROWSER_TEST_F(AudioPlayerBrowserTest, OpenAudioOnDownloads) {
+// http://crbug.com/508949
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_OpenAudioOnDownloads DISABLED_OpenAudioOnDownloads
+#else
+#define MAYBE_OpenAudioOnDownloads OpenAudioOnDownloads
+#endif
+IN_PROC_BROWSER_TEST_F(AudioPlayerBrowserTest, MAYBE_OpenAudioOnDownloads) {
   set_test_case_name("openAudioOnDownloads");
   StartTest();
 }
@@ -40,8 +46,44 @@ IN_PROC_BROWSER_TEST_F(AudioPlayerBrowserTestInGuestMode,
   StartTest();
 }
 
-IN_PROC_BROWSER_TEST_F(AudioPlayerBrowserTest, OpenAudioOnDrive) {
+// http://crbug.com/508949
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_OpenAudioOnDrive DISABLED_OpenAudioOnDrive
+#else
+#define MAYBE_OpenAudioOnDrive OpenAudioOnDrive
+#endif
+IN_PROC_BROWSER_TEST_F(AudioPlayerBrowserTest, MAYBE_OpenAudioOnDrive) {
   set_test_case_name("openAudioOnDrive");
+  StartTest();
+}
+
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_TogglePlayState DISABLED_TogglePlayState
+#else
+#define MAYBE_TogglePlayState TogglePlayState
+#endif
+IN_PROC_BROWSER_TEST_F(AudioPlayerBrowserTest, MAYBE_TogglePlayState) {
+  set_test_case_name("togglePlayState");
+  StartTest();
+}
+
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_ChangeVolumeLevel DISABLED_ChangeVolumeLevel
+#else
+#define MAYBE_ChangeVolumeLevel ChangeVolumeLevel
+#endif
+IN_PROC_BROWSER_TEST_F(AudioPlayerBrowserTest, MAYBE_ChangeVolumeLevel) {
+  set_test_case_name("changeVolumeLevel");
+  StartTest();
+}
+
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_ChangeTracks DISABLED_ChangeTracks
+#else
+#define MAYBE_ChangeTracks ChangeTracks
+#endif
+IN_PROC_BROWSER_TEST_F(AudioPlayerBrowserTest, MAYBE_ChangeTracks) {
+  set_test_case_name("changeTracks");
   StartTest();
 }
 

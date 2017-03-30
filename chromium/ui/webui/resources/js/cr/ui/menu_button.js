@@ -110,7 +110,7 @@ cr.define('cr.ui', function() {
               this.hideMenu();
             } else if (e.button == 0) {  // Only show the menu when using left
                                          // mouse button.
-              this.showMenu(false);
+              this.showMenu(false, {x: e.screenX, y: e.screenY});
 
               // Prevent the button from stealing focus on mousedown.
               e.preventDefault();
@@ -158,7 +158,7 @@ cr.define('cr.ui', function() {
         case 'contextmenu':
           if ((!this.menu || !this.menu.contains(e.target)) &&
               (!this.hideTimestamp_ || Date.now() - this.hideTimestamp_ > 50))
-            this.showMenu(true);
+            this.showMenu(true, {x: e.screenX, y: e.screenY});
           e.preventDefault();
           // Don't allow elements further up in the DOM to show their menus.
           e.stopPropagation();
@@ -175,8 +175,10 @@ cr.define('cr.ui', function() {
      * Shows the menu.
      * @param {boolean} shouldSetFocus Whether to set focus on the
      *     selected menu item.
+     * @param {{x: number, y: number}=} opt_mousePos The position of the mouse
+     *     when shown (in screen coordinates).
      */
-    showMenu: function(shouldSetFocus) {
+    showMenu: function(shouldSetFocus, opt_mousePos) {
       this.hideMenu();
 
       this.menu.updateCommands(this);
@@ -189,7 +191,7 @@ cr.define('cr.ui', function() {
       if (!this.dispatchEvent(event))
         return;
 
-      this.menu.hidden = false;
+      this.menu.show(opt_mousePos);
 
       this.setAttribute('menu-shown', '');
 
@@ -225,7 +227,7 @@ cr.define('cr.ui', function() {
         this.menu.classList.add('hide-delayed');
       else
         this.menu.classList.remove('hide-delayed');
-      this.menu.hidden = true;
+      this.menu.hide();
 
       this.showingEvents_.removeAll();
       this.focus();
@@ -282,52 +284,6 @@ cr.define('cr.ui', function() {
           break;
       }
     }
-  };
-
-  /**
-   * Helper for styling a menu button with a drop-down arrow indicator.
-   * Creates a new 2D canvas context and draws a downward-facing arrow into it.
-   * @param {string} canvasName The name of the canvas. The canvas can be
-   *     addressed from CSS using -webkit-canvas(<canvasName>).
-   * @param {number} width The width of the canvas and the arrow.
-   * @param {number} height The height of the canvas and the arrow.
-   * @param {string} colorSpec The CSS color to use when drawing the arrow.
-   */
-  function createDropDownArrowCanvas(canvasName, width, height, colorSpec) {
-    var ctx = document.getCSSCanvasContext('2d', canvasName, width, height);
-    ctx.fillStyle = ctx.strokeStyle = colorSpec;
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(width, 0);
-    ctx.lineTo(height, height);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-  };
-
-  /** @const */ var ARROW_WIDTH = 6;
-  /** @const */ var ARROW_HEIGHT = 3;
-
-  /**
-   * Create the images used to style drop-down-style MenuButtons.
-   * This should be called before creating any MenuButtons that will have the
-   * CSS class 'drop-down'. If no colors are specified, defaults will be used.
-   * @param {string=} opt_normalColor CSS color for the default button state.
-   * @param {string=} opt_hoverColor CSS color for the hover button state.
-   * @param {string=} opt_activeColor CSS color for the active button state.
-   */
-  MenuButton.createDropDownArrows = function(
-      opt_normalColor, opt_hoverColor, opt_activeColor) {
-    opt_normalColor = opt_normalColor || 'rgb(192, 195, 198)';
-    opt_hoverColor = opt_hoverColor || 'rgb(48, 57, 66)';
-    opt_activeColor = opt_activeColor || 'white';
-
-    createDropDownArrowCanvas(
-        'drop-down-arrow', ARROW_WIDTH, ARROW_HEIGHT, opt_normalColor);
-    createDropDownArrowCanvas(
-        'drop-down-arrow-hover', ARROW_WIDTH, ARROW_HEIGHT, opt_hoverColor);
-    createDropDownArrowCanvas(
-        'drop-down-arrow-active', ARROW_WIDTH, ARROW_HEIGHT, opt_activeColor);
   };
 
   // Export

@@ -2,18 +2,21 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import os
+import logging
+import sys
+
+from catapult_base import cloud_storage
 
 from telemetry.core import exceptions
-from telemetry.core import local_server
-from telemetry.core import memory_cache_http_server
-from telemetry.core.platform import profiling_controller
+from telemetry.core import profiling_controller
 from telemetry import decorators
 from telemetry.internal import app
 from telemetry.internal.backends import browser_backend
 from telemetry.internal.browser import browser_credentials
 from telemetry.internal.browser import extension_dict
 from telemetry.internal.browser import tab_list
+from telemetry.internal.browser import web_contents
+from telemetry.internal.util import exception_formatter
 
 
 class Browser(app.App):
@@ -30,31 +33,38 @@ class Browser(app.App):
   def __init__(self, backend, platform_backend, credentials_path):
     super(Browser, self).__init__(app_backend=backend,
                                   platform_backend=platform_backend)
-    self._browser_backend = backend
-    self._platform_backend = platform_backend
-    self._local_server_controller = local_server.LocalServerController(
-        platform_backend)
-    self._tabs = tab_list.TabList(backend.tab_list_backend)
-    self.credentials = browser_credentials.BrowserCredentials()
-    self.credentials.credentials_path = credentials_path
-    self._platform_backend.DidCreateBrowser(self, self._browser_backend)
+    try:
+      self._browser_backend = backend
+      self._platform_backend = platform_backend
+      self._tabs = tab_list.TabList(backend.tab_list_backend)
+      self.credentials = browser_credentials.BrowserCredentials()
+      self.credentials.credentials_path = credentials_path
+      self._platform_backend.DidCreateBrowser(self, self._browser_backend)
+      browser_options = self._browser_backend.browser_options
+      self.platform.FlushDnsCache()
+      if browser_options.clear_sytem_cache_for_browser_and_profile_on_start:
+        if self.platform.CanFlushIndividualFilesFromSystemCache():
+          self.platform.FlushSystemCacheForDirectory(
+              self._browser_backend.profile_directory)
+          self.platform.FlushSystemCacheForDirectory(
+              self._browser_backend.browser_directory)
+        else:
+          self.platform.FlushEntireSystemCache()
 
-    browser_options = self._browser_backend.browser_options
-    self.platform.FlushDnsCache()
-    if browser_options.clear_sytem_cache_for_browser_and_profile_on_start:
-      if self.platform.CanFlushIndividualFilesFromSystemCache():
-        self.platform.FlushSystemCacheForDirectory(
-            self._browser_backend.profile_directory)
-        self.platform.FlushSystemCacheForDirectory(
-            self._browser_backend.browser_directory)
-      else:
-        self.platform.FlushEntireSystemCache()
-
-    self._browser_backend.SetBrowser(self)
-    self._browser_backend.Start()
-    self._platform_backend.DidStartBrowser(self, self._browser_backend)
-    self._profiling_controller = profiling_controller.ProfilingController(
-        self._browser_backend.profiling_controller_backend)
+      self._browser_backend.SetBrowser(self)
+      self._browser_backend.Start()
+      self._platform_backend.DidStartBrowser(self, self._browser_backend)
+      self._profiling_controller = profiling_controller.ProfilingController(
+          self._browser_backend.profiling_controller_backend)
+    except Exception:
+      exc_info = sys.exc_info()
+      logging.exception('Failure while starting browser backend.')
+      try:
+        self._platform_backend.WillCloseBrowser(self, self._browser_backend)
+      except Exception:
+        exception_formatter.PrintFormattedException(
+            msg='Exception raised while closing platform backend')
+      raise exc_info[0], exc_info[1], exc_info[2]
 
   @property
   def profiling_controller(self):
@@ -215,56 +225,15 @@ class Browser(app.App):
     if self._browser_backend.IsBrowserRunning():
       self._platform_backend.WillCloseBrowser(self, self._browser_backend)
 
-    self._local_server_controller.Close()
     self._browser_backend.profiling_controller_backend.WillCloseBrowser()
+    if self._browser_backend.supports_uploading_logs:
+      try:
+        self._browser_backend.UploadLogsToCloudStorage()
+      except cloud_storage.CloudStorageError as e:
+        logging.error('Cannot upload browser log: %s' % str(e))
     self._browser_backend.Close()
     self.credentials = None
 
-  @property
-  def http_server(self):
-    return self._local_server_controller.GetRunningServer(
-        memory_cache_http_server.MemoryCacheHTTPServer, None)
-
-  def SetHTTPServerDirectories(self, paths):
-    """Returns True if the HTTP server was started, False otherwise."""
-    if isinstance(paths, basestring):
-      paths = set([paths])
-    paths = set(os.path.realpath(p) for p in paths)
-
-    # If any path is in a subdirectory of another, remove the subdirectory.
-    duplicates = set()
-    for parent_path in paths:
-      for sub_path in paths:
-        if parent_path == sub_path:
-          continue
-        if os.path.commonprefix((parent_path, sub_path)) == parent_path:
-          duplicates.add(sub_path)
-    paths -= duplicates
-
-    if self.http_server:
-      if paths and self.http_server.paths == paths:
-        return False
-
-      self.http_server.Close()
-
-    if not paths:
-      return False
-
-    server = memory_cache_http_server.MemoryCacheHTTPServer(paths)
-    self.StartLocalServer(server)
-    return True
-
-  def StartLocalServer(self, server):
-    """Starts a LocalServer and associates it with this browser.
-
-    It will be closed when the browser closes.
-    """
-    self._local_server_controller.StartServer(server)
-
-  @property
-  def local_servers(self):
-    """Returns the currently running local servers."""
-    return self._local_server_controller.local_servers
 
   def GetStandardOutput(self):
     return self._browser_backend.GetStandardOutput()
@@ -281,3 +250,37 @@ class Browser(app.App):
 
        See the documentation of the SystemInfo class for more details."""
     return self._browser_backend.GetSystemInfo()
+
+  @property
+  def supports_memory_dumping(self):
+    return self._browser_backend.supports_memory_dumping
+
+  def DumpMemory(self, timeout=web_contents.DEFAULT_WEB_CONTENTS_TIMEOUT):
+    return self._browser_backend.DumpMemory(timeout)
+
+  @property
+  def supports_overriding_memory_pressure_notifications(self):
+    return (
+        self._browser_backend.supports_overriding_memory_pressure_notifications)
+
+  def SetMemoryPressureNotificationsSuppressed(
+      self, suppressed, timeout=web_contents.DEFAULT_WEB_CONTENTS_TIMEOUT):
+    self._browser_backend.SetMemoryPressureNotificationsSuppressed(
+        suppressed, timeout)
+
+  def SimulateMemoryPressureNotification(
+      self, pressure_level, timeout=web_contents.DEFAULT_WEB_CONTENTS_TIMEOUT):
+    self._browser_backend.SimulateMemoryPressureNotification(
+        pressure_level, timeout)
+
+  @property
+  def supports_cpu_metrics(self):
+    return self._browser_backend.supports_cpu_metrics
+
+  @property
+  def supports_memory_metrics(self):
+    return self._browser_backend.supports_memory_metrics
+
+  @property
+  def supports_power_metrics(self):
+    return self._browser_backend.supports_power_metrics

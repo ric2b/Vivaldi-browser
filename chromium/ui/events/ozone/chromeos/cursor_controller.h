@@ -8,6 +8,7 @@
 #include <map>
 
 #include "base/event_types.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/synchronization/lock.h"
 #include "ui/events/ozone/events_ozone_export.h"
@@ -61,7 +62,7 @@ class EVENTS_OZONE_EXPORT CursorController {
  private:
   CursorController();
   ~CursorController();
-  friend struct DefaultSingletonTraits<CursorController>;
+  friend struct base::DefaultSingletonTraits<CursorController>;
 
   struct PerWindowCursorConfiguration {
     gfx::Display::Rotation rotation;

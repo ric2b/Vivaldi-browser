@@ -5,7 +5,7 @@
 #ifndef UI_GFX_INTERPOLATED_TRANSFORM_H_
 #define UI_GFX_INTERPOLATED_TRANSFORM_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/point3_f.h"
@@ -163,10 +163,10 @@ class GFX_EXPORT InterpolatedScale : public InterpolatedTransform {
 
 class GFX_EXPORT InterpolatedTranslation : public InterpolatedTransform {
  public:
-  InterpolatedTranslation(const gfx::Point& start_pos,
-                          const gfx::Point& end_pos);
-  InterpolatedTranslation(const gfx::Point& start_pos,
-                          const gfx::Point& end_pos,
+  InterpolatedTranslation(const gfx::PointF& start_pos,
+                          const gfx::PointF& end_pos);
+  InterpolatedTranslation(const gfx::PointF& start_pos,
+                          const gfx::PointF& end_pos,
                           float start_time,
                           float end_time);
   InterpolatedTranslation(const gfx::Point3F& start_pos,

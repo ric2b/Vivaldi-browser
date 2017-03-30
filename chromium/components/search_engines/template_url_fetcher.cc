@@ -4,6 +4,7 @@
 
 #include "build/build_config.h"
 
+#include "base/macros.h"
 #include "components/search_engines/template_url_fetcher.h"
 
 #include "base/strings/string_number_conversions.h"
@@ -70,7 +71,7 @@ TemplateURLFetcher::RequestDelegate::RequestDelegate(
     const ConfirmAddSearchProviderCallback& confirm_add_callback,
     ProviderType provider_type)
     : url_fetcher_(
-          net::URLFetcher::Create(osdd_url, net::URLFetcher::GET, this).Pass()),
+          net::URLFetcher::Create(osdd_url, net::URLFetcher::GET, this)),
       fetcher_(fetcher),
       keyword_(keyword),
       osdd_url_(osdd_url),

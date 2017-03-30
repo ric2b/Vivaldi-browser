@@ -5,9 +5,12 @@
 #ifndef CONTENT_COMMON_GPU_CLIENT_GPU_VIDEO_ENCODE_ACCELERATOR_HOST_H_
 #define CONTENT_COMMON_GPU_CLIENT_GPU_VIDEO_ENCODE_ACCELERATOR_HOST_H_
 
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/non_thread_safe.h"
@@ -17,19 +20,19 @@
 #include "media/video/video_encode_accelerator.h"
 
 namespace gfx {
-
+struct GpuMemoryBufferHandle;
 class Size;
-
 }  // namespace gfx
 
 namespace media {
-
 class VideoFrame;
-
 }  // namespace media
 
-namespace content {
+namespace tracked_objects {
+class Location;
+}  // namespace tracked_objects
 
+namespace content {
 class GpuChannelHost;
 
 // This class is the renderer-side host for the VideoEncodeAccelerator in the
@@ -51,38 +54,45 @@ class GpuVideoEncodeAcceleratorHost
 
   // media::VideoEncodeAccelerator implementation.
   SupportedProfiles GetSupportedProfiles() override;
-  bool Initialize(media::VideoFrame::Format input_format,
+  bool Initialize(media::VideoPixelFormat input_format,
                   const gfx::Size& input_visible_size,
                   media::VideoCodecProfile output_profile,
-                  uint32 initial_bitrate,
+                  uint32_t initial_bitrate,
                   Client* client) override;
   void Encode(const scoped_refptr<media::VideoFrame>& frame,
               bool force_keyframe) override;
   void UseOutputBitstreamBuffer(const media::BitstreamBuffer& buffer) override;
-  void RequestEncodingParametersChange(uint32 bitrate,
-                                       uint32 framerate_num) override;
+  void RequestEncodingParametersChange(uint32_t bitrate,
+                                       uint32_t framerate_num) override;
   void Destroy() override;
 
-  // CommandBufferProxyImpl::DeletionObserver implemetnation.
+  // CommandBufferProxyImpl::DeletionObserver implementation.
   void OnWillDeleteImpl() override;
 
  private:
   // Only Destroy() should be deleting |this|.
   ~GpuVideoEncodeAcceleratorHost() override;
 
+  // Encode specific video frame types.
+  void EncodeGpuMemoryBufferFrame(const scoped_refptr<media::VideoFrame>& frame,
+                                  bool force_keyframe);
+  void EncodeSharedMemoryFrame(const scoped_refptr<media::VideoFrame>& frame,
+                               bool force_keyframe);
+
   // Notify |client_| of an error.  Posts a task to avoid re-entrancy.
-  void PostNotifyError(Error);
+  void PostNotifyError(const tracked_objects::Location& location,
+                       Error error, const std::string& message);
 
   void Send(IPC::Message* message);
 
   // IPC handlers, proxying media::VideoEncodeAccelerator::Client for the GPU
   // process.  Should not be called directly.
-  void OnRequireBitstreamBuffers(uint32 input_count,
+  void OnRequireBitstreamBuffers(uint32_t input_count,
                                  const gfx::Size& input_coded_size,
-                                 uint32 output_buffer_size);
-  void OnNotifyInputDone(int32 frame_id);
-  void OnBitstreamBufferReady(int32 bitstream_buffer_id,
-                              uint32 payload_size,
+                                 uint32_t output_buffer_size);
+  void OnNotifyInputDone(int32_t frame_id);
+  void OnBitstreamBufferReady(int32_t bitstream_buffer_id,
+                              uint32_t payload_size,
                               bool key_frame);
   void OnNotifyError(Error error);
 
@@ -92,7 +102,7 @@ class GpuVideoEncodeAcceleratorHost
   GpuChannelHost* channel_;
 
   // Route ID for the associated encoder in the GPU process.
-  int32 encoder_route_id_;
+  int32_t encoder_route_id_;
 
   // The client that will receive callbacks from the encoder.
   Client* client_;
@@ -104,11 +114,11 @@ class GpuVideoEncodeAcceleratorHost
 
   // media::VideoFrames sent to the encoder.
   // base::IDMap not used here, since that takes pointers, not scoped_refptr.
-  typedef base::hash_map<int32, scoped_refptr<media::VideoFrame> > FrameMap;
+  typedef base::hash_map<int32_t, scoped_refptr<media::VideoFrame>> FrameMap;
   FrameMap frame_map_;
 
   // ID serial number for the next frame to send to the GPU process.
-  int32 next_frame_id_;
+  int32_t next_frame_id_;
 
   // WeakPtr factory for posting tasks back to itself.
   base::WeakPtrFactory<GpuVideoEncodeAcceleratorHost> weak_this_factory_;

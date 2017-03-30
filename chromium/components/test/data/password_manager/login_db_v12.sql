@@ -73,10 +73,15 @@ X'00000000', /* possible_usernames */
 X'18000000020000000000000000000000000000000000000000000000', /* form_data */
 0, /* date_synced */
 '', /* display_name */
-'', /* avatar_url */
+'https://www.google.com/icon', /* avatar_url */
 '', /* federation_url */
 0,  /* skip_zero_click */
 0  /* generation_upload_status */
 );
 CREATE INDEX logins_signon ON logins (signon_realm);
+CREATE TABLE stats (
+origin_domain VARCHAR NOT NULL PRIMARY KEY, 
+nopes_count INTEGER,
+dismissal_count INTEGER, 
+start_date INTEGER NOT NULL);
 COMMIT;

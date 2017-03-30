@@ -2,8 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/test/test_views.h"
@@ -255,12 +256,19 @@ TEST_F(DialogClientViewTest, LayoutWithFootnoteHeightForWidth) {
             footnote_view->bounds().height());
 }
 
+// No ReparentNativeView on Mac. See http://crbug.com/514920.
+#if defined(OS_MACOSX) && !defined(USE_AURA)
+#define MAYBE_FocusManager DISABLED_FocusManager
+#else
+#define MAYBE_FocusManager FocusManager
+#endif
+
 // Test that the DialogClientView's FocusManager is properly updated when the
 // DialogClientView belongs to a non top level widget and the widget is
 // reparented. The DialogClientView belongs to a non top level widget in the
 // case of constrained windows. The constrained window's widget is reparented
 // when a browser tab is dragged to a different browser window.
-TEST_F(DialogClientViewTest, FocusManager) {
+TEST_F(DialogClientViewTest, MAYBE_FocusManager) {
   scoped_ptr<Widget> toplevel1(new Widget);
   Widget::InitParams toplevel1_params =
       CreateParams(Widget::InitParams::TYPE_WINDOW);

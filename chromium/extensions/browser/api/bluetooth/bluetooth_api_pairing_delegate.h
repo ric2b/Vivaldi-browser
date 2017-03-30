@@ -5,8 +5,11 @@
 #ifndef EXTENSIONS_BROWSER_API_BLUETOOTH_BLUETOOTH_API_PAIRING_DELEGATE_H_
 #define EXTENSIONS_BROWSER_API_BLUETOOTH_BLUETOOTH_API_PAIRING_DELEGATE_H_
 
+#include <stdint.h>
+
 #include <string>
 
+#include "base/macros.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "extensions/common/api/bluetooth_private.h"
 
@@ -21,8 +24,8 @@ namespace extensions {
 class BluetoothApiPairingDelegate
     : public device::BluetoothDevice::PairingDelegate {
  public:
-  BluetoothApiPairingDelegate(const std::string& extension_id,
-                              content::BrowserContext* browser_context);
+  explicit BluetoothApiPairingDelegate(
+      content::BrowserContext* browser_context);
   ~BluetoothApiPairingDelegate() override;
 
   // device::PairingDelegate overrides:
@@ -30,18 +33,21 @@ class BluetoothApiPairingDelegate
   void RequestPasskey(device::BluetoothDevice* device) override;
   void DisplayPinCode(device::BluetoothDevice* device,
                       const std::string& pincode) override;
-  void DisplayPasskey(device::BluetoothDevice* device, uint32 passkey) override;
-  void KeysEntered(device::BluetoothDevice* device, uint32 entered) override;
-  void ConfirmPasskey(device::BluetoothDevice* device, uint32 passkey) override;
+  void DisplayPasskey(device::BluetoothDevice* device,
+                      uint32_t passkey) override;
+  void KeysEntered(device::BluetoothDevice* device, uint32_t entered) override;
+  void ConfirmPasskey(device::BluetoothDevice* device,
+                      uint32_t passkey) override;
   void AuthorizePairing(device::BluetoothDevice* device) override;
 
  private:
   // Dispatches a pairing event to the extension.
   void DispatchPairingEvent(
-      const core_api::bluetooth_private::PairingEvent& pairing_event);
+      const api::bluetooth_private::PairingEvent& pairing_event);
 
-  std::string extension_id_;
   content::BrowserContext* browser_context_;
+
+  DISALLOW_COPY_AND_ASSIGN(BluetoothApiPairingDelegate);
 };
 
 }  // namespace extensions

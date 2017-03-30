@@ -5,11 +5,14 @@
 #ifndef CHROME_BROWSER_BACKGROUND_BACKGROUND_CONTENTS_SERVICE_H_
 #define CHROME_BROWSER_BACKGROUND_BACKGROUND_CONTENTS_SERVICE_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/scoped_observer.h"
 #include "chrome/browser/background/background_contents.h"
@@ -102,7 +105,8 @@ class BackgroundContentsService : private content::NotificationObserver,
   // Gets the parent application id for the passed BackgroundContents. Returns
   // an empty string if no parent application found (e.g. passed
   // BackgroundContents has already shut down).
-  const base::string16& GetParentApplicationId(BackgroundContents* contents) const;
+  const base::string16& GetParentApplicationId(
+      BackgroundContents* contents) const;
 
   // Creates a new BackgroundContents using the passed |site| and
   // the |route_id| and begins tracking the object internally so it can be
@@ -112,8 +116,9 @@ class BackgroundContentsService : private content::NotificationObserver,
   // Source..
   BackgroundContents* CreateBackgroundContents(
       content::SiteInstance* site,
-      int route_id,
-      int main_frame_route_id,
+      int32_t route_id,
+      int32_t main_frame_route_id,
+      int32_t main_frame_widget_route_id,
       Profile* profile,
       const std::string& frame_name,
       const base::string16& application_id,
@@ -130,16 +135,11 @@ class BackgroundContentsService : private content::NotificationObserver,
  private:
   friend class BackgroundContentsServiceTest;
   friend class MockBackgroundContents;
-  friend class TaskManagerNoShowBrowserTest;
 
   FRIEND_TEST_ALL_PREFIXES(BackgroundContentsServiceTest,
                            BackgroundContentsCreateDestroy);
   FRIEND_TEST_ALL_PREFIXES(BackgroundContentsServiceTest,
                            TestApplicationIDLinkage);
-  FRIEND_TEST_ALL_PREFIXES(TaskManagerNoShowBrowserTest,
-                           NoticeBGContentsChanges);
-  FRIEND_TEST_ALL_PREFIXES(TaskManagerNoShowBrowserTest,
-                           KillBGContents);
 
   // Registers for various notifications.
   void StartObserving(Profile* profile);

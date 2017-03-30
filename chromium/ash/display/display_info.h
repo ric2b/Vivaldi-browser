@@ -5,11 +5,14 @@
 #ifndef ASH_DISPLAY_DISPLAY_INFO_H_
 #define ASH_DISPLAY_DISPLAY_INFO_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
 #include "ash/ash_export.h"
+#include "base/files/file_path.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/gfx/display.h"
 #include "ui/gfx/geometry/insets.h"
@@ -83,22 +86,25 @@ class ASH_EXPORT DisplayInfo {
   static DisplayInfo CreateFromSpec(const std::string& spec);
 
   // Creates a DisplayInfo from string spec using given |id|.
-  static DisplayInfo CreateFromSpecWithID(const std::string& spec,
-                                          int64 id);
-
-  DisplayInfo();
-  DisplayInfo(int64 id, const std::string& name, bool has_overscan);
-  ~DisplayInfo();
+  static DisplayInfo CreateFromSpecWithID(const std::string& spec, int64_t id);
 
   // When this is set to true on the device whose internal display has
   // 1.25 dsf, Chrome uses 1.0f as a default scale factor, and uses
   // dsf 1.25 when UI scaling is set to 0.8f.
-  static void SetUse125DSFForUIScaling(bool enable);
+  static void SetUse125DSFForUIScalingForTest(bool enable);
 
-  int64 id() const { return id_; }
+  DisplayInfo();
+  DisplayInfo(int64_t id, const std::string& name, bool has_overscan);
+  ~DisplayInfo();
+
+  int64_t id() const { return id_; }
 
   // The name of the display.
   const std::string& name() const { return name_; }
+
+  // The path to the display device in the sysfs filesystem.
+  void set_sys_path(const base::FilePath& sys_path) { sys_path_ = sys_path; }
+  const base::FilePath& sys_path() const { return sys_path_; }
 
   // True if the display EDID has the overscan flag. This does not create the
   // actual overscan automatically, but used in the message.
@@ -109,12 +115,22 @@ class ASH_EXPORT DisplayInfo {
   }
   gfx::Display::TouchSupport touch_support() const { return touch_support_; }
 
-  void set_touch_device_id(int id) { touch_device_id_ = id; }
-  int touch_device_id() const { return touch_device_id_; }
+  // Associate the input device with identifier |id| with this display.
+  void AddInputDevice(int id);
+
+  // Clear the list of input devices associated with this display.
+  void ClearInputDevices();
+
+  // The input device ids that are associated with this display.
+  std::vector<int> input_devices() const { return input_devices_; }
 
   // Gets/Sets the device scale factor of the display.
   float device_scale_factor() const { return device_scale_factor_; }
   void set_device_scale_factor(float scale) { device_scale_factor_ = scale; }
+
+  // Gets/Sets the device DPI of the display.
+  float device_dpi() const { return device_dpi_; }
+  void set_device_dpi(float dpi) { device_dpi_ = dpi; }
 
   // The native bounds for the display. The size of this can be
   // different from the |size_in_pixel| when overscan insets are set
@@ -235,17 +251,17 @@ class ASH_EXPORT DisplayInfo {
  private:
   // Returns true if this display should use DSF=1.25 for UI scaling; i.e.
   // SetUse125DSFForUIScaling(true) is called and this is the internal display.
-  bool Use125DSFRorUIScaling() const;
+  bool Use125DSFForUIScaling() const;
 
-  int64 id_;
+  int64_t id_;
   std::string name_;
+  base::FilePath sys_path_;
   bool has_overscan_;
   std::map<gfx::Display::RotationSource, gfx::Display::Rotation> rotations_;
   gfx::Display::TouchSupport touch_support_;
 
-  // If the display is also a touch device, it will have a positive
-  // |touch_device_id_|. Otherwise |touch_device_id_| is 0.
-  int touch_device_id_;
+  // The set of input devices associated with this display.
+  std::vector<int> input_devices_;
 
   // This specifies the device's pixel density. (For example, a
   // display whose DPI is higher than the threshold is considered to have
@@ -254,6 +270,9 @@ class ASH_EXPORT DisplayInfo {
   // layers properly.
   float device_scale_factor_;
   gfx::Rect bounds_in_native_;
+
+  // This specifies the device's DPI.
+  float device_dpi_;
 
   // The size of the display in use. The size can be different from the size
   // of |bounds_in_native_| if the display has overscan insets and/or rotation.
@@ -291,6 +310,10 @@ class ASH_EXPORT DisplayInfo {
 
   // If you add a new member, you need to update Copy().
 };
+
+// Resets the synthesized display id for testing. This
+// is necessary to avoid overflowing the output index.
+ASH_EXPORT void ResetDisplayIdForTest();
 
 }  // namespace ash
 

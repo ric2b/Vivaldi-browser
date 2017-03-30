@@ -16,13 +16,12 @@ DropTargetEvent::DropTargetEvent(const OSExchangeData& data,
                                  const gfx::Point& root_location,
                                  int source_operations)
     : LocatedEvent(ET_DROP_TARGET_EVENT,
-                   location,
-                   root_location,
+                   gfx::PointF(location),
+                   gfx::PointF(root_location),
                    EventTimeForNow(),
                    0),
       data_(data),
-      source_operations_(source_operations) {
-}
+      source_operations_(source_operations) {}
 
 }  // namespace ui
 

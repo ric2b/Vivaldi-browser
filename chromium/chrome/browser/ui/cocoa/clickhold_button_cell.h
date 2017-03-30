@@ -15,15 +15,21 @@
 @interface ClickHoldButtonCell : ImageButtonCell {
  @private
   BOOL enableClickHold_;
+  BOOL enableRightClick_;
   NSTimeInterval clickHoldTimeout_;
   id clickHoldTarget_;                  // Weak.
   SEL clickHoldAction_;
+  id accessibilityShowMenuTarget_;                  // Weak.
+  SEL accessibilityShowMenuAction_;
   BOOL trackOnlyInRect_;
   BOOL activateOnDrag_;
 }
 
 // Enable click-hold? Default: NO.
 @property(assign, nonatomic) BOOL enableClickHold;
+
+// Enable right click? Default: NO. Needs to be set for accessibility.
+@property(assign, nonatomic) BOOL enableRightClick;
 
 // Timeout is in seconds (at least 0.0, at most 5; 0.0 means that the button
 // will always have its click-hold action activated immediately on press).
@@ -40,6 +46,13 @@
 // Defines what to do when click-held (as per usual action/target).
 @property(assign, nonatomic) id clickHoldTarget;
 @property(assign, nonatomic) SEL clickHoldAction;
+
+// Defines what to do when the Show Menu accessibility action is performed.
+// (clickHoldAction should be independent from accessibilityShowMenuAction
+// since different operations, e.g. releasing vs. not releasing a mouse button,
+// may need to be performed for each occasion.)
+@property(assign, nonatomic) id accessibilityShowMenuTarget;
+@property(assign, nonatomic) SEL accessibilityShowMenuAction;
 
 @end  // @interface ClickHoldButtonCell
 

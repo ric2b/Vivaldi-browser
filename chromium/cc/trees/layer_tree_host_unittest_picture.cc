@@ -25,6 +25,7 @@ class LayerTreeHostPictureTest : public LayerTreeTest {
     root->AddChild(root_picture_layer_);
 
     layer_tree_host()->SetRootLayer(root);
+    client_.set_bounds(size);
   }
 
   scoped_refptr<FakePictureLayer> root_picture_layer_;
@@ -81,7 +82,8 @@ class LayerTreeHostPictureTestTwinLayer
     }
 
     FakePictureLayerImpl* pending_picture_impl =
-        static_cast<FakePictureLayerImpl*>(pending_root_impl->children()[0]);
+        static_cast<FakePictureLayerImpl*>(
+            pending_root_impl->children()[0].get());
 
     if (!active_root_impl) {
       EXPECT_EQ(0, activates_);
@@ -96,7 +98,8 @@ class LayerTreeHostPictureTestTwinLayer
     }
 
     FakePictureLayerImpl* active_picture_impl =
-        static_cast<FakePictureLayerImpl*>(active_root_impl->children()[0]);
+        static_cast<FakePictureLayerImpl*>(
+            active_root_impl->children()[0].get());
 
     // After the first activation, when we commit again, we'll have a pending
     // and active layer. Then we recreate a picture layer in the 4th activate
@@ -115,7 +118,8 @@ class LayerTreeHostPictureTestTwinLayer
       EXPECT_EQ(2, activates_);
     } else {
       FakePictureLayerImpl* active_picture_impl =
-          static_cast<FakePictureLayerImpl*>(active_root_impl->children()[0]);
+          static_cast<FakePictureLayerImpl*>(
+              active_root_impl->children()[0].get());
       EXPECT_EQ(nullptr, active_picture_impl->GetPendingOrActiveTwinLayer());
     }
 
@@ -139,7 +143,7 @@ class LayerTreeHostPictureTestResizeViewportWithGpuRaster
   void SetupTree() override {
     scoped_refptr<Layer> root = Layer::Create(layer_settings());
     root->SetBounds(gfx::Size(768, 960));
-
+    client_.set_bounds(root->bounds());
     client_.set_fill_with_nonsolid_color(true);
     picture_ = FakePictureLayer::Create(layer_settings(), &client_);
     picture_->SetBounds(gfx::Size(768, 960));
@@ -152,7 +156,7 @@ class LayerTreeHostPictureTestResizeViewportWithGpuRaster
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
 
   void CommitCompleteOnThread(LayerTreeHostImpl* impl) override {
-    LayerImpl* child = impl->sync_tree()->root_layer()->children()[0];
+    LayerImpl* child = impl->sync_tree()->root_layer()->children()[0].get();
     FakePictureLayerImpl* picture_impl =
         static_cast<FakePictureLayerImpl*>(child);
     gfx::Size tile_size =
@@ -202,7 +206,6 @@ class LayerTreeHostPictureTestChangeLiveTilesRectWithRecycleTree
 
     scoped_refptr<Layer> root = Layer::Create(layer_settings());
     root->SetBounds(gfx::Size(100, 100));
-
     // The layer is big enough that the live tiles rect won't cover the full
     // layer.
     client_.set_fill_with_nonsolid_color(true);
@@ -210,14 +213,19 @@ class LayerTreeHostPictureTestChangeLiveTilesRectWithRecycleTree
     picture_->SetBounds(gfx::Size(100, 100000));
     root->AddChild(picture_);
 
+    // picture_'s transform is going to be changing on the compositor thread, so
+    // force it to have a transform node by making it scrollable.
+    picture_->SetScrollClipLayerId(root->id());
+
     layer_tree_host()->SetRootLayer(root);
     LayerTreeHostPictureTest::SetupTree();
+    client_.set_bounds(picture_->bounds());
   }
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
 
   void DrawLayersOnThread(LayerTreeHostImpl* impl) override {
-    LayerImpl* child = impl->active_tree()->root_layer()->children()[0];
+    LayerImpl* child = impl->active_tree()->root_layer()->children()[0].get();
     FakePictureLayerImpl* picture_impl =
         static_cast<FakePictureLayerImpl*>(child);
     switch (++frame_) {
@@ -268,7 +276,7 @@ class LayerTreeHostPictureTestChangeLiveTilesRectWithRecycleTree
   }
 
   void WillActivateTreeOnThread(LayerTreeHostImpl* impl) override {
-    LayerImpl* child = impl->sync_tree()->root_layer()->children()[0];
+    LayerImpl* child = impl->sync_tree()->root_layer()->children()[0].get();
     FakePictureLayerImpl* picture_impl =
         static_cast<FakePictureLayerImpl*>(child);
     PictureLayerTiling* tiling = picture_impl->HighResTiling();
@@ -304,6 +312,7 @@ class LayerTreeHostPictureTestRSLLMembership : public LayerTreeHostPictureTest {
   void SetupTree() override {
     scoped_refptr<Layer> root = Layer::Create(layer_settings());
     root->SetBounds(gfx::Size(100, 100));
+    client_.set_bounds(root->bounds());
 
     child_ = Layer::Create(layer_settings());
     root->AddChild(child_);
@@ -322,8 +331,8 @@ class LayerTreeHostPictureTestRSLLMembership : public LayerTreeHostPictureTest {
 
   void CommitCompleteOnThread(LayerTreeHostImpl* impl) override {
     LayerImpl* root = impl->sync_tree()->root_layer();
-    LayerImpl* child = root->children()[0];
-    LayerImpl* gchild = child->children()[0];
+    LayerImpl* child = root->children()[0].get();
+    LayerImpl* gchild = child->children()[0].get();
     FakePictureLayerImpl* picture = static_cast<FakePictureLayerImpl*>(gchild);
 
     switch (impl->sync_tree()->source_frame_number()) {
@@ -344,8 +353,8 @@ class LayerTreeHostPictureTestRSLLMembership : public LayerTreeHostPictureTest {
 
   void DidActivateTreeOnThread(LayerTreeHostImpl* impl) override {
     LayerImpl* root = impl->active_tree()->root_layer();
-    LayerImpl* child = root->children()[0];
-    LayerImpl* gchild = child->children()[0];
+    LayerImpl* child = root->children()[0].get();
+    LayerImpl* gchild = child->children()[0].get();
     FakePictureLayerImpl* picture = static_cast<FakePictureLayerImpl*>(gchild);
 
     switch (impl->active_tree()->source_frame_number()) {
@@ -391,14 +400,17 @@ SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostPictureTestRSLLMembership);
 class LayerTreeHostPictureTestRSLLMembershipWithScale
     : public LayerTreeHostPictureTest {
   void SetupTree() override {
-    scoped_refptr<Layer> root = Layer::Create(layer_settings());
-    root->SetBounds(gfx::Size(100, 100));
+    scoped_refptr<Layer> root_clip = Layer::Create(layer_settings());
+    root_clip->SetBounds(gfx::Size(100, 100));
+    scoped_refptr<Layer> page_scale_layer = Layer::Create(layer_settings());
+    page_scale_layer->SetBounds(gfx::Size(100, 100));
 
     pinch_ = Layer::Create(layer_settings());
     pinch_->SetBounds(gfx::Size(500, 500));
-    pinch_->SetScrollClipLayerId(root->id());
+    pinch_->SetScrollClipLayerId(root_clip->id());
     pinch_->SetIsContainerForFixedPositionLayers(true);
-    root->AddChild(pinch_);
+    page_scale_layer->AddChild(pinch_);
+    root_clip->AddChild(page_scale_layer);
 
     // Don't be solid color so the layer has tilings/tiles.
     client_.set_fill_with_nonsolid_color(true);
@@ -406,10 +418,12 @@ class LayerTreeHostPictureTestRSLLMembershipWithScale
     picture_->SetBounds(gfx::Size(100, 100));
     pinch_->AddChild(picture_);
 
-    layer_tree_host()->RegisterViewportLayers(NULL, root, pinch_, pinch_);
+    layer_tree_host()->RegisterViewportLayers(NULL, page_scale_layer, pinch_,
+                                              nullptr);
     layer_tree_host()->SetPageScaleFactorAndLimits(1.f, 1.f, 4.f);
-    layer_tree_host()->SetRootLayer(root);
+    layer_tree_host()->SetRootLayer(root_clip);
     LayerTreeHostPictureTest::SetupTree();
+    client_.set_bounds(picture_->bounds());
   }
 
   void InitializeSettings(LayerTreeSettings* settings) override {
@@ -420,34 +434,41 @@ class LayerTreeHostPictureTestRSLLMembershipWithScale
     frame_ = 0;
     draws_in_frame_ = 0;
     last_frame_drawn_ = -1;
+    ready_to_draw_ = false;
     PostSetNeedsCommitToMainThread();
   }
 
   void WillActivateTreeOnThread(LayerTreeHostImpl* impl) override {
     LayerImpl* root = impl->sync_tree()->root_layer();
-    LayerImpl* pinch = root->children()[0];
-    LayerImpl* gchild = pinch->children()[0];
+    LayerImpl* pinch = root->children()[0]->children()[0].get();
+    LayerImpl* gchild = pinch->children()[0].get();
     FakePictureLayerImpl* picture = static_cast<FakePictureLayerImpl*>(gchild);
+    ready_to_draw_ = false;
 
     switch (frame_) {
       case 0:
-        // On 1st commit the layer has tilings.
-        EXPECT_GT(picture->tilings()->num_tilings(), 0u);
+        // On 1st commit the pending layer has tilings.
+        ASSERT_EQ(1u, picture->tilings()->num_tilings());
+        EXPECT_EQ(1.f, picture->tilings()->tiling_at(0)->contents_scale());
         break;
       case 1:
-        // On 2nd commit, the layer is transparent, so does not have tilings.
-        EXPECT_EQ(0u, picture->tilings()->num_tilings());
+        // On 2nd commit, the pending layer is transparent, so has a stale
+        // value.
+        ASSERT_EQ(1u, picture->tilings()->num_tilings());
+        EXPECT_EQ(1.f, picture->tilings()->tiling_at(0)->contents_scale());
         break;
       case 2:
-        // On 3rd commit, the layer is visible again, so has tilings.
-        EXPECT_GT(picture->tilings()->num_tilings(), 0u);
+        // On 3rd commit, the pending layer is visible again, so has tilings and
+        // is updated for the pinch.
+        ASSERT_EQ(1u, picture->tilings()->num_tilings());
+        EXPECT_EQ(2.f, picture->tilings()->tiling_at(0)->contents_scale());
     }
   }
 
   void DrawLayersOnThread(LayerTreeHostImpl* impl) override {
     LayerImpl* root = impl->active_tree()->root_layer();
-    LayerImpl* pinch = root->children()[0];
-    LayerImpl* gchild = pinch->children()[0];
+    LayerImpl* pinch = root->children()[0]->children()[0].get();
+    LayerImpl* gchild = pinch->children()[0].get();
     FakePictureLayerImpl* picture = static_cast<FakePictureLayerImpl*>(gchild);
 
     if (frame_ != last_frame_drawn_)
@@ -470,30 +491,29 @@ class LayerTreeHostPictureTestRSLLMembershipWithScale
           // If the pinch gesture caused a commit we could get here with a
           // pending tree.
           EXPECT_FALSE(impl->pending_tree());
-          // The active layer now has only a 2.f scale tiling, which means the
-          // recycled layer's tiling is destroyed.
           EXPECT_EQ(2.f, picture->HighResTiling()->contents_scale());
-          EXPECT_EQ(0u, picture->GetRecycledTwinLayer()
-                            ->picture_layer_tiling_set()
-                            ->num_tilings());
 
-          ++frame_;
-          MainThreadTaskRunner()->PostTask(
-              FROM_HERE,
-              base::Bind(
-                  &LayerTreeHostPictureTestRSLLMembershipWithScale::NextStep,
-                  base::Unretained(this)));
+          // Need to wait for ready to draw here so that the pinch is
+          // entirely complete, otherwise another draw might come in before
+          // the commit occurs.
+          if (ready_to_draw_) {
+            ++frame_;
+            MainThreadTaskRunner()->PostTask(
+                FROM_HERE,
+                base::Bind(
+                    &LayerTreeHostPictureTestRSLLMembershipWithScale::NextStep,
+                    base::Unretained(this)));
+          }
         }
         break;
       case 1:
         EXPECT_EQ(1, draws_in_frame_);
-        // On 2nd commit, the layer is transparent, so does not create
-        // tilings. Since the 1.f tiling was destroyed in the recycle tree, it
-        // has no tilings left. This is propogated to the active tree.
-        EXPECT_EQ(0u, picture->picture_layer_tiling_set()->num_tilings());
-        EXPECT_EQ(0u, picture->GetRecycledTwinLayer()
-                          ->picture_layer_tiling_set()
-                          ->num_tilings());
+        // On 2nd commit, this active layer is transparent, so does not update
+        // tilings.  It has the high res scale=2 from the previous frame, and
+        // also a scale=1 copied from the pending layer's stale value during
+        // activation.
+        EXPECT_EQ(2u, picture->picture_layer_tiling_set()->num_tilings());
+
         ++frame_;
         MainThreadTaskRunner()->PostTask(
             FROM_HERE,
@@ -524,6 +544,16 @@ class LayerTreeHostPictureTestRSLLMembershipWithScale
     }
   }
 
+  void NotifyReadyToDrawOnThread(LayerTreeHostImpl* impl) override {
+    ready_to_draw_ = true;
+    if (frame_ == 0) {
+      // The ready to draw can race with a draw in which everything is
+      // actually ready.  Therefore, just issue one more extra draw
+      // here to force notify->draw ordering.
+      impl->SetNeedsRedraw();
+    }
+  }
+
   void AfterTest() override {}
 
   FakeContentLayerClient client_;
@@ -532,12 +562,12 @@ class LayerTreeHostPictureTestRSLLMembershipWithScale
   int frame_;
   int draws_in_frame_;
   int last_frame_drawn_;
+  bool ready_to_draw_;
 };
 
 // Multi-thread only because in single thread you can't pinch zoom on the
 // compositor thread.
-// Disabled due to flakiness. See http://crbug.com/460581
-// MULTI_THREAD_TEST_F(LayerTreeHostPictureTestRSLLMembershipWithScale);
+MULTI_THREAD_TEST_F(LayerTreeHostPictureTestRSLLMembershipWithScale);
 
 }  // namespace
 }  // namespace cc

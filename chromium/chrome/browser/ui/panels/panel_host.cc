@@ -12,10 +12,11 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
 #include "chrome/browser/extensions/window_controller.h"
-#include "chrome/browser/favicon/favicon_helper.h"
+#include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/panels/panel.h"
 #include "chrome/browser/ui/prefs/prefs_tab_helper.h"
 #include "components/favicon/content/content_favicon_driver.h"
@@ -46,12 +47,15 @@ PanelHost::PanelHost(Panel* panel, Profile* profile)
 PanelHost::~PanelHost() {
 }
 
-void PanelHost::Init(const GURL& url) {
+void PanelHost::Init(const GURL& url,
+                     content::SiteInstance* source_site_instance) {
   if (url.is_empty())
     return;
 
-  content::WebContents::CreateParams create_params(
-      profile_, content::SiteInstance::CreateForURL(profile_, url));
+  content::SiteInstance* instance =
+      source_site_instance ? source_site_instance->GetRelatedSiteInstance(url)
+                           : content::SiteInstance::CreateForURL(profile_, url);
+  content::WebContents::CreateParams create_params(profile_, instance);
   web_contents_.reset(content::WebContents::Create(create_params));
   extensions::SetViewType(web_contents_.get(), extensions::VIEW_TYPE_PANEL);
   web_contents_->SetDelegate(this);
@@ -160,10 +164,6 @@ void PanelHost::AddNewContents(content::WebContents* source,
 
 void PanelHost::ActivateContents(content::WebContents* contents) {
   panel_->Activate();
-}
-
-void PanelHost::DeactivateContents(content::WebContents* contents) {
-  panel_->Deactivate();
 }
 
 void PanelHost::LoadingStateChanged(content::WebContents* source,

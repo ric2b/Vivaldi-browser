@@ -4,14 +4,20 @@
 
 #include "components/app_modal/javascript_dialog_manager.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/i18n/rtl.h"
+#include "base/macros.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/app_modal/app_modal_dialog.h"
 #include "components/app_modal/app_modal_dialog_queue.h"
 #include "components/app_modal/javascript_dialog_extensions_client.h"
 #include "components/app_modal/javascript_native_dialog_factory.h"
 #include "components/app_modal/native_app_modal_dialog.h"
+#include "components/url_formatter/elide_url.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/common/javascript_message_type.h"
 #include "grit/components_strings.h"
 #include "net/base/net_util.h"
@@ -40,17 +46,7 @@ class DefaultExtensionsClient : public JavaScriptDialogExtensionsClient {
 
 bool ShouldDisplaySuppressCheckbox(
     ChromeJavaScriptDialogExtraData* extra_data) {
-  base::TimeDelta time_since_last_message = base::TimeTicks::Now() -
-      extra_data->last_javascript_message_dismissal_;
-
-  // If a WebContents is impolite and displays a second JavaScript
-  // alert within kJavaScriptMessageExpectedDelay of a previous
-  // JavaScript alert being dismissed, show a checkbox offering to
-  // suppress future alerts from this WebContents.
-  const int kJavaScriptMessageExpectedDelay = 1000;
-
-  return time_since_last_message <
-      base::TimeDelta::FromMilliseconds(kJavaScriptMessageExpectedDelay);
+  return extra_data->has_already_shown_a_dialog_;
 }
 
 }  // namespace
@@ -60,17 +56,17 @@ bool ShouldDisplaySuppressCheckbox(
 
 // static
 JavaScriptDialogManager* JavaScriptDialogManager::GetInstance() {
-  return Singleton<JavaScriptDialogManager>::get();
+  return base::Singleton<JavaScriptDialogManager>::get();
 }
 
 void JavaScriptDialogManager::SetNativeDialogFactory(
     scoped_ptr<JavaScriptNativeDialogFactory> factory) {
-  native_dialog_factory_ = factory.Pass();
+  native_dialog_factory_ = std::move(factory);
 }
 
 void JavaScriptDialogManager::SetExtensionsClient(
     scoped_ptr<JavaScriptDialogExtensionsClient> extensions_client) {
-  extensions_client_ = extensions_client.Pass();
+  extensions_client_ = std::move(extensions_client);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -98,8 +94,42 @@ void JavaScriptDialogManager::RunJavaScriptDialog(
       &javascript_dialog_extra_data_[web_contents];
 
   if (extra_data->suppress_javascript_messages_) {
+    // If a page tries to open dialogs in a tight loop, the number of
+    // suppressions logged can grow out of control. Arbitrarily cap the number
+    // logged at 100. That many suppressed dialogs is enough to indicate the
+    // page is doing something very hinky.
+    if (extra_data->suppressed_dialog_count_ < 100) {
+      // Log a suppressed dialog as one that opens and then closes immediately.
+      UMA_HISTOGRAM_MEDIUM_TIMES(
+          "JSDialogs.FineTiming.TimeBetweenDialogCreatedAndSameDialogClosed",
+          base::TimeDelta());
+
+      // Only increment the count if it's not already at the limit, to prevent
+      // overflow.
+      extra_data->suppressed_dialog_count_++;
+    }
+
     *did_suppress_message = true;
     return;
+  }
+
+  base::TimeTicks now = base::TimeTicks::Now();
+  if (!last_creation_time_.is_null()) {
+    // A new dialog has been created: log the time since the last one was
+    // created.
+    UMA_HISTOGRAM_MEDIUM_TIMES(
+        "JSDialogs.FineTiming.TimeBetweenDialogCreatedAndNextDialogCreated",
+        now - last_creation_time_);
+  }
+  last_creation_time_ = now;
+
+  // Also log the time since a dialog was closed, but only if this is the first
+  // dialog that was opened since the closing.
+  if (!last_close_time_.is_null()) {
+    UMA_HISTOGRAM_MEDIUM_TIMES(
+        "JSDialogs.FineTiming.TimeBetweenDialogClosedAndNextDialogCreated",
+        now - last_close_time_);
+    last_close_time_ = base::TimeTicks();
   }
 
   bool is_alert = message_type == content::JAVASCRIPT_MESSAGE_TYPE_ALERT;
@@ -194,26 +224,30 @@ base::string16 JavaScriptDialogManager::GetTitle(
     const GURL& origin_url,
     const std::string& accept_lang,
     bool is_alert) {
-  // If the URL hasn't any host, return the default string.
-  if (!origin_url.has_host()) {
-      return l10n_util::GetStringUTF16(
-          is_alert ? IDS_JAVASCRIPT_ALERT_DEFAULT_TITLE
-                   : IDS_JAVASCRIPT_MESSAGEBOX_DEFAULT_TITLE);
-  }
-
   // For extensions, show the extension name, but only if the origin of
   // the alert matches the top-level WebContents.
   std::string name;
   if (extensions_client_->GetExtensionName(web_contents, origin_url, &name))
     return base::UTF8ToUTF16(name);
 
-  // Otherwise, return the formatted URL.
-  // In this case, force URL to have LTR directionality.
-  base::string16 url_string = net::FormatUrl(origin_url, accept_lang);
-  return l10n_util::GetStringFUTF16(
-      is_alert ? IDS_JAVASCRIPT_ALERT_TITLE
-      : IDS_JAVASCRIPT_MESSAGEBOX_TITLE,
-      base::i18n::GetDisplayStringInLTRDirectionality(url_string));
+  // Otherwise, return the formatted URL. For non-standard URLs such as |data:|,
+  // just say "This page".
+  bool is_same_origin_as_main_frame =
+      (web_contents->GetURL().GetOrigin() == origin_url.GetOrigin());
+  if (origin_url.IsStandard() && !origin_url.SchemeIsFile() &&
+      !origin_url.SchemeIsFileSystem()) {
+    base::string16 url_string =
+        url_formatter::FormatUrlForSecurityDisplayOmitScheme(origin_url,
+                                                             accept_lang);
+    return l10n_util::GetStringFUTF16(
+        is_same_origin_as_main_frame ? IDS_JAVASCRIPT_MESSAGEBOX_TITLE
+                                     : IDS_JAVASCRIPT_MESSAGEBOX_TITLE_IFRAME,
+        base::i18n::GetDisplayStringInLTRDirectionality(url_string));
+  }
+  return l10n_util::GetStringUTF16(
+      is_same_origin_as_main_frame
+          ? IDS_JAVASCRIPT_MESSAGEBOX_TITLE_NONSTANDARD_URL
+          : IDS_JAVASCRIPT_MESSAGEBOX_TITLE_NONSTANDARD_URL_IFRAME);
 }
 
 void JavaScriptDialogManager::CancelActiveAndPendingDialogs(
@@ -242,6 +276,8 @@ void JavaScriptDialogManager::OnDialogClosed(
   // lazy background page after the dialog closes. (Dialogs are closed before
   // their WebContents is destroyed so |web_contents| is still valid here.)
   extensions_client_->OnDialogClosed(web_contents);
+
+  last_close_time_ = base::TimeTicks::Now();
 
   callback.Run(success, user_input);
 }

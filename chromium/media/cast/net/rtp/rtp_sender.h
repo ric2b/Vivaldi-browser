@@ -7,13 +7,16 @@
 #ifndef MEDIA_CAST_NET_RTP_RTP_SENDER_H_
 #define MEDIA_CAST_NET_RTP_RTP_SENDER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
 #include <set>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
-#include "media/cast/cast_config.h"
 #include "media/cast/cast_environment.h"
 #include "media/cast/net/cast_transport_defines.h"
 #include "media/cast/net/cast_transport_sender.h"
@@ -50,11 +53,12 @@ class RtpSender {
   // frame was just sent.
   // Returns 0 if the frame cannot be found or the frame was only sent
   // partially.
-  int64 GetLastByteSentForFrame(uint32 frame_id);
+  int64_t GetLastByteSentForFrame(uint32_t frame_id);
 
-  void CancelSendingFrames(const std::vector<uint32>& frame_ids);
+  void CancelSendingFrames(const std::vector<uint32_t>& frame_ids);
 
-  void ResendFrameForKickstart(uint32 frame_id, base::TimeDelta dedupe_window);
+  void ResendFrameForKickstart(uint32_t frame_id,
+                               base::TimeDelta dedupe_window);
 
   size_t send_packet_count() const {
     return packetizer_ ? packetizer_->send_packet_count() : 0;
@@ -62,7 +66,7 @@ class RtpSender {
   size_t send_octet_count() const {
     return packetizer_ ? packetizer_->send_octet_count() : 0;
   }
-  uint32 ssrc() const { return config_.ssrc; }
+  uint32_t ssrc() const { return config_.ssrc; }
 
  private:
   void UpdateSequenceNumber(Packet* packet);

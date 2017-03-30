@@ -47,6 +47,7 @@ hooks = [
     'action': [
       'python',
       'vivaldi/chromium/build/util/lastchange.py',
+      '--git-hash-only',
       '-o',
       'vivaldi/chromium/build/util/LASTCHANGE'
        ],
@@ -59,6 +60,7 @@ hooks = [
     'action': [
       'python',
       'vivaldi/chromium/build/util/lastchange.py',
+      '--git-hash-only',
       '-s',
       'vivaldi/chromium/third_party/WebKit',
       '-o',
@@ -67,12 +69,13 @@ hooks = [
     'pattern':
          '.',
     'name':
-         'lastchange'
+         'lastchange_blink'
     },
     {
     'action': [
       'python',
       'vivaldi/chromium/build/util/lastchange.py',
+      '--git-hash-only',
       '-s',
       'vivaldi/.',
       '--name-suffix',
@@ -83,7 +86,7 @@ hooks = [
     'pattern':
          '.',
     'name':
-         'lastchange'
+         'lastchange_vivaldi'
     },
     {
     'action': [
@@ -181,6 +184,18 @@ hooks = [
     'name':
          'clang_format_linux'
     },
+    # Pull the prebuilt libc++ static library for mac.
+    {
+      'name': 'libcpp_mac',
+      'pattern': '.',
+      'action': [ 'download_from_google_storage',
+                  '--no_resume',
+                  '--platform=darwin',
+                  '--no_auth',
+                  '--bucket', 'chromium-libcpp',
+                  '-s', 'vivaldi/chromium/third_party/libc++-static/libc++.a.sha1',
+      ],
+    },
     {
     'action': [
       'download_from_google_storage',
@@ -267,7 +282,7 @@ hooks = [
       'vivaldi/chromium/build/get_syzygy_binaries.py',
       '--output-dir',
       'vivaldi/chromium/third_party/syzygy/binaries',
-      '--revision=e50a9822fc8aeb5e7902da5e2940ea135d732e57',
+      '--revision=24abcb05aa6cc35545111d244378ef37b5d5218c',
       '--overwrite'
       ],
     'pattern':
@@ -280,8 +295,8 @@ hooks = [
       'python',
       'vivaldi/chromium/build/get_syzygy_binaries.py',
       '--output-dir',
-      'vivaldi/chromium/third_party/kasko',
-      '--revision=283aeaceeb22e2ba40a1753e3cb32454b59cc017',
+      'vivaldi/chromium/third_party/kasko/binaries',
+      '--revision=266a18d9209be5ca5c5dcd0620942b82a2d238f3',
       '--resource=kasko.zip',
       '--resource=kasko_symbols.zip',
       '--overwrite'
@@ -312,17 +327,6 @@ hooks = [
     {
     'action': [
       'python',
-      'vivaldi/chromium/third_party/mojo/src/mojo/public/tools/download_shell_binary.py',
-      '--tools-directory=../../../../../../tools'
-      ],
-    'pattern':
-         '',
-    'name':
-         'download_mojo_shell'
-    },
-    {
-    'action': [
-      'python',
       'vivaldi/chromium/third_party/instrumented_libraries/scripts/download_binaries.py'
       ],
     'pattern':
@@ -336,6 +340,7 @@ hooks = [
       'vivaldi/chromium/tools/remove_stale_pyc_files.py',
       'vivaldi/chromium/android_webview/tools',
       'vivaldi/chromium/gpu/gles2_conform_support',
+      'vivaldi/src/infra',
       'vivaldi/chromium/ppapi',
       'vivaldi/chromium/printing',
       'vivaldi/chromium/third_party/closure_compiler/build',
@@ -349,17 +354,7 @@ hooks = [
     {
     'action': [
       'python',
-      'vivaldi/chromium/tools/check_git_config.py',
-      '--running-as-hook'
-    ],
-    'pattern':
-         '.',
-    'name':
-         'check_git_config'
-    },
-    {
-    'action': [
-      'python',
+      '-O',
       'vivaldi/chromium/build/gyp_chromium',
       '--depth',
       'vivaldi/chromium/.',

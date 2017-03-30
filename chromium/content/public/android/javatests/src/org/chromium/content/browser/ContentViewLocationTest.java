@@ -45,15 +45,15 @@ public class ContentViewLocationTest extends ContentShellTestBase {
     }
 
     private void pollForPositionCallback() throws Throwable {
-        mJavascriptHelper.evaluateJavaScript(getWebContents(),
+        mJavascriptHelper.evaluateJavaScriptForTests(getWebContents(),
                 "positionCount = 0");
         mJavascriptHelper.waitUntilHasValue();
         assertEquals(0, Integer.parseInt(mJavascriptHelper.getJsonResultAndClear()));
 
-        assertTrue(CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollForCriteria(new Criteria() {
                 @Override
                 public boolean isSatisfied() {
-                    mJavascriptHelper.evaluateJavaScript(getWebContents(), "positionCount");
+                    mJavascriptHelper.evaluateJavaScriptForTests(getWebContents(), "positionCount");
                     try {
                         mJavascriptHelper.waitUntilHasValue();
                     } catch (Exception e) {
@@ -61,22 +61,22 @@ public class ContentViewLocationTest extends ContentShellTestBase {
                     }
                     return Integer.parseInt(mJavascriptHelper.getJsonResultAndClear()) > 0;
                 }
-        }));
+        });
     }
 
     private void startGeolocationWatchPosition() throws Throwable {
-        mJavascriptHelper.evaluateJavaScript(getWebContents(),
+        mJavascriptHelper.evaluateJavaScriptForTests(getWebContents(),
                 "initiate_watchPosition();");
         mJavascriptHelper.waitUntilHasValue();
     }
 
     private void ensureGeolocationRunning(final boolean running) throws Exception {
-        assertTrue(CriteriaHelper.pollForCriteria(new Criteria() {
+        CriteriaHelper.pollForCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 return mMockLocationProvider.isRunning() == running;
             }
-        }));
+        });
     }
 
     @Override
@@ -116,7 +116,7 @@ public class ContentViewLocationTest extends ContentShellTestBase {
         hideContentViewOnUiThread();
         ensureGeolocationRunning(false);
 
-        mJavascriptHelper.evaluateJavaScript(getWebContents(),
+        mJavascriptHelper.evaluateJavaScriptForTests(getWebContents(),
                 "positionCount = 0");
         mJavascriptHelper.waitUntilHasValue();
 

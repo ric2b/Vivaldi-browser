@@ -30,24 +30,43 @@ TextInputClientMac::~TextInputClientMac() {
 
 // static
 TextInputClientMac* TextInputClientMac::GetInstance() {
-  return Singleton<TextInputClientMac>::get();
+  return base::Singleton<TextInputClientMac>::get();
 }
 
 void TextInputClientMac::GetStringAtPoint(
     RenderWidgetHost* rwh,
     gfx::Point point,
-    void (^replyHandler)(NSAttributedString*, NSPoint)) {
-  DCHECK(replyHandler_.get() == nil);
-  replyHandler_.reset(replyHandler, base::scoped_policy::RETAIN);
+    void (^reply_handler)(NSAttributedString*, NSPoint)) {
+  DCHECK(replyForPointHandler_.get() == nil);
+  replyForPointHandler_.reset(reply_handler, base::scoped_policy::RETAIN);
   RenderWidgetHostImpl* rwhi = RenderWidgetHostImpl::From(rwh);
   rwhi->Send(new TextInputClientMsg_StringAtPoint(rwhi->GetRoutingID(), point));
 }
 
 void TextInputClientMac::GetStringAtPointReply(NSAttributedString* string,
                                                NSPoint point) {
-  if (replyHandler_.get()) {
-    replyHandler_.get()(string, point);
-    replyHandler_.reset();
+  if (replyForPointHandler_.get()) {
+    replyForPointHandler_.get()(string, point);
+    replyForPointHandler_.reset();
+  }
+}
+
+void TextInputClientMac::GetStringFromRange(
+    RenderWidgetHost* rwh,
+    NSRange range,
+    void (^reply_handler)(NSAttributedString*, NSPoint)) {
+  DCHECK(replyForRangeHandler_.get() == nil);
+  replyForRangeHandler_.reset(reply_handler, base::scoped_policy::RETAIN);
+  RenderWidgetHostImpl* rwhi = RenderWidgetHostImpl::From(rwh);
+  rwhi->Send(new TextInputClientMsg_StringForRange(rwhi->GetRoutingID(),
+                                                   gfx::Range(range)));
+}
+
+void TextInputClientMac::GetStringFromRangeReply(NSAttributedString* string,
+                                                 NSPoint point) {
+  if (replyForRangeHandler_.get()) {
+    replyForRangeHandler_.get()(string, point);
+    replyForRangeHandler_.reset();
   }
 }
 
@@ -92,30 +111,6 @@ NSRect TextInputClientMac::GetFirstRectForRange(RenderWidgetHost* rwh,
   return first_rect_;
 }
 
-NSAttributedString* TextInputClientMac::GetAttributedSubstringFromRange(
-    RenderWidgetHost* rwh,
-    NSRange range) {
-  base::TimeTicks start = base::TimeTicks::Now();
-
-  BeforeRequest();
-  RenderWidgetHostImpl* rwhi = RenderWidgetHostImpl::From(rwh);
-  rwhi->Send(new TextInputClientMsg_StringForRange(rwhi->GetRoutingID(),
-                                                   gfx::Range(range)));
-  // http://crbug.com/121917
-  base::ThreadRestrictions::ScopedAllowWait allow_wait;
-  condition_.TimedWait(base::TimeDelta::FromMilliseconds(kWaitTimeout));
-  AfterRequest();
-
-  base::TimeDelta delta(base::TimeTicks::Now() - start);
-  UMA_HISTOGRAM_LONG_TIMES("TextInputClient.Substring",
-                           delta * base::Time::kMicrosecondsPerMillisecond);
-
-  // Lookup.framework calls this method repeatedly and expects that repeated
-  // calls don't deallocate previous results immediately. Returning an
-  // autoreleased string is better convention anyway.
-  return [[substring_.get() retain] autorelease];
-}
-
 void TextInputClientMac::SetCharacterIndexAndSignal(NSUInteger index) {
   lock_.Acquire();
   character_index_ = index;
@@ -126,13 +121,6 @@ void TextInputClientMac::SetCharacterIndexAndSignal(NSUInteger index) {
 void TextInputClientMac::SetFirstRectAndSignal(NSRect first_rect) {
   lock_.Acquire();
   first_rect_ = first_rect;
-  lock_.Release();
-  condition_.Signal();
-}
-
-void TextInputClientMac::SetSubstringAndSignal(NSAttributedString* string) {
-  lock_.Acquire();
-  substring_.reset([string copy]);
   lock_.Release();
   condition_.Signal();
 }
@@ -148,7 +136,6 @@ void TextInputClientMac::BeforeRequest() {
 
   character_index_ = NSNotFound;
   first_rect_ = NSZeroRect;
-  substring_.reset();
 }
 
 void TextInputClientMac::AfterRequest() {

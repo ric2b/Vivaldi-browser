@@ -5,16 +5,18 @@
 #include "chrome/browser/apps/drive/drive_service_bridge.h"
 
 #include <string>
+#include <utility>
 
 #include "base/logging.h"
-#include "chrome/browser/drive/drive_api_service.h"
-#include "chrome/browser/drive/drive_app_registry.h"
-#include "chrome/browser/drive/drive_notification_manager.h"
+#include "base/macros.h"
 #include "chrome/browser/drive/drive_notification_manager_factory.h"
-#include "chrome/browser/drive/drive_notification_observer.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
+#include "components/drive/drive_app_registry.h"
+#include "components/drive/drive_notification_manager.h"
+#include "components/drive/drive_notification_observer.h"
+#include "components/drive/service/drive_api_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "content/public/browser/browser_thread.h"
@@ -83,6 +85,7 @@ void DriveServiceBridgeImpl::Initialize() {
       drive_task_runner.get(),
       GURL(google_apis::DriveApiUrlGenerator::kBaseUrlForProduction),
       GURL(google_apis::DriveApiUrlGenerator::kBaseDownloadUrlForProduction),
+      GURL(google_apis::DriveApiUrlGenerator::kBaseThumbnailUrlForProduction),
       std::string() /* custom_user_agent */));
   SigninManagerBase* signin_manager =
       SigninManagerFactory::GetForProfile(profile_);
@@ -124,7 +127,7 @@ scoped_ptr<DriveServiceBridge> DriveServiceBridge::Create(Profile* profile) {
   scoped_ptr<DriveServiceBridgeImpl> bridge(
       new DriveServiceBridgeImpl(profile));
   bridge->Initialize();
-  return bridge.Pass();
+  return std::move(bridge);
 }
 
 // static

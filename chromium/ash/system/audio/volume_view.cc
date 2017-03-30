@@ -175,9 +175,6 @@ void VolumeView::SetVolumeLevel(float percent) {
   // slider value if the change is less than 1%.
   if (std::abs(percent-slider_->value()) < 0.01)
     return;
-  // The change in volume will be reflected via accessibility system events,
-  // so we prevent the UI event from being sent here.
-  slider_->set_enable_accessibility_events(false);
   slider_->SetValue(percent);
   // It is possible that the volume was (un)muted, but the actual volume level
   // did not change. In that case, setting the value of the slider won't
@@ -279,6 +276,11 @@ void VolumeView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
   // set on first layout this causes BoxLayout to ignore the separator. Reset
   // its height on each bounds change so that it is laid out properly.
   separator_->SetSize(gfx::Size(kSeparatorSize, bounds().height()));
+}
+
+void VolumeView::GetAccessibleState(ui::AXViewState* state) {
+  // Intentionally overrides ActionableView, leaving |state| unset. A slider
+  // childview exposes accessibility data.
 }
 
 }  // namespace tray

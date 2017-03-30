@@ -2,12 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/files/file_path.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_service.h"
 #include "base/run_loop.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/policy/cloud/user_cloud_policy_manager_factory.h"
@@ -16,15 +19,13 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/account_fetcher_service_factory.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
-#include "chrome/browser/signin/fake_account_fetcher_service.h"
-#include "chrome/browser/signin/fake_profile_oauth2_token_service.h"
+#include "chrome/browser/signin/fake_account_fetcher_service_builder.h"
 #include "chrome/browser/signin/fake_profile_oauth2_token_service_builder.h"
-#include "chrome/browser/signin/fake_signin_manager.h"
+#include "chrome/browser/signin/fake_signin_manager_builder.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/signin/test_signin_client_builder.h"
 #include "chrome/test/base/testing_browser_process.h"
-#include "chrome/test/base/testing_pref_service_syncable.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/common/cloud/cloud_external_data_manager.h"
@@ -34,7 +35,10 @@
 #include "components/policy/core/common/cloud/user_cloud_policy_manager.h"
 #include "components/policy/core/common/schema_registry.h"
 #include "components/signin/core/browser/account_tracker_service.h"
+#include "components/signin/core/browser/fake_account_fetcher_service.h"
+#include "components/signin/core/browser/fake_profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
+#include "components/syncable_prefs/testing_pref_service_syncable.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
@@ -42,6 +46,7 @@
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "google_apis/gaia/gaia_constants.h"
 #include "google_apis/gaia/google_service_auth_error.h"
+#include "net/base/net_errors.h"
 #include "net/http/http_status_code.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -82,25 +87,6 @@ const char kHostedDomainResponse[] =
     "{"
     "  \"hd\": \"test.com\""
     "}";
-
-class SigninManagerFake : public FakeSigninManager {
- public:
-  explicit SigninManagerFake(Profile* profile)
-      : FakeSigninManager(profile) {
-    Initialize(NULL);
-  }
-
-  void ForceSignOut() {
-    // Allow signing out now.
-    prohibit_signout_ = false;
-    SignOut(signin_metrics::SIGNOUT_TEST);
-  }
-
-  static scoped_ptr<KeyedService> Build(content::BrowserContext* profile) {
-    return make_scoped_ptr(
-        new SigninManagerFake(static_cast<Profile*>(profile)));
-  }
-};
 
 UserCloudPolicyManager* BuildCloudPolicyManager(
     content::BrowserContext* context) {
@@ -144,7 +130,9 @@ class UserPolicySigninServiceTest : public testing::Test {
 #endif
     service->RegisterForPolicy(
         kTestUser,
-#if !defined(OS_ANDROID)
+#if defined(OS_ANDROID)
+        kTestGaiaId,
+#else
         "mock_oauth_token",
 #endif
         base::Bind(&UserPolicySigninServiceTest::OnRegisterCompleted,
@@ -169,8 +157,8 @@ class UserPolicySigninServiceTest : public testing::Test {
 
     // Create a testing profile with cloud-policy-on-signin enabled, and bring
     // up a UserCloudPolicyManager with a MockUserCloudPolicyStore.
-    scoped_ptr<TestingPrefServiceSyncable> prefs(
-        new TestingPrefServiceSyncable());
+    scoped_ptr<syncable_prefs::TestingPrefServiceSyncable> prefs(
+        new syncable_prefs::TestingPrefServiceSyncable());
     chrome::RegisterUserProfilePrefs(prefs->registry());
 
     // UserCloudPolicyManagerFactory isn't a real
@@ -181,20 +169,21 @@ class UserPolicySigninServiceTest : public testing::Test {
     UserCloudPolicyManagerFactory::GetInstance()->RegisterTestingFactory(
         BuildCloudPolicyManager);
     TestingProfile::Builder builder;
-    builder.SetPrefService(scoped_ptr<PrefServiceSyncable>(prefs.Pass()));
+    builder.SetPrefService(
+        scoped_ptr<syncable_prefs::PrefServiceSyncable>(std::move(prefs)));
     builder.AddTestingFactory(SigninManagerFactory::GetInstance(),
-                              SigninManagerFake::Build);
+                              BuildFakeSigninManagerBase);
     builder.AddTestingFactory(ProfileOAuth2TokenServiceFactory::GetInstance(),
                               BuildFakeProfileOAuth2TokenService);
     builder.AddTestingFactory(AccountFetcherServiceFactory::GetInstance(),
-                              FakeAccountFetcherService::BuildForTests);
+                              FakeAccountFetcherServiceBuilder::BuildForTests);
     builder.AddTestingFactory(ChromeSigninClientFactory::GetInstance(),
                               signin::BuildTestSigninClient);
 
-    profile_ = builder.Build().Pass();
+    profile_ = builder.Build();
     url_factory_.set_remove_fetcher_on_delete(true);
 
-    signin_manager_ = static_cast<SigninManagerFake*>(
+    signin_manager_ = static_cast<FakeSigninManager*>(
         SigninManagerFactory::GetForProfile(profile_.get()));
     // Tests are responsible for freeing the UserCloudPolicyManager instances
     // they inject.
@@ -218,7 +207,7 @@ class UserPolicySigninServiceTest : public testing::Test {
         TestingBrowserProcess::GetGlobal();
     testing_browser_process->SetLocalState(NULL);
     local_state_.reset();
-    testing_browser_process->SetBrowserPolicyConnector(NULL);
+    testing_browser_process->ShutdownBrowserPolicyConnector();
     base::RunLoop run_loop;
     run_loop.RunUntilIdle();
   }
@@ -287,7 +276,7 @@ class UserPolicySigninServiceTest : public testing::Test {
                 CreateJob(DeviceManagementRequestJob::TYPE_REGISTRATION, _))
         .WillOnce(device_management_service_.CreateAsyncJob(
             &register_request));
-    EXPECT_CALL(device_management_service_, StartJob(_, _, _, _, _, _, _))
+    EXPECT_CALL(device_management_service_, StartJob(_, _, _, _, _, _))
         .Times(1);
 
     // Now mimic the user being a hosted domain - this should cause a Register()
@@ -319,7 +308,7 @@ class UserPolicySigninServiceTest : public testing::Test {
     EXPECT_CALL(device_management_service_,
                 CreateJob(DeviceManagementRequestJob::TYPE_POLICY_FETCH, _))
         .WillOnce(device_management_service_.CreateAsyncJob(&fetch_request));
-    EXPECT_CALL(device_management_service_, StartJob(_, _, _, _, _, _, _))
+    EXPECT_CALL(device_management_service_, StartJob(_, _, _, _, _, _))
         .Times(1);
 
     signin_service->FetchPolicyForSignedInUser(
@@ -369,7 +358,7 @@ class UserPolicySigninServiceTest : public testing::Test {
 
   net::TestURLFetcherFactory url_factory_;
 
-  SigninManagerFake* signin_manager_;
+  FakeSigninManager* signin_manager_;
 
   // Used in conjunction with OnRegisterCompleted() to test client registration
   // callbacks.
@@ -620,7 +609,7 @@ TEST_F(UserPolicySigninServiceTest, RegisterPolicyClientOAuthFailure) {
       GoogleServiceAuthError::FromServiceError("fail"));
 #else
   net::TestURLFetcher* fetcher = url_factory_.GetFetcherByID(0);
-  fetcher->set_status(net::URLRequestStatus(net::URLRequestStatus::FAILED, -1));
+  fetcher->set_status(net::URLRequestStatus::FromError(net::ERR_FAILED));
   fetcher->delegate()->OnURLFetchComplete(fetcher);
 #endif
 
@@ -677,7 +666,7 @@ TEST_F(UserPolicySigninServiceTest, RegisterPolicyClientFailedRegistration) {
   EXPECT_CALL(device_management_service_,
               CreateJob(DeviceManagementRequestJob::TYPE_REGISTRATION, _))
       .WillOnce(device_management_service_.CreateAsyncJob(&register_request));
-  EXPECT_CALL(device_management_service_, StartJob(_, _, _, _, _, _, _))
+  EXPECT_CALL(device_management_service_, StartJob(_, _, _, _, _, _))
         .Times(1);
 
   // Now mimic the user being a hosted domain - this should cause a Register()
@@ -711,7 +700,7 @@ TEST_F(UserPolicySigninServiceTest, RegisterPolicyClientSucceeded) {
   EXPECT_CALL(device_management_service_,
               CreateJob(DeviceManagementRequestJob::TYPE_REGISTRATION, _))
       .WillOnce(device_management_service_.CreateAsyncJob(&register_request));
-  EXPECT_CALL(device_management_service_, StartJob(_, _, _, _, _, _, _))
+  EXPECT_CALL(device_management_service_, StartJob(_, _, _, _, _, _))
       .Times(1);
 
   // Now mimic the user being a hosted domain - this should cause a Register()
@@ -744,7 +733,7 @@ TEST_F(UserPolicySigninServiceTest, FetchPolicyFailed) {
   EXPECT_CALL(device_management_service_,
               CreateJob(DeviceManagementRequestJob::TYPE_POLICY_FETCH, _))
       .WillOnce(device_management_service_.CreateAsyncJob(&fetch_request));
-  EXPECT_CALL(device_management_service_, StartJob(_, _, _, _, _, _, _))
+  EXPECT_CALL(device_management_service_, StartJob(_, _, _, _, _, _))
       .Times(1);
   UserPolicySigninService* signin_service =
       UserPolicySigninServiceFactory::GetForProfile(profile_.get());
@@ -792,7 +781,7 @@ TEST_F(UserPolicySigninServiceTest, PolicyFetchFailureTemporary) {
   EXPECT_CALL(device_management_service_,
               CreateJob(DeviceManagementRequestJob::TYPE_POLICY_FETCH, _))
       .WillOnce(device_management_service_.CreateAsyncJob(&fetch_request));
-  EXPECT_CALL(device_management_service_, StartJob(_, _, _, _, _, _, _))
+  EXPECT_CALL(device_management_service_, StartJob(_, _, _, _, _, _))
       .Times(1);
   manager_->RefreshPolicies();
   Mock::VerifyAndClearExpectations(this);
@@ -818,7 +807,7 @@ TEST_F(UserPolicySigninServiceTest, PolicyFetchFailureDisableManagement) {
   EXPECT_CALL(device_management_service_,
               CreateJob(DeviceManagementRequestJob::TYPE_POLICY_FETCH, _))
       .WillOnce(device_management_service_.CreateAsyncJob(&fetch_request));
-  EXPECT_CALL(device_management_service_, StartJob(_, _, _, _, _, _, _))
+  EXPECT_CALL(device_management_service_, StartJob(_, _, _, _, _, _))
       .Times(1);
   manager_->RefreshPolicies();
   Mock::VerifyAndClearExpectations(this);

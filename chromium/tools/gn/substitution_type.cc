@@ -4,6 +4,7 @@
 
 #include "tools/gn/substitution_type.h"
 
+#include <stddef.h>
 #include <stdlib.h>
 
 #include "tools/gn/err.h"
@@ -22,12 +23,14 @@ const char* kSubstitutionNames[SUBSTITUTION_NUM_TYPES] = {
   "{{source_out_dir}}",  // SUBSTITUTION_SOURCE_OUT_DIR
 
   "{{label}}",  // SUBSTITUTION_LABEL
+  "{{label_name}}",  // SUBSTITUTION_LABEL_NAME
   "{{root_gen_dir}}",  // SUBSTITUTION_ROOT_GEN_DIR
   "{{root_out_dir}}",  // SUBSTITUTION_ROOT_OUT_DIR
   "{{target_gen_dir}}",  // SUBSTITUTION_TARGET_GEN_DIR
   "{{target_out_dir}}",  // SUBSTITUTION_TARGET_OUT_DIR
   "{{target_output_name}}",  // SUBSTITUTION_TARGET_OUTPUT_NAME
 
+  "{{asmflags}}",  // SUBSTITUTION_ASMFLAGS
   "{{cflags}}",  // SUBSTITUTION_CFLAGS
   "{{cflags_c}}",  // SUBSTITUTION_CFLAGS_C
   "{{cflags_cc}}",  // SUBSTITUTION_CFLAGS_CC
@@ -42,6 +45,8 @@ const char* kSubstitutionNames[SUBSTITUTION_NUM_TYPES] = {
   "{{libs}}",  // SUBSTITUTION_LIBS
   "{{output_extension}}",  // SUBSTITUTION_OUTPUT_EXTENSION
   "{{solibs}}",  // SUBSTITUTION_SOLIBS
+
+  "{{response_file_name}}",  // SUBSTITUTION_RSP_FILE_NAME
 };
 
 const char* kSubstitutionNinjaNames[SUBSTITUTION_NUM_TYPES] = {
@@ -58,12 +63,14 @@ const char* kSubstitutionNinjaNames[SUBSTITUTION_NUM_TYPES] = {
     "source_out_dir",            // SUBSTITUTION_SOURCE_OUT_DIR
 
     "label",               // SUBSTITUTION_LABEL
+    "label_name",          // SUBSTITUTION_LABEL_NAME
     "root_gen_dir",        // SUBSTITUTION_ROOT_GEN_DIR
     "root_out_dir",        // SUBSTITUTION_ROOT_OUT_DIR
     "target_gen_dir",      // SUBSTITUTION_TARGET_GEN_DIR
     "target_out_dir",      // SUBSTITUTION_TARGET_OUT_DIR
     "target_output_name",  // SUBSTITUTION_TARGET_OUTPUT_NAME
 
+    "asmflags",      // SUBSTITUTION_ASMFLAGS
     "cflags",        // SUBSTITUTION_CFLAGS
     "cflags_c",      // SUBSTITUTION_CFLAGS_C
     "cflags_cc",     // SUBSTITUTION_CFLAGS_CC
@@ -81,6 +88,8 @@ const char* kSubstitutionNinjaNames[SUBSTITUTION_NUM_TYPES] = {
     "libs",              // SUBSTITUTION_LIBS
     "output_extension",  // SUBSTITUTION_OUTPUT_EXTENSION
     "solibs",            // SUBSTITUTION_SOLIBS
+
+    "rspfile",  // SUBSTITUTION_RSP_FILE_NAME
 };
 
 SubstitutionBits::SubstitutionBits() : used() {
@@ -122,6 +131,7 @@ bool IsValidToolSubstutition(SubstitutionType type) {
   return type == SUBSTITUTION_LITERAL ||
          type == SUBSTITUTION_OUTPUT ||
          type == SUBSTITUTION_LABEL ||
+         type == SUBSTITUTION_LABEL_NAME ||
          type == SUBSTITUTION_ROOT_GEN_DIR ||
          type == SUBSTITUTION_ROOT_OUT_DIR ||
          type == SUBSTITUTION_TARGET_GEN_DIR ||
@@ -133,6 +143,7 @@ bool IsValidCompilerSubstitution(SubstitutionType type) {
   return IsValidToolSubstutition(type) ||
          IsValidSourceSubstitution(type) ||
          type == SUBSTITUTION_SOURCE ||
+         type == SUBSTITUTION_ASMFLAGS ||
          type == SUBSTITUTION_CFLAGS ||
          type == SUBSTITUTION_CFLAGS_C ||
          type == SUBSTITUTION_CFLAGS_CC ||

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/themes/theme_service.h"
 
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
@@ -45,11 +46,13 @@ class ThemeServiceBrowserTest : public ExtensionBrowserTest {
 IN_PROC_BROWSER_TEST_F(ThemeServiceBrowserTest, PRE_ThemeDataPackInvalid) {
   Profile* profile = browser()->profile();
   ThemeService* theme_service = ThemeServiceFactory::GetForProfile(profile);
+  const ui::ThemeProvider& theme_provider =
+      ThemeService::GetThemeProviderForProfile(profile);
 
   // Test initial state.
   EXPECT_FALSE(UsingCustomTheme(*theme_service));
-  EXPECT_NE(kThemeToolbarColor, theme_service->GetColor(
-      ThemeProperties::COLOR_TOOLBAR));
+  EXPECT_NE(kThemeToolbarColor,
+            theme_provider.GetColor(ThemeProperties::COLOR_TOOLBAR));
   EXPECT_EQ(base::FilePath(),
             profile->GetPrefs()->GetFilePath(prefs::kCurrentThemePackFilename));
 
@@ -57,8 +60,8 @@ IN_PROC_BROWSER_TEST_F(ThemeServiceBrowserTest, PRE_ThemeDataPackInvalid) {
 
   // Check that the theme was installed.
   EXPECT_TRUE(UsingCustomTheme(*theme_service));
-  EXPECT_EQ(kThemeToolbarColor, theme_service->GetColor(
-      ThemeProperties::COLOR_TOOLBAR));
+  EXPECT_EQ(kThemeToolbarColor,
+            theme_provider.GetColor(ThemeProperties::COLOR_TOOLBAR));
   EXPECT_NE(base::FilePath(),
             profile->GetPrefs()->GetFilePath(prefs::kCurrentThemePackFilename));
 
@@ -73,9 +76,11 @@ IN_PROC_BROWSER_TEST_F(ThemeServiceBrowserTest, PRE_ThemeDataPackInvalid) {
 IN_PROC_BROWSER_TEST_F(ThemeServiceBrowserTest, ThemeDataPackInvalid) {
   ThemeService* theme_service = ThemeServiceFactory::GetForProfile(
       browser()->profile());
+  const ui::ThemeProvider& theme_provider =
+      ThemeService::GetThemeProviderForProfile(browser()->profile());
   EXPECT_TRUE(UsingCustomTheme(*theme_service));
-  EXPECT_EQ(kThemeToolbarColor, theme_service->GetColor(
-      ThemeProperties::COLOR_TOOLBAR));
+  EXPECT_EQ(kThemeToolbarColor,
+            theme_provider.GetColor(ThemeProperties::COLOR_TOOLBAR));
 }
 
 }  // namespace

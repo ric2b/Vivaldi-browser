@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_SIGNIN_ACCOUNT_TRACKER_SERVICE_FACTORY_H_
 #define CHROME_BROWSER_SIGNIN_ACCOUNT_TRACKER_SERVICE_FACTORY_H_
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
@@ -27,7 +28,7 @@ class AccountTrackerServiceFactory
   static AccountTrackerServiceFactory* GetInstance();
 
  private:
-  friend struct DefaultSingletonTraits<AccountTrackerServiceFactory>;
+  friend struct base::DefaultSingletonTraits<AccountTrackerServiceFactory>;
 
   AccountTrackerServiceFactory();
   ~AccountTrackerServiceFactory() override;

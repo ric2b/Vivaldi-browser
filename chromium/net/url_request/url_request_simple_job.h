@@ -5,6 +5,8 @@
 #ifndef NET_URL_REQUEST_URL_REQUEST_SIMPLE_JOB_H_
 #define NET_URL_REQUEST_URL_REQUEST_SIMPLE_JOB_H_
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/memory/ref_counted.h"
@@ -27,7 +29,8 @@ class NET_EXPORT URLRequestSimpleJob : public URLRangeRequestJob {
   URLRequestSimpleJob(URLRequest* request, NetworkDelegate* network_delegate);
 
   void Start() override;
-  bool ReadRawData(IOBuffer* buf, int buf_size, int* bytes_read) override;
+  void Kill() override;
+  int ReadRawData(IOBuffer* buf, int buf_size) override;
   bool GetMimeType(std::string* mime_type) const override;
   bool GetCharset(std::string* charset) override;
 
@@ -65,13 +68,12 @@ class NET_EXPORT URLRequestSimpleJob : public URLRangeRequestJob {
 
  private:
   void OnGetDataCompleted(int result);
-  void OnReadCompleted(int bytes_read);
 
   HttpByteRange byte_range_;
   std::string mime_type_;
   std::string charset_;
   scoped_refptr<base::RefCountedMemory> data_;
-  int64 next_data_offset_;
+  int64_t next_data_offset_;
   scoped_refptr<base::TaskRunner> task_runner_;
   base::WeakPtrFactory<URLRequestSimpleJob> weak_factory_;
 };

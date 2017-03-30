@@ -9,12 +9,12 @@
 #define XK_MISCELLANY
 #include <X11/keysymdef.h>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/message_loop/message_pump_libevent.h"
 #include "base/single_thread_task_runner.h"
@@ -300,7 +300,7 @@ void LocalInputMonitorX11::Core::ProcessXEvent(xEvent* event) {
     } else if (key_sym == XK_Escape && down && alt_pressed_ && ctrl_pressed_) {
       caller_task_runner_->PostTask(
           FROM_HERE, base::Bind(&ClientSessionControl::DisconnectSession,
-                                client_session_control_));
+                                client_session_control_, protocol::OK));
     }
   }
 }

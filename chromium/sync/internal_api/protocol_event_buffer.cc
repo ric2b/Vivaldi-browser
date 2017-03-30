@@ -4,6 +4,8 @@
 
 #include "sync/internal_api/protocol_event_buffer.h"
 
+#include <stddef.h>
+
 #include "sync/internal_api/public/events/protocol_event.h"
 
 namespace syncer {
@@ -29,9 +31,9 @@ ProtocolEventBuffer::GetBufferedProtocolEvents() const {
   ScopedVector<ProtocolEvent> ret;
   for (std::deque<ProtocolEvent*>::const_iterator it = buffer_.begin();
        it != buffer_.end(); ++it) {
-    ret.push_back((*it)->Clone().Pass());
+    ret.push_back((*it)->Clone());
   }
-  return ret.Pass();
+  return ret;
 }
 
 }  // namespace syncer

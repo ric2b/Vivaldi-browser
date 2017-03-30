@@ -2,18 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "build/build_config.h"
 #include "ui/views/metrics.h"
 
 #if defined(OS_WIN)
 #include <windows.h>
 #endif
-
-namespace {
-
-// Default double click interval in milliseconds.
-const int kDefaultDoubleClickInterval = 500;
-
-}  // namespace
 
 namespace views {
 
@@ -22,7 +16,8 @@ int GetDoubleClickInterval() {
   return ::GetDoubleClickTime();
 #else
   // TODO(jennyz): This value may need to be adjusted on different platforms.
-  return kDefaultDoubleClickInterval;
+  const int kDefaultDoubleClickIntervalMs = 500;
+  return kDefaultDoubleClickIntervalMs;
 #endif
 }
 

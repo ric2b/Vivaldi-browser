@@ -11,16 +11,18 @@
 #include <utility>
 #include <vector>
 
+#include "base/gtest_prod_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/api/identity/extension_token_key.h"
 #include "chrome/browser/extensions/api/identity/gaia_web_auth_flow.h"
 #include "chrome/browser/extensions/api/identity/identity_mint_queue.h"
 #include "chrome/browser/extensions/api/identity/identity_signin_flow.h"
 #include "chrome/browser/extensions/api/identity/web_auth_flow.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
-#include "chrome/browser/signin/profile_identity_provider.h"
+#include "components/signin/core/browser/profile_identity_provider.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "google_apis/gaia/account_tracker.h"
 #include "google_apis/gaia/oauth2_mint_token_flow.h"
@@ -263,8 +265,12 @@ class IdentityGetAuthTokenFunction : public ChromeAsyncExtensionFunction,
 
 #if defined(OS_CHROMEOS)
   // Starts a login access token request for device robot account. This method
-  // will be called only in enterprise kiosk mode in ChromeOS.
+  // will be called only in Chrome OS for:
+  // 1. Enterprise kiosk mode.
+  // 2. Whitelisted first party apps in public session.
   virtual void StartDeviceLoginAccessTokenRequest();
+
+  bool IsOriginWhitelistedInPublicSession();
 #endif
 
   // Methods for invoking UI. Overridable for testing.

@@ -4,7 +4,9 @@
 
 #include "content/renderer/pepper/pepper_graphics_2d_host.h"
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "content/renderer/pepper/gfx_conversion.h"
 #include "content/renderer/pepper/mock_renderer_ppapi_host.h"
@@ -15,7 +17,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/WebCanvas.h"
 #include "third_party/skia/include/core/SkCanvas.h"
-#include "ui/events/latency_info.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -65,8 +66,7 @@ class PepperGraphics2DHostTest : public testing::Test {
   void Flush() {
     ppapi::host::HostMessageContext context(
         ppapi::proxy::ResourceMessageCallParams(host_->pp_resource(), 0));
-    std::vector<ui::LatencyInfo> latency;
-    host_->OnHostMsgFlush(&context, latency);
+    host_->OnHostMsgFlush(&context);
     host_->ViewInitiatedPaint();
     host_->SendOffscreenFlushAck();
   }

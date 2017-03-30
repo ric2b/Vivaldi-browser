@@ -5,9 +5,11 @@
 #ifndef SYNC_INTERNAL_API_PUBLIC_BASE_UNIQUE_POSITION_H_
 #define SYNC_INTERNAL_API_PUBLIC_BASE_UNIQUE_POSITION_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "sync/base/sync_export.h"
 
 namespace sync_pb {
@@ -38,7 +40,7 @@ namespace syncer {
 //
 // This class currently has several bookmarks-related assumptions built in,
 // though it could be adapted to be more generally useful.
-class SYNC_EXPORT_PRIVATE UniquePosition {
+class SYNC_EXPORT UniquePosition {
  public:
   static const size_t kSuffixLength;
   static const size_t kCompressBytesThreshold;
@@ -60,7 +62,7 @@ class SYNC_EXPORT_PRIVATE UniquePosition {
   // Creates a position with the given suffix.  Ordering among positions created
   // from this function is the same as that of the integer parameters that were
   // passed in.
-  static UniquePosition FromInt64(int64 i, const std::string& suffix);
+  static UniquePosition FromInt64(int64_t i, const std::string& suffix);
 
   // Returns a valid position.  Its ordering is not defined.
   static UniquePosition InitialPosition(const std::string& suffix);
@@ -93,10 +95,11 @@ class SYNC_EXPORT_PRIVATE UniquePosition {
   // Returns the suffix.
   std::string GetSuffixForTest() const;
 
-  // Performs a lossy conversion to an int64 position.  Positions converted to
-  // and from int64s using this and the FromInt64 function should maintain their
-  // relative orderings unless the int64 values conflict.
-  int64 ToInt64() const;
+  // Performs a lossy conversion to an int64_t position.  Positions converted to
+  // and from int64_ts using this and the FromInt64 function should maintain
+  // their
+  // relative orderings unless the int64_t values conflict.
+  int64_t ToInt64() const;
 
   bool IsValid() const;
 
@@ -139,6 +142,6 @@ class SYNC_EXPORT_PRIVATE UniquePosition {
   bool is_valid_;
 };
 
-}  // namespace syncer;
+}  // namespace syncer
 
 #endif  // SYNC_INTERNAL_API_PUBLIC_BASE_UNIQUE_POSITION_H_

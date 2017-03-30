@@ -4,6 +4,10 @@
 
 #include "content/common/gpu/media/vaapi_jpeg_decode_accelerator.h"
 
+#include <stddef.h>
+#include <string.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
@@ -21,13 +25,54 @@ namespace {
 // UMA errors that the VaapiJpegDecodeAccelerator class reports.
 enum VAJDADecoderFailure {
   VAAPI_ERROR = 0,
-  VAJDA_DECODER_FAILURES_MAX,
+  // UMA requires that max must be greater than 1.
+  VAJDA_DECODER_FAILURES_MAX = 2,
 };
 
 static void ReportToUMA(VAJDADecoderFailure failure) {
   UMA_HISTOGRAM_ENUMERATION("Media.VAJDA.DecoderFailure", failure,
                             VAJDA_DECODER_FAILURES_MAX);
 }
+
+static unsigned int VaSurfaceFormatForJpeg(
+    const media::JpegFrameHeader& frame_header) {
+  // The range of sampling factor is [1, 4]. Pack them into integer to make the
+  // matching code simpler. For example, 0x211 means the sampling factor are 2,
+  // 1, 1 for 3 components.
+  unsigned int h = 0, v = 0;
+  for (int i = 0; i < frame_header.num_components; i++) {
+    DCHECK_LE(frame_header.components[i].horizontal_sampling_factor, 4);
+    DCHECK_LE(frame_header.components[i].vertical_sampling_factor, 4);
+    h = h << 4 | frame_header.components[i].horizontal_sampling_factor;
+    v = v << 4 | frame_header.components[i].vertical_sampling_factor;
+  }
+
+  switch (frame_header.num_components) {
+    case 1:  // Grey image
+      return VA_RT_FORMAT_YUV400;
+
+    case 3:  // Y Cb Cr color image
+      // See https://en.wikipedia.org/wiki/Chroma_subsampling for the
+      // definition of these numbers.
+      if (h == 0x211 && v == 0x211)
+        return VA_RT_FORMAT_YUV420;
+
+      if (h == 0x211 && v == 0x111)
+        return VA_RT_FORMAT_YUV422;
+
+      if (h == 0x111 && v == 0x111)
+        return VA_RT_FORMAT_YUV444;
+
+      if (h == 0x411 && v == 0x111)
+        return VA_RT_FORMAT_YUV411;
+  }
+  DVLOG(1) << "Unsupported sampling factor: num_components="
+           << frame_header.num_components << ", h=" << std::hex << h
+           << ", v=" << v;
+
+  return 0;
+}
+
 }  // namespace
 
 VaapiJpegDecodeAccelerator::DecodeRequest::DecodeRequest(
@@ -35,9 +80,8 @@ VaapiJpegDecodeAccelerator::DecodeRequest::DecodeRequest(
     scoped_ptr<base::SharedMemory> shm,
     const scoped_refptr<media::VideoFrame>& video_frame)
     : bitstream_buffer(bitstream_buffer),
-      shm(shm.Pass()),
-      video_frame(video_frame) {
-}
+      shm(std::move(shm)),
+      video_frame(video_frame) {}
 
 VaapiJpegDecodeAccelerator::DecodeRequest::~DecodeRequest() {
 }
@@ -184,25 +228,35 @@ void VaapiJpegDecodeAccelerator::DecodeTask(
           reinterpret_cast<const uint8_t*>(request->shm->memory()),
           request->bitstream_buffer.size(), &parse_result)) {
     DLOG(ERROR) << "ParseJpegPicture failed";
-    NotifyErrorFromDecoderThread(
-        request->bitstream_buffer.id(),
-        media::JpegDecodeAccelerator::PARSE_JPEG_FAILED);
+    NotifyErrorFromDecoderThread(request->bitstream_buffer.id(),
+                                 PARSE_JPEG_FAILED);
+    return;
+  }
+
+  unsigned int new_va_rt_format =
+      VaSurfaceFormatForJpeg(parse_result.frame_header);
+  if (!new_va_rt_format) {
+    DLOG(ERROR) << "Unsupported subsampling";
+    NotifyErrorFromDecoderThread(request->bitstream_buffer.id(),
+                                 UNSUPPORTED_JPEG);
     return;
   }
 
   // Reuse VASurface if size doesn't change.
   gfx::Size new_coded_size(parse_result.frame_header.coded_width,
                            parse_result.frame_header.coded_height);
-  if (new_coded_size != coded_size_ || va_surface_id_ == VA_INVALID_SURFACE) {
+  if (new_coded_size != coded_size_ || va_surface_id_ == VA_INVALID_SURFACE ||
+      new_va_rt_format != va_rt_format_) {
     vaapi_wrapper_->DestroySurfaces();
     va_surface_id_ = VA_INVALID_SURFACE;
+    va_rt_format_ = new_va_rt_format;
 
     std::vector<VASurfaceID> va_surfaces;
-    if (!vaapi_wrapper_->CreateSurfaces(new_coded_size, 1, &va_surfaces)) {
+    if (!vaapi_wrapper_->CreateSurfaces(va_rt_format_, new_coded_size, 1,
+                                        &va_surfaces)) {
       LOG(ERROR) << "Create VA surface failed";
-      NotifyErrorFromDecoderThread(
-          request->bitstream_buffer.id(),
-          media::JpegDecodeAccelerator::PLATFORM_FAILURE);
+      NotifyErrorFromDecoderThread(request->bitstream_buffer.id(),
+                                   PLATFORM_FAILURE);
       return;
     }
     va_surface_id_ = va_surfaces[0];
@@ -212,18 +266,16 @@ void VaapiJpegDecodeAccelerator::DecodeTask(
   if (!VaapiJpegDecoder::Decode(vaapi_wrapper_.get(), parse_result,
                                 va_surface_id_)) {
     LOG(ERROR) << "Decode JPEG failed";
-    NotifyErrorFromDecoderThread(
-        request->bitstream_buffer.id(),
-        media::JpegDecodeAccelerator::PLATFORM_FAILURE);
+    NotifyErrorFromDecoderThread(request->bitstream_buffer.id(),
+                                 PLATFORM_FAILURE);
     return;
   }
 
   if (!OutputPicture(va_surface_id_, request->bitstream_buffer.id(),
                      request->video_frame)) {
     LOG(ERROR) << "Output picture failed";
-    NotifyErrorFromDecoderThread(
-        request->bitstream_buffer.id(),
-        media::JpegDecodeAccelerator::PLATFORM_FAILURE);
+    NotifyErrorFromDecoderThread(request->bitstream_buffer.id(),
+                                 PLATFORM_FAILURE);
     return;
   }
 }
@@ -247,11 +299,15 @@ void VaapiJpegDecodeAccelerator::Decode(
   }
 
   scoped_ptr<DecodeRequest> request(
-      new DecodeRequest(bitstream_buffer, shm.Pass(), video_frame));
+      new DecodeRequest(bitstream_buffer, std::move(shm), video_frame));
 
   decoder_task_runner_->PostTask(
       FROM_HERE, base::Bind(&VaapiJpegDecodeAccelerator::DecodeTask,
                             base::Unretained(this), base::Passed(&request)));
+}
+
+bool VaapiJpegDecodeAccelerator::IsSupported() {
+  return VaapiWrapper::IsJpegDecodeSupported();
 }
 
 }  // namespace content

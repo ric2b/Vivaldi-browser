@@ -6,7 +6,7 @@
   'variables': {
     'chromium_code': 1,
     'conditions': [
-      ['(OS=="linux" or OS=="freebsd" or OS=="solaris") and (embedded!=1 or (chromecast==1 and target_arch!="arm"))', {
+      ['(OS=="linux" or OS=="freebsd" or OS=="solaris") and ((embedded!=1 and chromecast==0) or is_cast_desktop_build==1)', {
         'use_alsa%': 1,
       }, {
         'use_alsa%': 0,
@@ -47,6 +47,7 @@
         'midi_manager.cc',
         'midi_manager.h',
         'midi_manager_android.cc',
+        'midi_manager_android.h',
         'midi_manager_mac.cc',
         'midi_manager_mac.h',
         'midi_manager_win.cc',
@@ -59,6 +60,8 @@
         'midi_port_info.h',
         'midi_scheduler.cc',
         'midi_scheduler.h',
+        'midi_switches.cc',
+        'midi_switches.h',
         'usb_midi_device_android.cc',
         'usb_midi_device_android.h',
         'usb_midi_device_factory_android.cc',
@@ -97,8 +100,14 @@
           ],
           'sources': [
             '<@(usb_midi_sources)',
+            'midi_device_android.cc',
+            'midi_device_android.h',
+            'midi_input_port_android.cc',
+            'midi_input_port_android.h',
             'midi_jni_registrar.cc',
             'midi_jni_registrar.h',
+            'midi_output_port_android.cc',
+            'midi_output_port_android.h',
           ],
           'defines': [
             'EXPORT_USB_MIDI',
@@ -119,59 +128,59 @@
         }],
       ],  # conditions
     },
-    #{
-    #  # GN version: //media/midi:midi_unittests
-    #  'target_name': 'midi_unittests',
-    #  'type': '<(gtest_target_type)',
-    #  'dependencies': [
-    #    'midi',
-    #    '../../base/base.gyp:base',
-    #    '../../base/base.gyp:run_all_unittests',
-    #    '../../testing/gtest.gyp:gtest',
-    #  ],
-    #  'include_dirs': [
-    #    '../..',
-    #  ],
-    #  'sources': [
-    #    'midi_manager_unittest.cc',
-    #    'midi_manager_usb_unittest.cc',
-    #    'midi_message_queue_unittest.cc',
-    #    'midi_message_util_unittest.cc',
-    #    'usb_midi_descriptor_parser_unittest.cc',
-    #    'usb_midi_input_stream_unittest.cc',
-    #    'usb_midi_output_stream_unittest.cc',
-    #  ],
-    #  'conditions': [
-    #    ['use_alsa==1 and use_udev==1', {
-    #      'defines': [
-    #        'USE_ALSA',
-    #        'USE_UDEV',
-    #      ],
-    #      'sources': [
-    #        'midi_manager_alsa_unittest.cc',
-    #      ],
-    #    }],
-    #    ['use_x11==1', {
-    #      'dependencies': [
-    #        '../../tools/xdisplaycheck/xdisplaycheck.gyp:xdisplaycheck',
-    #      ],
-    #    }],
-    #    ['OS=="android"', {
-    #      'dependencies': [
-    #        '../../testing/android/native_test.gyp:native_test_native_code',
-    #      ],
-    #    }, {
-    #      'sources': [
-    #        '<@(usb_midi_sources)',
-    #      ],
-    #    }],
-    #    ['OS=="mac"', {
-    #      'sources': [
-    #        'midi_manager_mac_unittest.cc',
-    #      ],
-    #    }],
-    #  ],
-    #},
+    {
+      # GN version: //media/midi:midi_unittests
+      'target_name': 'midi_unittests',
+      'type': '<(gtest_target_type)',
+      'dependencies': [
+        'midi',
+        '../../base/base.gyp:base',
+        '../../base/base.gyp:run_all_unittests',
+        '../../testing/gtest.gyp:gtest',
+      ],
+      'include_dirs': [
+        '../..',
+      ],
+      'sources': [
+        'midi_manager_unittest.cc',
+        'midi_manager_usb_unittest.cc',
+        'midi_message_queue_unittest.cc',
+        'midi_message_util_unittest.cc',
+        'usb_midi_descriptor_parser_unittest.cc',
+        'usb_midi_input_stream_unittest.cc',
+        'usb_midi_output_stream_unittest.cc',
+      ],
+      'conditions': [
+        ['use_alsa==1 and use_udev==1', {
+          'defines': [
+            'USE_ALSA',
+            'USE_UDEV',
+          ],
+          'sources': [
+            'midi_manager_alsa_unittest.cc',
+          ],
+        }],
+        ['use_x11==1', {
+          'dependencies': [
+            '../../tools/xdisplaycheck/xdisplaycheck.gyp:xdisplaycheck',
+          ],
+        }],
+        ['OS=="android"', {
+          'dependencies': [
+            '../../testing/android/native_test.gyp:native_test_native_code',
+          ],
+        }, {
+          'sources': [
+            '<@(usb_midi_sources)',
+          ],
+        }],
+        ['OS=="mac"', {
+          'sources': [
+            'midi_manager_mac_unittest.cc',
+          ],
+        }],
+      ],
+    },
   ],
   'conditions': [
     ['OS=="android"', {
@@ -207,6 +216,10 @@
           'target_name': 'midi_jni_headers',
           'type': 'none',
           'sources': [
+            'java/src/org/chromium/media/midi/MidiDeviceAndroid.java',
+            'java/src/org/chromium/media/midi/MidiManagerAndroid.java',
+            'java/src/org/chromium/media/midi/MidiInputPortAndroid.java',
+            'java/src/org/chromium/media/midi/MidiOutputPortAndroid.java',
             'java/src/org/chromium/media/midi/UsbMidiDeviceAndroid.java',
             'java/src/org/chromium/media/midi/UsbMidiDeviceFactoryAndroid.java',
           ],
@@ -217,7 +230,7 @@
         },
       ],
     }],
-    ['0 and test_isolation_mode != "noop"', {
+    ['test_isolation_mode != "noop"', {
       'targets': [
         {
           'target_name': 'midi_unittests_run',

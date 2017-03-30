@@ -4,7 +4,9 @@
 
 #include "sync/engine/commit_processor.h"
 
-#include <map>
+#include <stddef.h>
+
+#include <utility>
 
 #include "sync/engine/commit_contribution.h"
 #include "sync/engine/commit_contributor.h"
@@ -39,7 +41,7 @@ void CommitProcessor::GatherCommitContributions(
         cm_it->second->GetContribution(spaces_remaining);
     if (contribution) {
       num_entries += contribution->GetNumEntries();
-      contributions->insert(it.Get(), contribution.Pass());
+      contributions->insert(std::make_pair(it.Get(), std::move(contribution)));
     }
     if (num_entries >= max_entries) {
       DCHECK_EQ(num_entries, max_entries)

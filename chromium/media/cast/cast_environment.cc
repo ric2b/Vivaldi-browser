@@ -4,19 +4,13 @@
 
 #include "media/cast/cast_environment.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
 
 using base::SingleThreadTaskRunner;
-
-namespace {
-
-void DeleteLoggingOnMainThread(scoped_ptr<media::cast::LoggingImpl> logging) {
-  logging.reset();
-}
-
-}  // namespace
 
 namespace media {
 namespace cast {
@@ -29,18 +23,10 @@ CastEnvironment::CastEnvironment(
     : main_thread_proxy_(main_thread_proxy),
       audio_thread_proxy_(audio_thread_proxy),
       video_thread_proxy_(video_thread_proxy),
-      clock_(clock.Pass()),
-      logging_(new LoggingImpl) {}
+      clock_(std::move(clock)),
+      logger_(this) {}
 
-CastEnvironment::~CastEnvironment() {
-  // Logging must be deleted on the main thread.
-  if (main_thread_proxy_.get() &&
-      !main_thread_proxy_->RunsTasksOnCurrentThread()) {
-    main_thread_proxy_->PostTask(
-        FROM_HERE,
-        base::Bind(&DeleteLoggingOnMainThread, base::Passed(&logging_)));
-  }
-}
+CastEnvironment::~CastEnvironment() {}
 
 bool CastEnvironment::PostTask(ThreadId identifier,
                                const tracked_objects::Location& from_here,

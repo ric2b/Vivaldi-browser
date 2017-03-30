@@ -4,6 +4,9 @@
 
 #include "extensions/browser/api/declarative/rules_registry_service.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/message_loop/message_loop.h"
 #include "chrome/test/base/testing_profile.h"
@@ -20,8 +23,8 @@ const char kExtensionId[] = "foo";
 
 void InsertRule(scoped_refptr<extensions::RulesRegistry> registry,
                 const std::string& id) {
-  std::vector<linked_ptr<extensions::RulesRegistry::Rule> > add_rules;
-  add_rules.push_back(make_linked_ptr(new extensions::RulesRegistry::Rule));
+  std::vector<linked_ptr<extensions::api::events::Rule>> add_rules;
+  add_rules.push_back(make_linked_ptr(new extensions::api::events::Rule));
   add_rules[0]->id.reset(new std::string(id));
   std::string error = registry->AddRules(kExtensionId, add_rules);
   EXPECT_TRUE(error.empty());
@@ -29,7 +32,7 @@ void InsertRule(scoped_refptr<extensions::RulesRegistry> registry,
 
 void VerifyNumberOfRules(scoped_refptr<extensions::RulesRegistry> registry,
                          size_t expected_number_of_rules) {
-  std::vector<linked_ptr<extensions::RulesRegistry::Rule> > get_rules;
+  std::vector<linked_ptr<extensions::api::events::Rule>> get_rules;
   registry->GetAllRules(kExtensionId, &get_rules);
   EXPECT_EQ(expected_number_of_rules, get_rules.size());
 }
@@ -105,7 +108,7 @@ TEST_F(RulesRegistryServiceTest, TestConstructionAndMultiThreading) {
                                                    .Set("manifest_version", 2)
                                                    .Build();
   scoped_refptr<Extension> extension = ExtensionBuilder()
-                                           .SetManifest(manifest.Pass())
+                                           .SetManifest(std::move(manifest))
                                            .SetID(kExtensionId)
                                            .Build();
   registry_service.SimulateExtensionUninstalled(extension.get());

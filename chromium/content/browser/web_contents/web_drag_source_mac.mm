@@ -6,6 +6,8 @@
 
 #include <sys/param.h>
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
@@ -225,6 +227,9 @@ void PromiseWriterHelper(const DropData& drop_data,
 }
 
 - (void)startDrag {
+  if (!contentsView_)
+    return;
+
   NSEvent* currentEvent = [NSApp currentEvent];
 
   // Synthesize an event for dragging, since we can't be sure that
@@ -260,7 +265,7 @@ void PromiseWriterHelper(const DropData& drop_data,
 
 - (void)endDragAt:(NSPoint)screenPoint
         operation:(NSDragOperation)operation {
-  if (!contents_)
+  if (!contents_ || !contentsView_)
     return;
   contents_->SystemDragEnded();
 
@@ -309,15 +314,12 @@ void PromiseWriterHelper(const DropData& drop_data,
   if (!file.IsValid())
     return nil;
 
-  if (downloadURL_.is_valid()) {
-    scoped_refptr<DragDownloadFile> dragFileDownloader(new DragDownloadFile(
-        filePath,
-        file.Pass(),
-        downloadURL_,
-        content::Referrer(contents_->GetLastCommittedURL(),
-                          dropData_->referrer_policy),
-        contents_->GetEncoding(),
-        contents_));
+  if (downloadURL_.is_valid() && contents_) {
+    scoped_refptr<DragDownloadFile> dragFileDownloader(
+        new DragDownloadFile(filePath, std::move(file), downloadURL_,
+                             content::Referrer(contents_->GetLastCommittedURL(),
+                                               dropData_->referrer_policy),
+                             contents_->GetEncoding(), contents_));
 
     // The finalizer will take care of closing and deletion.
     dragFileDownloader->Start(new PromiseFileFinalizer(
@@ -342,6 +344,9 @@ void PromiseWriterHelper(const DropData& drop_data,
 @implementation WebDragSource (Private)
 
 - (void)fillPasteboard {
+  if (!contentsView_)
+    return;
+
   DCHECK(pasteboard_.get());
 
   [pasteboard_ declareTypes:@[ ui::kChromeDragDummyPboardType ]

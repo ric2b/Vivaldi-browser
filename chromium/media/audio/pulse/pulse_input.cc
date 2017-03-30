@@ -4,6 +4,8 @@
 
 #include "media/audio/pulse/pulse_input.h"
 
+#include <stdint.h>
+
 #include "base/logging.h"
 #include "media/audio/pulse/audio_manager_pulse.h"
 #include "media/audio/pulse/pulse_util.h"
@@ -267,7 +269,7 @@ void PulseAudioInputStream::StreamNotifyCallback(pa_stream* s,
 }
 
 void PulseAudioInputStream::ReadData() {
-  uint32 hardware_delay = pulse::GetHardwareLatencyInBytes(
+  uint32_t hardware_delay = pulse::GetHardwareLatencyInBytes(
       handle_, params_.sample_rate(), params_.GetBytesPerFrame());
 
   // Update the AGC volume level once every second. Note that,

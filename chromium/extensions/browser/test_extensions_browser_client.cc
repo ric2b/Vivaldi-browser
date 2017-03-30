@@ -4,8 +4,9 @@
 
 #include "extensions/browser/test_extensions_browser_client.h"
 
+#include "base/values.h"
+#include "build/build_config.h"
 #include "content/public/browser/browser_context.h"
-#include "extensions/browser/app_sorting.h"
 #include "extensions/browser/extension_host_delegate.h"
 #include "extensions/browser/test_runtime_api_delegate.h"
 #include "extensions/browser/updater/null_extension_cache.h"
@@ -26,6 +27,11 @@ TestExtensionsBrowserClient::TestExtensionsBrowserClient(
 }
 
 TestExtensionsBrowserClient::~TestExtensionsBrowserClient() {}
+
+void TestExtensionsBrowserClient::SetUpdateClientFactory(
+    const base::Callback<update_client::UpdateClient*(void)>& factory) {
+  update_client_factory_ = factory;
+}
 
 void TestExtensionsBrowserClient::SetIncognitoContext(BrowserContext* context) {
   // If a context is provided it must be off-the-record.
@@ -140,11 +146,11 @@ bool TestExtensionsBrowserClient::DidVersionUpdate(BrowserContext* context) {
 void TestExtensionsBrowserClient::PermitExternalProtocolHandler() {
 }
 
-scoped_ptr<AppSorting> TestExtensionsBrowserClient::CreateAppSorting() {
-  return scoped_ptr<AppSorting>();
-}
-
 bool TestExtensionsBrowserClient::IsRunningInForcedAppMode() { return false; }
+
+bool TestExtensionsBrowserClient::IsLoggedInAsPublicAccount() {
+  return false;
+}
 
 ApiActivityMonitor* TestExtensionsBrowserClient::GetApiActivityMonitor(
     BrowserContext* context) {
@@ -177,9 +183,9 @@ TestExtensionsBrowserClient::GetComponentExtensionResourceManager() {
 }
 
 void TestExtensionsBrowserClient::BroadcastEventToRenderers(
+    events::HistogramValue histogram_value,
     const std::string& event_name,
-    scoped_ptr<base::ListValue> args) {
-}
+    scoped_ptr<base::ListValue> args) {}
 
 net::NetLog* TestExtensionsBrowserClient::GetNetLog() {
   return NULL;
@@ -202,6 +208,14 @@ ExtensionWebContentsObserver*
 TestExtensionsBrowserClient::GetExtensionWebContentsObserver(
     content::WebContents* web_contents) {
   return nullptr;
+}
+
+scoped_refptr<update_client::UpdateClient>
+TestExtensionsBrowserClient::CreateUpdateClient(
+    content::BrowserContext* context) {
+  return update_client_factory_.is_null()
+             ? nullptr
+             : make_scoped_refptr(update_client_factory_.Run());
 }
 
 }  // namespace extensions

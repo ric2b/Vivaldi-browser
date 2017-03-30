@@ -2,15 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/edk/system/channel_endpoint.h"
+#include "third_party/mojo/src/mojo/edk/system/channel_endpoint.h"
+
+#include <utility>
 
 #include "base/synchronization/waitable_event.h"
 #include "base/test/test_timeouts.h"
-#include "mojo/edk/system/channel_test_base.h"
-#include "mojo/edk/system/message_in_transit_queue.h"
-#include "mojo/edk/system/message_in_transit_test_utils.h"
-#include "mojo/edk/system/test_channel_endpoint_client.h"
 #include "mojo/public/cpp/system/macros.h"
+#include "third_party/mojo/src/mojo/edk/system/channel_test_base.h"
+#include "third_party/mojo/src/mojo/edk/system/message_in_transit_queue.h"
+#include "third_party/mojo/src/mojo/edk/system/message_in_transit_test_utils.h"
+#include "third_party/mojo/src/mojo/edk/system/test_channel_endpoint_client.h"
 
 namespace mojo {
 namespace system {
@@ -72,7 +74,7 @@ TEST_F(ChannelEndpointTest, Basic) {
   EXPECT_FALSE(read_event.IsSignaled());
 
   // Send it through channel/endpoint 1.
-  EXPECT_TRUE(endpoint1->EnqueueMessage(send_message.Pass()));
+  EXPECT_TRUE(endpoint1->EnqueueMessage(std::move(send_message)));
 
   // Wait to receive it.
   EXPECT_TRUE(read_event.TimedWait(TestTimeouts::tiny_timeout()));

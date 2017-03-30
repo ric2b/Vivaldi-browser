@@ -123,52 +123,52 @@
         'test/rlz_test_helpers.h',
       ],
     },
-    #{
-    #  'target_name': 'rlz_unittests',
-    #  'type': 'executable',
-    #  'dependencies': [
-    #    ':rlz_lib',
-    #    ':test_support_rlz',
-    #    '../base/base.gyp:base',
-    #    '../base/base.gyp:base_prefs',
-    #    '../testing/gmock.gyp:gmock',
-    #    '../testing/gtest.gyp:gtest',
-    #    '../third_party/zlib/zlib.gyp:zlib',
-    #  ],
-    #  'sources': [
-    #    'lib/crc32_unittest.cc',
-    #    'lib/crc8_unittest.cc',
-    #    'lib/financial_ping_test.cc',
-    #    'lib/lib_values_unittest.cc',
-    #    'lib/machine_id_unittest.cc',
-    #    'lib/rlz_lib_test.cc',
-    #    'lib/string_utils_unittest.cc',
-    #    'test/rlz_unittest_main.cc',
-    #    'win/lib/machine_deal_test.cc',
-    #  ],
-    #  'conditions': [
-    #    ['rlz_use_chrome_net==1', {
-    #      'dependencies': [
-    #        '../net/net.gyp:net_test_support',
-    #      ],
-    #    }],
-    #  ],
-    #  # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-    #  'msvs_disabled_warnings': [ 4267, ],
-    #},
-    #{
-    #  'target_name': 'rlz_id',
-    #  'type': 'executable',
-    #  'dependencies': [
-    #    ':rlz_lib',
-    #  ],
-    #  'sources': [
-    #    'examples/rlz_id.cc',
-    #  ],
-    #},
+    {
+      'target_name': 'rlz_unittests',
+      'type': 'executable',
+      'dependencies': [
+        ':rlz_lib',
+        ':test_support_rlz',
+        '../base/base.gyp:base',
+        '../base/base.gyp:base_prefs',
+        '../testing/gmock.gyp:gmock',
+        '../testing/gtest.gyp:gtest',
+        '../third_party/zlib/zlib.gyp:zlib',
+      ],
+      'sources': [
+        'lib/crc32_unittest.cc',
+        'lib/crc8_unittest.cc',
+        'lib/financial_ping_test.cc',
+        'lib/lib_values_unittest.cc',
+        'lib/machine_id_unittest.cc',
+        'lib/rlz_lib_test.cc',
+        'lib/string_utils_unittest.cc',
+        'test/rlz_unittest_main.cc',
+        'win/lib/machine_deal_test.cc',
+      ],
+      'conditions': [
+        ['rlz_use_chrome_net==1', {
+          'dependencies': [
+            '../net/net.gyp:net_test_support',
+          ],
+        }],
+      ],
+      # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+      'msvs_disabled_warnings': [ 4267, ],
+    },
+    {
+      'target_name': 'rlz_id',
+      'type': 'executable',
+      'dependencies': [
+        ':rlz_lib',
+      ],
+      'sources': [
+        'examples/rlz_id.cc',
+      ],
+    },
   ],
   'conditions': [
-    ['0 and OS=="win"', {
+    ['OS=="win"', {
       'targets': [
         {
           'target_name': 'rlz',

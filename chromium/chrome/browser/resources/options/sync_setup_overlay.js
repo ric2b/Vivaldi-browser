@@ -25,6 +25,7 @@ cr.exportPath('options');
  *             passwordsEnforced: boolean,
  *             passwordsRegistered: boolean,
  *             passwordsSynced: boolean,
+ *             paymentsIntegrationEnabled: boolean,
  *             preferencesEnforced: boolean,
  *             preferencesRegistered: boolean,
  *             preferencesSynced: boolean,
@@ -159,6 +160,11 @@ cr.define('options', function() {
       $('use-default-link').onclick = function() {
         self.showSyncEverythingPage_();
       };
+      $('autofill-checkbox').onclick = function() {
+        var autofillSyncEnabled = $('autofill-checkbox').checked;
+        $('payments-integration-checkbox').checked = autofillSyncEnabled;
+        $('payments-integration-checkbox').disabled = !autofillSyncEnabled;
+      };
     },
 
     /** @private */
@@ -210,6 +216,7 @@ cr.define('options', function() {
       for (var i = 0; i < checkboxes.length; i++) {
         checkboxes[i].checked = value;
       }
+      $('payments-integration-checkbox').checked = value;
     },
 
     /**
@@ -330,6 +337,7 @@ cr.define('options', function() {
                     options.DataTypeSelection.SYNC_EVERYTHING;
       var syncNothing = $('sync-select-datatypes').selectedIndex ==
                         options.DataTypeSelection.SYNC_NOTHING;
+      var autofillSynced = syncAll || $('autofill-checkbox').checked;
       var result = JSON.stringify({
         'syncAllDataTypes': syncAll,
         'syncNothing': syncNothing,
@@ -337,13 +345,15 @@ cr.define('options', function() {
         'preferencesSynced': syncAll || $('preferences-checkbox').checked,
         'themesSynced': syncAll || $('themes-checkbox').checked,
         'passwordsSynced': syncAll || $('passwords-checkbox').checked,
-        'autofillSynced': syncAll || $('autofill-checkbox').checked,
+        'autofillSynced': autofillSynced,
         'extensionsSynced': syncAll || $('extensions-checkbox').checked,
         'typedUrlsSynced': syncAll || $('typed-urls-checkbox').checked,
         'appsSynced': syncAll || $('apps-checkbox').checked,
         'tabsSynced': syncAll || $('tabs-checkbox').checked,
-        'wifiCredentialsSynced': syncAll ||
-                                 $('wifi-credentials-checkbox').checked,
+        'wifiCredentialsSynced':
+            syncAll || $('wifi-credentials-checkbox').checked,
+        'paymentsIntegrationEnabled': syncAll ||
+            (autofillSynced && $('payments-integration-checkbox').checked),
         'encryptAllData': encryptAllData,
         'usePassphrase': usePassphrase,
         'isGooglePassphrase': googlePassphrase,
@@ -367,6 +377,7 @@ cr.define('options', function() {
       for (var i = 0; i < configureElements.length; i++)
         configureElements[i].disabled = disabled;
       $('sync-select-datatypes').disabled = disabled;
+      $('payments-integration-checkbox').disabled = disabled;
 
       $('customize-link').hidden = disabled;
       $('customize-link').disabled = disabled;
@@ -420,9 +431,15 @@ cr.define('options', function() {
         this.dataTypeBoxesChecked_['autofill-checkbox'] = args.autofillSynced;
         this.dataTypeBoxesDisabled_['autofill-checkbox'] =
             args.autofillEnforced;
+        this.dataTypeBoxesChecked_['payments-integration-checkbox'] =
+            args.autofillSynced && args.paymentsIntegrationEnabled;
+        this.dataTypeBoxesDisabled_['payments-integration-checkbox'] =
+            !args.autofillSynced;
         $('autofill-item').hidden = false;
+        $('payments-integration-setting-area').hidden = false;
       } else {
         $('autofill-item').hidden = true;
+        $('payments-integration-setting-area').hidden = true;
       }
       if (args.extensionsRegistered) {
         $('extensions-checkbox').checked = args.extensionsSynced;
@@ -827,8 +844,8 @@ cr.define('options', function() {
      * already signed in.
      * @private
      */
-    startSignIn_: function() {
-      chrome.send('SyncSetupStartSignIn');
+    startSignIn_: function(accessPoint) {
+      chrome.send('SyncSetupStartSignIn', [accessPoint]);
     },
 
     /**
@@ -840,34 +857,16 @@ cr.define('options', function() {
     },
   };
 
-  // These methods are for general consumption.
-  SyncSetupOverlay.closeOverlay = function() {
-    SyncSetupOverlay.getInstance().closeOverlay_();
-  };
-
-  SyncSetupOverlay.showSetupUI = function() {
-    SyncSetupOverlay.getInstance().showSetupUI_();
-  };
-
-  SyncSetupOverlay.startSignIn = function() {
-    SyncSetupOverlay.getInstance().startSignIn_();
-  };
-
-  SyncSetupOverlay.doSignOutOnAuthError = function() {
-    SyncSetupOverlay.getInstance().doSignOutOnAuthError_();
-  };
-
-  SyncSetupOverlay.showSyncSetupPage = function(page, args) {
-    SyncSetupOverlay.getInstance().showSyncSetupPage_(page, args);
-  };
-
-  SyncSetupOverlay.showCustomizePage = function(args, index) {
-    SyncSetupOverlay.getInstance().showCustomizePage_(args, index);
-  };
-
-  SyncSetupOverlay.showStopSyncingUI = function() {
-    SyncSetupOverlay.getInstance().showStopSyncingUI_();
-  };
+  // Forward public APIs to private implementations.
+  cr.makePublic(SyncSetupOverlay, [
+    'closeOverlay',
+    'showSetupUI',
+    'startSignIn',
+    'doSignOutOnAuthError',
+    'showSyncSetupPage',
+    'showCustomizePage',
+    'showStopSyncingUI',
+  ]);
 
   // Export
   return {

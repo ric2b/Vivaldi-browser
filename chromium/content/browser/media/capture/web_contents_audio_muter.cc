@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/macros.h"
 #include "content/browser/media/capture/audio_mirroring_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
@@ -49,7 +50,7 @@ class AudioDiscarder : public media::AudioOutputStream {
   ~AudioDiscarder() override {}
 
   void FetchAudioData(AudioSourceCallback* callback) {
-    callback->OnMoreData(audio_bus_.get(), 0);
+    callback->OnMoreData(audio_bus_.get(), 0, 0);
   }
 
   // Calls FetchAudioData() at regular intervals and discards the data.

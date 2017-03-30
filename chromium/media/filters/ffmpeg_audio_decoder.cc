@@ -4,6 +4,8 @@
 
 #include "media/filters/ffmpeg_audio_decoder.h"
 
+#include <stdint.h>
+
 #include "base/callback_helpers.h"
 #include "base/single_thread_task_runner.h"
 #include "media/base/audio_buffer.h"
@@ -13,6 +15,7 @@
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/limits.h"
+#include "media/base/timestamp_constants.h"
 #include "media/ffmpeg/ffmpeg_common.h"
 #include "media/filters/ffmpeg_glue.h"
 
@@ -41,7 +44,7 @@ static inline int DetermineChannels(AVFrame* frame) {
 
 // Called by FFmpeg's allocation routine to free a buffer. |opaque| is the
 // AudioBuffer allocated, so unref it.
-static void ReleaseAudioBufferImpl(void* opaque, uint8* data) {
+static void ReleaseAudioBufferImpl(void* opaque, uint8_t* data) {
   scoped_refptr<AudioBuffer> buffer;
   buffer.swap(reinterpret_cast<AudioBuffer**>(&opaque));
 }
@@ -57,7 +60,8 @@ static int GetAudioBuffer(struct AVCodecContext* s, AVFrame* frame, int flags) {
   // data, use the values supplied by FFmpeg (ignoring the current settings).
   // FFmpegDecode() gets to determine if the buffer is useable or not.
   AVSampleFormat format = static_cast<AVSampleFormat>(frame->format);
-  SampleFormat sample_format = AVSampleFormatToSampleFormat(format);
+  SampleFormat sample_format =
+      AVSampleFormatToSampleFormat(format, s->codec_id);
   int channels = DetermineChannels(frame);
   if (channels <= 0 || channels >= limits::kMaxChannels) {
     DLOG(ERROR) << "Requested number of channels (" << channels
@@ -106,7 +110,7 @@ static int GetAudioBuffer(struct AVCodecContext* s, AVFrame* frame, int flags) {
   } else {
     // There are more channels than can fit into data[], so allocate
     // extended_data[] and fill appropriately.
-    frame->extended_data = static_cast<uint8**>(
+    frame->extended_data = static_cast<uint8_t**>(
         av_malloc(number_of_planes * sizeof(*frame->extended_data)));
     int i = 0;
     for (; i < AV_NUM_DATA_POINTERS; ++i)
@@ -126,20 +130,18 @@ static int GetAudioBuffer(struct AVCodecContext* s, AVFrame* frame, int flags) {
 
 FFmpegAudioDecoder::FFmpegAudioDecoder(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
-    const LogCB& log_cb)
+    const scoped_refptr<MediaLog>& media_log)
     : task_runner_(task_runner),
       state_(kUninitialized),
       av_sample_format_(0),
-      log_cb_(log_cb) {
+      media_log_(media_log) {
 }
 
 FFmpegAudioDecoder::~FFmpegAudioDecoder() {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
-  if (state_ != kUninitialized) {
+  if (state_ != kUninitialized)
     ReleaseFFmpegResources();
-    ResetTimestampState();
-  }
 }
 
 std::string FFmpegAudioDecoder::GetDisplayName() const {
@@ -147,17 +149,25 @@ std::string FFmpegAudioDecoder::GetDisplayName() const {
 }
 
 void FFmpegAudioDecoder::Initialize(const AudioDecoderConfig& config,
+                                    const SetCdmReadyCB& /* set_cdm_ready_cb */,
                                     const InitCB& init_cb,
                                     const OutputCB& output_cb) {
   DCHECK(task_runner_->BelongsToCurrentThread());
-  DCHECK(!config.is_encrypted());
+  DCHECK(config.IsValidConfig());
 
-  FFmpegGlue::InitializeFFmpeg();
-
-  config_ = config;
   InitCB bound_init_cb = BindToCurrentLoop(init_cb);
 
-  if (!config.IsValidConfig() || !ConfigureDecoder()) {
+  if (config.is_encrypted()) {
+    bound_init_cb.Run(false);
+    return;
+  }
+
+  FFmpegGlue::InitializeFFmpeg();
+  config_ = config;
+
+  // TODO(xhwang): Only set |config_| after we successfully configure the
+  // decoder. Make sure we clean up all member variables upon failure.
+  if (!ConfigureDecoder()) {
     bound_init_cb.Run(false);
     return;
   }
@@ -243,7 +253,7 @@ bool FFmpegAudioDecoder::FFmpegDecode(
     packet.data = NULL;
     packet.size = 0;
   } else {
-    packet.data = const_cast<uint8*>(buffer->data());
+    packet.data = const_cast<uint8_t*>(buffer->data());
     packet.size = buffer->data_size();
   }
 
@@ -262,7 +272,7 @@ bool FFmpegAudioDecoder::FFmpegDecode(
           << "This is quite possibly a bug in the audio decoder not handling "
           << "end of stream AVPackets correctly.";
 
-      MEDIA_LOG(DEBUG, log_cb_)
+      MEDIA_LOG(DEBUG, media_log_)
           << "Dropping audio frame which failed decode with timestamp: "
           << buffer->timestamp().InMicroseconds()
           << " us, duration: " << buffer->duration().InMicroseconds()
@@ -292,9 +302,10 @@ bool FFmpegAudioDecoder::FFmpegDecode(
 
         if (config_.codec() == kCodecAAC &&
             av_frame_->sample_rate == 2 * config_.samples_per_second()) {
-          MEDIA_LOG(DEBUG, log_cb_) << "Implicit HE-AAC signalling is being"
-                                    << " used. Please use mp4a.40.5 instead of"
-                                    << " mp4a.40.2 in the mimetype.";
+          MEDIA_LOG(DEBUG, media_log_)
+              << "Implicit HE-AAC signalling is being"
+              << " used. Please use mp4a.40.5 instead of"
+              << " mp4a.40.2 in the mimetype.";
         }
         // This is an unrecoverable error, so bail out.
         av_frame_unref(av_frame_.get());
@@ -334,19 +345,8 @@ void FFmpegAudioDecoder::ReleaseFFmpegResources() {
 }
 
 bool FFmpegAudioDecoder::ConfigureDecoder() {
-  if (!config_.IsValidConfig()) {
-    DLOG(ERROR) << "Invalid audio stream -"
-                << " codec: " << config_.codec()
-                << " channel layout: " << config_.channel_layout()
-                << " bits per channel: " << config_.bits_per_channel()
-                << " samples per second: " << config_.samples_per_second();
-    return false;
-  }
-
-  if (config_.is_encrypted()) {
-    DLOG(ERROR) << "Encrypted audio stream not supported";
-    return false;
-  }
+  DCHECK(config_.IsValidConfig());
+  DCHECK(!config_.is_encrypted());
 
   // Release existing decoder resources if necessary.
   ReleaseFFmpegResources();
@@ -370,8 +370,6 @@ bool FFmpegAudioDecoder::ConfigureDecoder() {
 
   // Success!
   av_frame_.reset(av_frame_alloc());
-  discard_helper_.reset(new AudioDiscardHelper(config_.samples_per_second(),
-                                               config_.codec_delay()));
   av_sample_format_ = codec_context_->sample_fmt;
 
   if (codec_context_->channels !=
@@ -390,6 +388,8 @@ bool FFmpegAudioDecoder::ConfigureDecoder() {
 }
 
 void FFmpegAudioDecoder::ResetTimestampState() {
+  discard_helper_.reset(new AudioDiscardHelper(config_.samples_per_second(),
+                                               config_.codec_delay()));
   discard_helper_->Reset(config_.codec_delay());
 }
 

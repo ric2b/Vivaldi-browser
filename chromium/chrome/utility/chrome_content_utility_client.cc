@@ -4,10 +4,14 @@
 
 #include "chrome/utility/chrome_content_utility_client.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_utility_messages.h"
 #include "chrome/common/safe_browsing/zip_analyzer.h"
 #include "chrome/common/safe_browsing/zip_analyzer_results.h"
@@ -33,9 +37,9 @@
 #if !defined(OS_ANDROID)
 #include "chrome/common/resource_usage_reporter.mojom.h"
 #include "chrome/utility/profile_import_handler.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "net/proxy/mojo_proxy_resolver_factory_impl.h"
 #include "net/proxy/proxy_resolver_v8.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/strong_binding.h"
 #endif
 
 #if defined(OS_WIN)
@@ -44,19 +48,16 @@
 #endif
 
 #if defined(ENABLE_EXTENSIONS)
-#include "chrome/common/extensions/chrome_utility_extensions_messages.h"
 #include "chrome/utility/extensions/extensions_handler.h"
 #include "chrome/utility/image_writer/image_writer_handler.h"
-#include "chrome/utility/media_galleries/ipc_data_source.h"
-#include "chrome/utility/media_galleries/media_metadata_parser.h"
 #endif
 
 #if defined(ENABLE_PRINT_PREVIEW) || defined(OS_WIN)
 #include "chrome/utility/printing_handler.h"
 #endif
 
-#if defined(ENABLE_MDNS)
-#include "chrome/utility/local_discovery/service_discovery_message_handler.h"
+#if defined(OS_MACOSX) && defined(FULL_SAFE_BROWSING)
+#include "chrome/utility/safe_browsing/mac/dmg_analyzer.h"
 #endif
 
 namespace {
@@ -69,17 +70,6 @@ void ReleaseProcessIfNeeded() {
   content::UtilityThread::Get()->ReleaseProcessIfNeeded();
 }
 
-#if defined(ENABLE_EXTENSIONS)
-void FinishParseMediaMetadata(
-    metadata::MediaMetadataParser* /* parser */,
-    const extensions::api::media_galleries::MediaMetadata& metadata,
-    const std::vector<metadata::AttachedImage>& attached_images) {
-  Send(new ChromeUtilityHostMsg_ParseMediaMetadata_Finished(
-      true, *metadata.ToValue(), attached_images));
-  ReleaseProcessIfNeeded();
-}
-#endif
-
 #if !defined(OS_ANDROID)
 void CreateProxyResolverFactory(
     mojo::InterfaceRequest<net::interfaces::ProxyResolverFactory> request) {
@@ -87,14 +77,14 @@ void CreateProxyResolverFactory(
   // is connected to. When that message pipe is closed, either explicitly on the
   // other end (in the browser process), or by a connection error, this object
   // will be destroyed.
-  new net::MojoProxyResolverFactoryImpl(request.Pass());
+  new net::MojoProxyResolverFactoryImpl(std::move(request));
 }
 
 class ResourceUsageReporterImpl : public ResourceUsageReporter {
  public:
   explicit ResourceUsageReporterImpl(
       mojo::InterfaceRequest<ResourceUsageReporter> req)
-      : binding_(this, req.Pass()) {}
+      : binding_(this, std::move(req)) {}
   ~ResourceUsageReporterImpl() override {}
 
  private:
@@ -107,7 +97,7 @@ class ResourceUsageReporterImpl : public ResourceUsageReporter {
       data->v8_bytes_allocated = total_heap_size;
       data->v8_bytes_used = net::ProxyResolverV8::GetUsedHeapSize();
     }
-    callback.Run(data.Pass());
+    callback.Run(std::move(data));
   }
 
   mojo::StrongBinding<ResourceUsageReporter> binding_;
@@ -115,7 +105,7 @@ class ResourceUsageReporterImpl : public ResourceUsageReporter {
 
 void CreateResourceUsageReporter(
     mojo::InterfaceRequest<ResourceUsageReporter> request) {
-  new ResourceUsageReporterImpl(request.Pass());
+  new ResourceUsageReporterImpl(std::move(request));
 }
 #endif  // OS_ANDROID
 
@@ -131,19 +121,12 @@ ChromeContentUtilityClient::ChromeContentUtilityClient()
 #endif
 
 #if defined(ENABLE_EXTENSIONS)
-  handlers_.push_back(new extensions::ExtensionsHandler());
+  handlers_.push_back(new extensions::ExtensionsHandler(this));
   handlers_.push_back(new image_writer::ImageWriterHandler());
 #endif
 
 #if defined(ENABLE_PRINT_PREVIEW) || defined(OS_WIN)
-  handlers_.push_back(new PrintingHandler());
-#endif
-
-#if defined(ENABLE_MDNS)
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kUtilityProcessEnableMDns)) {
-    handlers_.push_back(new local_discovery::ServiceDiscoveryMessageHandler());
-  }
+  handlers_.push_back(new printing::PrintingHandler());
 #endif
 
 #if defined(OS_WIN)
@@ -192,11 +175,11 @@ bool ChromeContentUtilityClient::OnMessageReceived(
 #if defined(FULL_SAFE_BROWSING)
     IPC_MESSAGE_HANDLER(ChromeUtilityMsg_AnalyzeZipFileForDownloadProtection,
                         OnAnalyzeZipFileForDownloadProtection)
-#endif
-#if defined(ENABLE_EXTENSIONS)
-    IPC_MESSAGE_HANDLER(ChromeUtilityMsg_ParseMediaMetadata,
-                        OnParseMediaMetadata)
-#endif
+#if defined(OS_MACOSX)
+    IPC_MESSAGE_HANDLER(ChromeUtilityMsg_AnalyzeDmgFileForDownloadProtection,
+                        OnAnalyzeDmgFileForDownloadProtection)
+#endif  // defined(OS_MACOSX)
+#endif  // defined(FULL_SAFE_BROWSING)
 #if defined(OS_CHROMEOS)
     IPC_MESSAGE_HANDLER(ChromeUtilityMsg_CreateZipFile, OnCreateZipFile)
 #endif
@@ -221,18 +204,16 @@ void ChromeContentUtilityClient::RegisterMojoServices(
 #endif
 }
 
+void ChromeContentUtilityClient::AddHandler(
+    scoped_ptr<UtilityMessageHandler> handler) {
+  handlers_.push_back(std::move(handler));
+}
+
 // static
 void ChromeContentUtilityClient::PreSandboxStartup() {
 #if defined(ENABLE_EXTENSIONS)
   extensions::ExtensionsHandler::PreSandboxStartup();
 #endif
-
-#if defined(ENABLE_MDNS)
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kUtilityProcessEnableMDns)) {
-    local_discovery::ServiceDiscoveryMessageHandler::PreSandboxStartup();
-  }
-#endif  // ENABLE_MDNS
 }
 
 // static
@@ -291,6 +272,7 @@ void ChromeContentUtilityClient::OnDecodeImage(
     const std::vector<unsigned char>& encoded_data,
     bool shrink_to_fit,
     int request_id) {
+  content::UtilityThread::Get()->EnsureBlinkInitialized();
   DecodeImageAndSend(encoded_data, shrink_to_fit, request_id);
 }
 
@@ -395,19 +377,17 @@ void ChromeContentUtilityClient::OnAnalyzeZipFileForDownloadProtection(
       results));
   ReleaseProcessIfNeeded();
 }
-#endif
 
-#if defined(ENABLE_EXTENSIONS)
-// TODO(thestig): Try to move this to
-// chrome/utility/extensions/extensions_handler.cc.
-void ChromeContentUtilityClient::OnParseMediaMetadata(
-    const std::string& mime_type, int64 total_size, bool get_attached_images) {
-  // Only one IPCDataSource may be created and added to the list of handlers.
-  metadata::IPCDataSource* source = new metadata::IPCDataSource(total_size);
-  handlers_.push_back(source);
-
-  metadata::MediaMetadataParser* parser = new metadata::MediaMetadataParser(
-      source, mime_type, get_attached_images);
-  parser->Start(base::Bind(&FinishParseMediaMetadata, base::Owned(parser)));
+#if defined(OS_MACOSX)
+void ChromeContentUtilityClient::OnAnalyzeDmgFileForDownloadProtection(
+    const IPC::PlatformFileForTransit& dmg_file) {
+  safe_browsing::zip_analyzer::Results results;
+  safe_browsing::dmg::AnalyzeDMGFile(
+      IPC::PlatformFileForTransitToFile(dmg_file), &results);
+  Send(new ChromeUtilityHostMsg_AnalyzeDmgFileForDownloadProtection_Finished(
+      results));
+  ReleaseProcessIfNeeded();
 }
-#endif
+#endif  // defined(OS_MACOSX)
+
+#endif  // defined(FULL_SAFE_BROWSING)

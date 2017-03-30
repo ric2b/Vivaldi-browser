@@ -24,7 +24,7 @@
 #include "chrome/browser/ui/app_list/app_list_service.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
-#include "components/crash/app/crashpad_mac.h"
+#include "components/crash/content/app/crashpad.h"
 #include "components/metrics/metrics_service.h"
 #include "content/public/common/main_function_params.h"
 #include "content/public/common/result_codes.h"
@@ -33,6 +33,8 @@
 #include "ui/base/resource/resource_handle.h"
 
 #include "chrome/app/chrome_command_ids.h"
+
+#include "app/vivaldi_apptools.h"
 #include "app/vivaldi_commands.h"
 
 namespace {
@@ -144,7 +146,7 @@ void ChromeBrowserMainPartsMac::PreMainMessageLoopStart() {
     }
   }
 
-  if (base::CommandLine::ForCurrentProcess()->IsRunningVivaldi()) {
+  if (vivaldi::IsVivaldiRunning()) {
     // Running Vivaldi so we load a dummy nib menu
     // and later read the menu from storage
     base::scoped_nsobject<NSNib> nib(
@@ -154,13 +156,13 @@ void ChromeBrowserMainPartsMac::PreMainMessageLoopStart() {
     // change this, you'll probably need to change the Valgrind suppression.
     [nib instantiateNibWithOwner:NSApp topLevelObjects:nil];
   } else {
-    // Now load the nib (from the right bundle).
-    base::scoped_nsobject<NSNib> nib(
-        [[NSNib alloc] initWithNibNamed:@"MainMenu"
-                                 bundle:base::mac::FrameworkBundle()]);
-    // TODO(viettrungluu): crbug.com/20504 - This currently leaks, so if you
-    // change this, you'll probably need to change the Valgrind suppression.
-    [nib instantiateNibWithOwner:NSApp topLevelObjects:nil];
+  // Now load the nib (from the right bundle).
+  base::scoped_nsobject<NSNib> nib(
+      [[NSNib alloc] initWithNibNamed:@"MainMenu"
+                               bundle:base::mac::FrameworkBundle()]);
+  // TODO(viettrungluu): crbug.com/20504 - This currently leaks, so if you
+  // change this, you'll probably need to change the Valgrind suppression.
+  [nib instantiateNibWithOwner:NSApp topLevelObjects:nil];
   }
   // Make sure the app controller has been created.
   DCHECK([NSApp delegate]);

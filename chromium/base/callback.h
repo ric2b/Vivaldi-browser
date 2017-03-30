@@ -26,7 +26,7 @@
 // much like lexical closures are used in other languages. For example, it
 // is used in Chromium code to schedule tasks on different MessageLoops.
 //
-// A callback with no unbound input parameters (base::Callback<void(void)>)
+// A callback with no unbound input parameters (base::Callback<void()>)
 // is called a base::Closure. Note that this is NOT the same as what other
 // languages refer to as a closure -- it does not retain a reference to its
 // enclosing environment.
@@ -48,7 +48,7 @@
 // BINDING A BARE FUNCTION
 //
 //   int Return5() { return 5; }
-//   base::Callback<int(void)> func_cb = base::Bind(&Return5);
+//   base::Callback<int()> func_cb = base::Bind(&Return5);
 //   LOG(INFO) << func_cb.Run();  // Prints 5.
 //
 // BINDING A CLASS METHOD
@@ -62,7 +62,7 @@
 //     void PrintBye() { LOG(INFO) << "bye."; }
 //   };
 //   scoped_refptr<Ref> ref = new Ref();
-//   base::Callback<void(void)> ref_cb = base::Bind(&Ref::Foo, ref);
+//   base::Callback<void()> ref_cb = base::Bind(&Ref::Foo, ref);
 //   LOG(INFO) << ref_cb.Run();  // Prints out 3.
 //
 //   By default the object must support RefCounted or you will get a compiler
@@ -104,10 +104,10 @@
 //   calling.
 //
 //   void MyFunc(int i, const std::string& str) {}
-//   base::Callback<void(void)> cb = base::Bind(&MyFunc, 23, "hello world");
+//   base::Callback<void()> cb = base::Bind(&MyFunc, 23, "hello world");
 //   cb.Run();
 //
-//   A callback with no unbound input parameters (base::Callback<void(void)>)
+//   A callback with no unbound input parameters (base::Callback<void()>)
 //   is called a base::Closure. So we could have also written:
 //
 //   base::Closure cb = base::Bind(&MyFunc, 23, "hello world");
@@ -165,7 +165,7 @@
 //   that doesn't expect a return value.
 //
 //   int DoSomething(int arg) { cout << arg << endl; }
-//   base::Callback<void<int>) cb =
+//   base::Callback<void(int)> cb =
 //       base::Bind(base::IgnoreResult(&DoSomething));
 //
 //
@@ -175,7 +175,7 @@
 //
 // Bound parameters are specified as arguments to Bind() and are passed to the
 // function. A callback with no parameters or no unbound parameters is called a
-// Closure (base::Callback<void(void)> and base::Closure are the same thing).
+// Closure (base::Callback<void()> and base::Closure are the same thing).
 //
 // PASSING PARAMETERS OWNED BY THE CALLBACK
 //
@@ -354,32 +354,30 @@ namespace base {
 //
 // If you are thinking of forward declaring Callback in your own header file,
 // please include "base/callback_forward.h" instead.
-template <typename Sig>
-class Callback;
 
 namespace internal {
-template <typename Runnable, typename RunType, typename BoundArgsType>
+template <typename Runnable, typename RunType, typename... BoundArgsType>
 struct BindState;
 }  // namespace internal
 
 template <typename R, typename... Args>
 class Callback<R(Args...)> : public internal::CallbackBase {
  public:
-  typedef R(RunType)(Args...);
+  // MSVC 2013 doesn't support Type Alias of function types.
+  // Revisit this after we update it to newer version.
+  typedef R RunType(Args...);
 
-  Callback() : CallbackBase(NULL) { }
+  Callback() : CallbackBase(nullptr) { }
 
-  // Note that this constructor CANNOT be explicit, and that Bind() CANNOT
-  // return the exact Callback<> type.  See base/bind.h for details.
-  template <typename Runnable, typename BindRunType, typename BoundArgsType>
-  Callback(internal::BindState<Runnable, BindRunType,
-           BoundArgsType>* bind_state)
+  template <typename Runnable, typename BindRunType, typename... BoundArgsType>
+  explicit Callback(
+      internal::BindState<Runnable, BindRunType, BoundArgsType...>* bind_state)
       : CallbackBase(bind_state) {
     // Force the assignment to a local variable of PolymorphicInvoke
     // so the compiler will typecheck that the passed in Run() method has
     // the correct type.
     PolymorphicInvoke invoke_func =
-        &internal::BindState<Runnable, BindRunType, BoundArgsType>
+        &internal::BindState<Runnable, BindRunType, BoundArgsType...>
             ::InvokerType::Run;
     polymorphic_invoke_ = reinterpret_cast<InvokeFuncStorage>(invoke_func);
   }
@@ -397,14 +395,10 @@ class Callback<R(Args...)> : public internal::CallbackBase {
   }
 
  private:
-  typedef R(*PolymorphicInvoke)(
-      internal::BindStateBase*,
-      typename internal::CallbackParamTraits<Args>::ForwardType...);
+  using PolymorphicInvoke =
+      R(*)(internal::BindStateBase*,
+           typename internal::CallbackParamTraits<Args>::ForwardType...);
 };
-
-// Syntactic sugar to make Callback<void(void)> easier to declare since it
-// will be used in a lot of APIs with delayed execution.
-typedef Callback<void(void)> Closure;
 
 }  // namespace base
 

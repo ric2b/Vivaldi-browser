@@ -4,20 +4,23 @@
 
 #include "chrome/browser/sync_file_system/sync_process_runner.h"
 
+#include <utility>
+
 #include "base/format_macros.h"
+#include "base/macros.h"
 #include "chrome/browser/sync_file_system/logger.h"
 
 namespace sync_file_system {
 
-const int64 SyncProcessRunner::kSyncDelayInMilliseconds =
-    1 * base::Time::kMillisecondsPerSecond; // 1 sec
-const int64 SyncProcessRunner::kSyncDelayWithSyncError =
-    3 * base::Time::kMillisecondsPerSecond; // 3 sec
-const int64 SyncProcessRunner::kSyncDelayFastInMilliseconds = 100;  // 100 ms
+const int64_t SyncProcessRunner::kSyncDelayInMilliseconds =
+    1 * base::Time::kMillisecondsPerSecond;  // 1 sec
+const int64_t SyncProcessRunner::kSyncDelayWithSyncError =
+    3 * base::Time::kMillisecondsPerSecond;                           // 3 sec
+const int64_t SyncProcessRunner::kSyncDelayFastInMilliseconds = 100;  // 100 ms
 const int SyncProcessRunner::kPendingChangeThresholdForFastSync = 10;
-const int64 SyncProcessRunner::kSyncDelaySlowInMilliseconds =
+const int64_t SyncProcessRunner::kSyncDelaySlowInMilliseconds =
     30 * base::Time::kMillisecondsPerSecond;  // 30 sec
-const int64 SyncProcessRunner::kSyncDelayMaxInMilliseconds =
+const int64_t SyncProcessRunner::kSyncDelayMaxInMilliseconds =
     30 * 60 * base::Time::kMillisecondsPerSecond;  // 30 min
 
 namespace {
@@ -39,7 +42,7 @@ class BaseTimerHelper : public SyncProcessRunner::TimerHelper {
   ~BaseTimerHelper() override {}
 
  private:
-  base::OneShotTimer<SyncProcessRunner> timer_;
+  base::OneShotTimer timer_;
 
   DISALLOW_COPY_AND_ASSIGN(BaseTimerHelper);
 };
@@ -55,16 +58,15 @@ bool WasSuccessfulSync(SyncStatusCode status) {
 
 }  // namespace
 
-SyncProcessRunner::SyncProcessRunner(
-    const std::string& name,
-    Client* client,
-    scoped_ptr<TimerHelper> timer_helper,
-    size_t max_parallel_task)
+SyncProcessRunner::SyncProcessRunner(const std::string& name,
+                                     Client* client,
+                                     scoped_ptr<TimerHelper> timer_helper,
+                                     size_t max_parallel_task)
     : name_(name),
       client_(client),
       max_parallel_task_(max_parallel_task),
       running_tasks_(0),
-      timer_helper_(timer_helper.Pass()),
+      timer_helper_(std::move(timer_helper)),
       service_state_(SYNC_SERVICE_RUNNING),
       pending_changes_(0),
       factory_(this) {
@@ -111,7 +113,7 @@ void SyncProcessRunner::Schedule() {
   ScheduleInternal(kSyncDelayMaxInMilliseconds);
 }
 
-void SyncProcessRunner::ThrottleSync(int64 base_delay) {
+void SyncProcessRunner::ThrottleSync(int64_t base_delay) {
   base::TimeTicks now = timer_helper_->Now();
   base::TimeDelta elapsed = std::min(now, throttle_until_) - throttle_from_;
   DCHECK(base::TimeDelta() <= elapsed);
@@ -145,10 +147,9 @@ SyncServiceState SyncProcessRunner::GetServiceState() {
   return client_->GetSyncServiceState();
 }
 
-void SyncProcessRunner::OnChangesUpdated(
-    int64 pending_changes) {
+void SyncProcessRunner::OnChangesUpdated(int64_t pending_changes) {
   DCHECK_GE(pending_changes, 0);
-  int64 old_pending_changes = pending_changes_;
+  int64_t old_pending_changes = pending_changes_;
   pending_changes_ = pending_changes;
   if (old_pending_changes != pending_changes) {
     CheckIfIdle();
@@ -203,7 +204,7 @@ void SyncProcessRunner::Run() {
     Schedule();
 }
 
-void SyncProcessRunner::ScheduleInternal(int64 delay) {
+void SyncProcessRunner::ScheduleInternal(int64_t delay) {
   base::TimeTicks now = timer_helper_->Now();
   base::TimeTicks next_scheduled;
 

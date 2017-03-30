@@ -4,6 +4,8 @@
 
 #include "content/browser/storage_partition_impl.h"
 
+#include <stddef.h>
+
 #include <set>
 #include <vector>
 
@@ -17,7 +19,6 @@
 #include "content/browser/gpu/shader_disk_cache.h"
 #include "content/browser/host_zoom_map_impl.h"
 #include "content/browser/navigator_connect/navigator_connect_context_impl.h"
-#include "content/browser/navigator_connect/navigator_connect_service_worker_service_factory.h"
 #include "content/browser/notifications/platform_notification_context_impl.h"
 #include "content/common/dom_storage/dom_storage_types.h"
 #include "content/public/browser/browser_context.h"
@@ -201,38 +202,8 @@ void ClearSessionStorageOnUIThread(
 
 }  // namespace
 
-// static
-STATIC_CONST_MEMBER_DEFINITION const uint32
-    StoragePartition::REMOVE_DATA_MASK_APPCACHE;
-STATIC_CONST_MEMBER_DEFINITION const uint32
-    StoragePartition::REMOVE_DATA_MASK_COOKIES;
-STATIC_CONST_MEMBER_DEFINITION const uint32
-    StoragePartition::REMOVE_DATA_MASK_FILE_SYSTEMS;
-STATIC_CONST_MEMBER_DEFINITION const uint32
-    StoragePartition::REMOVE_DATA_MASK_INDEXEDDB;
-STATIC_CONST_MEMBER_DEFINITION const uint32
-    StoragePartition::REMOVE_DATA_MASK_LOCAL_STORAGE;
-STATIC_CONST_MEMBER_DEFINITION const uint32
-    StoragePartition::REMOVE_DATA_MASK_SERVICE_WORKERS;
-STATIC_CONST_MEMBER_DEFINITION const uint32
-    StoragePartition::REMOVE_DATA_MASK_SHADER_CACHE;
-STATIC_CONST_MEMBER_DEFINITION const uint32
-    StoragePartition::REMOVE_DATA_MASK_WEBSQL;
-STATIC_CONST_MEMBER_DEFINITION const uint32
-    StoragePartition::REMOVE_DATA_MASK_WEBRTC_IDENTITY;
-STATIC_CONST_MEMBER_DEFINITION const uint32
-    StoragePartition::REMOVE_DATA_MASK_ALL;
-STATIC_CONST_MEMBER_DEFINITION const uint32
-    StoragePartition::QUOTA_MANAGED_STORAGE_MASK_TEMPORARY;
-STATIC_CONST_MEMBER_DEFINITION const uint32
-    StoragePartition::QUOTA_MANAGED_STORAGE_MASK_PERSISTENT;
-STATIC_CONST_MEMBER_DEFINITION const uint32
-    StoragePartition::QUOTA_MANAGED_STORAGE_MASK_SYNCABLE;
-STATIC_CONST_MEMBER_DEFINITION const uint32
-    StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL;
-
 // Static.
-int StoragePartitionImpl::GenerateQuotaClientMask(uint32 remove_mask) {
+int StoragePartitionImpl::GenerateQuotaClientMask(uint32_t remove_mask) {
   int quota_client_mask = 0;
 
   if (remove_mask & StoragePartition::REMOVE_DATA_MASK_FILE_SYSTEMS)
@@ -243,11 +214,10 @@ int StoragePartitionImpl::GenerateQuotaClientMask(uint32 remove_mask) {
     quota_client_mask |= storage::QuotaClient::kAppcache;
   if (remove_mask & StoragePartition::REMOVE_DATA_MASK_INDEXEDDB)
     quota_client_mask |= storage::QuotaClient::kIndexedDatabase;
-  if (remove_mask & StoragePartition::REMOVE_DATA_MASK_SERVICE_WORKERS) {
+  if (remove_mask & StoragePartition::REMOVE_DATA_MASK_SERVICE_WORKERS)
     quota_client_mask |= storage::QuotaClient::kServiceWorker;
+  if (remove_mask & StoragePartition::REMOVE_DATA_MASK_CACHE_STORAGE)
     quota_client_mask |= storage::QuotaClient::kServiceWorkerCache;
-  }
-
 
   return quota_client_mask;
 }
@@ -256,16 +226,15 @@ int StoragePartitionImpl::GenerateQuotaClientMask(uint32 remove_mask) {
 //
 // Most of the operations in this class are done on IO thread.
 struct StoragePartitionImpl::QuotaManagedDataDeletionHelper {
-  QuotaManagedDataDeletionHelper(uint32 remove_mask,
-                                 uint32 quota_storage_remove_mask,
+  QuotaManagedDataDeletionHelper(uint32_t remove_mask,
+                                 uint32_t quota_storage_remove_mask,
                                  const GURL& storage_origin,
                                  const base::Closure& callback)
       : remove_mask(remove_mask),
         quota_storage_remove_mask(quota_storage_remove_mask),
         storage_origin(storage_origin),
         callback(callback),
-        task_count(0) {
-  }
+        task_count(0) {}
 
   void IncrementTaskCountOnIO();
   void DecrementTaskCountOnIO();
@@ -287,8 +256,8 @@ struct StoragePartitionImpl::QuotaManagedDataDeletionHelper {
       storage::StorageType quota_storage_type);
 
   // All of these data are accessed on IO thread.
-  uint32 remove_mask;
-  uint32 quota_storage_remove_mask;
+  uint32_t remove_mask;
+  uint32_t quota_storage_remove_mask;
   GURL storage_origin;
   const base::Closure callback;
   int task_count;
@@ -305,14 +274,13 @@ struct StoragePartitionImpl::QuotaManagedDataDeletionHelper {
 // forwarded and updated on each (sub) deletion's callback. The instance is
 // finally destroyed when deletion completes (and |callback| is invoked).
 struct StoragePartitionImpl::DataDeletionHelper {
-  DataDeletionHelper(uint32 remove_mask,
-                     uint32 quota_storage_remove_mask,
+  DataDeletionHelper(uint32_t remove_mask,
+                     uint32_t quota_storage_remove_mask,
                      const base::Closure& callback)
-                     : remove_mask(remove_mask),
-                       quota_storage_remove_mask(quota_storage_remove_mask),
-                       callback(callback),
-                       task_count(0) {
-  }
+      : remove_mask(remove_mask),
+        quota_storage_remove_mask(quota_storage_remove_mask),
+        callback(callback),
+        task_count(0) {}
 
   void IncrementTaskCountOnUI();
   void DecrementTaskCountOnUI();
@@ -338,8 +306,8 @@ struct StoragePartitionImpl::DataDeletionHelper {
       const StoragePartition::OriginMatcherFunction& origin_matcher,
       const base::Closure& callback);
 
-  uint32 remove_mask;
-  uint32 quota_storage_remove_mask;
+  uint32_t remove_mask;
+  uint32_t quota_storage_remove_mask;
 
   // Accessed on UI thread.
   const base::Closure callback;
@@ -383,8 +351,7 @@ StoragePartitionImpl::StoragePartitionImpl(
     HostZoomLevelContext* host_zoom_level_context,
     NavigatorConnectContextImpl* navigator_connect_context,
     PlatformNotificationContextImpl* platform_notification_context,
-    BackgroundSyncContextImpl* background_sync_context,
-    StashedPortManager* stashed_port_manager)
+    BackgroundSyncContextImpl* background_sync_context)
     : partition_path_(partition_path),
       quota_manager_(quota_manager),
       appcache_service_(appcache_service),
@@ -401,7 +368,6 @@ StoragePartitionImpl::StoragePartitionImpl(
       navigator_connect_context_(navigator_connect_context),
       platform_notification_context_(platform_notification_context),
       background_sync_context_(background_sync_context),
-      stashed_port_manager_(stashed_port_manager),
       browser_context_(browser_context) {
 }
 
@@ -437,9 +403,6 @@ StoragePartitionImpl::~StoragePartitionImpl() {
 
   if (GetBackgroundSyncContext())
     GetBackgroundSyncContext()->Shutdown();
-
-  if (GetStashedPortManager())
-    GetStashedPortManager()->Shutdown();
 }
 
 StoragePartitionImpl* StoragePartitionImpl::Create(
@@ -525,9 +488,7 @@ StoragePartitionImpl* StoragePartitionImpl::Create(
           context->CreateZoomLevelDelegate(partition_path)));
 
   scoped_refptr<NavigatorConnectContextImpl> navigator_connect_context =
-      new NavigatorConnectContextImpl();
-  navigator_connect_context->AddFactory(make_scoped_ptr(
-      new NavigatorConnectServiceWorkerServiceFactory(service_worker_context)));
+      new NavigatorConnectContextImpl(service_worker_context);
 
   scoped_refptr<PlatformNotificationContextImpl> platform_notification_context =
       new PlatformNotificationContextImpl(path, context,
@@ -538,10 +499,6 @@ StoragePartitionImpl* StoragePartitionImpl::Create(
       new BackgroundSyncContextImpl();
   background_sync_context->Init(service_worker_context);
 
-  scoped_refptr<StashedPortManager> stashed_port_manager =
-      new StashedPortManager(service_worker_context);
-  stashed_port_manager->Init();
-
   StoragePartitionImpl* storage_partition = new StoragePartitionImpl(
       context, partition_path, quota_manager.get(), appcache_service.get(),
       filesystem_context.get(), database_tracker.get(),
@@ -550,7 +507,7 @@ StoragePartitionImpl* StoragePartitionImpl::Create(
       webrtc_identity_store.get(), special_storage_policy.get(),
       geofencing_manager.get(), host_zoom_level_context.get(),
       navigator_connect_context.get(), platform_notification_context.get(),
-      background_sync_context.get(), stashed_port_manager.get());
+      background_sync_context.get());
 
   service_worker_context->set_storage_partition(storage_partition);
 
@@ -634,13 +591,9 @@ BackgroundSyncContextImpl* StoragePartitionImpl::GetBackgroundSyncContext() {
   return background_sync_context_.get();
 }
 
-StashedPortManager* StoragePartitionImpl::GetStashedPortManager() {
-  return stashed_port_manager_.get();
-}
-
 void StoragePartitionImpl::ClearDataImpl(
-    uint32 remove_mask,
-    uint32 quota_storage_remove_mask,
+    uint32_t remove_mask,
+    uint32_t quota_storage_remove_mask,
     const GURL& storage_origin,
     const OriginMatcherFunction& origin_matcher,
     net::URLRequestContextGetter* rq_context,
@@ -836,7 +789,8 @@ void StoragePartitionImpl::DataDeletionHelper::ClearDataOnUIThread(
       remove_mask & REMOVE_DATA_MASK_WEBSQL ||
       remove_mask & REMOVE_DATA_MASK_APPCACHE ||
       remove_mask & REMOVE_DATA_MASK_FILE_SYSTEMS ||
-      remove_mask & REMOVE_DATA_MASK_SERVICE_WORKERS) {
+      remove_mask & REMOVE_DATA_MASK_SERVICE_WORKERS ||
+      remove_mask & REMOVE_DATA_MASK_CACHE_STORAGE) {
     IncrementTaskCountOnUI();
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
@@ -896,8 +850,8 @@ void StoragePartitionImpl::DataDeletionHelper::ClearDataOnUIThread(
 }
 
 void StoragePartitionImpl::ClearDataForOrigin(
-    uint32 remove_mask,
-    uint32 quota_storage_remove_mask,
+    uint32_t remove_mask,
+    uint32_t quota_storage_remove_mask,
     const GURL& storage_origin,
     net::URLRequestContextGetter* request_context_getter,
     const base::Closure& callback) {
@@ -913,8 +867,8 @@ void StoragePartitionImpl::ClearDataForOrigin(
 }
 
 void StoragePartitionImpl::ClearData(
-    uint32 remove_mask,
-    uint32 quota_storage_remove_mask,
+    uint32_t remove_mask,
+    uint32_t quota_storage_remove_mask,
     const GURL& storage_origin,
     const OriginMatcherFunction& origin_matcher,
     const base::Time begin,

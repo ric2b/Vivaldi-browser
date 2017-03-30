@@ -4,11 +4,15 @@
 
 #include "content/renderer/pepper/content_renderer_pepper_host_factory.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "content/common/content_switches_internal.h"
 #include "content/public/common/content_client.h"
 #include "content/public/renderer/content_renderer_client.h"
+#include "content/renderer/pepper/pepper_audio_encoder_host.h"
 #include "content/renderer/pepper/pepper_audio_input_host.h"
 #include "content/renderer/pepper/pepper_camera_device_host.h"
 #include "content/renderer/pepper/pepper_compositor_host.h"
@@ -201,6 +205,9 @@ scoped_ptr<ResourceHost> ContentRendererPepperHostFactory::CreateResourceHost(
   // Dev interfaces.
   if (GetPermissions().HasPermission(ppapi::PERMISSION_DEV)) {
     switch (message.type()) {
+      case PpapiHostMsg_AudioEncoder_Create::ID:
+        return scoped_ptr<ResourceHost>(
+            new PepperAudioEncoderHost(host_, instance, resource));
       case PpapiHostMsg_AudioInput_Create::ID:
         return scoped_ptr<ResourceHost>(
             new PepperAudioInputHost(host_, instance, resource));
@@ -227,7 +234,7 @@ scoped_ptr<ResourceHost> ContentRendererPepperHostFactory::CreateResourceHost(
       return nullptr;
     scoped_ptr<PepperCameraDeviceHost> host(
         new PepperCameraDeviceHost(host_, instance, resource));
-    return host->Init() ? host.Pass() : nullptr;
+    return host->Init() ? std::move(host) : nullptr;
   }
 
   return scoped_ptr<ResourceHost>();

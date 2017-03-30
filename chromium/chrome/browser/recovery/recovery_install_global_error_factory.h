@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_RECOVERY_RECOVERY_INSTALL_GLOBAL_ERROR_FACTORY_H_
 #define CHROME_BROWSER_RECOVERY_RECOVERY_INSTALL_GLOBAL_ERROR_FACTORY_H_
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
@@ -25,7 +26,7 @@ class RecoveryInstallGlobalErrorFactory
   static RecoveryInstallGlobalErrorFactory* GetInstance();
 
  private:
-  friend struct DefaultSingletonTraits<RecoveryInstallGlobalErrorFactory>;
+  friend struct base::DefaultSingletonTraits<RecoveryInstallGlobalErrorFactory>;
 
   RecoveryInstallGlobalErrorFactory();
   ~RecoveryInstallGlobalErrorFactory() override;

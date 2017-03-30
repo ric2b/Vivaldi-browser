@@ -7,7 +7,6 @@
 
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/strings/string16.h"
 #include "content/common/content_export.h"
@@ -72,10 +71,9 @@ class CONTENT_EXPORT WebUI {
   virtual int GetBindings() const = 0;
   virtual void SetBindings(int bindings) = 0;
 
-  // Overrides which frame gets JavaScript messages; this is useful if this
-  // WebUI is embedded in a page. If no override is set, the main frame will
-  // receive the JavaScript messages.
-  virtual void OverrideJavaScriptFrame(const std::string& frame_name) = 0;
+  // Whether this WebUI has a render frame associated with it. This will be true
+  // if the URL that created this WebUI was actually visited.
+  virtual bool HasRenderFrame() = 0;
 
   // Takes ownership of |handler|, which will be destroyed when the WebUI is.
   virtual void AddMessageHandler(WebUIMessageHandler* handler) = 0;

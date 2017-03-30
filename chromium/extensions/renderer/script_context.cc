@@ -5,6 +5,7 @@
 #include "extensions/renderer/script_context.h"
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -16,11 +17,12 @@
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_api.h"
-#include "extensions/common/extension_set.h"
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/features/base_feature_provider.h"
 #include "extensions/common/manifest_handlers/sandboxed_page_info.h"
 #include "extensions/common/permissions/permissions_data.h"
+#include "extensions/renderer/renderer_extension_registry.h"
+#include "extensions/renderer/v8_helpers.h"
 #include "gin/per_context_data.h"
 #include "third_party/WebKit/public/web/WebDataSource.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
@@ -53,9 +55,20 @@ std::string GetContextTypeDescriptionString(Feature::Context context_type) {
       return "BLESSED_WEB_PAGE";
     case Feature::WEBUI_CONTEXT:
       return "WEBUI";
+    case Feature::SERVICE_WORKER_CONTEXT:
+      return "SERVICE_WORKER";
   }
   NOTREACHED();
   return std::string();
+}
+
+static std::string ToStringOrDefault(
+    const v8::Local<v8::String>& v8_string,
+    const std::string& dflt) {
+  if (v8_string.IsEmpty())
+    return dflt;
+  std::string ascii_value = *v8::String::Utf8Value(v8_string);
+  return ascii_value.empty() ? dflt : ascii_value;
 }
 
 }  // namespace
@@ -97,7 +110,7 @@ ScriptContext::ScriptContext(const v8::Local<v8::Context>& v8_context,
       runner_(new Runner(this)) {
   VLOG(1) << "Created context:\n" << GetDebugString();
   gin::PerContextData* gin_data = gin::PerContextData::From(v8_context);
-  CHECK(gin_data);  // may fail if the v8::Context hasn't been registered yet
+  CHECK(gin_data);
   gin_data->set_runner(runner_.get());
 }
 
@@ -110,12 +123,12 @@ ScriptContext::~ScriptContext() {
 }
 
 // static
-bool ScriptContext::IsSandboxedPage(const ExtensionSet& extensions,
-                                    const GURL& url) {
+bool ScriptContext::IsSandboxedPage(const GURL& url) {
   // TODO(kalman): This is checking the wrong thing. See comment in
   // HasAccessOrThrowError.
   if (url.SchemeIs(kExtensionScheme)) {
-    const Extension* extension = extensions.GetByID(url.host());
+    const Extension* extension =
+        RendererExtensionRegistry::Get()->GetByID(url.host());
     if (extension) {
       return SandboxedPageInfo::IsSandboxedPage(extension, url.path());
     }
@@ -124,6 +137,7 @@ bool ScriptContext::IsSandboxedPage(const ExtensionSet& extensions,
 }
 
 void ScriptContext::Invalidate() {
+  DCHECK(thread_checker_.CalledOnValidThread());
   CHECK(is_valid_);
   is_valid_ = false;
 
@@ -147,14 +161,17 @@ void ScriptContext::Invalidate() {
 }
 
 void ScriptContext::AddInvalidationObserver(const base::Closure& observer) {
+  DCHECK(thread_checker_.CalledOnValidThread());
   invalidate_observers_.push_back(observer);
 }
 
 const std::string& ScriptContext::GetExtensionID() const {
+  DCHECK(thread_checker_.CalledOnValidThread());
   return extension_.get() ? extension_->id() : base::EmptyString();
 }
 
 content::RenderFrame* ScriptContext::GetRenderFrame() const {
+  DCHECK(thread_checker_.CalledOnValidThread());
   if (web_frame_)
     return content::RenderFrame::FromWebFrame(web_frame_);
   return NULL;
@@ -164,6 +181,7 @@ v8::Local<v8::Value> ScriptContext::CallFunction(
     const v8::Local<v8::Function>& function,
     int argc,
     v8::Local<v8::Value> argv[]) const {
+  DCHECK(thread_checker_.CalledOnValidThread());
   v8::EscapableHandleScope handle_scope(isolate());
   v8::Context::Scope scope(v8_context());
 
@@ -183,11 +201,13 @@ v8::Local<v8::Value> ScriptContext::CallFunction(
 
 v8::Local<v8::Value> ScriptContext::CallFunction(
     const v8::Local<v8::Function>& function) const {
+  DCHECK(thread_checker_.CalledOnValidThread());
   return CallFunction(function, 0, nullptr);
 }
 
 Feature::Availability ScriptContext::GetAvailability(
     const std::string& api_name) {
+  DCHECK(thread_checker_.CalledOnValidThread());
   // Hack: Hosted apps should have the availability of messaging APIs based on
   // the URL of the page (which might have access depending on some extension
   // with externally_connectable), not whether the app has access to messaging
@@ -197,12 +217,13 @@ Feature::Availability ScriptContext::GetAvailability(
       (api_name == "runtime.connect" || api_name == "runtime.sendMessage")) {
     extension = NULL;
   }
-  return ExtensionAPI::GetSharedInstance()->IsAvailable(
-      api_name, extension, context_type_, GetURL());
+  return ExtensionAPI::GetSharedInstance()->IsAvailable(api_name, extension,
+                                                        context_type_, url());
 }
 
 void ScriptContext::DispatchEvent(const char* event_name,
                                   v8::Local<v8::Array> args) const {
+  DCHECK(thread_checker_.CalledOnValidThread());
   v8::HandleScope handle_scope(isolate());
   v8::Context::Scope context_scope(v8_context());
 
@@ -212,25 +233,18 @@ void ScriptContext::DispatchEvent(const char* event_name,
       kEventBindings, "dispatchEvent", arraysize(argv), argv);
 }
 
-void ScriptContext::DispatchOnUnloadEvent() {
-  v8::HandleScope handle_scope(isolate());
-  v8::Context::Scope context_scope(v8_context());
-  module_system_->CallModuleMethod("unload_event", "dispatch");
-}
-
 std::string ScriptContext::GetContextTypeDescription() const {
+  DCHECK(thread_checker_.CalledOnValidThread());
   return GetContextTypeDescriptionString(context_type_);
 }
 
 std::string ScriptContext::GetEffectiveContextTypeDescription() const {
+  DCHECK(thread_checker_.CalledOnValidThread());
   return GetContextTypeDescriptionString(effective_context_type_);
 }
 
-GURL ScriptContext::GetURL() const {
-  return url_;
-}
-
 bool ScriptContext::IsAnyFeatureAvailableToContext(const Feature& api) {
+  DCHECK(thread_checker_.CalledOnValidThread());
   return ExtensionAPI::GetSharedInstance()->IsAnyFeatureAvailableToContext(
       api, extension(), context_type(), GetDataSourceURLForFrame(web_frame()));
 }
@@ -266,27 +280,37 @@ GURL ScriptContext::GetEffectiveDocumentURL(const blink::WebFrame* frame,
   // hierarchy to find the closest non-about:-page and return its URL.
   const blink::WebFrame* parent = frame;
   do {
-    parent = parent->parent() ? parent->parent() : parent->opener();
-  } while (parent != NULL && !parent->document().isNull() &&
+    if (parent->parent())
+      parent = parent->parent();
+    else if (parent->opener() != parent)
+      parent = parent->opener();
+    else
+      parent = nullptr;
+  } while (parent && !parent->document().isNull() &&
            GURL(parent->document().url()).SchemeIs(url::kAboutScheme));
 
   if (parent && !parent->document().isNull()) {
     // Only return the parent URL if the frame can access it.
     const blink::WebDocument& parent_document = parent->document();
     if (frame->document().securityOrigin().canAccess(
-            parent_document.securityOrigin()))
+            parent_document.securityOrigin())) {
       return parent_document.url();
+    }
   }
   return document_url;
 }
 
-ScriptContext* ScriptContext::GetContext() { return this; }
+ScriptContext* ScriptContext::GetContext() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return this;
+}
 
 void ScriptContext::OnResponseReceived(const std::string& name,
                                        int request_id,
                                        bool success,
                                        const base::ListValue& response,
                                        const std::string& error) {
+  DCHECK(thread_checker_.CalledOnValidThread());
   v8::HandleScope handle_scope(isolate());
 
   scoped_ptr<V8ValueConverter> converter(V8ValueConverter::create());
@@ -307,16 +331,13 @@ void ScriptContext::OnResponseReceived(const std::string& name,
       << *v8::String::Utf8Value(retval);
 }
 
-void ScriptContext::SetContentCapabilities(
-    const APIPermissionSet& permissions) {
-  content_capabilities_ = permissions;
-}
-
 bool ScriptContext::HasAPIPermission(APIPermission::ID permission) const {
+  DCHECK(thread_checker_.CalledOnValidThread());
   if (effective_extension_.get()) {
     return effective_extension_->permissions_data()->HasAPIPermission(
         permission);
-  } else if (context_type() == Feature::WEB_PAGE_CONTEXT) {
+  }
+  if (context_type() == Feature::WEB_PAGE_CONTEXT) {
     // Only web page contexts may be granted content capabilities. Other
     // contexts are either privileged WebUI or extensions with their own set of
     // permissions.
@@ -327,6 +348,7 @@ bool ScriptContext::HasAPIPermission(APIPermission::ID permission) const {
 }
 
 bool ScriptContext::HasAccessOrThrowError(const std::string& name) {
+  DCHECK(thread_checker_.CalledOnValidThread());
   // Theoretically[1] we could end up with bindings being injected into
   // sandboxed frames, for example content scripts. Don't let them execute API
   // functions.
@@ -359,6 +381,7 @@ bool ScriptContext::HasAccessOrThrowError(const std::string& name) {
 }
 
 std::string ScriptContext::GetDebugString() const {
+  DCHECK(thread_checker_.CalledOnValidThread());
   return base::StringPrintf(
       "  extension id:           %s\n"
       "  frame:                  %p\n"
@@ -367,10 +390,68 @@ std::string ScriptContext::GetDebugString() const {
       "  effective extension id: %s\n"
       "  effective context type: %s",
       extension_.get() ? extension_->id().c_str() : "(none)", web_frame_,
-      GetURL().spec().c_str(), GetContextTypeDescription().c_str(),
+      url_.spec().c_str(), GetContextTypeDescription().c_str(),
       effective_extension_.get() ? effective_extension_->id().c_str()
                                  : "(none)",
       GetEffectiveContextTypeDescription().c_str());
+}
+
+std::string ScriptContext::GetStackTraceAsString() const {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  v8::Local<v8::StackTrace> stack_trace =
+      v8::StackTrace::CurrentStackTrace(isolate(), 10);
+  if (stack_trace.IsEmpty() || stack_trace->GetFrameCount() <= 0) {
+    return "    <no stack trace>";
+  }
+  std::string result;
+  for (int i = 0; i < stack_trace->GetFrameCount(); ++i) {
+    v8::Local<v8::StackFrame> frame = stack_trace->GetFrame(i);
+    CHECK(!frame.IsEmpty());
+    result += base::StringPrintf(
+        "\n    at %s (%s:%d:%d)",
+        ToStringOrDefault(frame->GetFunctionName(), "<anonymous>").c_str(),
+        ToStringOrDefault(frame->GetScriptName(), "<anonymous>").c_str(),
+        frame->GetLineNumber(), frame->GetColumn());
+  }
+  return result;
+}
+
+v8::Local<v8::Value> ScriptContext::RunScript(
+    v8::Local<v8::String> name,
+    v8::Local<v8::String> code,
+    const RunScriptExceptionHandler& exception_handler) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  v8::EscapableHandleScope handle_scope(isolate());
+  v8::Context::Scope context_scope(v8_context());
+
+  // Prepend extensions:: to |name| so that internal code can be differentiated
+  // from external code in stack traces. This has no effect on behaviour.
+  std::string internal_name =
+      base::StringPrintf("extensions::%s", *v8::String::Utf8Value(name));
+
+  if (internal_name.size() >= v8::String::kMaxLength) {
+    NOTREACHED() << "internal_name is too long.";
+    return v8::Undefined(isolate());
+  }
+
+  blink::WebScopedMicrotaskSuppression suppression;
+  v8::TryCatch try_catch(isolate());
+  try_catch.SetCaptureMessage(true);
+  v8::ScriptOrigin origin(
+      v8_helpers::ToV8StringUnsafe(isolate(), internal_name.c_str()));
+  v8::Local<v8::Script> script;
+  if (!v8::Script::Compile(v8_context(), code, &origin).ToLocal(&script)) {
+    exception_handler.Run(try_catch);
+    return v8::Undefined(isolate());
+  }
+
+  v8::Local<v8::Value> result;
+  if (!script->Run(v8_context()).ToLocal(&result)) {
+    exception_handler.Run(try_catch);
+    return v8::Undefined(isolate());
+  }
+
+  return handle_scope.Escape(result);
 }
 
 ScriptContext::Runner::Runner(ScriptContext* context) : context_(context) {

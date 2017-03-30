@@ -3,6 +3,9 @@
 // found in the LICENSE file.
 #include "content/renderer/media/peer_connection_tracker.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
@@ -93,13 +96,13 @@ static string SerializeMediaConstraints(
 
 static string SerializeMediaStreamComponent(
     const blink::WebMediaStreamTrack component) {
-  string id = base::UTF16ToUTF8(component.source().id());
+  string id = base::UTF16ToUTF8(base::StringPiece16(component.source().id()));
   return id;
 }
 
 static string SerializeMediaDescriptor(
     const blink::WebMediaStream& stream) {
-  string label = base::UTF16ToUTF8(stream.id());
+  string label = base::UTF16ToUTF8(base::StringPiece16(stream.id()));
   string result = "label: " + label;
   blink::WebVector<blink::WebMediaStreamTrack> tracks;
   stream.audioTracks(tracks);
@@ -270,7 +273,8 @@ static base::DictionaryValue* GetDictValueStats(const StatsReport& report) {
       case StatsReport::Value::kBool:
         values->AppendBoolean(value->bool_val());
         break;
-      case StatsReport::Value::kInt64:  // int64 isn't supported, so use string.
+      case StatsReport::Value::kInt64:  // int64_t isn't supported, so use
+                                        // string.
       case StatsReport::Value::kId:
       default:
         values->AppendString(value->ToString());
@@ -402,7 +406,7 @@ void PeerConnectionTracker::RegisterPeerConnection(
       "rtcpMuxPolicy: " + SerializeRtcpMuxPolicy(config.rtcp_mux_policy) + " }";
 
   info.constraints = SerializeMediaConstraints(constraints);
-  info.url = frame->document().url().spec();
+  info.url = frame->document().url().string().utf8();
   RenderThreadImpl::current()->Send(
       new PeerConnectionTrackerHost_AddPeerConnection(info));
 
@@ -494,9 +498,11 @@ void PeerConnectionTracker::TrackAddIceCandidate(
       bool succeeded) {
   DCHECK(main_thread_.CalledOnValidThread());
   string value =
-      "sdpMid: " + base::UTF16ToUTF8(candidate.sdpMid()) + ", " +
-      "sdpMLineIndex: " + base::IntToString(candidate.sdpMLineIndex()) + ", " +
-      "candidate: " + base::UTF16ToUTF8(candidate.candidate());
+      "sdpMid: " +
+      base::UTF16ToUTF8(base::StringPiece16(candidate.sdpMid())) + ", " +
+      "sdpMLineIndex: " + base::UintToString(candidate.sdpMLineIndex()) +
+      ", " + "candidate: " +
+      base::UTF16ToUTF8(base::StringPiece16(candidate.candidate()));
 
   // OnIceCandidate always succeeds as it's a callback from the browser.
   DCHECK(source != SOURCE_LOCAL || succeeded);
@@ -611,7 +617,7 @@ void PeerConnectionTracker::TrackCreateDTMFSender(
     const blink::WebMediaStreamTrack& track) {
   DCHECK(main_thread_.CalledOnValidThread());
   SendPeerConnectionUpdate(pc_handler, "createDTMFSender",
-                           base::UTF16ToUTF8(track.id()));
+                           base::UTF16ToUTF8(base::StringPiece16(track.id())));
 }
 
 void PeerConnectionTracker::TrackGetUserMedia(

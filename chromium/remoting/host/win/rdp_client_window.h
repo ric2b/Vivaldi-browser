@@ -10,7 +10,6 @@
 #include <atlcrack.h>
 #include <atlctl.h>
 
-#include "base/basictypes.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/win/scoped_comptr.h"
@@ -125,6 +124,8 @@ class RdpClientWindow
   STDMETHOD(OnDisconnected)(long reason);
   STDMETHOD(OnFatalError)(long error_code);
   STDMETHOD(OnConfirmClose)(VARIANT_BOOL* allow_close);
+
+  int LogOnCreateError(HRESULT error);
 
   // Wrappers for the event handler's methods that make sure that
   // OnDisconnected() is the last notification delivered and is delevered

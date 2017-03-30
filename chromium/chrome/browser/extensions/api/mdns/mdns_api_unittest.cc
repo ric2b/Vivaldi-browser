@@ -2,11 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/extensions/api/mdns/mdns_api.h"
+
+#include <stddef.h>
+#include <utility>
 #include <vector>
 
 #include "base/memory/linked_ptr.h"
 #include "base/memory/scoped_ptr.h"
-#include "chrome/browser/extensions/api/mdns/mdns_api.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_service_test_base.h"
 #include "chrome/browser/extensions/test_extension_system.h"
@@ -41,7 +44,8 @@ void AddEventListener(
   filter->SetString(kEventFilterServiceTypeKey, service_type);
   listener_list->push_back(make_linked_ptr(
       EventListener::ForExtension(kEventFilterServiceTypeKey, extension_id,
-                                  nullptr, filter.Pass()).release()));
+                                  nullptr, std::move(filter))
+          .release()));
 }
 
 class NullDelegate : public EventListenerMap::Delegate {
@@ -347,8 +351,8 @@ TEST_F(MDnsAPIMaxServicesTest, OnServiceListDoesNotExceedLimit) {
   EventRouterFactory::GetInstance()->SetTestingFactory(
       browser_context(), &MockEventRouterFactoryFunction);
 
-  // This check should change when the [value=64] changes in the IDL file.
-  EXPECT_EQ(64, api::mdns::MAX_SERVICE_INSTANCES_PER_EVENT);
+  // This check should change when the [value=2048] changes in the IDL file.
+  EXPECT_EQ(2048, api::mdns::MAX_SERVICE_INSTANCES_PER_EVENT);
 
   // Dispatch an mDNS event with more service instances than the max, and ensure
   // that the list is truncated by inspecting the argument to MockEventRouter's
@@ -357,8 +361,11 @@ TEST_F(MDnsAPIMaxServicesTest, OnServiceListDoesNotExceedLimit) {
   for (int i = 0; i < api::mdns::MAX_SERVICE_INSTANCES_PER_EVENT + 10; ++i) {
     services.push_back(DnsSdService());
   }
-  EXPECT_CALL(*event_router(), BroadcastEventPtr(testing::Pointee(
-                                   EventServiceListSize(size_t(64))))).Times(1);
+  EXPECT_CALL(
+      *event_router(),
+      BroadcastEventPtr(testing::Pointee(EventServiceListSize(
+          static_cast<size_t>(api::mdns::MAX_SERVICE_INSTANCES_PER_EVENT)))))
+      .Times(1);
   dns_sd_registry()->DispatchMDnsEvent("_testing._tcp.local", services);
 }
 

@@ -10,9 +10,11 @@
 #include "base/memory/ref_counted.h"
 #include "net/base/net_export.h"
 #include "net/cert/cert_status_flags.h"
+#include "net/cert/ct_verify_result.h"
 #include "net/cert/sct_status_flags.h"
 #include "net/cert/x509_cert_types.h"
 #include "net/ssl/signed_certificate_timestamp_and_status.h"
+#include "net/ssl/ssl_config.h"
 
 namespace net {
 
@@ -42,6 +44,14 @@ class NET_EXPORT SSLInfo {
   // Adds the specified |error| to the cert status.
   void SetCertError(int error);
 
+  // Adds the SignedCertificateTimestamps from ct_verify_result to
+  // |signed_certificate_timestamps|.  SCTs are held in three separate vectors
+  // in ct_verify_result, each vetor representing a particular verification
+  // state, this method associates each of the SCTs with the corresponding
+  // SCTVerifyStatus as it adds it to the |signed_certificate_timestamps| list.
+  void UpdateSignedCertificateTimestamps(
+      const ct::CTVerifyResult& ct_verify_result);
+
   // The SSL certificate.
   scoped_refptr<X509Certificate> cert;
 
@@ -60,6 +70,12 @@ class NET_EXPORT SSLInfo {
   // -1 means the security strength is unknown.
   int security_bits;
 
+  // Security information of the SSL connection handshake.
+  // The meaning depends on the cipher used, see BoringSSL's |SSL_SESSION|'s
+  // key_exchange_info for more information.
+  // A zero indicates that the value is unknown.
+  int key_exchange_info;
+
   // Information about the SSL connection itself. See
   // ssl_connection_status_flags.h for values. The protocol version,
   // ciphersuite, and compression in use are encoded within.
@@ -75,6 +91,15 @@ class NET_EXPORT SSLInfo {
 
   // True if a channel ID was sent to the server.
   bool channel_id_sent;
+
+  // True if Token Binding was negotiated with the server and we agreed on a
+  // version and key params.
+  bool token_binding_negotiated;
+
+  // Only valid if |token_binding_negotiated| is true. Contains the key param
+  // negotiated by the client and server in the Token Binding Negotiation TLS
+  // extension.
+  TokenBindingParam token_binding_key_param;
 
   HandshakeType handshake_type;
 

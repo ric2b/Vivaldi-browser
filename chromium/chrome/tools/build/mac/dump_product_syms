@@ -88,11 +88,6 @@ if [[ -e "${BUILT_PRODUCTS_DIR}/PDF.plugin" ]]; then
   SRC_NAMES[${#SRC_NAMES[@]}]="PDF.plugin"
 fi
 
-# libpeerconnection.so is optional. Only include it if present.
-if [[ -e "${BUILT_PRODUCTS_DIR}/libpeerconnection.so" ]]; then
-  SRC_NAMES[${#SRC_NAMES[@]}]="libpeerconnection.so"
-fi
-
 for SRC_NAME in "${SRC_NAMES[@]}"; do
   # SRC_STEM is the name of the file within the DWARF directory of the .dSYM
   # bundle, which comes from the on-disk name of an executable or dylib within
@@ -162,15 +157,6 @@ for SRC_NAME in "${SRC_NAMES[@]}"; do
         redump_syms_variant "${BPAD_SYM_PATH}" "${SRC_STEM}" \
                             "${SRC_STEM} Canary" "${SRC_STEM} Canary.app" \
                             "${ARCH}"
-        ;;
-
-      "${SRC_APP_NAME} Helper.app")
-        # Google Chrome Helper EH and Google Chrome Helper NP are produced by
-        # build/mac/make_more_helpers.sh.
-        redump_syms_variant "${BPAD_SYM_PATH}" "${SRC_STEM}" \
-                            "${SRC_STEM} EH" "${SRC_STEM} EH.app" "${ARCH}"
-        redump_syms_variant "${BPAD_SYM_PATH}" "${SRC_STEM}" \
-                            "${SRC_STEM} NP" "${SRC_STEM} NP.app" "${ARCH}"
         ;;
     esac
   done

@@ -4,6 +4,8 @@
 
 #include "chrome/browser/custom_home_pages_table_model.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/i18n/rtl.h"
@@ -14,13 +16,14 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_iterator.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/settings_window_manager.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/history/core/browser/history_service.h"
+#include "components/url_formatter/url_formatter.h"
 #include "content/public/browser/web_contents.h"
-#include "net/base/net_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/table_model_observer.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -38,8 +41,10 @@ bool ShouldAddPage(const GURL& url) {
     return false;
 
   if (url.SchemeIs(content::kChromeUIScheme)) {
-    if (url.host() == chrome::kChromeUISettingsHost)
+    if (url.host() == chrome::kChromeUISettingsHost ||
+        url.host() == chrome::kChromeUISettingsFrameHost) {
       return false;
+    }
 
     // For a settings page, the path will start with "/settings" not "settings"
     // so find() will return 1, not 0.
@@ -181,12 +186,12 @@ void CustomHomePagesTableModel::SetToCurrentlyOpenPages() {
   while (RowCount())
     RemoveWithoutNotification(0);
 
-  // And add all tabs for all open browsers with our profile.
+  // Add tabs from appropriate browser windows.
   int add_index = 0;
   for (chrome::BrowserIterator it; !it.done(); it.Next()) {
     Browser* browser = *it;
-    if (browser->profile() != profile_)
-      continue;  // Skip incognito browsers.
+    if (!ShouldIncludeBrowser(browser))
+      continue;
 
     for (int tab_index = 0;
          tab_index < browser->tab_strip_model()->count();
@@ -225,6 +230,18 @@ base::string16 CustomHomePagesTableModel::GetTooltip(int row) {
 
 void CustomHomePagesTableModel::SetObserver(ui::TableModelObserver* observer) {
   observer_ = observer;
+}
+
+bool CustomHomePagesTableModel::ShouldIncludeBrowser(Browser* browser) {
+  // Do not include incognito browsers.
+  if (browser->profile() != profile_)
+    return false;
+  // Do not include the Settings window.
+  if (chrome::SettingsWindowManager::GetInstance()->IsSettingsBrowser(
+          browser)) {
+    return false;
+  }
+  return true;
 }
 
 void CustomHomePagesTableModel::LoadTitle(Entry* entry) {
@@ -305,7 +322,7 @@ void CustomHomePagesTableModel::OnGotTitle(const GURL& entry_url,
 base::string16 CustomHomePagesTableModel::FormattedURL(int row) const {
   std::string languages =
       profile_->GetPrefs()->GetString(prefs::kAcceptLanguages);
-  base::string16 url = net::FormatUrl(entries_[row].url, languages);
+  base::string16 url = url_formatter::FormatUrl(entries_[row].url, languages);
   url = base::i18n::GetDisplayStringInLTRDirectionality(url);
   return url;
 }

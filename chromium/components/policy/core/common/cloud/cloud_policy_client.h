@@ -5,14 +5,16 @@
 #ifndef COMPONENTS_POLICY_CORE_COMMON_CLOUD_CLOUD_POLICY_CLIENT_H_
 #define COMPONENTS_POLICY_CORE_COMMON_CLOUD_CLOUD_POLICY_CLIENT_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <set>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/observer_list.h"
@@ -85,7 +87,6 @@ class POLICY_EXPORT CloudPolicyClient {
       const std::string& machine_id,
       const std::string& machine_model,
       const std::string& verification_key_hash,
-      UserAffiliation user_affiliation,
       DeviceManagementService* service,
       scoped_refptr<net::URLRequestContextGetter> request_context);
   virtual ~CloudPolicyClient();
@@ -109,7 +110,7 @@ class POLICY_EXPORT CloudPolicyClient {
   // Sets information about a policy invalidation. Subsequent fetch operations
   // will use the given info, and callers can use fetched_invalidation_version
   // to determine which version of policy was fetched.
-  void SetInvalidationInfo(int64 version, const std::string& payload);
+  void SetInvalidationInfo(int64_t version, const std::string& payload);
 
   // Requests a policy fetch. The client being registered is a prerequisite to
   // this operation and this call will CHECK if the client is not in registered
@@ -172,6 +173,12 @@ class POLICY_EXPORT CloudPolicyClient {
                               const std::string& asset_id,
                               const std::string& location,
                               const StatusCallback& callback);
+
+  // Sends a GCM id update request to the DM server. The server will
+  // associate the DM token in authorization header with |gcm_id|, and
+  // |callback| will be called when the operation completes.
+  virtual void UpdateGcmId(const std::string& gcm_id,
+                           const StatusCallback& callback);
 
   // Adds an observer to be called back upon policy and state changes.
   void AddObserver(Observer* observer);
@@ -246,7 +253,7 @@ class POLICY_EXPORT CloudPolicyClient {
   // Returns the invalidation version that was used for the last FetchPolicy.
   // Observers can call this method from their OnPolicyFetched method to
   // determine which at which invalidation version the policy was fetched.
-  int64 fetched_invalidation_version() const {
+  int64_t fetched_invalidation_version() const {
     return fetched_invalidation_version_;
   }
 
@@ -326,6 +333,14 @@ class POLICY_EXPORT CloudPolicyClient {
       int net_error,
       const enterprise_management::DeviceManagementResponse& response);
 
+  // Callback for gcm id update requests.
+  void OnGcmIdUpdated(
+      const DeviceManagementRequestJob* job,
+      const StatusCallback& callback,
+      DeviceManagementStatus status,
+      int net_error,
+      const enterprise_management::DeviceManagementResponse& response);
+
   // Helper to remove a job from request_jobs_.
   void RemoveJob(const DeviceManagementRequestJob* job);
 
@@ -339,7 +354,6 @@ class POLICY_EXPORT CloudPolicyClient {
   const std::string machine_id_;
   const std::string machine_model_;
   const std::string verification_key_hash_;
-  const UserAffiliation user_affiliation_;
   PolicyTypeSet types_to_fetch_;
   std::vector<std::string> state_keys_to_upload_;
 
@@ -353,11 +367,11 @@ class POLICY_EXPORT CloudPolicyClient {
   std::string robot_api_auth_code_;
 
   // Information for the latest policy invalidation received.
-  int64 invalidation_version_;
+  int64_t invalidation_version_;
   std::string invalidation_payload_;
 
   // The invalidation version used for the most recent fetch operation.
-  int64 fetched_invalidation_version_;
+  int64_t fetched_invalidation_version_;
 
   // Used for issuing requests to the cloud.
   DeviceManagementService* service_;

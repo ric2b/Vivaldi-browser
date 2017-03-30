@@ -4,6 +4,10 @@
 
 #include "extensions/browser/api/bluetooth/bluetooth_private_api.h"
 
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/callback.h"
 #include "base/lazy_instance.h"
 #include "base/strings/string_util.h"
@@ -11,16 +15,26 @@
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "device/bluetooth/bluetooth_discovery_session.h"
 #include "extensions/browser/api/bluetooth/bluetooth_api.h"
+#include "extensions/browser/api/bluetooth/bluetooth_api_pairing_delegate.h"
 #include "extensions/browser/api/bluetooth/bluetooth_event_router.h"
 #include "extensions/common/api/bluetooth_private.h"
 
-namespace bt_private = extensions::core_api::bluetooth_private;
+namespace bt_private = extensions::api::bluetooth_private;
 namespace SetDiscoveryFilter = bt_private::SetDiscoveryFilter;
 
 namespace extensions {
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<BluetoothPrivateAPI> >
+static base::LazyInstance<BrowserContextKeyedAPIFactory<BluetoothPrivateAPI>>
     g_factory = LAZY_INSTANCE_INITIALIZER;
+
+namespace {
+
+std::string GetListenerId(const EventListenerInfo& details) {
+  return !details.extension_id.empty() ? details.extension_id
+                                       : details.listener_url.host();
+}
+
+}  // namespace
 
 // static
 BrowserContextKeyedAPIFactory<BluetoothPrivateAPI>*
@@ -46,8 +60,9 @@ void BluetoothPrivateAPI::OnListenerAdded(const EventListenerInfo& details) {
   if (!details.browser_context)
     return;
 
-  BluetoothAPI::Get(browser_context_)->event_router()->AddPairingDelegate(
-      details.extension_id);
+  BluetoothAPI::Get(browser_context_)
+      ->event_router()
+      ->AddPairingDelegate(GetListenerId(details));
 }
 
 void BluetoothPrivateAPI::OnListenerRemoved(const EventListenerInfo& details) {
@@ -56,37 +71,29 @@ void BluetoothPrivateAPI::OnListenerRemoved(const EventListenerInfo& details) {
   if (!details.browser_context)
     return;
 
-  BluetoothAPI::Get(browser_context_)->event_router()->RemovePairingDelegate(
-      details.extension_id);
+  BluetoothAPI::Get(browser_context_)
+      ->event_router()
+      ->RemovePairingDelegate(GetListenerId(details));
 }
 
-namespace core_api {
+namespace api {
 
 namespace {
 
 const char kNameProperty[] = "name";
 const char kPoweredProperty[] = "powered";
 const char kDiscoverableProperty[] = "discoverable";
-
 const char kSetAdapterPropertyError[] = "Error setting adapter properties: $1";
-
-const char kDeviceNotFoundError[] =
-    "Given address is not a valid Bluetooth device.";
-
-const char kDeviceNotConnectedError[] = "Device is not connected";
-
-const char kPairingNotEnabled[] =
-    "Pairing must be enabled to set a pairing response.";
-
+const char kDeviceNotFoundError[] = "Invalid Bluetooth device";
+const char kDeviceNotConnectedError[] = "Device not connected";
+const char kPairingNotEnabled[] = "Pairing not enabled";
 const char kInvalidPairingResponseOptions[] =
     "Invalid pairing response options";
-
-const char kAdapterNotPresent[] =
-    "Could not find a Bluetooth adapter.";
-
+const char kAdapterNotPresent[] = "Failed to find a Bluetooth adapter";
 const char kDisconnectError[] = "Failed to disconnect device";
-
+const char kForgetDeviceError[] = "Failed to forget device";
 const char kSetDiscoveryFilterFailed[] = "Failed to set discovery filter";
+const char kPairingFailed[] = "Pairing failed";
 
 // Returns true if the pairing response options passed into the
 // setPairingResponse function are valid.
@@ -94,8 +101,8 @@ bool ValidatePairingResponseOptions(
     const device::BluetoothDevice* device,
     const bt_private::SetPairingResponseOptions& options) {
   bool response = options.response != bt_private::PAIRING_RESPONSE_NONE;
-  bool pincode = options.pincode.get() != NULL;
-  bool passkey = options.passkey.get() != NULL;
+  bool pincode = options.pincode.get() != nullptr;
+  bool passkey = options.passkey.get() != nullptr;
 
   if (!response && !pincode && !passkey)
     return false;
@@ -104,6 +111,9 @@ bool ValidatePairingResponseOptions(
   if (options.response != bt_private::PAIRING_RESPONSE_CONFIRM &&
       (pincode || passkey))
     return false;
+
+  if (options.response == bt_private::PAIRING_RESPONSE_CANCEL)
+    return true;
 
   // Check the BluetoothDevice is in expecting the correct response.
   if (!device->ExpectingConfirmation() && !device->ExpectingPinCode() &&
@@ -121,6 +131,8 @@ bool ValidatePairingResponseOptions(
 }
 
 }  // namespace
+
+////////////////////////////////////////////////////////////////////////////////
 
 BluetoothPrivateSetAdapterStateFunction::
     BluetoothPrivateSetAdapterStateFunction() {}
@@ -149,23 +161,20 @@ bool BluetoothPrivateSetAdapterStateFunction::DoWork(
 
   if (name && adapter->GetName() != *name) {
     pending_properties_.insert(kNameProperty);
-    adapter->SetName(*name,
-                     CreatePropertySetCallback(kNameProperty),
+    adapter->SetName(*name, CreatePropertySetCallback(kNameProperty),
                      CreatePropertyErrorCallback(kNameProperty));
   }
 
   if (powered && adapter->IsPowered() != *powered) {
     pending_properties_.insert(kPoweredProperty);
-    adapter->SetPowered(*powered,
-                        CreatePropertySetCallback(kPoweredProperty),
+    adapter->SetPowered(*powered, CreatePropertySetCallback(kPoweredProperty),
                         CreatePropertyErrorCallback(kPoweredProperty));
   }
 
   if (discoverable && adapter->IsDiscoverable() != *discoverable) {
     pending_properties_.insert(kDiscoverableProperty);
     adapter->SetDiscoverable(
-        *discoverable,
-        CreatePropertySetCallback(kDiscoverableProperty),
+        *discoverable, CreatePropertySetCallback(kDiscoverableProperty),
         CreatePropertyErrorCallback(kDiscoverableProperty));
   }
 
@@ -178,8 +187,7 @@ base::Closure
 BluetoothPrivateSetAdapterStateFunction::CreatePropertySetCallback(
     const std::string& property_name) {
   return base::Bind(
-      &BluetoothPrivateSetAdapterStateFunction::OnAdapterPropertySet,
-      this,
+      &BluetoothPrivateSetAdapterStateFunction::OnAdapterPropertySet, this,
       property_name);
 }
 
@@ -187,8 +195,7 @@ base::Closure
 BluetoothPrivateSetAdapterStateFunction::CreatePropertyErrorCallback(
     const std::string& property_name) {
   return base::Bind(
-      &BluetoothPrivateSetAdapterStateFunction::OnAdapterPropertyError,
-      this,
+      &BluetoothPrivateSetAdapterStateFunction::OnAdapterPropertyError, this,
       property_name);
 }
 
@@ -222,17 +229,18 @@ void BluetoothPrivateSetAdapterStateFunction::SendError() {
   DCHECK(!failed_properties_.empty());
 
   std::vector<std::string> failed_vector;
-  std::copy(failed_properties_.begin(),
-            failed_properties_.end(),
+  std::copy(failed_properties_.begin(), failed_properties_.end(),
             std::back_inserter(failed_vector));
 
   std::vector<std::string> replacements(1);
-  replacements[0] = JoinString(failed_vector, ", ");
-  std::string error =
-      ReplaceStringPlaceholders(kSetAdapterPropertyError, replacements, NULL);
+  replacements[0] = base::JoinString(failed_vector, ", ");
+  std::string error = base::ReplaceStringPlaceholders(kSetAdapterPropertyError,
+                                                      replacements, nullptr);
   SetError(error);
   SendResponse(false);
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 BluetoothPrivateSetPairingResponseFunction::
     BluetoothPrivateSetPairingResponseFunction() {}
@@ -249,7 +257,7 @@ bool BluetoothPrivateSetPairingResponseFunction::DoWork(
 
   BluetoothEventRouter* router =
       BluetoothAPI::Get(browser_context())->event_router();
-  if (!router->GetPairingDelegate(extension_id())) {
+  if (!router->GetPairingDelegate(GetExtensionId())) {
     SetError(kPairingNotEnabled);
     SendResponse(false);
     return true;
@@ -293,12 +301,13 @@ bool BluetoothPrivateSetPairingResponseFunction::DoWork(
   return true;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 BluetoothPrivateDisconnectAllFunction::BluetoothPrivateDisconnectAllFunction() {
 }
 
 BluetoothPrivateDisconnectAllFunction::
-    ~BluetoothPrivateDisconnectAllFunction() {
-}
+    ~BluetoothPrivateDisconnectAllFunction() {}
 
 bool BluetoothPrivateDisconnectAllFunction::DoWork(
     scoped_refptr<device::BluetoothAdapter> adapter) {
@@ -347,14 +356,46 @@ void BluetoothPrivateDisconnectAllFunction::OnErrorCallback(
   SendResponse(false);
 }
 
-void BluetoothPrivateSetDiscoveryFilterFunction::OnSuccessCallback() {
+////////////////////////////////////////////////////////////////////////////////
+
+BluetoothPrivateForgetDeviceFunction::BluetoothPrivateForgetDeviceFunction() {}
+
+BluetoothPrivateForgetDeviceFunction::~BluetoothPrivateForgetDeviceFunction() {}
+
+bool BluetoothPrivateForgetDeviceFunction::DoWork(
+    scoped_refptr<device::BluetoothAdapter> adapter) {
+  scoped_ptr<bt_private::ForgetDevice::Params> params(
+      bt_private::ForgetDevice::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  device::BluetoothDevice* device = adapter->GetDevice(params->device_address);
+  if (!device) {
+    SetError(kDeviceNotFoundError);
+    SendResponse(false);
+    return true;
+  }
+
+  device->Forget(
+      base::Bind(&BluetoothPrivateForgetDeviceFunction::OnSuccessCallback,
+                 this),
+      base::Bind(&BluetoothPrivateForgetDeviceFunction::OnErrorCallback, this,
+                 adapter, params->device_address));
+
+  return true;
+}
+
+void BluetoothPrivateForgetDeviceFunction::OnSuccessCallback() {
   SendResponse(true);
 }
 
-void BluetoothPrivateSetDiscoveryFilterFunction::OnErrorCallback() {
-  SetError(kSetDiscoveryFilterFailed);
+void BluetoothPrivateForgetDeviceFunction::OnErrorCallback(
+    scoped_refptr<device::BluetoothAdapter> adapter,
+    const std::string& device_address) {
+  SetError(kForgetDeviceError);
   SendResponse(false);
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 bool BluetoothPrivateSetDiscoveryFilterFunction::DoWork(
     scoped_refptr<device::BluetoothAdapter> adapter) {
@@ -404,8 +445,10 @@ bool BluetoothPrivateSetDiscoveryFilterFunction::DoWork(
       discovery_filter->SetPathloss(*df_param.pathloss);
   }
 
-  BluetoothAPI::Get(browser_context())->event_router()->SetDiscoveryFilter(
-          discovery_filter.Pass(), adapter.get(), extension_id(),
+  BluetoothAPI::Get(browser_context())
+      ->event_router()
+      ->SetDiscoveryFilter(
+          std::move(discovery_filter), adapter.get(), GetExtensionId(),
           base::Bind(
               &BluetoothPrivateSetDiscoveryFilterFunction::OnSuccessCallback,
               this),
@@ -415,6 +458,168 @@ bool BluetoothPrivateSetDiscoveryFilterFunction::DoWork(
   return true;
 }
 
-}  // namespace core_api
+void BluetoothPrivateSetDiscoveryFilterFunction::OnSuccessCallback() {
+  SendResponse(true);
+}
+
+void BluetoothPrivateSetDiscoveryFilterFunction::OnErrorCallback() {
+  SetError(kSetDiscoveryFilterFailed);
+  SendResponse(false);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+BluetoothPrivateConnectFunction::BluetoothPrivateConnectFunction() {}
+
+BluetoothPrivateConnectFunction::~BluetoothPrivateConnectFunction() {}
+
+bool BluetoothPrivateConnectFunction::DoWork(
+    scoped_refptr<device::BluetoothAdapter> adapter) {
+  scoped_ptr<bt_private::Connect::Params> params(
+      bt_private::Connect::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  device::BluetoothDevice* device = adapter->GetDevice(params->device_address);
+  if (!device) {
+    SetError(kDeviceNotFoundError);
+    SendResponse(false);
+    return true;
+  }
+
+  if (device->IsConnected()) {
+    results_ = bt_private::Connect::Results::Create(
+        bt_private::CONNECT_RESULT_TYPE_ALREADYCONNECTED);
+    SendResponse(true);
+    return true;
+  }
+
+  // pairing_delegate may be null for connect.
+  device::BluetoothDevice::PairingDelegate* pairing_delegate =
+      BluetoothAPI::Get(browser_context())
+          ->event_router()
+          ->GetPairingDelegate(GetExtensionId());
+  device->Connect(
+      pairing_delegate,
+      base::Bind(&BluetoothPrivateConnectFunction::OnSuccessCallback, this),
+      base::Bind(&BluetoothPrivateConnectFunction::OnErrorCallback, this));
+  return true;
+}
+
+void BluetoothPrivateConnectFunction::OnSuccessCallback() {
+  results_ = bt_private::Connect::Results::Create(
+      bt_private::CONNECT_RESULT_TYPE_SUCCESS);
+  SendResponse(true);
+}
+
+void BluetoothPrivateConnectFunction::OnErrorCallback(
+    device::BluetoothDevice::ConnectErrorCode error) {
+  bt_private::ConnectResultType result = bt_private::CONNECT_RESULT_TYPE_NONE;
+  switch (error) {
+    case device::BluetoothDevice::ERROR_ATTRIBUTE_LENGTH_INVALID:
+      result = bt_private::CONNECT_RESULT_TYPE_ATTRIBUTELENGTHINVALID;
+      break;
+    case device::BluetoothDevice::ERROR_AUTH_CANCELED:
+      result = bt_private::CONNECT_RESULT_TYPE_AUTHCANCELED;
+      break;
+    case device::BluetoothDevice::ERROR_AUTH_FAILED:
+      result = bt_private::CONNECT_RESULT_TYPE_AUTHFAILED;
+      break;
+    case device::BluetoothDevice::ERROR_AUTH_REJECTED:
+      result = bt_private::CONNECT_RESULT_TYPE_AUTHREJECTED;
+      break;
+    case device::BluetoothDevice::ERROR_AUTH_TIMEOUT:
+      result = bt_private::CONNECT_RESULT_TYPE_AUTHTIMEOUT;
+      break;
+    case device::BluetoothDevice::ERROR_CONNECTION_CONGESTED:
+      result = bt_private::CONNECT_RESULT_TYPE_CONNECTIONCONGESTED;
+      break;
+    case device::BluetoothDevice::ERROR_FAILED:
+      result = bt_private::CONNECT_RESULT_TYPE_FAILED;
+      break;
+    case device::BluetoothDevice::ERROR_INPROGRESS:
+      result = bt_private::CONNECT_RESULT_TYPE_INPROGRESS;
+      break;
+    case device::BluetoothDevice::ERROR_INSUFFICIENT_ENCRYPTION:
+      result = bt_private::CONNECT_RESULT_TYPE_INSUFFICIENTENCRYPTION;
+      break;
+    case device::BluetoothDevice::ERROR_OFFSET_INVALID:
+      result = bt_private::CONNECT_RESULT_TYPE_OFFSETINVALID;
+      break;
+    case device::BluetoothDevice::ERROR_READ_NOT_PERMITTED:
+      result = bt_private::CONNECT_RESULT_TYPE_READNOTPERMITTED;
+      break;
+    case device::BluetoothDevice::ERROR_REQUEST_NOT_SUPPORTED:
+      result = bt_private::CONNECT_RESULT_TYPE_REQUESTNOTSUPPORTED;
+      break;
+    case device::BluetoothDevice::ERROR_UNKNOWN:
+      result = bt_private::CONNECT_RESULT_TYPE_UNKNOWNERROR;
+      break;
+    case device::BluetoothDevice::ERROR_UNSUPPORTED_DEVICE:
+      result = bt_private::CONNECT_RESULT_TYPE_UNSUPPORTEDDEVICE;
+      break;
+    case device::BluetoothDevice::ERROR_WRITE_NOT_PERMITTED:
+      result = bt_private::CONNECT_RESULT_TYPE_WRITENOTPERMITTED;
+      break;
+    case device::BluetoothDevice::NUM_CONNECT_ERROR_CODES:
+      NOTREACHED();
+      break;
+  }
+  // Set the result type and respond with true (success).
+  results_ = bt_private::Connect::Results::Create(result);
+  SendResponse(true);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+BluetoothPrivatePairFunction::BluetoothPrivatePairFunction() {}
+
+BluetoothPrivatePairFunction::~BluetoothPrivatePairFunction() {}
+
+bool BluetoothPrivatePairFunction::DoWork(
+    scoped_refptr<device::BluetoothAdapter> adapter) {
+  scoped_ptr<bt_private::Pair::Params> params(
+      bt_private::Pair::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  device::BluetoothDevice* device = adapter->GetDevice(params->device_address);
+  if (!device) {
+    SetError(kDeviceNotFoundError);
+    SendResponse(false);
+    return true;
+  }
+
+  device::BluetoothDevice::PairingDelegate* pairing_delegate =
+      BluetoothAPI::Get(browser_context())
+          ->event_router()
+          ->GetPairingDelegate(GetExtensionId());
+
+  // pairing_delegate must be set (by adding an onPairing listener) before
+  // any calls to pair().
+  if (!pairing_delegate) {
+    SetError(kPairingNotEnabled);
+    SendResponse(false);
+    return true;
+  }
+
+  device->Pair(
+      pairing_delegate,
+      base::Bind(&BluetoothPrivatePairFunction::OnSuccessCallback, this),
+      base::Bind(&BluetoothPrivatePairFunction::OnErrorCallback, this));
+  return true;
+}
+
+void BluetoothPrivatePairFunction::OnSuccessCallback() {
+  SendResponse(true);
+}
+
+void BluetoothPrivatePairFunction::OnErrorCallback(
+    device::BluetoothDevice::ConnectErrorCode error) {
+  SetError(kPairingFailed);
+  SendResponse(false);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+}  // namespace api
 
 }  // namespace extensions

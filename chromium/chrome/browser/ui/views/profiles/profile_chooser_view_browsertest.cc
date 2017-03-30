@@ -4,7 +4,10 @@
 
 #include "chrome/browser/ui/views/profiles/profile_chooser_view.h"
 
+#include <stddef.h>
+
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
@@ -25,13 +28,11 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "components/signin/core/common/profile_management_switches.h"
+#include "components/signin/core/common/signin_pref_names.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_registry.h"
 #include "ui/events/event_utils.h"
 #include "ui/views/controls/webview/webview.h"
-
-// ChromeOS and mobile platforms don't have a ProfileChooserView.
-#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID) && !defined(OS_IOS)
 
 namespace {
 
@@ -50,6 +51,18 @@ Profile* CreateTestingProfile(const std::string& profile_name) {
   profile_manager->RegisterTestingProfile(profile, true, false);
   EXPECT_EQ(starting_number_of_profiles + 1,
             profile_manager->GetNumberOfProfiles());
+  return profile;
+}
+
+Profile* CreateProfileOutsideUserDataDir() {
+  base::FilePath path;
+  if (!base::CreateNewTempDirectory(base::FilePath::StringType(), &path))
+    NOTREACHED() << "Could not create directory at " << path.MaybeAsASCII();
+
+  ProfileManager* profile_manager = g_browser_process->profile_manager();
+  Profile* profile =
+      Profile::CreateProfile(path, NULL, Profile::CREATE_MODE_SYNCHRONOUS);
+  profile_manager->RegisterTestingProfile(profile, true, false);
   return profile;
 }
 
@@ -95,7 +108,6 @@ class ProfileChooserViewExtensionsTest : public ExtensionBrowserTest {
  protected:
   void SetUp() override {
     ExtensionBrowserTest::SetUp();
-    DCHECK(switches::IsNewAvatarMenu());
     DCHECK(switches::IsNewProfileManagement());
   }
 
@@ -168,6 +180,10 @@ class ProfileChooserViewExtensionsTest : public ExtensionBrowserTest {
     return ProfileChooserView::profile_bubble_;
   }
 
+  views::View* signin_current_profile_link() {
+    return ProfileChooserView::profile_bubble_->signin_current_profile_link_;
+  }
+
   void ShowSigninView() {
     DCHECK(current_profile_bubble());
     DCHECK(current_profile_bubble()->avatar_menu_);
@@ -183,7 +199,28 @@ class ProfileChooserViewExtensionsTest : public ExtensionBrowserTest {
   DISALLOW_COPY_AND_ASSIGN(ProfileChooserViewExtensionsTest);
 };
 
-// crbug.com/502370
+IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest,
+    NoProfileChooserOnOutsideUserDataDirProfiles) {
+  // Test that the profile chooser view does not show when avatar menu is not
+  // available. This can be repro'ed with a profile path outside user_data_dir.
+  // crbug.com/527505
+  Profile* new_profile = CreateProfileOutsideUserDataDir();
+  Browser* browser = CreateBrowser(new_profile);
+  browser->window()->ShowAvatarBubbleFromAvatarButton(
+      BrowserWindow::AVATAR_BUBBLE_MODE_CONFIRM_SIGNIN,
+      signin::ManageAccountsParams(),
+      signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN);
+  ASSERT_FALSE(ProfileChooserView::IsShowing());
+  CloseBrowserSynchronously(browser);
+}
+
+IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest, SigninButtonHasFocus) {
+  ASSERT_TRUE(profiles::IsMultipleProfilesEnabled());
+  ASSERT_NO_FATAL_FAILURE(OpenProfileChooserView(browser()));
+
+  EXPECT_TRUE(signin_current_profile_link()->HasFocus());
+}
+
 IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest, ContentAreaHasFocus) {
   ASSERT_TRUE(profiles::IsMultipleProfilesEnabled());
 
@@ -288,5 +325,3 @@ IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest,
   // We need to hide the User Manager or else the process can't die.
   UserManager::Hide();
 }
-
-#endif

@@ -13,6 +13,7 @@ source_set("devtools_http_handler") {
     "//base",
     "//components/devtools_discovery",
     "//content/public/browser",
+    "//content/public/common",
     "//net",
     "//net:http_server",
   ]
@@ -26,6 +27,9 @@ source_set("unit_tests") {
 
   deps = [
     ":devtools_http_handler",
+    "//base",
+    "//content/test:test_support",
+    "//net",
     "//testing/gtest",
   ]
 }

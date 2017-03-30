@@ -10,10 +10,12 @@
 #include "base/bind_helpers.h"
 #include "base/files/file_path_watcher.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/timer/timer.h"
+#include "build/build_config.h"
 
 namespace remoting {
 
@@ -68,7 +70,7 @@ class ConfigFileWatcherImpl
   std::string config_;
   base::FilePath config_path_;
 
-  scoped_ptr<base::DelayTimer<ConfigFileWatcherImpl> > config_updated_timer_;
+  scoped_ptr<base::DelayTimer> config_updated_timer_;
 
   // Number of times an attempt to read the configuration file failed.
   int retries_;
@@ -134,9 +136,9 @@ void ConfigFileWatcherImpl::WatchOnIoThread() {
 
   // Create the timer that will be used for delayed-reading the configuration
   // file.
-  config_updated_timer_.reset(new base::DelayTimer<ConfigFileWatcherImpl>(
-      FROM_HERE, base::TimeDelta::FromSeconds(2), this,
-      &ConfigFileWatcherImpl::ReloadConfig));
+  config_updated_timer_.reset(
+      new base::DelayTimer(FROM_HERE, base::TimeDelta::FromSeconds(2), this,
+                           &ConfigFileWatcherImpl::ReloadConfig));
 
   // Start watching the configuration file.
   config_watcher_.reset(new base::FilePathWatcher());

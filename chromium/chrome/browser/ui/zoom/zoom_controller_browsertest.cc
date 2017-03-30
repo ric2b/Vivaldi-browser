@@ -4,8 +4,10 @@
 
 #include "components/ui/zoom/zoom_controller.h"
 
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "base/process/kill.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -276,8 +278,8 @@ IN_PROC_BROWSER_TEST_F(ZoomControllerBrowserTest, NavigationResetsManualMode) {
 // Regression test: crbug.com/438979.
 IN_PROC_BROWSER_TEST_F(ZoomControllerBrowserTest,
                        SettingsZoomAfterSigninWorks) {
-  GURL signin_url(
-      std::string(chrome::kChromeUIChromeSigninURL).append("?source=0"));
+  GURL signin_url(std::string(chrome::kChromeUIChromeSigninURL)
+                      .append("?access_point=0&reason=0"));
   // We open the signin page in a new tab so that the ZoomController is
   // created against the HostZoomMap of the special StoragePartition that
   // backs the signin page. When we subsequently navigate away from the
@@ -297,9 +299,6 @@ IN_PROC_BROWSER_TEST_F(ZoomControllerBrowserTest,
   ZoomController* zoom_controller =
       ZoomController::FromWebContents(web_contents);
 
-  content::HostZoomMap* host_zoom_map_signin =
-      content::HostZoomMap::GetForWebContents(web_contents);
-
   GURL settings_url(chrome::kChromeUISettingsURL);
   ui_test_utils::NavigateToURL(browser(), settings_url);
   EXPECT_NE(
@@ -314,17 +313,6 @@ IN_PROC_BROWSER_TEST_F(ZoomControllerBrowserTest,
   // test not properly trigger a navigation to the settings page.
   EXPECT_EQ(settings_url, web_contents->GetLastCommittedURL());
   EXPECT_EQ(zoom_controller, ZoomController::FromWebContents(web_contents));
-
-  // For the webview based sign-in code, the sign in page uses the default host
-  // zoom map.
-  if (!switches::IsEnableWebviewBasedSignin()) {
-    // We expect the navigation from the chrome sign in page to the settings
-    // page to invoke a storage partition switch, and thus a different
-    // HostZoomMap for the web_contents.
-    content::HostZoomMap* host_zoom_map_settings =
-        content::HostZoomMap::GetForWebContents(web_contents);
-    EXPECT_NE(host_zoom_map_signin, host_zoom_map_settings);
-  }
 
   // If we zoom the new page, it should still generate a ZoomController event.
   double old_zoom_level = zoom_controller->GetZoomLevel();

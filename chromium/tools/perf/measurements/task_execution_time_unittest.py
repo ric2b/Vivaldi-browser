@@ -37,8 +37,6 @@ class TaskExecutionTimeUnitTest(page_test_test_case.PageTestTestCase):
     self._measurement = None
     self._page_set = None
 
-  #disabled in vivaldi: Uses Google storage
-  @decorators.Disabled
   @decorators.Enabled('android')
   def testSomeResultsReturnedFromDummyPage(self):
     self._GenerateDataForEmptyPageSet()
@@ -50,7 +48,7 @@ class TaskExecutionTimeUnitTest(page_test_test_case.PageTestTestCase):
     self.assertGreater(len(results.all_page_specific_values), 0)
 
   # http://crbug.com/466994
-  @decorators.Disabled
+  @decorators.Disabled('all')
   def testSlicesConformToRequiredNamingConventionsUsingDummyPage(self):
     """This test ensures the presence of required keywords.
 
@@ -82,8 +80,6 @@ class TaskExecutionTimeUnitTest(page_test_test_case.PageTestTestCase):
     for use_counts in required_keywords.itervalues():
       self.assertGreater(use_counts, 0)
 
-  #disabled in vivaldi: Uses Google storage
-  @decorators.Disabled
   def testMockedResultsCorrectlyReturned(self):
     data = self._GenerateResultsFromMockedData()
 
@@ -102,8 +98,6 @@ class TaskExecutionTimeUnitTest(page_test_test_case.PageTestTestCase):
     fast_result = self._findResultFromName(task_prefix + 'fast', data)
     self.assertEqual(fast_result.value, 1)
 
-  #disabled in vivaldi: Uses Google storage
-  @decorators.Disabled
   def testNonIdlePercentagesAreCorrect(self):
     data = self._GenerateResultsFromMockedData()
 
@@ -115,8 +109,6 @@ class TaskExecutionTimeUnitTest(page_test_test_case.PageTestTestCase):
         data)
     self.assertEqual(percentage_result.value, 100)
 
-  #disabled in vivaldi: Uses Google storage
-  @decorators.Disabled
   def testIdleTasksAreReported(self):
     data = self._GenerateResultsFromMockedIdleData()
 
@@ -137,8 +129,6 @@ class TaskExecutionTimeUnitTest(page_test_test_case.PageTestTestCase):
     else:
       self.fail('Task was incorrectly marked as Idle')
 
-  #disabled in vivaldi: Uses Google storage
-  @decorators.Disabled
   def testIdlePercentagesAreCorrect(self):
     data = self._GenerateResultsFromMockedIdleData()
 
@@ -158,8 +148,6 @@ class TaskExecutionTimeUnitTest(page_test_test_case.PageTestTestCase):
         data)
     self.assertEqual(idle_percentage_result.value, 80)
 
-  #disabled in vivaldi: Uses Google storage
-  @decorators.Disabled
   def testTopNTasksAreCorrectlyReported(self):
     data = self._GenerateDataForEmptyPageSet()
 
@@ -185,16 +173,12 @@ class TaskExecutionTimeUnitTest(page_test_test_case.PageTestTestCase):
           'process 1:%s:task%s' % (self._first_thread_name, str(duration)),
           data)
 
-  #disabled in vivaldi: Uses Google storage
-  @decorators.Disabled
   def _findResultFromName(self, name, data):
     for result in data.results.all_page_specific_values:
       if result.name == name:
         return result
     self.fail('Expected result "%s" missing.' % (name))
 
-  #disabled in vivaldi: Uses Google storage
-  @decorators.Disabled
   def _GenerateResultsFromMockedData(self):
     data = self._GenerateDataForEmptyPageSet()
 
@@ -206,8 +190,6 @@ class TaskExecutionTimeUnitTest(page_test_test_case.PageTestTestCase):
     self._measurement._AddResults(data.results)
     return data
 
-  #disabled in vivaldi: Uses Google storage
-  @decorators.Disabled
   def _GenerateResultsFromMockedIdleData(self):
     data = self._GenerateDataForEmptyPageSet()
 
@@ -239,8 +221,6 @@ class TaskExecutionTimeUnitTest(page_test_test_case.PageTestTestCase):
 
     return data
 
-  #disabled in vivaldi: Uses Google storage
-  @decorators.Disabled 
   def _GenerateDataForEmptyPageSet(self):
     self._measurement = task_execution_time.TaskExecutionTime()
     self._page_set = self.CreateEmptyPageSet()

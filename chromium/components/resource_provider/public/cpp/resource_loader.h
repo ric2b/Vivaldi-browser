@@ -10,20 +10,19 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "components/resource_provider/public/interfaces/resource_provider.mojom.h"
-#include "mojo/application/public/interfaces/service_provider.mojom.h"
 #include "mojo/platform_handle/platform_handle.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/array.h"
-#include "third_party/mojo/src/mojo/public/cpp/system/handle.h"
+#include "mojo/public/cpp/bindings/array.h"
+#include "mojo/public/cpp/system/handle.h"
 
 namespace base {
 class File;
 }
 
 namespace mojo {
-class Shell;
+class ApplicationImpl;
 }
 
 namespace resource_provider {
@@ -34,7 +33,8 @@ namespace resource_provider {
 // have been obtained.
 class ResourceLoader {
  public:
-  ResourceLoader(mojo::Shell* shell, const std::set<std::string>& paths);
+  ResourceLoader(mojo::ApplicationImpl* app,
+                 const std::set<std::string>& paths);
   ~ResourceLoader();
 
   // Uses WaitForIncomingMessage() to block until the results are available, or
@@ -54,8 +54,6 @@ class ResourceLoader {
   // Callback when resources have loaded.
   void OnGotResources(const std::vector<std::string>& paths,
                       mojo::Array<mojo::ScopedHandle> resources);
-
-  mojo::ServiceProviderPtr resource_provider_service_provider_;
 
   ResourceProviderPtr resource_provider_;
 

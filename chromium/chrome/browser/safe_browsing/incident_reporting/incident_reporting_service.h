@@ -8,12 +8,12 @@
 #include <stdint.h>
 
 #include <map>
+#include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
@@ -28,8 +28,6 @@
 #include "content/public/browser/notification_registrar.h"
 
 class Profile;
-class SafeBrowsingDatabaseManager;
-class SafeBrowsingService;
 class TrackedPreferenceValidationDelegate;
 
 namespace base {
@@ -52,9 +50,12 @@ class ClientDownloadRequest;
 class ClientIncidentReport;
 class ClientIncidentReport_DownloadDetails;
 class ClientIncidentReport_EnvironmentData;
+class ClientIncidentReport_ExtensionData;
 class ClientIncidentReport_IncidentData;
 class Incident;
 class IncidentReceiver;
+class SafeBrowsingDatabaseManager;
+class SafeBrowsingService;
 
 // A class that manages the collection of incidents and submission of incident
 // reports to the safe browsing client-side detection service. The service
@@ -70,13 +71,17 @@ class IncidentReceiver;
 // remaining are uploaded in an incident report.
 class IncidentReportingService : public content::NotificationObserver {
  public:
-  IncidentReportingService(SafeBrowsingService* safe_browsing_service,
-                           const scoped_refptr<net::URLRequestContextGetter>&
-                               request_context_getter);
+  IncidentReportingService(
+      SafeBrowsingService* safe_browsing_service,
+      const scoped_refptr<net::URLRequestContextGetter>&
+          request_context_getter);
 
   // All incident collection, data collection, and uploads in progress are
   // dropped at destruction.
   ~IncidentReportingService() override;
+
+  // Returns true if incident reporting is enabled for the given profile.
+  static bool IsEnabledForProfile(Profile* profile);
 
   // Returns an object by which external components can add an incident to the
   // service. The object may outlive the service, but will no longer have any
@@ -116,6 +121,11 @@ class IncidentReportingService : public content::NotificationObserver {
   void SetCollectEnvironmentHook(
       CollectEnvironmentDataFn collect_environment_data_hook,
       const scoped_refptr<base::TaskRunner>& task_runner);
+
+  // Initiates extension collection. Overriden by unit tests to provide fake
+  // extension data.
+  virtual void DoExtensionCollection(
+      ClientIncidentReport_ExtensionData* extension_data);
 
   // Handles the addition of a new profile to the ProfileManager. Creates a new
   // context for |profile| if one does not exist, drops any received incidents
@@ -164,6 +174,13 @@ class IncidentReportingService : public content::NotificationObserver {
   // Adds |incident_data| relating to the optional |profile| to the service.
   void AddIncident(Profile* profile, scoped_ptr<Incident> incident);
 
+  // Clears all data associated with the |incident| relating to the optional
+  // |profile|.
+  void ClearIncident(Profile* profile, scoped_ptr<Incident> incident);
+
+  // Returns true if there are incidents waiting to be sent.
+  bool HasIncidentsToUpload() const;
+
   // Begins processing a report. If processing is already underway, ensures that
   // collection tasks have completed or are running.
   void BeginReportProcessing();
@@ -171,6 +188,19 @@ class IncidentReportingService : public content::NotificationObserver {
   // Begins the process of collating incidents by waiting for incidents to
   // arrive. This function is idempotent.
   void BeginIncidentCollation();
+
+  // Returns true if the service is waiting for additional incidents before
+  // uploading a report.
+  bool WaitingToCollateIncidents();
+
+  // Cancels the collection timeout.
+  void CancelIncidentCollection();
+
+  // A callback invoked on the UI thread after which incident collation has
+  // completed. Incident report processing continues, either by waiting for
+  // environment data or the most recent download to arrive or by sending an
+  // incident report.
+  void OnCollationTimeout();
 
   // Starts a task to collect environment data in the blocking pool.
   void BeginEnvironmentCollection();
@@ -188,19 +218,6 @@ class IncidentReportingService : public content::NotificationObserver {
   void OnEnvironmentDataCollected(
       scoped_ptr<ClientIncidentReport_EnvironmentData> environment_data);
 
-  // Returns true if the service is waiting for additional incidents before
-  // uploading a report.
-  bool WaitingToCollateIncidents();
-
-  // Cancels the collection timeout.
-  void CancelIncidentCollection();
-
-  // A callback invoked on the UI thread after which incident collation has
-  // completed. Incident report processing continues, either by waiting for
-  // environment data or the most recent download to arrive or by sending an
-  // incident report.
-  void OnCollationTimeout();
-
   // Starts the asynchronous process of finding the most recent executable
   // download if one is not currently being search for and/or has not already
   // been found.
@@ -215,14 +232,19 @@ class IncidentReportingService : public content::NotificationObserver {
   void CancelDownloadCollection();
 
   // A callback invoked on the UI thread by the last download finder when the
-  // search for the most recent binary download is complete.
+  // search for the most recent binary download and most recent non-binary
+  // download is complete.
   void OnLastDownloadFound(
-      scoped_ptr<ClientIncidentReport_DownloadDetails> last_download);
+      scoped_ptr<ClientIncidentReport_DownloadDetails> last_binary_download,
+      scoped_ptr<ClientIncidentReport_NonBinaryDownloadDetails>
+          last_non_binary_download);
 
-  // Uploads an incident report if all data collection is complete. Incidents
-  // originating from profiles that do not participate in safe browsing are
-  // dropped.
-  void UploadIfCollectionComplete();
+  // Processes all received incidents once all data collection is
+  // complete. Incidents originating from profiles that do not participate in
+  // safe browsing are dropped, incidents that have already been reported are
+  // pruned, and prune state is cleared for incidents that are now clear. Report
+  // upload is started if any incidents remain.
+  void ProcessIncidentsIfCollectionComplete();
 
   // Cancels all uploads, discarding all reports and responses in progress.
   void CancelAllReportUploads();
@@ -285,7 +307,7 @@ class IncidentReportingService : public content::NotificationObserver {
 
   // A timer upon the firing of which the service will report received
   // incidents.
-  base::DelayTimer<IncidentReportingService> collation_timer_;
+  base::DelayTimer collation_timer_;
 
   // The report currently being assembled. This becomes non-NULL when an initial
   // incident is reported, and returns to NULL when the report is sent for
@@ -314,11 +336,15 @@ class IncidentReportingService : public content::NotificationObserver {
   DownloadMetadataManager download_metadata_manager_;
 
   // The collection of uploads in progress.
-  ScopedVector<UploadContext> uploads_;
+  std::vector<scoped_ptr<UploadContext>> uploads_;
 
   // An object that asynchronously searches for the most recent binary download.
   // Non-NULL while such a search is outstanding.
   scoped_ptr<LastDownloadFinder> last_download_finder_;
+
+  // True if IncidentReportingService is enabled at the process level, by a
+  // field trial.
+  bool enabled_by_field_trial_;
 
   // A factory for handing out weak pointers for IncidentReceiver objects.
   base::WeakPtrFactory<IncidentReportingService> receiver_weak_ptr_factory_;

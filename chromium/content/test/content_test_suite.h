@@ -6,10 +6,18 @@
 #define CONTENT_TEST_CONTENT_TEST_SUITE_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "content/public/test/content_test_suite_base.h"
 
 #if defined(OS_WIN)
 #include "base/win/scoped_com_initializer.h"
+#endif
+
+#if defined(USE_OZONE)
+namespace ui {
+class ClientNativePixmapFactory;
+}  // namespace ui
 #endif
 
 namespace content {
@@ -25,6 +33,9 @@ class ContentTestSuite : public ContentTestSuiteBase {
  private:
 #if defined(OS_WIN)
   base::win::ScopedCOMInitializer com_initializer_;
+#endif
+#if defined(USE_OZONE)
+  scoped_ptr<ui::ClientNativePixmapFactory> client_native_pixmap_factory_;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(ContentTestSuite);

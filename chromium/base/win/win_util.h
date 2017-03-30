@@ -23,6 +23,7 @@
 #define BASE_WIN_WIN_UTIL_H_
 
 #include <windows.h>
+#include <stdint.h>
 
 #include <string>
 
@@ -56,24 +57,18 @@ struct NONCLIENTMETRICS_XP {
 namespace base {
 namespace win {
 
+inline uint32_t HandleToUint32(HANDLE h) {
+  // Cast through uintptr_t and then unsigned int to make the truncation to
+  // 32 bits explicit. Handles are size of-pointer but are always 32-bit values.
+  // https://msdn.microsoft.com/en-us/library/aa384203(VS.85).aspx says:
+  // 64-bit versions of Windows use 32-bit handles for interoperability.
+  return static_cast<uint32_t>(reinterpret_cast<uintptr_t>(h));
+}
+
 BASE_EXPORT void GetNonClientMetrics(NONCLIENTMETRICS_XP* metrics);
 
 // Returns the string representing the current user sid.
 BASE_EXPORT bool GetUserSidString(std::wstring* user_sid);
-
-// Returns true if the shift key is currently pressed.
-BASE_EXPORT bool IsShiftPressed();
-
-// Returns true if the ctrl key is currently pressed.
-BASE_EXPORT bool IsCtrlPressed();
-
-// Returns true if the alt key is currently pressed.
-BASE_EXPORT bool IsAltPressed();
-
-// Returns true if the altgr key is currently pressed.
-// Windows does not have specific key code and modifier bit and Alt+Ctrl key is
-// used as AltGr key in Windows.
-BASE_EXPORT bool IsAltGrPressed();
 
 // Returns false if user account control (UAC) has been disabled with the
 // EnableLUA registry flag. Returns true if user account control is enabled.
@@ -128,9 +123,14 @@ BASE_EXPORT bool ShouldCrashOnProcessDetach();
 BASE_EXPORT void SetAbortBehaviorForCrashReporting();
 
 // A tablet is a device that is touch enabled and also is being used
-// "like a tablet".  This is used primarily for metrics in order to gain some
-// insight into how users use Chrome.
-BASE_EXPORT bool IsTabletDevice();
+// "like a tablet". This is used by the following:-
+// 1. Metrics:- To gain insight into how users use Chrome.
+// 2. Physical keyboard presence :- If a device is in tablet mode, it means
+//    that there is no physical keyboard attached.
+// This function optionally sets the |reason| parameter to determine as to why
+// or why not a device was deemed to be a tablet.
+// Returns true if the device is in tablet mode.
+BASE_EXPORT bool IsTabletDevice(std::string* reason);
 
 // A slate is a touch device that may have a keyboard attached. This function
 // returns true if a keyboard is attached and optionally will set the reason
@@ -165,6 +165,13 @@ BASE_EXPORT void SetDomainStateForTesting(bool state);
 // may be re-implemented in the future to return a reliable value, based on
 // run-time detection of this capability.
 BASE_EXPORT bool MaybeHasSHA256Support();
+
+// Returns true if the current process can make USER32 or GDI32 calls such as
+// CreateWindow and CreateDC. Windows 8 and above allow the kernel component
+// of these calls to be disabled which can cause undefined behaviour such as
+// crashes. This function can be used to guard areas of code using these calls
+// and provide a fallback path if necessary.
+BASE_EXPORT bool IsUser32AndGdi32Available();
 
 }  // namespace win
 }  // namespace base

@@ -5,16 +5,33 @@
 #include "media/cast/net/rtp/cast_message_builder.h"
 
 #include "media/cast/cast_defines.h"
+#include "media/cast/constants.h"
 #include "media/cast/net/rtp/framer.h"
 
 namespace media {
 namespace cast {
 
+namespace {
+
+// TODO(miu): These should probably be dynamic and computed base on configured
+// end-to-end latency and packet loss rates.  http://crbug.com/563784
+enum {
+  // Number of milliseconds between sending of ACK/NACK Cast Message RTCP
+  // packets back to the sender.
+  kCastMessageUpdateIntervalMs = 33,
+
+  // Number of milliseconds between repeating a NACK for packets in the same
+  // frame.
+  kNackRepeatIntervalMs = 30,
+};
+
+}  // namespace
+
 CastMessageBuilder::CastMessageBuilder(
     base::TickClock* clock,
     RtpPayloadFeedback* incoming_payload_feedback,
     const Framer* framer,
-    uint32 media_ssrc,
+    uint32_t media_ssrc,
     bool decoder_faster_than_max_frame_rate,
     int max_unacked_frames)
     : clock_(clock),
@@ -26,14 +43,14 @@ CastMessageBuilder::CastMessageBuilder(
       cast_msg_(media_ssrc),
       slowing_down_ack_(false),
       acked_last_frame_(true),
-      last_acked_frame_id_(kStartFrameId) {
-  cast_msg_.ack_frame_id = kStartFrameId;
+      last_acked_frame_id_(kFirstFrameId - 1) {
+  cast_msg_.ack_frame_id = kFirstFrameId - 1;
 }
 
 CastMessageBuilder::~CastMessageBuilder() {}
 
-void CastMessageBuilder::CompleteFrameReceived(uint32 frame_id) {
-  DCHECK_GE(static_cast<int32>(frame_id - last_acked_frame_id_), 0);
+void CastMessageBuilder::CompleteFrameReceived(uint32_t frame_id) {
+  DCHECK_GE(static_cast<int32_t>(frame_id - last_acked_frame_id_), 0);
   VLOG(2) << "CompleteFrameReceived: " << frame_id;
   if (last_update_time_.is_null()) {
     // Our first update.
@@ -50,7 +67,7 @@ void CastMessageBuilder::CompleteFrameReceived(uint32 frame_id) {
   cast_feedback_->CastFeedback(cast_msg_);
 }
 
-bool CastMessageBuilder::UpdateAckMessage(uint32 frame_id) {
+bool CastMessageBuilder::UpdateAckMessage(uint32_t frame_id) {
   if (!decoder_faster_than_max_frame_rate_) {
     int complete_frame_count = framer_->NumberOfCompleteFrames();
     if (complete_frame_count > max_unacked_frames_) {
@@ -114,7 +131,7 @@ void CastMessageBuilder::UpdateCastMessage() {
 }
 
 void CastMessageBuilder::Reset() {
-  cast_msg_.ack_frame_id = kStartFrameId;
+  cast_msg_.ack_frame_id = kFirstFrameId - 1;
   cast_msg_.missing_frames_and_packets.clear();
   time_last_nacked_map_.clear();
 }
@@ -152,8 +169,8 @@ void CastMessageBuilder::BuildPacketList() {
   if (framer_->Empty())
     return;
 
-  uint32 newest_frame_id = framer_->NewestFrameId();
-  uint32 next_expected_frame_id = cast_msg_.ack_frame_id + 1;
+  uint32_t newest_frame_id = framer_->NewestFrameId();
+  uint32_t next_expected_frame_id = cast_msg_.ack_frame_id + 1;
 
   // Iterate over all frames.
   for (; !IsNewerFrameId(next_expected_frame_id, newest_frame_id);

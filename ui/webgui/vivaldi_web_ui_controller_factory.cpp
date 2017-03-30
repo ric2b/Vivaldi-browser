@@ -105,7 +105,7 @@ VivaldiWebUIControllerFactory::CreateWebUIControllerForURL(
 }
 
 VivaldiWebUIControllerFactory* VivaldiWebUIControllerFactory::GetInstance() {
-  return Singleton<VivaldiWebUIControllerFactory>::get();
+  return base::Singleton<VivaldiWebUIControllerFactory>::get();
 }
 
 VivaldiWebUIControllerFactory::VivaldiWebUIControllerFactory() {

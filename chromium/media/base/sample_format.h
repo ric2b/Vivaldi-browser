@@ -22,9 +22,10 @@ enum SampleFormat {
   kSampleFormatPlanarS16,  // Signed 16-bit planar.
   kSampleFormatPlanarF32,  // Float 32-bit planar.
   kSampleFormatPlanarS32,  // Signed 32-bit planar.
+  kSampleFormatS24,        // Signed 24-bit.
 
   // Must always be equal to largest value ever logged.
-  kSampleFormatMax = kSampleFormatPlanarS32,
+  kSampleFormatMax = kSampleFormatS24,
 };
 
 // Returns the number of bytes used per channel for the specified
@@ -33,6 +34,12 @@ MEDIA_EXPORT int SampleFormatToBytesPerChannel(SampleFormat sample_format);
 
 // Returns the name of the sample format as a string
 MEDIA_EXPORT const char* SampleFormatToString(SampleFormat sample_format);
+
+// Returns true if |sample_format| is planar, false otherwise.
+MEDIA_EXPORT bool IsPlanar(SampleFormat sample_format);
+
+// Returns true if |sample_format| is interleaved, false otherwise.
+MEDIA_EXPORT bool IsInterleaved(SampleFormat sample_format);
 
 }  // namespace media
 

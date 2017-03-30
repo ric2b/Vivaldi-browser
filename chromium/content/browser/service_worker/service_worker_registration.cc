@@ -4,11 +4,13 @@
 
 #include "content/browser/service_worker/service_worker_registration.h"
 
+#include <vector>
+
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_info.h"
 #include "content/browser/service_worker/service_worker_metrics.h"
 #include "content/browser/service_worker/service_worker_register_job.h"
-#include "content/browser/service_worker/service_worker_utils.h"
+#include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/browser_thread.h"
 
 namespace content {
@@ -25,7 +27,7 @@ ServiceWorkerVersionInfo GetVersionInfo(ServiceWorkerVersion* version) {
 
 ServiceWorkerRegistration::ServiceWorkerRegistration(
     const GURL& pattern,
-    int64 registration_id,
+    int64_t registration_id,
     base::WeakPtr<ServiceWorkerContextCore> context)
     : pattern_(pattern),
       registration_id_(registration_id),
@@ -33,9 +35,11 @@ ServiceWorkerRegistration::ServiceWorkerRegistration(
       is_uninstalling_(false),
       is_uninstalled_(false),
       should_activate_when_ready_(false),
+      force_update_on_page_load_(false),
       resources_total_size_bytes_(0),
       context_(context) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK_NE(kInvalidServiceWorkerRegistrationId, registration_id);
   DCHECK(context_);
   context_->AddLiveRegistration(this);
 }
@@ -67,10 +71,19 @@ void ServiceWorkerRegistration::RemoveListener(Listener* listener) {
 
 void ServiceWorkerRegistration::NotifyRegistrationFailed() {
   FOR_EACH_OBSERVER(Listener, listeners_, OnRegistrationFailed(this));
+  NotifyRegistrationFinished();
 }
 
 void ServiceWorkerRegistration::NotifyUpdateFound() {
   FOR_EACH_OBSERVER(Listener, listeners_, OnUpdateFound(this));
+}
+
+void ServiceWorkerRegistration::NotifyVersionAttributesChanged(
+    ChangedVersionAttributesMask mask) {
+  FOR_EACH_OBSERVER(Listener, listeners_,
+                    OnVersionAttributesChanged(this, mask, GetInfo()));
+  if (mask.active_changed() || mask.waiting_changed())
+    NotifyRegistrationFinished();
 }
 
 ServiceWorkerRegistrationInfo ServiceWorkerRegistration::GetInfo() {
@@ -79,6 +92,8 @@ ServiceWorkerRegistrationInfo ServiceWorkerRegistration::GetInfo() {
       pattern(), registration_id_,
       is_deleted_ ? ServiceWorkerRegistrationInfo::IS_DELETED
                   : ServiceWorkerRegistrationInfo::IS_NOT_DELETED,
+      force_update_on_page_load_ ? ServiceWorkerRegistrationInfo::IS_FORCED
+                                 : ServiceWorkerRegistrationInfo::IS_NOT_FORCED,
       GetVersionInfo(active_version_.get()),
       GetVersionInfo(waiting_version_.get()),
       GetVersionInfo(installing_version_.get()), resources_total_size_bytes_);
@@ -100,8 +115,7 @@ void ServiceWorkerRegistration::SetActiveVersion(
     active_version_->AddListener(this);
   mask.add(ChangedVersionAttributesMask::ACTIVE_VERSION);
 
-  FOR_EACH_OBSERVER(Listener, listeners_,
-                    OnVersionAttributesChanged(this, mask, GetInfo()));
+  NotifyVersionAttributesChanged(mask);
 }
 
 void ServiceWorkerRegistration::SetWaitingVersion(
@@ -116,8 +130,7 @@ void ServiceWorkerRegistration::SetWaitingVersion(
   waiting_version_ = version;
   mask.add(ChangedVersionAttributesMask::WAITING_VERSION);
 
-  FOR_EACH_OBSERVER(Listener, listeners_,
-                    OnVersionAttributesChanged(this, mask, GetInfo()));
+  NotifyVersionAttributesChanged(mask);
 }
 
 void ServiceWorkerRegistration::SetInstallingVersion(
@@ -131,8 +144,7 @@ void ServiceWorkerRegistration::SetInstallingVersion(
   installing_version_ = version;
   mask.add(ChangedVersionAttributesMask::INSTALLING_VERSION);
 
-  FOR_EACH_OBSERVER(Listener, listeners_,
-                    OnVersionAttributesChanged(this, mask, GetInfo()));
+  NotifyVersionAttributesChanged(mask);
 }
 
 void ServiceWorkerRegistration::UnsetVersion(ServiceWorkerVersion* version) {
@@ -140,11 +152,8 @@ void ServiceWorkerRegistration::UnsetVersion(ServiceWorkerVersion* version) {
     return;
   ChangedVersionAttributesMask mask;
   UnsetVersionInternal(version, &mask);
-  if (mask.changed()) {
-    ServiceWorkerRegistrationInfo info = GetInfo();
-    FOR_EACH_OBSERVER(Listener, listeners_,
-                      OnVersionAttributesChanged(this, mask, info));
-  }
+  if (mask.changed())
+    NotifyVersionAttributesChanged(mask);
 }
 
 void ServiceWorkerRegistration::UnsetVersionInternal(
@@ -229,29 +238,6 @@ void ServiceWorkerRegistration::AbortPendingClear(
                  most_recent_version));
 }
 
-void ServiceWorkerRegistration::GetUserData(
-    const std::string& key,
-    const GetUserDataCallback& callback) {
-  DCHECK(context_);
-  context_->storage()->GetUserData(registration_id_, key, callback);
-}
-
-void ServiceWorkerRegistration::StoreUserData(
-    const std::string& key,
-    const std::string& data,
-    const StatusCallback& callback) {
-  DCHECK(context_);
-  context_->storage()->StoreUserData(
-      registration_id_, pattern().GetOrigin(), key, data, callback);
-}
-
-void ServiceWorkerRegistration::ClearUserData(
-    const std::string& key,
-    const StatusCallback& callback) {
-  DCHECK(context_);
-  context_->storage()->ClearUserData(registration_id_, key, callback);
-}
-
 void ServiceWorkerRegistration::OnNoControllees(ServiceWorkerVersion* version) {
   if (!context_)
     return;
@@ -332,9 +318,24 @@ void ServiceWorkerRegistration::DeleteVersion(
       is_deleted_ = false;
     } else {
       is_uninstalled_ = true;
-      FOR_EACH_OBSERVER(Listener, listeners_, OnRegistrationFailed(this));
+      NotifyRegistrationFailed();
     }
   }
+}
+
+void ServiceWorkerRegistration::NotifyRegistrationFinished() {
+  std::vector<base::Closure> callbacks;
+  callbacks.swap(registration_finished_callbacks_);
+  for (const auto& callback : callbacks)
+    callback.Run();
+}
+
+void ServiceWorkerRegistration::RegisterRegistrationFinishedCallback(
+    const base::Closure& callback) {
+  // This should only be called if the registration is in progress.
+  DCHECK(!active_version() && !waiting_version() && !is_uninstalled() &&
+         !is_uninstalling());
+  registration_finished_callbacks_.push_back(callback);
 }
 
 void ServiceWorkerRegistration::OnActivateEventFinished(
@@ -367,27 +368,33 @@ void ServiceWorkerRegistration::Clear() {
   if (context_)
     context_->storage()->NotifyDoneUninstallingRegistration(this);
 
+  std::vector<scoped_refptr<ServiceWorkerVersion>> versions_to_doom;
   ChangedVersionAttributesMask mask;
   if (installing_version_.get()) {
-    installing_version_->Doom();
-    installing_version_ = NULL;
+    versions_to_doom.push_back(installing_version_);
+    installing_version_ = nullptr;
     mask.add(ChangedVersionAttributesMask::INSTALLING_VERSION);
   }
   if (waiting_version_.get()) {
-    waiting_version_->Doom();
-    waiting_version_ = NULL;
+    versions_to_doom.push_back(waiting_version_);
+    waiting_version_ = nullptr;
     mask.add(ChangedVersionAttributesMask::WAITING_VERSION);
   }
   if (active_version_.get()) {
-    active_version_->Doom();
+    versions_to_doom.push_back(active_version_);
     active_version_->RemoveListener(this);
-    active_version_ = NULL;
+    active_version_ = nullptr;
     mask.add(ChangedVersionAttributesMask::ACTIVE_VERSION);
   }
+
   if (mask.changed()) {
-    ServiceWorkerRegistrationInfo info = GetInfo();
-    FOR_EACH_OBSERVER(Listener, listeners_,
-                      OnVersionAttributesChanged(this, mask, info));
+    NotifyVersionAttributesChanged(mask);
+
+    // Doom only after notifying attributes changed, because the spec requires
+    // the attributes to be cleared by the time the statechange event is
+    // dispatched.
+    for (const auto& version : versions_to_doom)
+      version->Doom();
   }
 
   FOR_EACH_OBSERVER(

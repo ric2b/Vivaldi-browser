@@ -5,17 +5,24 @@
 #ifndef MEDIA_BASE_VIDEO_FRAME_H_
 #define MEDIA_BASE_VIDEO_FRAME_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <string>
 #include <vector>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/md5.h"
 #include "base/memory/shared_memory.h"
 #include "base/synchronization/lock.h"
+#include "build/build_config.h"
 #include "gpu/command_buffer/common/mailbox_holder.h"
-#include "media/base/buffers.h"
 #include "media/base/video_frame_metadata.h"
+#include "media/base/video_types.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/gpu_memory_buffer.h"
 
 #if defined(OS_MACOSX)
 #include <CoreVideo/CVPixelBuffer.h>
@@ -43,35 +50,6 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
     kAPlane = 3,
   };
 
-  // Pixel formats roughly based on FOURCC labels, see:
-  // http://www.fourcc.org/rgb.php and http://www.fourcc.org/yuv.php
-  // Logged to UMA, so never reuse values. Leave gaps if necessary.
-  enum Format {
-    UNKNOWN = 0,  // Unknown or unspecified format value.
-    YV12 = 1,  // 12bpp YVU planar 1x1 Y, 2x2 VU samples.
-    I420 = 2,  // 12bpp YUV planar 1x1 Y, 2x2 UV samples, a.k.a. YU12.
-    YV16 = 3,  // 16bpp YVU planar 1x1 Y, 2x1 VU samples.
-    YV12A = 4,  // 20bpp YUVA planar 1x1 Y, 2x2 VU, 1x1 A samples.
-    YV24 = 5,  // 24bpp YUV planar, no subsampling.
-#if defined(OS_MACOSX) || defined(OS_CHROMEOS)
-    NV12 = 6,  // 12bpp with Y plane followed by a 2x2 interleaved UV plane.
-#endif
-    ARGB = 7,  // 32bpp ARGB, 1 plane.
-    XRGB = 8,  // 24bpp XRGB, 1 plane.
-    // Please update UMA histogram enumeration when adding new formats here.
-    FORMAT_MAX = XRGB,  // Must always be equal to largest entry logged.
-  };
-
-  // Color space or color range used for the pixels, in general this is left
-  // unspecified, meaning Rec601 (SD) is assumed.
-  // Logged to UMA, so never reuse values. Leave gaps if necessary.
-  enum ColorSpace {
-    COLOR_SPACE_UNSPECIFIED = 0,  // In general this is Rec601.
-    COLOR_SPACE_JPEG = 1,  // JPEG color range.
-    COLOR_SPACE_HD_REC709 = 2,  // Rec709 "HD" color space.
-    COLOR_SPACE_MAX = COLOR_SPACE_HD_REC709,
-  };
-
   // Defines the pixel storage type. Differentiates between directly accessible
   // |data_| and pixels that are only indirectly accessible and not via mappable
   // memory.
@@ -82,7 +60,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
     STORAGE_OPAQUE = 1,  // We don't know how VideoFrame's pixels are stored.
     STORAGE_UNOWNED_MEMORY = 2,  // External, non owned data pointers.
     STORAGE_OWNED_MEMORY = 3,  // VideoFrame has allocated its own data buffer.
-    STORAGE_SHMEM = 4,  // Pixels are backed by Shared Memory.
+    STORAGE_SHMEM = 4,         // Pixels are backed by Shared Memory.
 #if defined(OS_LINUX)
     // TODO(mcasas): Consider turning this type into STORAGE_NATIVE or another
     // meaningful name and handle it appropriately in all cases.
@@ -94,45 +72,31 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
     // https://groups.google.com/a/google.com/d/topic/chrome-gpu/eIM1RwarUmk/discussion
     STORAGE_HOLE = 6,
 #endif
-
-#if defined(VIDEO_HOLE)
-    STORAGE_LAST = STORAGE_HOLE,
-#elif defined(OS_LINUX)
-    STORAGE_LAST = STORAGE_DMABUFS,
-#else
-    STORAGE_LAST = STORAGE_SHMEM
-#endif
+    STORAGE_GPU_MEMORY_BUFFERS = 7,
+    STORAGE_LAST = STORAGE_GPU_MEMORY_BUFFERS,
   };
 
   // CB to be called on the mailbox backing this frame when the frame is
   // destroyed.
-  typedef base::Callback<void(uint32)> ReleaseMailboxCB;
+  typedef base::Callback<void(const gpu::SyncToken&)> ReleaseMailboxCB;
 
-  // Interface representing client operations on a SyncPoint, i.e. insert one in
+  // Interface representing client operations on a SyncToken, i.e. insert one in
   // the GPU Command Buffer and wait for it.
-  class SyncPointClient {
+  class SyncTokenClient {
    public:
-    SyncPointClient() {}
-    virtual uint32 InsertSyncPoint() = 0;
-    virtual void WaitSyncPoint(uint32 sync_point) = 0;
+    SyncTokenClient() {}
+    virtual void GenerateSyncToken(gpu::SyncToken* sync_token) = 0;
+    virtual void WaitSyncToken(const gpu::SyncToken& sync_token) = 0;
 
    protected:
-    virtual ~SyncPointClient() {}
+    virtual ~SyncTokenClient() {}
 
-    DISALLOW_COPY_AND_ASSIGN(SyncPointClient);
+    DISALLOW_COPY_AND_ASSIGN(SyncTokenClient);
   };
-
-  // Returns the name of a Format as a string.
-  static std::string FormatToString(Format format);
-
-  // Returns true if |format| is a YUV format. This includes (multi)planar
-  // and/or (partially) interleaved formats.
-  static bool IsYuvPlanar(Format format);
 
   // Call prior to CreateFrame to ensure validity of frame configuration. Called
   // automatically by VideoDecoderConfig::IsValidConfig().
-  // TODO(scherkus): VideoDecoderConfig shouldn't call this method
-  static bool IsValidConfig(Format format,
+  static bool IsValidConfig(VideoPixelFormat format,
                             StorageType storage_type,
                             const gfx::Size& coded_size,
                             const gfx::Rect& visible_rect,
@@ -143,8 +107,16 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // caller most not make assumptions about the actual underlying size(s), but
   // check the returned VideoFrame instead.
   // TODO(mcasas): implement the RGB version of this factory method.
-  static scoped_refptr<VideoFrame> CreateFrame(
-      Format format,
+  static scoped_refptr<VideoFrame> CreateFrame(VideoPixelFormat format,
+                                               const gfx::Size& coded_size,
+                                               const gfx::Rect& visible_rect,
+                                               const gfx::Size& natural_size,
+                                               base::TimeDelta timestamp);
+
+  // Offers the same functionality as CreateFrame, and additionally zeroes out
+  // the initial allocated buffers.
+  static scoped_refptr<VideoFrame> CreateZeroInitializedFrame(
+      VideoPixelFormat format,
       const gfx::Size& coded_size,
       const gfx::Rect& visible_rect,
       const gfx::Size& natural_size,
@@ -153,9 +125,9 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // Wraps a native texture of the given parameters with a VideoFrame.
   // The backing of the VideoFrame is held in the mailbox held by
   // |mailbox_holder|, and |mailbox_holder_release_cb| will be called with
-  // a syncpoint as the argument when the VideoFrame is to be destroyed.
+  // a sync token as the argument when the VideoFrame is to be destroyed.
   static scoped_refptr<VideoFrame> WrapNativeTexture(
-      Format format,
+      VideoPixelFormat format,
       const gpu::MailboxHolder& mailbox_holder,
       const ReleaseMailboxCB& mailbox_holder_release_cb,
       const gfx::Size& coded_size,
@@ -164,7 +136,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
       base::TimeDelta timestamp);
 
   // Wraps a set of native textures representing YUV data with a VideoFrame.
-  // |mailbox_holders_release_cb| will be called with a syncpoint as the
+  // |mailbox_holders_release_cb| will be called with a sync token as the
   // argument when the VideoFrame is to be destroyed.
   static scoped_refptr<VideoFrame> WrapYUV420NativeTextures(
       const gpu::MailboxHolder& y_mailbox_holder,
@@ -181,21 +153,21 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // buffer of logical dimensions |coded_size| with the appropriate bit depth
   // and plane count as given by |format|. Returns NULL on failure.
   static scoped_refptr<VideoFrame> WrapExternalData(
-      Format format,
+      VideoPixelFormat format,
       const gfx::Size& coded_size,
       const gfx::Rect& visible_rect,
       const gfx::Size& natural_size,
-      uint8* data,
+      uint8_t* data,
       size_t data_size,
       base::TimeDelta timestamp);
 
   // Same as WrapExternalData() with SharedMemoryHandle and its offset.
   static scoped_refptr<VideoFrame> WrapExternalSharedMemory(
-      Format format,
+      VideoPixelFormat format,
       const gfx::Size& coded_size,
       const gfx::Rect& visible_rect,
       const gfx::Size& natural_size,
-      uint8* data,
+      uint8_t* data,
       size_t data_size,
       base::SharedMemoryHandle handle,
       size_t shared_memory_offset,
@@ -204,16 +176,34 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // Wraps external YUV data of the given parameters with a VideoFrame.
   // The returned VideoFrame does not own the data passed in.
   static scoped_refptr<VideoFrame> WrapExternalYuvData(
-      Format format,
+      VideoPixelFormat format,
       const gfx::Size& coded_size,
       const gfx::Rect& visible_rect,
       const gfx::Size& natural_size,
-      int32 y_stride,
-      int32 u_stride,
-      int32 v_stride,
-      uint8* y_data,
-      uint8* u_data,
-      uint8* v_data,
+      int32_t y_stride,
+      int32_t u_stride,
+      int32_t v_stride,
+      uint8_t* y_data,
+      uint8_t* u_data,
+      uint8_t* v_data,
+      base::TimeDelta timestamp);
+
+  // Wraps external YUV data with the given parameters with a VideoFrame.
+  // The returned VideoFrame does not own the GpuMemoryBuffers passed in.
+  static scoped_refptr<VideoFrame> WrapExternalYuvGpuMemoryBuffers(
+      VideoPixelFormat format,
+      const gfx::Size& coded_size,
+      const gfx::Rect& visible_rect,
+      const gfx::Size& natural_size,
+      int32_t y_stride,
+      int32_t u_stride,
+      int32_t v_stride,
+      uint8_t* y_data,
+      uint8_t* u_data,
+      uint8_t* v_data,
+      const gfx::GpuMemoryBufferHandle& y_handle,
+      const gfx::GpuMemoryBufferHandle& u_handle,
+      const gfx::GpuMemoryBufferHandle& v_handle,
       base::TimeDelta timestamp);
 
 #if defined(OS_LINUX)
@@ -228,7 +218,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // mapped via mmap() for CPU access.
   // Returns NULL on failure.
   static scoped_refptr<VideoFrame> WrapExternalDmabufs(
-      Format format,
+      VideoPixelFormat format,
       const gfx::Size& coded_size,
       const gfx::Rect& visible_rect,
       const gfx::Size& natural_size,
@@ -261,10 +251,11 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   static scoped_refptr<VideoFrame> CreateEOSFrame();
 
   // Allocates YV12 frame based on |size|, and sets its data to the YUV(y,u,v).
-  static scoped_refptr<VideoFrame> CreateColorFrame(
-      const gfx::Size& size,
-      uint8 y, uint8 u, uint8 v,
-      base::TimeDelta timestamp);
+  static scoped_refptr<VideoFrame> CreateColorFrame(const gfx::Size& size,
+                                                    uint8_t y,
+                                                    uint8_t u,
+                                                    uint8_t v,
+                                                    base::TimeDelta timestamp);
 
   // Allocates YV12 frame based on |size|, and sets its data to the YUV
   // equivalent of RGB(0,0,0).
@@ -280,35 +271,36 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   static scoped_refptr<VideoFrame> CreateHoleFrame(const gfx::Size& size);
 #endif  // defined(VIDEO_HOLE)
 
-  static size_t NumPlanes(Format format);
+  static size_t NumPlanes(VideoPixelFormat format);
 
   // Returns the required allocation size for a (tightly packed) frame of the
   // given coded size and format.
-  static size_t AllocationSize(Format format, const gfx::Size& coded_size);
+  static size_t AllocationSize(VideoPixelFormat format,
+                               const gfx::Size& coded_size);
 
   // Returns the plane gfx::Size (in bytes) for a plane of the given coded size
   // and format.
-  static gfx::Size PlaneSize(Format format,
+  static gfx::Size PlaneSize(VideoPixelFormat format,
                              size_t plane,
                              const gfx::Size& coded_size);
 
   // Returns horizontal bits per pixel for given |plane| and |format|.
-  static int PlaneHorizontalBitsPerPixel(Format format, size_t plane);
+  static int PlaneHorizontalBitsPerPixel(VideoPixelFormat format, size_t plane);
 
   // Returns bits per pixel for given |plane| and |format|.
-  static int PlaneBitsPerPixel(Format format, size_t plane);
+  static int PlaneBitsPerPixel(VideoPixelFormat format, size_t plane);
 
   // Returns the number of bytes per row for the given plane, format, and width.
   // The width may be aligned to format requirements.
-  static size_t RowBytes(size_t plane, Format format, int width);
+  static size_t RowBytes(size_t plane, VideoPixelFormat format, int width);
 
   // Returns the number of rows for the given plane, format, and height.
   // The height may be aligned to format requirements.
-  static size_t Rows(size_t plane, Format format, int height);
+  static size_t Rows(size_t plane, VideoPixelFormat format, int height);
 
   // Returns the number of columns for the given plane, format, and width.
   // The width may be aligned to format requirements.
-  static size_t Columns(size_t plane, Format format, int width);
+  static size_t Columns(size_t plane, VideoPixelFormat format, int width);
 
   // Used to keep a running hash of seen frames.  Expects an initialized MD5
   // context.  Calls MD5Update with the context and the contents of the frame.
@@ -324,7 +316,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // accessed via data(), visible_data() etc.
   bool HasTextures() const;
 
-  Format format() const { return format_; }
+  VideoPixelFormat format() const { return format_; }
   StorageType storage_type() const { return storage_type_; }
 
   const gfx::Size& coded_size() const { return coded_size_; }
@@ -343,15 +335,15 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // Returns pointer to the buffer for a given plane, if this is an
   // IsMappable() frame type. The memory is owned by VideoFrame object and must
   // not be freed by the caller.
-  const uint8* data(size_t plane) const;
-  uint8* data(size_t plane);
+  const uint8_t* data(size_t plane) const;
+  uint8_t* data(size_t plane);
 
   // Returns pointer to the data in the visible region of the frame, for
   // IsMappable() storage types. The returned pointer is offsetted into the
   // plane buffer specified by visible_rect().origin(). Memory is owned by
   // VideoFrame object and must not be freed by the caller.
-  const uint8* visible_data(size_t plane) const;
-  uint8* visible_data(size_t plane);
+  const uint8_t* visible_data(size_t plane) const;
+  uint8_t* visible_data(size_t plane);
 
   // Returns a mailbox holder for a given texture.
   // Only valid to call if this is a NATIVE_TEXTURE frame. Before using the
@@ -363,6 +355,10 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
 
   // Returns the offset into the shared memory where the frame data begins.
   size_t shared_memory_offset() const;
+
+  // Returns the vector of GpuMemoryBuffer handles, if present.
+  const std::vector<gfx::GpuMemoryBufferHandle>& gpu_memory_buffer_handles()
+      const;
 
 #if defined(OS_LINUX)
   // Returns backing DmaBuf file descriptor for given |plane|, if present, or
@@ -400,6 +396,9 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   const VideoFrameMetadata* metadata() const { return &metadata_; }
   VideoFrameMetadata* metadata() { return &metadata_; }
 
+  // The time span between the current frame and the first frame of the stream.
+  // This is the media timestamp, and not the reference time.
+  // See VideoFrameMetadata::REFERENCE_TIME for details.
   base::TimeDelta timestamp() const { return timestamp_; }
   void set_timestamp(base::TimeDelta timestamp) {
     timestamp_ = timestamp;
@@ -409,31 +408,34 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // older sync point. The final sync point will be used to release this
   // VideoFrame.
   // This method is thread safe. Both blink and compositor threads can call it.
-  void UpdateReleaseSyncPoint(SyncPointClient* client);
+  void UpdateReleaseSyncToken(SyncTokenClient* client);
+
+  // Returns a human-readable string describing |*this|.
+  std::string AsHumanReadableString();
 
  private:
   friend class base::RefCountedThreadSafe<VideoFrame>;
 
   static scoped_refptr<VideoFrame> WrapExternalStorage(
-      Format format,
+      VideoPixelFormat format,
       StorageType storage_type,
       const gfx::Size& coded_size,
       const gfx::Rect& visible_rect,
       const gfx::Size& natural_size,
-      uint8* data,
+      uint8_t* data,
       size_t data_size,
       base::TimeDelta timestamp,
       base::SharedMemoryHandle handle,
       size_t data_offset);
 
   // Clients must use the static factory/wrapping methods to create a new frame.
-  VideoFrame(Format format,
+  VideoFrame(VideoPixelFormat format,
              StorageType storage_type,
              const gfx::Size& coded_size,
              const gfx::Rect& visible_rect,
              const gfx::Size& natural_size,
              base::TimeDelta timestamp);
-  VideoFrame(Format format,
+  VideoFrame(VideoPixelFormat format,
              StorageType storage_type,
              const gfx::Size& coded_size,
              const gfx::Rect& visible_rect,
@@ -441,7 +443,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
              base::TimeDelta timestamp,
              base::SharedMemoryHandle handle,
              size_t shared_memory_offset);
-  VideoFrame(Format format,
+  VideoFrame(VideoPixelFormat format,
              StorageType storage_type,
              const gfx::Size& coded_size,
              const gfx::Rect& visible_rect,
@@ -451,10 +453,18 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
              base::TimeDelta timestamp);
   virtual ~VideoFrame();
 
-  void AllocateYUV();
+  static scoped_refptr<VideoFrame> CreateFrameInternal(
+      VideoPixelFormat format,
+      const gfx::Size& coded_size,
+      const gfx::Rect& visible_rect,
+      const gfx::Size& natural_size,
+      base::TimeDelta timestamp,
+      bool zero_initialize_memory);
+
+  void AllocateYUV(bool zero_initialize_memory);
 
   // Frame format.
-  const Format format_;
+  const VideoPixelFormat format_;
 
   // Storage type for the different planes.
   StorageType storage_type_;  // TODO(mcasas): make const
@@ -478,12 +488,12 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // Array of strides for each plane, typically greater or equal to the width
   // of the surface divided by the horizontal sampling period.  Note that
   // strides can be negative.
-  int32 strides_[kMaxPlanes];
+  int32_t strides_[kMaxPlanes];
 
   // Array of data pointers to each plane.
   // TODO(mcasas): we don't know on ctor if we own |data_| or not. After
-  // refactoring VideoFrame, change to scoped_ptr<uint8, AlignedFreeDeleter>.
-  uint8* data_[kMaxPlanes];
+  // refactoring VideoFrame, change to scoped_ptr<uint8_t, AlignedFreeDeleter>.
+  uint8_t* data_[kMaxPlanes];
 
   // Native texture mailboxes, if this is a IsTexture() frame.
   gpu::MailboxHolder mailbox_holders_[kMaxPlanes];
@@ -493,6 +503,9 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // a STORAGE_SHMEM one.
   base::SharedMemoryHandle shared_memory_handle_;
   size_t shared_memory_offset_;
+
+  // GpuMemoryBuffer handles attached to the video_frame.
+  std::vector<gfx::GpuMemoryBufferHandle> gpu_memory_buffer_handles_;
 
 #if defined(OS_LINUX)
   // Dmabufs for each plane. If set, this frame has DmaBuf backing in some way.
@@ -508,8 +521,8 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
 
   base::TimeDelta timestamp_;
 
-  base::Lock release_sync_point_lock_;
-  uint32 release_sync_point_;
+  base::Lock release_sync_token_lock_;
+  gpu::SyncToken release_sync_token_;
 
   VideoFrameMetadata metadata_;
 

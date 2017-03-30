@@ -2,37 +2,51 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/bit_cast.h"
+#include "base/metrics/field_trial.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/test/mock_entropy_provider.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "net/http/http_response_headers.h"
-#include "net/test/spawned_test_server/spawned_test_server.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "net/url_request/url_fetcher_delegate.h"
 #include "net/url_request/url_request_test_util.h"
 #include "sync/internal_api/public/base/cancelation_signal.h"
 #include "sync/internal_api/public/http_bridge.h"
+#include "sync/internal_api/public/http_post_provider_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/zlib/zlib.h"
 
 namespace syncer {
 
 namespace {
+
 // TODO(timsteele): Should use PathService here. See Chromium Issue 3113.
 const base::FilePath::CharType kDocRoot[] =
     FILE_PATH_LITERAL("chrome/test/data");
-}
+
+}  // namespace
 
 const char kUserAgent[] = "user-agent";
 
-class SyncHttpBridgeTest : public testing::Test {
+#if defined(OS_ANDROID)
+#define MAYBE_SyncHttpBridgeTest DISABLED_SyncHttpBridgeTest
+#else
+#define MAYBE_SyncHttpBridgeTest SyncHttpBridgeTest
+#endif  // defined(OS_ANDROID)
+class MAYBE_SyncHttpBridgeTest : public testing::Test {
  public:
-  SyncHttpBridgeTest()
-      : test_server_(net::SpawnedTestServer::TYPE_HTTP,
-                     net::SpawnedTestServer::kLocalhost,
-                     base::FilePath(kDocRoot)),
-        fake_default_request_context_getter_(NULL),
+  MAYBE_SyncHttpBridgeTest()
+      : fake_default_request_context_getter_(NULL),
         bridge_for_race_test_(NULL),
         io_thread_("IO thread") {
+    test_server_.AddDefaultHandlers(base::FilePath(kDocRoot));
   }
 
   void SetUp() override {
@@ -57,9 +71,8 @@ class SyncHttpBridgeTest : public testing::Test {
       fake_default_request_context_getter_->AddRef();
     }
     HttpBridge* bridge =
-        new HttpBridge(kUserAgent,
-                       fake_default_request_context_getter_,
-                       NetworkTimeUpdateCallback());
+        new HttpBridge(kUserAgent, fake_default_request_context_getter_,
+                       NetworkTimeUpdateCallback(), BindToTrackerCallback());
     return bridge;
   }
 
@@ -73,7 +86,7 @@ class SyncHttpBridgeTest : public testing::Test {
                                   base::WaitableEvent* signal_when_released);
 
   static void TestSameHttpNetworkSession(base::MessageLoop* main_message_loop,
-                                         SyncHttpBridgeTest* test) {
+                                         MAYBE_SyncHttpBridgeTest* test) {
     scoped_refptr<HttpBridge> http_bridge(test->BuildBridge());
     EXPECT_TRUE(test->GetTestRequestContextGetter());
     net::HttpNetworkSession* test_session =
@@ -83,7 +96,8 @@ class SyncHttpBridgeTest : public testing::Test {
               http_bridge->GetRequestContextGetterForTest()->
                   GetURLRequestContext()->
                   http_transaction_factory()->GetSession());
-    main_message_loop->PostTask(FROM_HERE, base::MessageLoop::QuitClosure());
+    main_message_loop->PostTask(FROM_HERE,
+                                base::MessageLoop::QuitWhenIdleClosure());
   }
 
   base::MessageLoop* GetIOThreadLoop() { return io_thread_.message_loop(); }
@@ -93,7 +107,7 @@ class SyncHttpBridgeTest : public testing::Test {
     return fake_default_request_context_getter_;
   }
 
-  net::SpawnedTestServer test_server_;
+  net::EmbeddedTestServer test_server_;
 
   base::Thread* io_thread() { return &io_thread_; }
 
@@ -120,11 +134,15 @@ class ShuntedHttpBridge : public HttpBridge {
   // If |never_finishes| is true, the simulated request never actually
   // returns.
   ShuntedHttpBridge(net::URLRequestContextGetter* baseline_context_getter,
-                    SyncHttpBridgeTest* test, bool never_finishes)
+                    MAYBE_SyncHttpBridgeTest* test,
+                    bool never_finishes)
       : HttpBridge(kUserAgent,
                    baseline_context_getter,
-                   NetworkTimeUpdateCallback()),
-        test_(test), never_finishes_(never_finishes) { }
+                   NetworkTimeUpdateCallback(),
+                   BindToTrackerCallback()),
+        test_(test),
+        never_finishes_(never_finishes) {}
+
  protected:
   void MakeAsynchronousPost() override {
     ASSERT_TRUE(base::MessageLoop::current() == test_->GetIOThreadLoop());
@@ -136,6 +154,7 @@ class ShuntedHttpBridge : public HttpBridge {
     test_->GetIOThreadLoop()->PostTask(FROM_HERE,
         base::Bind(&ShuntedHttpBridge::CallOnURLFetchComplete, this));
   }
+
  private:
   ~ShuntedHttpBridge() override {}
 
@@ -146,16 +165,19 @@ class ShuntedHttpBridge : public HttpBridge {
 
     std::string response_content = "success!";
     net::TestURLFetcher fetcher(0, GURL("http://www.google.com"), NULL);
+    scoped_refptr<net::HttpResponseHeaders> response_headers(
+        new net::HttpResponseHeaders(""));
     fetcher.set_response_code(200);
     fetcher.set_cookies(cookies);
     fetcher.SetResponseString(response_content);
+    fetcher.set_response_headers(response_headers);
     OnURLFetchComplete(&fetcher);
   }
-  SyncHttpBridgeTest* test_;
+  MAYBE_SyncHttpBridgeTest* test_;
   bool never_finishes_;
 };
 
-void SyncHttpBridgeTest::RunSyncThreadBridgeUseTest(
+void MAYBE_SyncHttpBridgeTest::RunSyncThreadBridgeUseTest(
     base::WaitableEvent* signal_when_created,
     base::WaitableEvent* signal_when_released) {
   scoped_refptr<net::URLRequestContextGetter> ctx_getter(
@@ -176,19 +198,18 @@ void SyncHttpBridgeTest::RunSyncThreadBridgeUseTest(
   signal_when_released->Signal();
 }
 
-TEST_F(SyncHttpBridgeTest, TestUsesSameHttpNetworkSession) {
+TEST_F(MAYBE_SyncHttpBridgeTest, TestUsesSameHttpNetworkSession) {
   // Run this test on the IO thread because we can only call
   // URLRequestContextGetter::GetURLRequestContext on the IO thread.
-  io_thread()->message_loop()
-      ->PostTask(FROM_HERE,
-                 base::Bind(&SyncHttpBridgeTest::TestSameHttpNetworkSession,
-                            base::MessageLoop::current(),
-                            this));
+  io_thread()->message_loop()->PostTask(
+      FROM_HERE,
+      base::Bind(&MAYBE_SyncHttpBridgeTest::TestSameHttpNetworkSession,
+                 base::MessageLoop::current(), this));
   base::MessageLoop::current()->Run();
 }
 
 // Test the HttpBridge without actually making any network requests.
-TEST_F(SyncHttpBridgeTest, TestMakeSynchronousPostShunted) {
+TEST_F(MAYBE_SyncHttpBridgeTest, TestMakeSynchronousPostShunted) {
   scoped_refptr<net::URLRequestContextGetter> ctx_getter(
       new net::TestURLRequestContextGetter(io_thread()->task_runner()));
   scoped_refptr<HttpBridge> http_bridge(
@@ -210,13 +231,13 @@ TEST_F(SyncHttpBridgeTest, TestMakeSynchronousPostShunted) {
 
 // Full round-trip test of the HttpBridge, using default UA string and
 // no request cookies.
-TEST_F(SyncHttpBridgeTest, TestMakeSynchronousPostLiveWithPayload) {
+TEST_F(MAYBE_SyncHttpBridgeTest, TestMakeSynchronousPostLiveWithPayload) {
   ASSERT_TRUE(test_server_.Start());
 
   scoped_refptr<HttpBridge> http_bridge(BuildBridge());
 
   std::string payload = "this should be echoed back";
-  GURL echo = test_server_.GetURL("echo");
+  GURL echo = test_server_.GetURL("/echo");
   http_bridge->SetURL(echo.spec().c_str(), echo.IntPort());
   http_bridge->SetPostPayload("application/x-www-form-urlencoded",
                               payload.length() + 1, payload.c_str());
@@ -232,13 +253,49 @@ TEST_F(SyncHttpBridgeTest, TestMakeSynchronousPostLiveWithPayload) {
   EXPECT_EQ(payload, std::string(http_bridge->GetResponseContent()));
 }
 
-// Full round-trip test of the HttpBridge.
-TEST_F(SyncHttpBridgeTest, TestMakeSynchronousPostLiveComprehensive) {
+// Full round-trip test of the HttpBridge with compression, check if header
+// fields("Content-Encoding" ,"Accept-Encoding" and user agent) are set
+// correctly.
+TEST_F(MAYBE_SyncHttpBridgeTest, CompressedRequestHeaderCheck) {
   ASSERT_TRUE(test_server_.Start());
 
   scoped_refptr<HttpBridge> http_bridge(BuildBridge());
 
-  GURL echo_header = test_server_.GetURL("echoall");
+  GURL echo_header = test_server_.GetURL("/echoall");
+  http_bridge->SetURL(echo_header.spec().c_str(), echo_header.IntPort());
+
+  std::string test_payload = "###TEST PAYLOAD###";
+  http_bridge->SetPostPayload("text/html", test_payload.length() + 1,
+                              test_payload.c_str());
+
+  int os_error = 0;
+  int response_code = 0;
+  base::FieldTrialList field_trial_list(new base::MockEntropyProvider());
+  base::FieldTrialList::CreateFieldTrial("SyncHttpContentCompression",
+                                         "Enabled");
+  bool success = http_bridge->MakeSynchronousPost(&os_error, &response_code);
+  EXPECT_TRUE(success);
+  EXPECT_EQ(200, response_code);
+  EXPECT_EQ(0, os_error);
+
+  std::string response(http_bridge->GetResponseContent(),
+                       http_bridge->GetResponseContentLength());
+  EXPECT_NE(std::string::npos,
+            response.find(base::StringPrintf(
+                "%s: %s", net::HttpRequestHeaders::kAcceptEncoding,
+                "gzip, deflate")));
+  EXPECT_NE(std::string::npos,
+            response.find(base::StringPrintf(
+                "%s: %s", net::HttpRequestHeaders::kUserAgent, kUserAgent)));
+}
+
+// Full round-trip test of the HttpBridge.
+TEST_F(MAYBE_SyncHttpBridgeTest, TestMakeSynchronousPostLiveComprehensive) {
+  ASSERT_TRUE(test_server_.Start());
+
+  scoped_refptr<HttpBridge> http_bridge(BuildBridge());
+
+  GURL echo_header = test_server_.GetURL("/echoall");
   http_bridge->SetURL(echo_header.spec().c_str(), echo_header.IntPort());
 
   std::string test_payload = "###TEST PAYLOAD###";
@@ -256,17 +313,21 @@ TEST_F(SyncHttpBridgeTest, TestMakeSynchronousPostLiveComprehensive) {
                        http_bridge->GetResponseContentLength());
   EXPECT_EQ(std::string::npos, response.find("Cookie:"));
   EXPECT_NE(std::string::npos,
+            response.find(base::StringPrintf(
+                "%s: %s", net::HttpRequestHeaders::kAcceptEncoding,
+                "deflate")));
+  EXPECT_NE(std::string::npos,
             response.find(base::StringPrintf("%s: %s",
                           net::HttpRequestHeaders::kUserAgent, kUserAgent)));
   EXPECT_NE(std::string::npos, response.find(test_payload.c_str()));
 }
 
-TEST_F(SyncHttpBridgeTest, TestExtraRequestHeaders) {
+TEST_F(MAYBE_SyncHttpBridgeTest, TestExtraRequestHeaders) {
   ASSERT_TRUE(test_server_.Start());
 
   scoped_refptr<HttpBridge> http_bridge(BuildBridge());
 
-  GURL echo_header = test_server_.GetURL("echoall");
+  GURL echo_header = test_server_.GetURL("/echoall");
 
   http_bridge->SetURL(echo_header.spec().c_str(), echo_header.IntPort());
   http_bridge->SetExtraRequestHeaders("test:fnord");
@@ -289,12 +350,12 @@ TEST_F(SyncHttpBridgeTest, TestExtraRequestHeaders) {
   EXPECT_NE(std::string::npos, response.find(test_payload.c_str()));
 }
 
-TEST_F(SyncHttpBridgeTest, TestResponseHeader) {
+TEST_F(MAYBE_SyncHttpBridgeTest, TestResponseHeader) {
   ASSERT_TRUE(test_server_.Start());
 
   scoped_refptr<HttpBridge> http_bridge(BuildBridge());
 
-  GURL echo_header = test_server_.GetURL("echoall");
+  GURL echo_header = test_server_.GetURL("/echoall");
   http_bridge->SetURL(echo_header.spec().c_str(), echo_header.IntPort());
 
   std::string test_payload = "###TEST PAYLOAD###";
@@ -312,7 +373,7 @@ TEST_F(SyncHttpBridgeTest, TestResponseHeader) {
   EXPECT_TRUE(http_bridge->GetResponseHeaderValue("invalid-header").empty());
 }
 
-TEST_F(SyncHttpBridgeTest, Abort) {
+TEST_F(MAYBE_SyncHttpBridgeTest, Abort) {
   scoped_refptr<net::URLRequestContextGetter> ctx_getter(
       new net::TestURLRequestContextGetter(io_thread()->task_runner()));
   scoped_refptr<ShuntedHttpBridge> http_bridge(
@@ -325,13 +386,13 @@ TEST_F(SyncHttpBridgeTest, Abort) {
 
   io_thread()->task_runner()->PostTask(
       FROM_HERE,
-      base::Bind(&SyncHttpBridgeTest::Abort, http_bridge));
+      base::Bind(&MAYBE_SyncHttpBridgeTest::Abort, http_bridge));
   bool success = http_bridge->MakeSynchronousPost(&os_error, &response_code);
   EXPECT_FALSE(success);
   EXPECT_EQ(net::ERR_ABORTED, os_error);
 }
 
-TEST_F(SyncHttpBridgeTest, AbortLate) {
+TEST_F(MAYBE_SyncHttpBridgeTest, AbortLate) {
   scoped_refptr<net::URLRequestContextGetter> ctx_getter(
       new net::TestURLRequestContextGetter(io_thread()->task_runner()));
   scoped_refptr<ShuntedHttpBridge> http_bridge(
@@ -352,7 +413,7 @@ TEST_F(SyncHttpBridgeTest, AbortLate) {
 // and releases ownership before a pending fetch completed callback is issued by
 // the underlying URLFetcher (and before that URLFetcher is destroyed, which
 // would cancel the callback).
-TEST_F(SyncHttpBridgeTest, AbortAndReleaseBeforeFetchComplete) {
+TEST_F(MAYBE_SyncHttpBridgeTest, AbortAndReleaseBeforeFetchComplete) {
   base::Thread sync_thread("SyncThread");
   sync_thread.Start();
 
@@ -360,7 +421,7 @@ TEST_F(SyncHttpBridgeTest, AbortAndReleaseBeforeFetchComplete) {
   base::WaitableEvent signal_when_created(false, false);
   base::WaitableEvent signal_when_released(false, false);
   sync_thread.message_loop()->PostTask(FROM_HERE,
-      base::Bind(&SyncHttpBridgeTest::RunSyncThreadBridgeUseTest,
+      base::Bind(&MAYBE_SyncHttpBridgeTest::RunSyncThreadBridgeUseTest,
                  base::Unretained(this),
                  &signal_when_created,
                  &signal_when_released));
@@ -418,7 +479,7 @@ void HttpBridgeRunOnSyncThread(
       new syncer::HttpBridgeFactory(baseline_context_getter,
                                     NetworkTimeUpdateCallback(),
                                     factory_cancelation_signal));
-  bridge_factory->Init("test");
+  bridge_factory->Init("test", BindToTrackerCallback());
   *bridge_factory_out = bridge_factory.get();
 
   HttpPostProviderInterface* bridge = bridge_factory->Create();
@@ -438,7 +499,7 @@ void WaitOnIOThread(base::WaitableEvent* signal_wait_start,
 
 // Tests RequestContextGetter is properly released on IO thread even when
 // IO thread stops before sync thread.
-TEST_F(SyncHttpBridgeTest, RequestContextGetterReleaseOrder) {
+TEST_F(MAYBE_SyncHttpBridgeTest, RequestContextGetterReleaseOrder) {
   base::Thread sync_thread("SyncThread");
   sync_thread.Start();
 
@@ -455,11 +516,11 @@ TEST_F(SyncHttpBridgeTest, RequestContextGetterReleaseOrder) {
 
   // Create bridge factory and factory on sync thread and wait for the creation
   // to finish.
-  sync_thread.message_loop()->PostTask(FROM_HERE,
-      base::Bind(&HttpBridgeRunOnSyncThread,
-                 base::Unretained(baseline_context_getter.get()),
-                 &release_request_context_signal ,&factory, &bridge,
-                 &signal_when_created, &wait_for_shutdown));
+  sync_thread.message_loop()->PostTask(
+      FROM_HERE, base::Bind(&HttpBridgeRunOnSyncThread,
+                            base::Unretained(baseline_context_getter.get()),
+                            &release_request_context_signal, &factory, &bridge,
+                            &signal_when_created, &wait_for_shutdown));
   signal_when_created.Wait();
 
   // Simulate sync shutdown by aborting bridge and shutting down factory on
@@ -491,7 +552,7 @@ TEST_F(SyncHttpBridgeTest, RequestContextGetterReleaseOrder) {
 
 // Attempt to release the URLRequestContextGetter before the HttpBridgeFactory
 // is initialized.
-TEST_F(SyncHttpBridgeTest, EarlyAbortFactory) {
+TEST_F(MAYBE_SyncHttpBridgeTest, EarlyAbortFactory) {
   // In a real scenario, the following would happen on many threads.  For
   // simplicity, this test uses only one thread.
 
@@ -512,10 +573,10 @@ TEST_F(SyncHttpBridgeTest, EarlyAbortFactory) {
 
   // Sync thread: Finally run the posted task, only to find that our
   // HttpBridgeFactory has been neutered.  Should not crash.
-  factory->Init("TestUserAgent");
+  factory->Init("TestUserAgent", BindToTrackerCallback());
 
   // At this point, attempting to use the factory would trigger a crash.  Both
   // this test and the real world code should make sure this never happens.
-};
+}
 
 }  // namespace syncer

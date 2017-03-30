@@ -5,6 +5,8 @@
 #ifndef CONTENT_BROWSER_APPCACHE_APPCACHE_RESPONSE_H_
 #define CONTENT_BROWSER_APPCACHE_APPCACHE_RESPONSE_H_
 
+#include <stdint.h>
+
 #include "base/compiler_specific.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
@@ -31,25 +33,27 @@ class CONTENT_EXPORT AppCacheResponseInfo
     : public base::RefCounted<AppCacheResponseInfo> {
  public:
   // AppCacheResponseInfo takes ownership of the http_info.
-  AppCacheResponseInfo(AppCacheStorage* storage, const GURL& manifest_url,
-                       int64 response_id, net::HttpResponseInfo* http_info,
-                       int64 response_data_size);
+  AppCacheResponseInfo(AppCacheStorage* storage,
+                       const GURL& manifest_url,
+                       int64_t response_id,
+                       net::HttpResponseInfo* http_info,
+                       int64_t response_data_size);
 
   const GURL& manifest_url() const { return manifest_url_; }
-  int64 response_id() const { return response_id_; }
+  int64_t response_id() const { return response_id_; }
   const net::HttpResponseInfo* http_response_info() const {
     return http_response_info_.get();
   }
-  int64 response_data_size() const { return response_data_size_; }
+  int64_t response_data_size() const { return response_data_size_; }
 
  private:
   friend class base::RefCounted<AppCacheResponseInfo>;
   virtual ~AppCacheResponseInfo();
 
   const GURL manifest_url_;
-  const int64 response_id_;
+  const int64_t response_id_;
   const scoped_ptr<net::HttpResponseInfo> http_response_info_;
-  const int64 response_data_size_;
+  const int64_t response_data_size_;
   AppCacheStorage* storage_;
 };
 
@@ -73,21 +77,30 @@ class CONTENT_EXPORT AppCacheDiskCacheInterface {
  public:
   class Entry {
    public:
-    virtual int Read(int index, int64 offset, net::IOBuffer* buf, int buf_len,
+    virtual int Read(int index,
+                     int64_t offset,
+                     net::IOBuffer* buf,
+                     int buf_len,
                      const net::CompletionCallback& callback) = 0;
-    virtual int Write(int index, int64 offset, net::IOBuffer* buf, int buf_len,
+    virtual int Write(int index,
+                      int64_t offset,
+                      net::IOBuffer* buf,
+                      int buf_len,
                       const net::CompletionCallback& callback) = 0;
-    virtual int64 GetSize(int index) = 0;
+    virtual int64_t GetSize(int index) = 0;
     virtual void Close() = 0;
    protected:
     virtual ~Entry() {}
   };
 
-  virtual int CreateEntry(int64 key, Entry** entry,
+  virtual int CreateEntry(int64_t key,
+                          Entry** entry,
                           const net::CompletionCallback& callback) = 0;
-  virtual int OpenEntry(int64 key, Entry** entry,
+  virtual int OpenEntry(int64_t key,
+                        Entry** entry,
                         const net::CompletionCallback& callback) = 0;
-  virtual int DoomEntry(int64 key, const net::CompletionCallback& callback) = 0;
+  virtual int DoomEntry(int64_t key,
+                        const net::CompletionCallback& callback) = 0;
 
  protected:
   friend class base::RefCounted<AppCacheDiskCacheInterface>;
@@ -98,11 +111,11 @@ class CONTENT_EXPORT AppCacheDiskCacheInterface {
 class CONTENT_EXPORT AppCacheResponseIO {
  public:
   virtual ~AppCacheResponseIO();
-  int64 response_id() const { return response_id_; }
+  int64_t response_id() const { return response_id_; }
 
  protected:
-  AppCacheResponseIO(int64 response_id,
-                     int64 group_id,
+  AppCacheResponseIO(int64_t response_id,
+                     int64_t group_id,
                      AppCacheDiskCacheInterface* disk_cache);
 
   virtual void OnIOComplete(int result) = 0;
@@ -115,8 +128,8 @@ class CONTENT_EXPORT AppCacheResponseIO {
   void WriteRaw(int index, int offset, net::IOBuffer* buf, int buf_len);
   void OpenEntryIfNeeded();
 
-  const int64 response_id_;
-  const int64 group_id_;
+  const int64_t response_id_;
+  const int64_t group_id_;
   AppCacheDiskCacheInterface* disk_cache_;
   AppCacheDiskCacheInterface::Entry* entry_;
   scoped_refptr<HttpResponseInfoIOBuffer> info_buffer_;
@@ -177,8 +190,8 @@ class CONTENT_EXPORT AppCacheResponseReader
   friend class content::MockAppCacheStorage;
 
   // Should only be constructed by the storage class and derivatives.
-  AppCacheResponseReader(int64 response_id,
-                         int64 group_id,
+  AppCacheResponseReader(int64_t response_id,
+                         int64_t group_id,
                          AppCacheDiskCacheInterface* disk_cache);
 
   void OnIOComplete(int result) override;
@@ -209,8 +222,9 @@ class CONTENT_EXPORT AppCacheResponseWriter
   // negative error code or the number of bytes written. The 'callback' is a
   // required parameter. The contents of 'info_buf' are not modified.
   // Should only be called where there is no Write operation in progress.
-  void WriteInfo(HttpResponseInfoIOBuffer* info_buf,
-                 const net::CompletionCallback& callback);
+  // (virtual for testing)
+  virtual void WriteInfo(HttpResponseInfoIOBuffer* info_buf,
+                         const net::CompletionCallback& callback);
 
   // Writes data to storage. Always returns the result of the write
   // asynchronously through the 'callback'. Returns the number of bytes written
@@ -220,19 +234,21 @@ class CONTENT_EXPORT AppCacheResponseWriter
   // the number of bytes written. The 'callback' is a required parameter.
   // The contents of 'buf' are not modified.
   // Should only be called where there is no Write operation in progress.
-  void WriteData(net::IOBuffer* buf, int buf_len,
-                 const net::CompletionCallback& callback);
+  // (virtual for testing)
+  virtual void WriteData(net::IOBuffer* buf,
+                         int buf_len,
+                         const net::CompletionCallback& callback);
 
   // Returns true if there is a write pending.
   bool IsWritePending() { return IsIOPending(); }
 
   // Returns the amount written, info and data.
-  int64 amount_written() { return info_size_ + write_position_; }
+  int64_t amount_written() { return info_size_ + write_position_; }
 
  protected:
   // Should only be constructed by the storage class and derivatives.
-  AppCacheResponseWriter(int64 response_id,
-                         int64 group_id,
+  AppCacheResponseWriter(int64_t response_id,
+                         int64_t group_id,
                          AppCacheDiskCacheInterface* disk_cache);
 
  private:
@@ -289,8 +305,8 @@ class CONTENT_EXPORT AppCacheResponseMetadataWriter
   friend class AppCacheStorageImpl;
   friend class content::MockAppCacheStorage;
   // Should only be constructed by the storage class and derivatives.
-  AppCacheResponseMetadataWriter(int64 response_id,
-                                 int64 group_id,
+  AppCacheResponseMetadataWriter(int64_t response_id,
+                                 int64_t group_id,
                                  AppCacheDiskCacheInterface* disk_cache);
 
  private:

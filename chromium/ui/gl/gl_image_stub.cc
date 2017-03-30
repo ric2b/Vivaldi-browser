@@ -6,30 +6,36 @@
 
 #include <GL/gl.h>
 
-namespace gfx {
+namespace gl {
 
 GLImageStub::GLImageStub() {}
 
 GLImageStub::~GLImageStub() {}
 
-gfx::Size GLImageStub::GetSize() { return gfx::Size(1, 1); }
+gfx::Size GLImageStub::GetSize() {
+  return gfx::Size(1, 1);
+}
 
 unsigned GLImageStub::GetInternalFormat() { return GL_RGBA; }
 
 bool GLImageStub::BindTexImage(unsigned target) { return true; }
 
+bool GLImageStub::CopyTexImage(unsigned target) {
+  return true;
+}
+
 bool GLImageStub::CopyTexSubImage(unsigned target,
-                                  const Point& offset,
-                                  const Rect& rect) {
+                                  const gfx::Point& offset,
+                                  const gfx::Rect& rect) {
   return true;
 }
 
 bool GLImageStub::ScheduleOverlayPlane(gfx::AcceleratedWidget widget,
                                        int z_order,
-                                       OverlayTransform transform,
-                                       const Rect& bounds_rect,
-                                       const RectF& crop_rect) {
+                                       gfx::OverlayTransform transform,
+                                       const gfx::Rect& bounds_rect,
+                                       const gfx::RectF& crop_rect) {
   return false;
 }
 
-}  // namespace gfx
+}  // namespace gl

@@ -7,6 +7,7 @@
 #include "base/logging.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/active_script_controller.h"
 #include "chrome/browser/extensions/activity_log/activity_log.h"
@@ -164,8 +165,8 @@ void TabHelper::RemoveScriptExecutionObserver(
 
 void TabHelper::SetExtensionApp(const Extension* extension) {
   // Vivaldi is bundled and does not have a valid url.
-  if (extension->name() != "Vivaldi")
-    DCHECK(!extension && AppLaunchInfo::GetFullLaunchURL(extension).is_valid());
+  if (!extension || extension->name() != "Vivaldi")
+    DCHECK(!extension || AppLaunchInfo::GetFullLaunchURL(extension).is_valid());
   if (extension_app_ == extension)
     return;
 
@@ -279,10 +280,10 @@ bool TabHelper::OnMessageReceived(const IPC::Message& message,
                                   content::RenderFrameHost* render_frame_host) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP_WITH_PARAM(TabHelper, message, render_frame_host)
-  IPC_MESSAGE_HANDLER(ExtensionHostMsg_InlineWebstoreInstall,
-                      OnInlineWebstoreInstall)
-  IPC_MESSAGE_HANDLER(ExtensionHostMsg_GetAppInstallState,
-                      OnGetAppInstallState);
+    IPC_MESSAGE_HANDLER(ExtensionHostMsg_InlineWebstoreInstall,
+                        OnInlineWebstoreInstall)
+    IPC_MESSAGE_HANDLER(ExtensionHostMsg_GetAppInstallState,
+                        OnGetAppInstallState)
     IPC_MESSAGE_HANDLER(ExtensionHostMsg_ContentScriptsExecuting,
                         OnContentScriptsExecuting)
     IPC_MESSAGE_UNHANDLED(handled = false)
@@ -400,10 +401,7 @@ void TabHelper::OnInlineWebstoreInstall(content::RenderFrameHost* host,
                    return_route_id);
     scoped_refptr<WebstoreInlineInstaller> installer(
         webstore_inline_installer_factory_->CreateInstaller(
-            web_contents(),
-            webstore_item_id,
-            requestor_url,
-            callback));
+            web_contents(), host, webstore_item_id, requestor_url, callback));
     installer->BeginInstall();
   }
 }

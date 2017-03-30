@@ -25,18 +25,15 @@ void AppBannerClient::registerBannerCallbacks(
 void AppBannerClient::ResolvePromise(int request_id,
                                      const std::string& resolve_platform) {
   blink::WebAppBannerCallbacks* callbacks = callbacks_map_.Lookup(request_id);
-  DCHECK(callbacks);
-
-  scoped_ptr<blink::WebAppBannerPromptResult> result(
-      new blink::WebAppBannerPromptResult(
-          blink::WebString::fromUTF8(resolve_platform),
-          blink::WebAppBannerPromptResult::Outcome::Accepted));
+  if (!callbacks)
+    return;
 
   // If no platform has been set, treat it as dismissal.
-  if (resolve_platform.empty())
-    result->outcome = blink::WebAppBannerPromptResult::Outcome::Dismissed;
-
-  callbacks->onSuccess(result.release());
+  callbacks->onSuccess(blink::WebAppBannerPromptResult(
+      blink::WebString::fromUTF8(resolve_platform),
+      resolve_platform.empty()
+          ? blink::WebAppBannerPromptResult::Outcome::Dismissed
+          : blink::WebAppBannerPromptResult::Outcome::Accepted));
   callbacks_map_.Remove(request_id);
 }
 

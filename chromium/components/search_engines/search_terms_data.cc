@@ -54,10 +54,6 @@ std::string SearchTermsData::GetSuggestRequestIdentifier() const {
   return std::string();
 }
 
-bool SearchTermsData::IsShowingSearchTermsOnSearchResultsPages() const {
-  return false;
-}
-
 std::string SearchTermsData::InstantExtendedEnabledParam(
     bool for_search) const {
   return std::string();
@@ -68,14 +64,14 @@ std::string SearchTermsData::ForceInstantResultsParam(
   return std::string();
 }
 
-int SearchTermsData::OmniboxStartMargin() const {
-  return 0;
-}
-
-std::string SearchTermsData::NTPIsThemedParam() const {
+std::string SearchTermsData::IOSWebViewTypeParam() const {
   return std::string();
 }
 
 std::string SearchTermsData::GoogleImageSearchSource() const {
+  return std::string();
+}
+
+std::string SearchTermsData::GetAcceptLanguages() const {
   return std::string();
 }

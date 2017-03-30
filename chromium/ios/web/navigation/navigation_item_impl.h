@@ -7,7 +7,6 @@
 
 #import <Foundation/Foundation.h>
 
-#include "base/basictypes.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string16.h"
@@ -50,8 +49,6 @@ class NavigationItemImpl : public web::NavigationItem {
   const GURL& GetVirtualURL() const override;
   void SetTitle(const base::string16& title) override;
   const base::string16& GetTitle() const override;
-  void SetPageID(int page_id) override;
-  int32 GetPageID() const override;
   void SetPageDisplayState(const PageDisplayState& display_state) override;
   const PageDisplayState& GetPageDisplayState() const override;
   const base::string16& GetTitleForDisplay(
@@ -116,7 +113,6 @@ class NavigationItemImpl : public web::NavigationItem {
   Referrer referrer_;
   GURL virtual_url_;
   base::string16 title_;
-  int32 page_id_;
   PageDisplayState page_display_state_;
   ui::PageTransition transition_type_;
   FaviconStatus favicon_;

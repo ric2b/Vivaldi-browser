@@ -20,6 +20,69 @@ Polymer({
      * @type {Array<DeviceInfo>}
      */
     devices: Array,
+
+    /**
+     * Set with the selected device when the unlock key dialog is opened.
+     */
+    deviceForDialog_: {
+      type: Object,
+      value: null
+    },
+
+    /**
+     * True if currently toggling a device as an unlock key.
+     */
+    toggleUnlockKeyInProgress_: {
+      type: Boolean,
+      value: false,
+    },
+  },
+
+  /**
+   * Shows the toggle unlock key dialog when the toggle button is pressed for an
+   * item.
+   * @param {Event} event
+   */
+  showUnlockKeyDialog_: function(event) {
+    this.deviceForDialog_ = event.model.item;
+    var dialog = this.querySelector('#unlock-key-dialog');
+    dialog.open();
+  },
+
+  /**
+   * Called when the unlock key dialog button is clicked to make the selected
+   * device an unlock key or remove it as an unlock key.
+   * @param {Event} event
+   */
+  toggleUnlockKey_: function(event) {
+    if (!this.deviceForDialog_)
+      return;
+    this.toggleUnlockKeyInProgress_ = true;
+    CryptAuthInterface.addObserver(this);
+
+    var publicKey = this.deviceForDialog_.publicKey;
+    var makeUnlockKey = !this.deviceForDialog_.unlockKey;
+    CryptAuthInterface.toggleUnlockKey(publicKey, makeUnlockKey);
+  },
+
+  /**
+   * Called when the toggling the unlock key completes, so we can close the
+   * dialog.
+   */
+  onUnlockKeyToggled: function() {
+    this.toggleUnlockKeyInProgress_ = false;
+    CryptAuthInterface.removeObserver(this);
+    var dialog = this.querySelector('#unlock-key-dialog');
+    dialog.close();
+  },
+
+  /**
+   * Handles when the toggle connection button is clicked for a list item.
+   * @param {Event} event
+   */
+  toggleConnection_: function(event) {
+    var deviceInfo = event.model.item;
+    chrome.send('toggleConnection', [deviceInfo.publicKey]);
   },
 
   /**
@@ -92,5 +155,44 @@ Polymer({
       default:
         return 'error';
     };
-  }
+  },
+
+  /**
+   * @param {number} userPresence
+   * @return {string}
+   */
+  getUserPresenceText_: function(userPresence) {
+    var userPresenceMap = {
+      0: 'User Present',
+      1: 'User Absent',
+      2: 'User Presence Unknown',
+    };
+    return userPresenceMap[userPresence];
+  },
+
+  /**
+   * @param {number} screenLock
+   * @return {string}
+   */
+  getScreenLockText_: function(screenLock) {
+    var screenLockMap = {
+      0: 'Secure Screen Lock Enabled',
+      1: 'Secure Screen Lock Disabled',
+      2: 'Secure Screen Lock State Unknown',
+    };
+    return screenLockMap[screenLock];
+  },
+
+  /**
+   * @param {number} trustAgent
+   * @return {string}
+   */
+  getTrustAgentText_: function(trustAgent) {
+    var trustAgentMap = {
+      0: 'Trust Agent Enabled',
+      1: 'Trust Agent Disabled',
+      2: 'Trust Agent Unsupported',
+    };
+    return trustAgentMap[trustAgent];
+  },
 });

@@ -5,15 +5,12 @@
 {
   'targets': [
     {
-      'target_name': 'vivaldi',
+      # GN version: //chrome
+      'target_name': 'chrome',
+      'product_name': 'vivaldi',
       'type': 'none',
       'dependencies': [ 'chrome_initial', ],
       'conditions': [
-        ['OS=="linux" and clang_type_profiler==1', {
-          'dependencies!': [
-            '<(DEPTH)/base/allocator/allocator.gyp:type_profiler',
-          ],
-        }],
         ['OS == "win"', {
           'actions': [
             {
@@ -47,9 +44,13 @@
       ],
     },
     {
-      # GN version: //chrome
+      # GN version: //chrome:chrome_initial
       'target_name': 'chrome_initial',
       'type': 'executable',
+      'dependencies' : [
+        '../chrome/common_constants.gyp:version_header',
+        '../chrome/chrome_features.gyp:chrome_common_features',
+      ],
       # Name the exe chrome.exe, not chrome_initial.exe.
       'product_name': 'vivaldi',
       'mac_bundle': 1,
@@ -57,29 +58,27 @@
         'use_system_xdg_utils%': 0,
         'enable_wexit_time_destructors': 1,
       },
-      'dependencies': [ 
+      'dependencies': [
         '<(VIVALDI)/vivaldi_version_info.gypi:*',
       ],
       'sources': [
         # Note that due to InitializeSandboxInfo, this must be directly linked
         # into chrome.exe, not into a dependent.
-        '<(DEPTH)/content/app/startup_helper_win.cc',
+        '<(DEPTH)/content/app/sandbox_helper_win.cc',
         '<(DEPTH)/content/public/common/content_switches.cc',
         'app/chrome_exe_load_config_win.cc',
         'app/chrome_exe_main_aura.cc',
-        'app/chrome_exe_main_mac.cc',
+        'app/chrome_exe_main_mac.c',
         'app/chrome_exe_main_win.cc',
         'app/chrome_exe_resource.h',
         'app/chrome_watcher_client_win.cc',
         'app/chrome_watcher_client_win.h',
         'app/chrome_watcher_command_line_win.cc',
         'app/chrome_watcher_command_line_win.h',
-        'app/client_util.cc',
-        'app/client_util.h',
         'app/kasko_client.cc',
         'app/kasko_client.h',
-        'app/signature_validator_win.cc',
-        'app/signature_validator_win.h',
+        'app/main_dll_loader_win.cc',
+        'app/main_dll_loader_win.h',
       ],
       'mac_bundle_resources': [
         'app/app-Info.plist',
@@ -95,11 +94,6 @@
         'INFOPLIST_FILE': 'app/app-Info.plist',
       },
       'conditions': [
-        ['order_profiling!=0 and (chromeos==1 or OS=="linux")', {
-          'dependencies' : [
-            '../tools/cygprofile/cygprofile.gyp:cygprofile',
-          ],
-        }],
         ['order_text_section!=""', {
           'target_conditions' : [
             ['_toolset=="target"', {
@@ -113,12 +107,17 @@
             'chrome_watcher',
             'chrome_watcher_client',
             '../components/components.gyp:browser_watcher_client',
+            '../components/components.gyp:crash_component',
+            '../third_party/crashpad/crashpad/handler/handler.gyp:crashpad_handler_lib',
+            '../third_party/kasko/kasko.gyp:kasko',
+          ],
+          'sources': [
+            'app/chrome_crash_reporter_client.cc',
+            'app/chrome_crash_reporter_client.h',
           ],
           'conditions': [
-            ['kasko==1', {
-              'dependencies': [
-                'kasko_dll',
-              ],
+            ['win_console_app==1', {
+              'defines': ['WIN_CONSOLE_APP'],
             }],
           ],
         }],
@@ -190,7 +189,7 @@
                   'files': ['tools/build/linux/chrome-wrapper',
                             '../third_party/xdg-utils/scripts/xdg-mime',
                             '../third_party/xdg-utils/scripts/xdg-settings',
-                            'app/theme/<(branding_path_component)/product_logo_48.png',
+                            '<(VIVALDI)/app/resources/theme/<(branding_path_component)/product_logo_48.png',
                             ],
                 },
               ],
@@ -289,10 +288,9 @@
             'infoplist_strings_tool',
             # On Mac, make sure we've built chrome_dll, which contains all of
             # the library code with Chromium functionality.
-            'chrome_dll',
+            'chrome_dll_dependency_shim',
           ],
           'mac_bundle_resources': [
-            '<(VIVALDI)/third_party/Sparkle-1.9.0/dsa_pub.pem',
             'app/theme/<(branding_path_component)/mac/app.icns',
             'app/theme/<(branding_path_component)/mac/document.icns',
             'browser/ui/cocoa/applescript/scripting.sdef',
@@ -389,47 +387,6 @@
                 '<(version_full)'
               ],
             },
-            {
-              # This postbuid step is responsible for creating the following
-              # helpers:
-              #
-              # For unofficial Chromium branding, Chromium Helper EH.app and
-              # Chromium Helper NP.app are created from Chromium Helper.app.
-              # For official Google Chrome branding, Google Chrome Helper
-              # EH.app and Google Chrome Helper NP.app are created from
-              # Google Chrome Helper.app.
-              #
-              # The EH helper is marked for an executable heap. The NP helper
-              # is marked for no PIE (ASLR).
-              #
-              # Normally, applications shipping as part of offical builds with
-              # Google Chrome branding have dsymutil (dwarf-with-dsym,
-              # mac_real_dsym) and dump_syms (mac_breakpad) run on them to
-              # produce a .dSYM bundle and a Breakpad .sym file. This is
-              # unnecessary for the "More Helpers" because they're identical
-              # to the original helper except for the bits in their Mach-O
-              # headers that change to enable or disable special features.
-              # Each .dSYM is identified by UUID stored in a Mach-O file's
-              # LC_UUID load command. Because the "More Helpers" share a UUID
-              # with the original helper, there's no need to run dsymutil
-              # again. All helpers can share the same .dSYM. Special handling
-              # is performed in chrome/tools/build/mac/dump_product_syms to
-              # prepare their Breakpad symbol files.
-              'postbuild_name': 'Make More Helpers',
-              'action': [
-                '../build/mac/make_more_helpers.sh',
-                'Versions/<(version_full)',
-                '<(mac_product_name)',
-              ],
-            },
-            {
-              # Make sure there isn't any Objective-C in the browser app's
-              # executable.
-              'postbuild_name': 'Verify No Objective-C',
-              'action': [
-                '../build/mac/verify_no_objc.sh',
-              ],
-            },
           ],  # postbuilds
         }, {  # OS != "mac"
           'conditions': [
@@ -442,7 +399,7 @@
             # "chrome" etc.; should we try to extract from there instead?
           ],
           'dependencies': [
-            '../components/components.gyp:startup_metric_utils',
+            '../components/components.gyp:startup_metric_utils_browser',
             'chrome_resources.gyp:packed_extra_resources',
             'chrome_resources.gyp:packed_resources',
             # Copy Flash Player files to PRODUCT_DIR if applicable. Let the .gyp
@@ -486,22 +443,24 @@
             'chrome_process_finder',
             'chrome_version_resources',
             'installer_util',
-            'image_pre_reader',
+            'file_pre_reader',
             '../base/base.gyp:base',
             '../crypto/crypto.gyp:crypto',
             '../breakpad/breakpad.gyp:breakpad_handler',
             '../breakpad/breakpad.gyp:breakpad_sender',
             '../chrome_elf/chrome_elf.gyp:chrome_elf',
             '../components/components.gyp:crash_component',
+            '../components/components.gyp:crash_core_common',
+            '../components/components.gyp:flags_ui_switches',
+            '../components/components.gyp:startup_metric_utils_common',
             '../sandbox/sandbox.gyp:sandbox',
+            '../third_party/kasko/kasko.gyp:kasko_features',
             '../ui/gfx/gfx.gyp:gfx',
             '../win8/metro_driver/metro_driver.gyp:metro_driver',
             '../win8/delegate_execute/delegate_execute.gyp:*',
           ],
           'sources': [
             '<(SHARED_INTERMEDIATE_DIR)/chrome_version/chrome_exe_version.rc',
-            'app/chrome_crash_reporter_client.cc',
-            'app/chrome_crash_reporter_client.h',
             'app/chrome_exe.rc',
             'common/crash_keys.cc',
             'common/crash_keys.h',
@@ -512,7 +471,6 @@
           ],
           'msvs_settings': {
             'VCLinkerTool': {
-              'ImportLibrary': '$(OutDir)\\lib\\chrome_exe.lib',
               'OutputFile': '$(OutDir)\\initialexe\\vivaldi.exe',
               'DelayLoadDLLs': [
                 'dbghelp.dll',
@@ -521,21 +479,17 @@
                 'ole32.dll',
                 'oleaut32.dll',
               ],
-              'AdditionalDependencies': [
-                'wintrust.lib',
-                'crypt32.lib'
-              ],
               'conditions': [
-                ['asan==0', {
-                  # Set /SUBSYSTEM:WINDOWS for chrome.exe itself, except for the
-                  # AddressSanitizer build where console output is important.
+                ['win_console_app==0', {
+                  # Set /SUBSYSTEM:WINDOWS for chrome.exe itself, unless a
+                  # console build has been requested.
                   'SubSystem': '2',
                 }],
               ],
             },
             'VCManifestTool': {
               'AdditionalManifestFiles': [
-                '$(ProjectDir)\\app\\vivaldi.exe.manifest',
+                '<(VIVALDI)\\app\\vivaldi.exe.manifest',
                 '<(SHARED_INTERMEDIATE_DIR)/chrome/app/version_assembly/version_assembly.manifest',
               ],
             },
@@ -560,21 +514,19 @@
               'message': 'Copy first run complete sentinel file',
             },
             {
+              # GN version: //chrome/app/version_assembly:chrome_exe_manifest
               'action_name': 'chrome_exe_manifest',
               'includes': [
                   'app/version_assembly/chrome_exe_manifest_action.gypi',
               ],
             },
             {
+              # GN version: //chrome/app/version_assembly:version_assembly_manifest
               'action_name': 'version_assembly_manifest',
               'includes': [
                   'app/version_assembly/version_assembly_manifest_action.gypi',
               ],
             },
-          ],
-        }, {  # 'OS!="win"
-          'sources!': [
-            'app/client_util.cc',
           ],
         }],
         ['OS=="win" and component=="shared_library"', {
@@ -587,11 +539,11 @@
     ['OS=="win"', {
       'targets': [
         {
-          'target_name': 'image_pre_reader',
+          'target_name': 'file_pre_reader',
           'type': 'static_library',
           'sources': [
-            'app/image_pre_reader_win.cc',
-            'app/image_pre_reader_win.h',
+            'app/file_pre_reader_win.cc',
+            'app/file_pre_reader_win.h',
           ],
           'dependencies': [
              '../base/base.gyp:base',
@@ -606,7 +558,7 @@
               'type': 'executable',
               'product_name': 'nacl64',
               'sources': [
-                '../content/app/startup_helper_win.cc',
+                '../content/app/sandbox_helper_win.cc',
                 '../content/common/sandbox_init_win.cc',
                 '../content/common/sandbox_win.cc',
                 '../content/public/common/content_switches.cc',
@@ -626,6 +578,8 @@
                 '../breakpad/breakpad.gyp:breakpad_handler_win64',
                 '../breakpad/breakpad.gyp:breakpad_sender_win64',
                 '../components/components.gyp:breakpad_win64',
+                '../components/components.gyp:crash_core_common_win64',
+                '../components/components.gyp:flags_ui_switches_win64',
                 '../chrome/common_constants.gyp:common_constants_win64',
                 '../components/nacl.gyp:nacl_win64',
                 '../crypto/crypto.gyp:crypto_nacl_win64',
@@ -676,7 +630,7 @@
           'target_name': 'chrome_run',
           'type': 'none',
           'dependencies': [
-            'vivaldi',
+            'chrome',
             # Runtime dependencies
             '../third_party/mesa/mesa.gyp:osmesa',
           ],

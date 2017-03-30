@@ -4,6 +4,8 @@
 
 #include "media/filters/ffmpeg_h264_to_annex_b_bitstream_converter.h"
 
+#include <stdint.h>
+
 #include "base/logging.h"
 #include "media/ffmpeg/ffmpeg_common.h"
 #include "media/formats/mp4/box_definitions.h"
@@ -41,7 +43,7 @@ bool FFmpegH264ToAnnexBBitstreamConverter::ConvertPacket(AVPacket* packet) {
     }
   }
 
-  uint32 output_packet_size = converter_.CalculateNeededOutputBufferSize(
+  uint32_t output_packet_size = converter_.CalculateNeededOutputBufferSize(
       packet->data, packet->size, avc_config.get());
 
   if (output_packet_size == 0)
@@ -59,7 +61,7 @@ bool FFmpegH264ToAnnexBBitstreamConverter::ConvertPacket(AVPacket* packet) {
 
   // Proceed with the conversion of the actual in-band NAL units, leave room
   // for configuration in the beginning.
-  uint32 io_size = dest_packet.size;
+  uint32_t io_size = dest_packet.size;
   if (!converter_.ConvertNalUnitStreamToByteStream(
           packet->data, packet->size,
           avc_config.get(),
@@ -71,7 +73,7 @@ bool FFmpegH264ToAnnexBBitstreamConverter::ConvertPacket(AVPacket* packet) {
     configuration_processed_ = true;
 
   // At the end we must destroy the old packet.
-  av_free_packet(packet);
+  av_packet_unref(packet);
   *packet = dest_packet;  // Finally, replace the values in the input packet.
 
   return true;

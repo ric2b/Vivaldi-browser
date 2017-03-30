@@ -21,6 +21,7 @@ import sys
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 SRC_DIR = os.path.dirname(os.path.dirname(THIS_DIR))
+BLINK_DIR = os.path.join(SRC_DIR, 'third_party', 'WebKit')
 sys.path.insert(0, os.path.join(SRC_DIR, 'third_party', 'colorama', 'src'))
 
 import colorama
@@ -40,7 +41,6 @@ SKIP = {
   # http://crbug.com/480053
   'Linux GN',
   'Linux GN (dbg)',
-  'linux_chromium_gn_rel',
 
   # Unmaintained builders on chromium.fyi
   'ClangToTMac',
@@ -57,12 +57,26 @@ SKIP = {
 }
 
 
-# TODO(GYP): These targets have not been ported to GN yet.
-SKIP_NINJA_TO_GN_TARGETS = {
+SKIP_GN_ISOLATE_MAP_TARGETS = {
+  # TODO(GYP): These targets have not been ported to GN yet.
+  'android_webview_unittests',
   'cast_media_unittests',
   'cast_shell_browser_test',
   'chromevox_tests',
   'nacl_helper_nonsfi_unittests',
+
+  # These targets are run on the bots but not listed in the
+  # buildbot JSON files.
+  'angle_end2end_tests',
+  'content_gl_tests',
+  'gl_tests',
+  'gl_unittests',
+  'gles2_conform_test',
+  'tab_capture_end2end_tests',
+  'telemetry_gpu_test',
+  'telemetry_gpu_unittests',
+  'telemetry_perf_unittests',
+  'telemetry_unittests',
 }
 
 
@@ -72,7 +86,11 @@ class Error(Exception):
 
 def get_isolates():
   """Returns the list of all isolate files."""
-  files = subprocess.check_output(['git', 'ls-files'], cwd=SRC_DIR).splitlines()
+
+  def git_ls_files(cwd):
+    return subprocess.check_output(['git', 'ls-files'], cwd=cwd).splitlines()
+
+  files = git_ls_files(SRC_DIR) + git_ls_files(BLINK_DIR)
   return [os.path.basename(f) for f in files if f.endswith('.isolate')]
 
 
@@ -137,8 +155,8 @@ def process_file(mode, test_name, tests_location, filepath, ninja_targets,
 
     for d in data['gtest_tests']:
       if (d['test'] not in ninja_targets and
-          d['test'] not in SKIP_NINJA_TO_GN_TARGETS):
-        raise Error('%s: %s / %s is not listed in ninja_to_gn.pyl.' %
+          d['test'] not in SKIP_GN_ISOLATE_MAP_TARGETS):
+        raise Error('%s: %s / %s is not listed in gn_isolate_map.pyl.' %
                     (filename, builder, d['test']))
       elif d['test'] in ninja_targets:
         ninja_targets_seen.add(d['test'])
@@ -268,8 +286,9 @@ def main():
         'count_run_local': 0, 'count_run_on_swarming': 0, 'local_configs': {}
       })
 
-  with open(os.path.join(THIS_DIR, "ninja_to_gn.pyl")) as fp:
-    ninja_targets = ast.literal_eval(fp.read())
+  with open(os.path.join(THIS_DIR, "gn_isolate_map.pyl")) as fp:
+    gn_isolate_map = ast.literal_eval(fp.read())
+    ninja_targets = {k: v['label'] for k, v in gn_isolate_map.items()}
 
   try:
     result = 0
@@ -279,14 +298,15 @@ def main():
                           ninja_targets, ninja_targets_seen):
         result = 1
 
-    extra_targets = set(ninja_targets) - ninja_targets_seen
+    extra_targets = (set(ninja_targets) - ninja_targets_seen -
+                     SKIP_GN_ISOLATE_MAP_TARGETS)
     if extra_targets:
       if len(extra_targets) > 1:
         extra_targets_str = ', '.join(extra_targets) + ' are'
       else:
         extra_targets_str = list(extra_targets)[0] + ' is'
-      raise Error('%s listed in ninja_to_gn.pyl but not in any .json files' %
-                  extra_targets_str)
+      raise Error('%s listed in gn_isolate_map.pyl but not in any .json '
+                  'files' % extra_targets_str)
 
     if args.mode == 'convert':
       print_convert(args.test_name, tests_location)

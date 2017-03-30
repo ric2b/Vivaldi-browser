@@ -10,12 +10,11 @@
 #include <shellapi.h>
 #include <shlobj.h>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
-#include "base/memory/shared_memory.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/stl_util.h"
@@ -161,10 +160,10 @@ HGLOBAL CreateGlobalData(const std::basic_string<charT>& str) {
   return data;
 }
 
-bool BitmapHasInvalidPremultipliedColors(const SkBitmap& bitmap) {
-  for (int x = 0; x < bitmap.width(); ++x) {
-    for (int y = 0; y < bitmap.height(); ++y) {
-      uint32_t pixel = *bitmap.getAddr32(x, y);
+bool BitmapHasInvalidPremultipliedColors(const SkPixmap& pixmap) {
+  for (int x = 0; x < pixmap.width(); ++x) {
+    for (int y = 0; y < pixmap.height(); ++y) {
+      uint32_t pixel = *pixmap.addr32(x, y);
       if (SkColorGetR(pixel) > SkColorGetA(pixel) ||
           SkColorGetG(pixel) > SkColorGetA(pixel) ||
           SkColorGetB(pixel) > SkColorGetA(pixel))
@@ -174,10 +173,10 @@ bool BitmapHasInvalidPremultipliedColors(const SkBitmap& bitmap) {
   return false;
 }
 
-void MakeBitmapOpaque(const SkBitmap& bitmap) {
-  for (int x = 0; x < bitmap.width(); ++x) {
-    for (int y = 0; y < bitmap.height(); ++y) {
-      *bitmap.getAddr32(x, y) = SkColorSetA(*bitmap.getAddr32(x, y), 0xFF);
+void MakeBitmapOpaque(SkPixmap* pixmap) {
+  for (int x = 0; x < pixmap->width(); ++x) {
+    for (int y = 0; y < pixmap->height(); ++y) {
+      *pixmap->writable_addr32(x, y) = SkColorSetA(*pixmap->addr32(x, y), 0xFF);
     }
   }
 }
@@ -419,7 +418,7 @@ ClipboardWin::ClipboardWin() {
 ClipboardWin::~ClipboardWin() {
 }
 
-uint64 ClipboardWin::GetSequenceNumber(ClipboardType type) const {
+uint64_t ClipboardWin::GetSequenceNumber(ClipboardType type) const {
   DCHECK_EQ(type, CLIPBOARD_TYPE_COPY_PASTE);
   return ::GetClipboardSequenceNumber();
 }
@@ -521,8 +520,8 @@ void ClipboardWin::ReadAsciiText(ClipboardType type,
 void ClipboardWin::ReadHTML(ClipboardType type,
                             base::string16* markup,
                             std::string* src_url,
-                            uint32* fragment_start,
-                            uint32* fragment_end) const {
+                            uint32_t* fragment_start,
+                            uint32_t* fragment_end) const {
   DCHECK_EQ(type, CLIPBOARD_TYPE_COPY_PASTE);
 
   markup->clear();
@@ -566,8 +565,8 @@ void ClipboardWin::ReadHTML(ClipboardType type,
   offsets.push_back(end_index - html_start);
   markup->assign(base::UTF8ToUTF16AndAdjustOffsets(cf_html.data() + html_start,
                                                    &offsets));
-  *fragment_start = base::checked_cast<uint32>(offsets[0]);
-  *fragment_end = base::checked_cast<uint32>(offsets[1]);
+  *fragment_start = base::checked_cast<uint32_t>(offsets[0]);
+  *fragment_end = base::checked_cast<uint32_t>(offsets[1]);
 }
 
 void ClipboardWin::ReadRTF(ClipboardType type, std::string* result) const {
@@ -632,14 +631,13 @@ SkBitmap ClipboardWin::ReadImage(ClipboardType type) const {
   // we assume the alpha channel contains garbage and force the bitmap to be
   // opaque as well. Note that this  heuristic will fail on a transparent bitmap
   // containing only black pixels...
-  const SkBitmap& device_bitmap =
-      canvas.sk_canvas()->getDevice()->accessBitmap(true);
+  SkPixmap device_pixels;
+  skia::GetWritablePixels(canvas.sk_canvas(), &device_pixels);
   {
-    SkAutoLockPixels lock(device_bitmap);
     bool has_invalid_alpha_channel = bitmap->bmiHeader.biBitCount < 32 ||
-        BitmapHasInvalidPremultipliedColors(device_bitmap);
+        BitmapHasInvalidPremultipliedColors(device_pixels);
     if (has_invalid_alpha_channel) {
-      MakeBitmapOpaque(device_bitmap);
+      MakeBitmapOpaque(&device_pixels);
     }
   }
 

@@ -5,10 +5,12 @@
 #ifndef CHROMECAST_APP_LINUX_CAST_CRASH_REPORTER_CLIENT_H_
 #define CHROMECAST_APP_LINUX_CAST_CRASH_REPORTER_CLIENT_H_
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/macros.h"
-#include "components/crash/app/crash_reporter_client.h"
+#include "components/crash/content/app/crash_reporter_client.h"
 
 namespace chromecast {
 

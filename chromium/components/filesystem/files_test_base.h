@@ -7,16 +7,22 @@
 
 #include "base/macros.h"
 #include "components/filesystem/public/interfaces/file_system.mojom.h"
-#include "mojo/application/public/cpp/application_test_base.h"
+#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/shell/public/cpp/application_test_base.h"
 
 namespace filesystem {
 
-class FilesTestBase : public mojo::test::ApplicationTestBase {
+class FilesTestBase : public mojo::test::ApplicationTestBase,
+                      public filesystem::FileSystemClient {
  public:
   FilesTestBase();
   ~FilesTestBase() override;
 
+  // Overridden from mojo::test::ApplicationTestBase:
   void SetUp() override;
+
+  // Overridden from FileSystemClient:
+  void OnFileSystemShutdown() override;
 
  protected:
   // Note: This has an out parameter rather than returning the |DirectoryPtr|,
@@ -26,6 +32,7 @@ class FilesTestBase : public mojo::test::ApplicationTestBase {
   FileSystemPtr& files() { return files_; }
 
  private:
+  mojo::Binding<filesystem::FileSystemClient> binding_;
   FileSystemPtr files_;
 
   DISALLOW_COPY_AND_ASSIGN(FilesTestBase);

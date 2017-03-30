@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_VIEWS_TABS_BROWSER_TAB_STRIP_CONTROLLER_H_
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_change_registrar.h"
 #include "chrome/browser/ui/tabs/hover_tab_selector.h"
@@ -45,7 +46,7 @@ class BrowserTabStripController : public TabStripController,
   bool IsTabPinned(Tab* tab) const;
 
   // TabStripController implementation:
-  const ui::ListSelectionModel& GetSelectionModel() override;
+  const ui::ListSelectionModel& GetSelectionModel() const override;
   int GetCount() const override;
   bool IsValidIndex(int model_index) const override;
   bool IsActiveTab(int model_index) const override;

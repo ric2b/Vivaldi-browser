@@ -9,42 +9,17 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/process/process.h"
 #include "base/process/process_iterator.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/test/base/test_switches.h"
 #include "content/public/common/result_codes.h"
 
 using base::TimeDelta;
 using base::TimeTicks;
-
-namespace {
-
-// Returns the executable name of the current Chrome helper process.
-std::vector<base::FilePath::StringType> GetRunningHelperExecutableNames() {
-  base::FilePath::StringType name = chrome::kHelperProcessExecutableName;
-
-  std::vector<base::FilePath::StringType> names;
-  names.push_back(name);
-
-#if defined(OS_MACOSX)
-  // The helper might show up as these different flavors depending on the
-  // executable flags required.
-  for (const char* const* suffix = chrome::kHelperFlavorSuffixes;
-       *suffix;
-       ++suffix) {
-    std::string flavor_name(name);
-    flavor_name.append(1, ' ');
-    flavor_name.append(*suffix);
-    names.push_back(flavor_name);
-  }
-#endif
-
-  return names;
-}
-
-}  // namespace
 
 void TerminateAllChromeProcesses(const ChromeProcessList& process_pids) {
   ChromeProcessList::const_iterator it;
@@ -106,15 +81,11 @@ ChromeProcessList GetRunningChromeProcesses(base::ProcessId browser_pid) {
   // on Linux via /proc/self/exe, so they end up with a different
   // name.  We must collect them in a second pass.
   {
-    std::vector<base::FilePath::StringType> names =
-        GetRunningHelperExecutableNames();
-    for (size_t i = 0; i < names.size(); ++i) {
-      base::FilePath::StringType name = names[i];
-      ChildProcessFilter filter(browser_pid);
-      base::NamedProcessIterator it(name, &filter);
-      while (const base::ProcessEntry* process_entry = it.NextProcessEntry())
-        result.push_back(process_entry->pid());
-    }
+    base::FilePath::StringType name = chrome::kHelperProcessExecutableName;
+    ChildProcessFilter filter(browser_pid);
+    base::NamedProcessIterator it(name, &filter);
+    while (const base::ProcessEntry* process_entry = it.NextProcessEntry())
+      result.push_back(process_entry->pid());
   }
 #endif  // defined(OS_POSIX)
 

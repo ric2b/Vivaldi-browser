@@ -5,6 +5,7 @@
 #include "chrome/browser/themes/theme_service_aurax11.h"
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/themes/custom_theme_supplier.h"
@@ -22,6 +23,7 @@ class SystemThemeX11 : public CustomThemeSupplier {
   // Overridden from CustomThemeSupplier:
   void StartUsingTheme() override;
   void StopUsingTheme() override;
+  bool GetTint(int id, color_utils::HSL* hsl) const override;
   bool GetColor(int id, SkColor* color) const override;
   gfx::Image GetImageNamed(int id) override;
   bool HasCustomImage(int id) const override;
@@ -52,6 +54,10 @@ void SystemThemeX11::StopUsingTheme() {
   // Have the former theme notify its observers of change.
   if (linux_ui_)
     linux_ui_->GetNativeTheme(NULL)->NotifyObservers();
+}
+
+bool SystemThemeX11::GetTint(int id, color_utils::HSL* hsl) const {
+  return linux_ui_ && linux_ui_->GetTint(id, hsl);
 }
 
 bool SystemThemeX11::GetColor(int id, SkColor* color) const {

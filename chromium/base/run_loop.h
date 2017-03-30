@@ -7,8 +7,10 @@
 
 #include "base/base_export.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
+#include "build/build_config.h"
 
 namespace base {
 #if defined(OS_ANDROID)
@@ -38,8 +40,8 @@ class BASE_EXPORT RunLoop {
 
   // Run the current MessageLoop. This blocks until Quit is called. Before
   // calling Run, be sure to grab an AsWeakPtr or the QuitClosure in order to
-  // stop the MessageLoop asynchronously. MessageLoop::Quit and QuitNow will
-  // also trigger a return from Run, but those are deprecated.
+  // stop the MessageLoop asynchronously. MessageLoop::QuitWhenIdle and QuitNow
+  // will also trigger a return from Run, but those are deprecated.
   void Run();
 
   // Run the current MessageLoop until it doesn't find any tasks or messages in

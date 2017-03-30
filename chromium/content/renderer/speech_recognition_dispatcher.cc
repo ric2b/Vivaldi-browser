@@ -4,7 +4,10 @@
 
 #include "content/renderer/speech_recognition_dispatcher.h"
 
-#include "base/basictypes.h"
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/strings/utf_string_conversions.h"
 #include "content/common/speech_recognition_messages.h"
 #include "content/renderer/render_view_impl.h"
@@ -97,10 +100,12 @@ void SpeechRecognitionDispatcher::start(
   for (size_t i = 0; i < params.grammars().size(); ++i) {
     const WebSpeechGrammar& grammar = params.grammars()[i];
     msg_params.grammars.push_back(
-        SpeechRecognitionGrammar(grammar.src().spec(), grammar.weight()));
+        SpeechRecognitionGrammar(grammar.src().string().utf8(),
+                                 grammar.weight()));
   }
-  msg_params.language = base::UTF16ToUTF8(params.language());
-  msg_params.max_hypotheses = static_cast<uint32>(params.maxAlternatives());
+  msg_params.language =
+      base::UTF16ToUTF8(base::StringPiece16(params.language()));
+  msg_params.max_hypotheses = static_cast<uint32_t>(params.maxAlternatives());
   msg_params.continuous = params.continuous();
   msg_params.interim_results = params.interimResults();
   msg_params.origin_url = params.origin().toString().utf8();
@@ -271,7 +276,7 @@ void SpeechRecognitionDispatcher::OnAudioReceiverReady(
       base::SyncSocket::UnwrapHandle(descriptor)));
 
   speech_audio_sink_.reset(new SpeechRecognitionAudioSink(
-      audio_track_, params, memory, socket.Pass(),
+      audio_track_, params, memory, std::move(socket),
       base::Bind(&SpeechRecognitionDispatcher::ResetAudioSink,
                  base::Unretained(this))));
 #endif

@@ -17,14 +17,14 @@ namespace cc {
 SurfaceDisplayOutputSurface::SurfaceDisplayOutputSurface(
     SurfaceManager* surface_manager,
     SurfaceIdAllocator* allocator,
-    const scoped_refptr<ContextProvider>& context_provider)
-    : OutputSurface(context_provider),
+    const scoped_refptr<ContextProvider>& context_provider,
+    const scoped_refptr<ContextProvider>& worker_context_provider)
+    : OutputSurface(context_provider, worker_context_provider),
       display_client_(NULL),
       factory_(surface_manager, this),
       allocator_(allocator) {
   factory_.set_needs_sync_points(false);
   capabilities_.delegated_rendering = true;
-  capabilities_.max_frames_pending = 1;
   capabilities_.adjust_deadline_for_parent = true;
   capabilities_.can_force_reclaim_resources = true;
   // Display and SurfaceDisplayOutputSurface share a GL context, so sync
@@ -63,8 +63,8 @@ void SurfaceDisplayOutputSurface::SwapBuffers(CompositorFrame* frame) {
 
   scoped_ptr<CompositorFrame> frame_copy(new CompositorFrame());
   frame->AssignTo(frame_copy.get());
-  factory_.SubmitFrame(
-      surface_id_, frame_copy.Pass(),
+  factory_.SubmitCompositorFrame(
+      surface_id_, std::move(frame_copy),
       base::Bind(&SurfaceDisplayOutputSurface::SwapBuffersComplete,
                  base::Unretained(this)));
 }
@@ -80,7 +80,8 @@ bool SurfaceDisplayOutputSurface::BindToClient(OutputSurfaceClient* client) {
 
 void SurfaceDisplayOutputSurface::ForceReclaimResources() {
   if (!surface_id_.is_null())
-    factory_.SubmitFrame(surface_id_, nullptr, SurfaceFactory::DrawCallback());
+    factory_.SubmitCompositorFrame(surface_id_, nullptr,
+                                   SurfaceFactory::DrawCallback());
 }
 
 void SurfaceDisplayOutputSurface::ReturnResources(
@@ -89,6 +90,12 @@ void SurfaceDisplayOutputSurface::ReturnResources(
   ack.resources = resources;
   if (client_)
     client_->ReclaimResources(&ack);
+}
+
+void SurfaceDisplayOutputSurface::SetBeginFrameSource(
+    SurfaceId surface_id,
+    BeginFrameSource* begin_frame_source) {
+  // TODO(tansell): Hook this up.
 }
 
 void SurfaceDisplayOutputSurface::SwapBuffersComplete(SurfaceDrawStatus drawn) {

@@ -4,21 +4,24 @@
 
 #include "components/policy/core/common/schema.h"
 
+#include <limits.h>
+#include <stddef.h>
+
 #include <algorithm>
 #include <climits>
 #include <map>
 #include <utility>
 
 #include "base/compiler_specific.h"
-#include "base/containers/scoped_ptr_map.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/memory/scoped_vector.h"
+#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "components/json_schema/json_schema_constants.h"
 #include "components/json_schema/json_schema_validator.h"
 #include "components/policy/core/common/schema_internal.h"
-#include "third_party/re2/re2/re2.h"
+#include "third_party/re2/src/re2/re2.h"
 
 namespace schema = json_schema_constants;
 
@@ -247,7 +250,7 @@ class Schema::InternalStorage
 
   // Cache for CompileRegex(), will memorize return value of every call to
   // CompileRegex() and return results directly next time.
-  mutable base::ScopedPtrMap<std::string, scoped_ptr<re2::RE2>> regex_cache_;
+  mutable std::map<std::string, scoped_ptr<re2::RE2>> regex_cache_;
 
   SchemaData schema_data_;
   std::vector<std::string> strings_;
@@ -331,26 +334,25 @@ Schema::InternalStorage::ParseSchema(const base::DictionaryValue& schema,
     return NULL;
 
   SchemaData* data = &storage->schema_data_;
-  data->schema_nodes = vector_as_array(&storage->schema_nodes_);
-  data->property_nodes = vector_as_array(&storage->property_nodes_);
-  data->properties_nodes = vector_as_array(&storage->properties_nodes_);
-  data->restriction_nodes = vector_as_array(&storage->restriction_nodes_);
-  data->int_enums = vector_as_array(&storage->int_enums_);
-  data->string_enums = vector_as_array(&storage->string_enums_);
+  data->schema_nodes = storage->schema_nodes_.data();
+  data->property_nodes = storage->property_nodes_.data();
+  data->properties_nodes = storage->properties_nodes_.data();
+  data->restriction_nodes = storage->restriction_nodes_.data();
+  data->int_enums = storage->int_enums_.data();
+  data->string_enums = storage->string_enums_.data();
   return storage;
 }
 
 re2::RE2* Schema::InternalStorage::CompileRegex(
     const std::string& pattern) const {
-  base::ScopedPtrMap<std::string, scoped_ptr<re2::RE2>>::const_iterator it =
-      regex_cache_.find(pattern);
+  auto it = regex_cache_.find(pattern);
   if (it == regex_cache_.end()) {
     scoped_ptr<re2::RE2> compiled(new re2::RE2(pattern));
     re2::RE2* compiled_ptr = compiled.get();
-    regex_cache_.insert(pattern, compiled.Pass());
+    regex_cache_.insert(std::make_pair(pattern, std::move(compiled)));
     return compiled_ptr;
   }
-  return it->second;
+  return it->second.get();
 }
 
 // static

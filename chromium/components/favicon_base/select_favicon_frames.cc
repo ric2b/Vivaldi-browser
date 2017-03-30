@@ -10,6 +10,7 @@
 #include <map>
 #include <set>
 
+#include "base/macros.h"
 #include "components/favicon_base/favicon_util.h"
 #include "skia/ext/image_operations.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -42,8 +43,7 @@ SkBitmap SampleNearestNeighbor(const SkBitmap& contents, int desired_size) {
   {
     SkCanvas canvas(bitmap);
     canvas.drawBitmapRect(
-        contents, NULL,
-        SkRect::MakeFromIRect(SkIRect::MakeWH(desired_size, desired_size)));
+        contents, SkRect::MakeIWH(desired_size, desired_size), NULL);
   }
 
   return bitmap;

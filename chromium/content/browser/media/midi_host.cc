@@ -33,11 +33,11 @@ const size_t kMaxInFlightBytes = 10 * 1024 * 1024;  // 10 MB.
 // how many bytes will be sent before reporting back to the renderer.
 const size_t kAcknowledgementThresholdBytes = 1024 * 1024;  // 1 MB.
 
-bool IsDataByte(uint8 data) {
+bool IsDataByte(uint8_t data) {
   return (data & 0x80) == 0;
 }
 
-bool IsSystemRealTimeMessage(uint8 data) {
+bool IsSystemRealTimeMessage(uint8_t data) {
   return 0xf8 <= data && data <= 0xff;
 }
 
@@ -56,13 +56,22 @@ MidiHost::MidiHost(int renderer_process_id,
       sent_bytes_in_flight_(0),
       bytes_sent_since_last_acknowledgement_(0),
       output_port_count_(0) {
-  CHECK(midi_manager_);
+  DCHECK(midi_manager_);
 }
 
-MidiHost::~MidiHost() {
-  // Close an open session, or abort opening a session.
-  if (is_session_requested_)
+MidiHost::~MidiHost() = default;
+
+void MidiHost::OnChannelClosing() {
+  // If we get here the MidiHost is going to be destroyed soon. Prevent any
+  // subsequent calls from MidiManager by closing our session.
+  // If Send() is called from a different thread (e.g. a separate thread owned
+  // by the MidiManager implementation), it will get posted to the IO thread.
+  // There is a race condition here if our refcount is 0 and we're about to or
+  // have already entered OnDestruct().
+  if (is_session_requested_ && midi_manager_) {
     midi_manager_->EndSession(this);
+    is_session_requested_ = false;
+  }
 }
 
 void MidiHost::OnDestruct() const {
@@ -84,11 +93,12 @@ bool MidiHost::OnMessageReceived(const IPC::Message& message) {
 
 void MidiHost::OnStartSession() {
   is_session_requested_ = true;
-  midi_manager_->StartSession(this);
+  if (midi_manager_)
+    midi_manager_->StartSession(this);
 }
 
-void MidiHost::OnSendData(uint32 port,
-                          const std::vector<uint8>& data,
+void MidiHost::OnSendData(uint32_t port,
+                          const std::vector<uint8_t>& data,
                           double timestamp) {
   {
     base::AutoLock auto_lock(output_port_count_lock_);
@@ -122,12 +132,14 @@ void MidiHost::OnSendData(uint32 port,
       return;
     sent_bytes_in_flight_ += data.size();
   }
-  midi_manager_->DispatchSendMidiData(this, port, data, timestamp);
+  if (midi_manager_)
+    midi_manager_->DispatchSendMidiData(this, port, data, timestamp);
 }
 
 void MidiHost::OnEndSession() {
   is_session_requested_ = false;
-  midi_manager_->EndSession(this);
+  if (midi_manager_)
+    midi_manager_->EndSession(this);
 }
 
 void MidiHost::CompleteStartSession(media::midi::Result result) {
@@ -154,21 +166,20 @@ void MidiHost::AddOutputPort(const media::midi::MidiPortInfo& info) {
   Send(new MidiMsg_AddOutputPort(info));
 }
 
-void MidiHost::SetInputPortState(uint32 port,
+void MidiHost::SetInputPortState(uint32_t port,
                                  media::midi::MidiPortState state) {
   Send(new MidiMsg_SetInputPortState(port, state));
 }
 
-void MidiHost::SetOutputPortState(uint32 port,
+void MidiHost::SetOutputPortState(uint32_t port,
                                   media::midi::MidiPortState state) {
   Send(new MidiMsg_SetOutputPortState(port, state));
 }
 
-void MidiHost::ReceiveMidiData(
-    uint32 port,
-    const uint8* data,
-    size_t length,
-    double timestamp) {
+void MidiHost::ReceiveMidiData(uint32_t port,
+                               const uint8_t* data,
+                               size_t length,
+                               double timestamp) {
   TRACE_EVENT0("midi", "MidiHost::ReceiveMidiData");
 
   base::AutoLock auto_lock(messages_queues_lock_);
@@ -180,7 +191,7 @@ void MidiHost::ReceiveMidiData(
     received_messages_queues_[port] = new media::midi::MidiMessageQueue(true);
 
   received_messages_queues_[port]->Add(data, length);
-  std::vector<uint8> message;
+  std::vector<uint8_t> message;
   while (true) {
     received_messages_queues_[port]->Get(&message);
     if (message.empty())
@@ -216,12 +227,16 @@ void MidiHost::AccumulateMidiBytesSent(size_t n) {
   }
 }
 
+void MidiHost::Detach() {
+  midi_manager_ = nullptr;
+}
+
 // static
-bool MidiHost::IsValidWebMIDIData(const std::vector<uint8>& data) {
+bool MidiHost::IsValidWebMIDIData(const std::vector<uint8_t>& data) {
   bool in_sysex = false;
   size_t waiting_data_length = 0;
   for (size_t i = 0; i < data.size(); ++i) {
-    const uint8 current = data[i];
+    const uint8_t current = data[i];
     if (IsSystemRealTimeMessage(current))
       continue;  // Real time message can be placed at any point.
     if (waiting_data_length > 0) {

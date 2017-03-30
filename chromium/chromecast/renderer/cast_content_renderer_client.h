@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "build/build_config.h"
 #include "content/public/renderer/content_renderer_client.h"
 
 namespace IPC {
@@ -33,11 +34,6 @@ class CastContentRendererClient : public content::ContentRendererClient {
   // Adds any platform-specific bindings to the current frame.
   virtual void AddRendererNativeBindings(blink::WebLocalFrame* frame);
 
-  // Returns any MessageFilters from the platform implementation that should
-  // be added to the render process.
-  virtual std::vector<scoped_refptr<IPC::MessageFilter>>
-  GetRendererMessageFilters();
-
   // ContentRendererClient implementation:
   void RenderThreadStarted() override;
   void RenderViewCreated(content::RenderView* render_view) override;
@@ -46,11 +42,12 @@ class CastContentRendererClient : public content::ContentRendererClient {
 #if !defined(OS_ANDROID)
   scoped_ptr<::media::RendererFactory> CreateMediaRendererFactory(
       content::RenderFrame* render_frame,
-      const scoped_refptr<::media::GpuVideoAcceleratorFactories>& gpu_factories,
+      ::media::GpuVideoAcceleratorFactories* gpu_factories,
       const scoped_refptr<::media::MediaLog>& media_log) override;
 #endif
   blink::WebPrescientNetworking* GetPrescientNetworking() override;
   void DeferMediaLoad(content::RenderFrame* render_frame,
+                      bool render_frame_has_played_media_before,
                       const base::Closure& closure) override;
 
  protected:
@@ -60,6 +57,7 @@ class CastContentRendererClient : public content::ContentRendererClient {
   scoped_ptr<network_hints::PrescientNetworkingDispatcher>
       prescient_networking_dispatcher_;
   scoped_ptr<CastRenderProcessObserver> cast_observer_;
+  const bool allow_hidden_media_playback_;
 
   DISALLOW_COPY_AND_ASSIGN(CastContentRendererClient);
 };

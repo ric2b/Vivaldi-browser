@@ -4,6 +4,8 @@
 
 #include "content/shell/browser/layout_test/layout_test_message_filter.h"
 
+#include <stddef.h>
+
 #include "base/files/file_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "content/public/browser/child_process_security_policy.h"
@@ -112,11 +114,11 @@ void LayoutTestMessageFilter::OnSetDatabaseQuota(int quota) {
 }
 
 void LayoutTestMessageFilter::OnSimulateWebNotificationClick(
-    const std::string& title) {
+    const std::string& title, int action_index) {
   LayoutTestNotificationManager* manager =
       LayoutTestContentBrowserClient::Get()->GetLayoutTestNotificationManager();
   if (manager)
-    manager->SimulateClick(title);
+    manager->SimulateClick(title, action_index);
 }
 
 void LayoutTestMessageFilter::OnAcceptAllCookies(bool accept) {

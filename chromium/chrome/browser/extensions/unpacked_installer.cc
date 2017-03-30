@@ -29,6 +29,7 @@
 #include "extensions/common/file_util.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_handlers/shared_module_info.h"
+#include "extensions/common/permissions/permissions_data.h"
 #include "sync/api/string_ordinal.h"
 
 using content::BrowserThread;
@@ -46,23 +47,24 @@ const char kImportMissing[] = "'import' extension is not installed.";
 const char kImportNotSharedModule[] = "'import' is not a shared module.";
 
 // Manages an ExtensionInstallPrompt for a particular extension.
-class SimpleExtensionLoadPrompt : public ExtensionInstallPrompt::Delegate {
+class SimpleExtensionLoadPrompt {
  public:
   SimpleExtensionLoadPrompt(const Extension* extension,
                             Profile* profile,
                             const base::Closure& callback);
-  ~SimpleExtensionLoadPrompt() override;
 
   void ShowPrompt();
 
-  // ExtensionInstallUI::Delegate
-  void InstallUIProceed() override;
-  void InstallUIAbort(bool user_initiated) override;
-
  private:
+  ~SimpleExtensionLoadPrompt();  // Manages its own lifetime.
+
+  void OnInstallPromptDone(ExtensionInstallPrompt::Result result);
+
   scoped_ptr<ExtensionInstallPrompt> install_ui_;
   scoped_refptr<const Extension> extension_;
   base::Closure callback_;
+
+  DISALLOW_COPY_AND_ASSIGN(SimpleExtensionLoadPrompt);
 };
 
 SimpleExtensionLoadPrompt::SimpleExtensionLoadPrompt(
@@ -80,28 +82,30 @@ SimpleExtensionLoadPrompt::~SimpleExtensionLoadPrompt() {
 }
 
 void SimpleExtensionLoadPrompt::ShowPrompt() {
+  // TODO(devlin): The AutoConfirm values should work from the
+  // ExtensionInstallPrompt code, so these should be unnecessary.
   switch (extensions::ScopedTestDialogAutoConfirm::GetAutoConfirmValue()) {
     case extensions::ScopedTestDialogAutoConfirm::NONE:
-      install_ui_->ConfirmInstall(
-          this,
-          extension_.get(),
+      // Unretained() is safe because this object manages its own lifetime.
+      install_ui_->ShowDialog(
+          base::Bind(&SimpleExtensionLoadPrompt::OnInstallPromptDone,
+                     base::Unretained(this)),
+          extension_.get(), nullptr,
           ExtensionInstallPrompt::GetDefaultShowDialogCallback());
       break;
     case extensions::ScopedTestDialogAutoConfirm::ACCEPT:
-      InstallUIProceed();
+      OnInstallPromptDone(ExtensionInstallPrompt::Result::ACCEPTED);
       break;
     case extensions::ScopedTestDialogAutoConfirm::CANCEL:
-      InstallUIAbort(false);
+      OnInstallPromptDone(ExtensionInstallPrompt::Result::ABORTED);
       break;
   }
 }
 
-void SimpleExtensionLoadPrompt::InstallUIProceed() {
-  callback_.Run();
-  delete this;
-}
-
-void SimpleExtensionLoadPrompt::InstallUIAbort(bool user_initiated) {
+void SimpleExtensionLoadPrompt::OnInstallPromptDone(
+    ExtensionInstallPrompt::Result result) {
+  if (result == ExtensionInstallPrompt::Result::ACCEPTED)
+    callback_.Run();
   delete this;
 }
 
@@ -168,6 +172,7 @@ bool UnpackedInstaller::LoadFromCommandLine(const base::FilePath& path_in,
     return false;
   }
 
+  extension()->permissions_data()->BindToCurrentThread();
   PermissionsUpdater(
       service_weak_->profile(), PermissionsUpdater::INIT_FLAG_TRANSIENT)
       .InitializePermissions(extension());
@@ -251,7 +256,7 @@ void UnpackedInstaller::OnInstallChecksComplete(int failed_checks) {
 
   if (!install_checker_.requirement_errors().empty()) {
     ReportExtensionLoadError(
-        JoinString(install_checker_.requirement_errors(), ' '));
+        base::JoinString(install_checker_.requirement_errors(), " "));
     return;
   }
 

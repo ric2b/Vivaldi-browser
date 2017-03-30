@@ -4,6 +4,9 @@
 
 #include "ui/views/touchui/touch_selection_menu_runner_views.h"
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/aura/window.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -38,23 +41,20 @@ const int kEllipsesButtonTag = -1;
 class TouchSelectionMenuRunnerViews::Menu : public BubbleDelegateView,
                                             public ButtonListener {
  public:
-  // Closes the menu. This will eventually self-destroy the object.
-  void Close();
-
-  // Returns a new instance of Menu if there is any command available;
-  // otherwise, returns |nullptr|.
-  static Menu* Create(TouchSelectionMenuRunnerViews* owner,
-                      ui::TouchSelectionMenuClient* client,
-                      const gfx::Rect& anchor_rect,
-                      const gfx::Size& handle_image_size,
-                      aura::Window* context);
-
- private:
   Menu(TouchSelectionMenuRunnerViews* owner,
        ui::TouchSelectionMenuClient* client,
        const gfx::Rect& anchor_rect,
        const gfx::Size& handle_image_size,
        aura::Window* context);
+
+  // Checks whether there is any command available to show in the menu.
+  static bool IsMenuAvailable(const ui::TouchSelectionMenuClient* client);
+
+  // Closes the menu. This will eventually self-destroy the object.
+  void Close();
+
+ private:
+  friend class TouchSelectionMenuRunnerViews::TestApi;
 
   ~Menu() override;
 
@@ -64,6 +64,9 @@ class TouchSelectionMenuRunnerViews::Menu : public BubbleDelegateView,
 
   // Helper method to create a single button.
   Button* CreateButton(const base::string16& title, int tag);
+
+  // Helper to disconnect this menu object from its owning menu runner.
+  void DisconnectOwner();
 
   // BubbleDelegateView:
   void OnPaint(gfx::Canvas* canvas) override;
@@ -77,24 +80,6 @@ class TouchSelectionMenuRunnerViews::Menu : public BubbleDelegateView,
 
   DISALLOW_COPY_AND_ASSIGN(Menu);
 };
-
-TouchSelectionMenuRunnerViews::Menu*
-TouchSelectionMenuRunnerViews::Menu::Create(
-    TouchSelectionMenuRunnerViews* owner,
-    ui::TouchSelectionMenuClient* client,
-    const gfx::Rect& anchor_rect,
-    const gfx::Size& handle_image_size,
-    aura::Window* context) {
-  DCHECK(client);
-
-  for (size_t i = 0; i < arraysize(kMenuCommands); i++) {
-    if (client->IsCommandIdEnabled(kMenuCommands[i]))
-      return new Menu(owner, client, anchor_rect, handle_image_size, context);
-  }
-
-  // No command is available, so return |nullptr|.
-  return nullptr;
-}
 
 TouchSelectionMenuRunnerViews::Menu::Menu(TouchSelectionMenuRunnerViews* owner,
                                           ui::TouchSelectionMenuClient* client,
@@ -136,6 +121,17 @@ TouchSelectionMenuRunnerViews::Menu::Menu(TouchSelectionMenuRunnerViews* owner,
   GetWidget()->Show();
 }
 
+bool TouchSelectionMenuRunnerViews::Menu::IsMenuAvailable(
+    const ui::TouchSelectionMenuClient* client) {
+  DCHECK(client);
+
+  for (size_t i = 0; i < arraysize(kMenuCommands); i++) {
+    if (client->IsCommandIdEnabled(kMenuCommands[i]))
+      return true;
+  }
+  return false;
+}
+
 TouchSelectionMenuRunnerViews::Menu::~Menu() {
 }
 
@@ -175,10 +171,16 @@ Button* TouchSelectionMenuRunnerViews::Menu::CreateButton(
 }
 
 void TouchSelectionMenuRunnerViews::Menu::Close() {
+  DisconnectOwner();
   // Closing the widget will self-destroy this object.
   Widget* widget = GetWidget();
   if (widget && !widget->IsClosed())
     widget->Close();
+}
+
+void TouchSelectionMenuRunnerViews::Menu::DisconnectOwner() {
+  DCHECK(owner_);
+  owner_->menu_ = nullptr;
   owner_ = nullptr;
 }
 
@@ -195,10 +197,10 @@ void TouchSelectionMenuRunnerViews::Menu::OnPaint(gfx::Canvas* canvas) {
 }
 
 void TouchSelectionMenuRunnerViews::Menu::WindowClosing() {
-  DCHECK_IMPLIES(owner_, owner_->menu_ == this);
+  DCHECK(!owner_ || owner_->menu_ == this);
   BubbleDelegateView::WindowClosing();
   if (owner_)
-    owner_->menu_ = nullptr;
+    DisconnectOwner();
 }
 
 void TouchSelectionMenuRunnerViews::Menu::ButtonPressed(
@@ -211,6 +213,28 @@ void TouchSelectionMenuRunnerViews::Menu::ButtonPressed(
     client_->RunContextMenu();
 }
 
+TouchSelectionMenuRunnerViews::TestApi::TestApi(
+    TouchSelectionMenuRunnerViews* menu_runner)
+    : menu_runner_(menu_runner) {
+  DCHECK(menu_runner_);
+}
+
+TouchSelectionMenuRunnerViews::TestApi::~TestApi() {}
+
+gfx::Rect TouchSelectionMenuRunnerViews::TestApi::GetAnchorRect() const {
+  TouchSelectionMenuRunnerViews::Menu* menu = menu_runner_->menu_;
+  return menu ? menu->GetAnchorRect() : gfx::Rect();
+}
+
+Button* TouchSelectionMenuRunnerViews::TestApi::GetFirstButton() const {
+  TouchSelectionMenuRunnerViews::Menu* menu = menu_runner_->menu_;
+  return menu ? static_cast<Button*>(menu->child_at(0)) : nullptr;
+}
+
+Widget* TouchSelectionMenuRunnerViews::TestApi::GetWidget() const {
+  TouchSelectionMenuRunnerViews::Menu* menu = menu_runner_->menu_;
+  return menu ? menu->GetWidget() : nullptr;
+}
 TouchSelectionMenuRunnerViews::TouchSelectionMenuRunnerViews()
     : menu_(nullptr) {
 }
@@ -219,8 +243,9 @@ TouchSelectionMenuRunnerViews::~TouchSelectionMenuRunnerViews() {
   CloseMenu();
 }
 
-gfx::Rect TouchSelectionMenuRunnerViews::GetAnchorRectForTest() const {
-  return menu_ ? menu_->GetAnchorRect() : gfx::Rect();
+bool TouchSelectionMenuRunnerViews::IsMenuAvailable(
+    const ui::TouchSelectionMenuClient* client) const {
+  return TouchSelectionMenuRunnerViews::Menu::IsMenuAvailable(client);
 }
 
 void TouchSelectionMenuRunnerViews::OpenMenu(
@@ -230,16 +255,17 @@ void TouchSelectionMenuRunnerViews::OpenMenu(
     aura::Window* context) {
   CloseMenu();
 
-  menu_ = Menu::Create(this, client, anchor_rect, handle_image_size, context);
+  if (TouchSelectionMenuRunnerViews::Menu::IsMenuAvailable(client))
+    menu_ = new Menu(this, client, anchor_rect, handle_image_size, context);
 }
 
 void TouchSelectionMenuRunnerViews::CloseMenu() {
   if (!menu_)
     return;
 
-  // Closing the menu will eventually delete the object.
+  // Closing the menu sets |menu_| to nullptr and eventually deletes the object.
   menu_->Close();
-  menu_ = nullptr;
+  DCHECK(!menu_);
 }
 
 bool TouchSelectionMenuRunnerViews::IsRunning() const {

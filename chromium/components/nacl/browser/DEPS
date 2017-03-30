@@ -1,8 +1,11 @@
 include_rules = [
+  # TODO(fdoray): Remove this once the PreRead field trial has expired.
+  # crbug.com/577698
+  "+components/startup_metric_utils/common",
+  "+components/url_formatter",
   "+content/public/browser",
   "+content/public/test",
   "+native_client/src/public",
-  "+native_client/src/shared/imc/nacl_imc_c.h",
   "+net",
   "+ppapi/host",
   "+ppapi/proxy",

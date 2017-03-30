@@ -4,7 +4,10 @@
 
 #include "extensions/common/permissions/permissions_data.h"
 
+#include <utility>
+
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "content/public/common/url_constants.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/error_utils.h"
@@ -13,7 +16,8 @@
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/manifest_handlers/permissions_parser.h"
-#include "extensions/common/permissions/permission_message_util.h"
+#include "extensions/common/permissions/api_permission.h"
+#include "extensions/common/permissions/permission_message_provider.h"
 #include "extensions/common/switches.h"
 #include "extensions/common/url_pattern_set.h"
 #include "url/gurl.h"
@@ -23,21 +27,32 @@ namespace extensions {
 
 namespace {
 
-PermissionsData::PolicyDelegate* g_policy_delegate = NULL;
+PermissionsData::PolicyDelegate* g_policy_delegate = nullptr;
+
+class AutoLockOnValidThread {
+ public:
+  AutoLockOnValidThread(base::Lock& lock, base::ThreadChecker* thread_checker)
+      : auto_lock_(lock) {
+    DCHECK(!thread_checker || thread_checker->CalledOnValidThread());
+  }
+
+ private:
+  base::AutoLock auto_lock_;
+
+  DISALLOW_COPY_AND_ASSIGN(AutoLockOnValidThread);
+};
 
 }  // namespace
 
 PermissionsData::PermissionsData(const Extension* extension)
     : extension_id_(extension->id()), manifest_type_(extension->GetType()) {
-  base::AutoLock auto_lock(runtime_lock_);
-  scoped_refptr<const PermissionSet> required_permissions =
+  const PermissionSet& required_permissions =
       PermissionsParser::GetRequiredPermissions(extension);
-  active_permissions_unsafe_ =
-      new PermissionSet(required_permissions->apis(),
-                        required_permissions->manifest_permissions(),
-                        required_permissions->explicit_hosts(),
-                        required_permissions->scriptable_hosts());
-  withheld_permissions_unsafe_ = new PermissionSet();
+  active_permissions_unsafe_.reset(new PermissionSet(
+      required_permissions.apis(), required_permissions.manifest_permissions(),
+      required_permissions.explicit_hosts(),
+      required_permissions.scriptable_hosts()));
+  withheld_permissions_unsafe_.reset(new PermissionSet());
 }
 
 PermissionsData::~PermissionsData() {
@@ -61,24 +76,10 @@ bool PermissionsData::CanExecuteScriptEverywhere(const Extension* extension) {
 }
 
 // static
-bool PermissionsData::ScriptsMayRequireActionForExtension(
-    const Extension* extension,
-    const PermissionSet* permissions) {
-  // An extension may require user action to execute scripts iff the extension
-  // shows up in chrome:extensions (so the user can grant withheld permissions),
-  // is not part of chrome or corporate policy, not on the scripting whitelist,
-  // and requires enough permissions that we should withhold them.
-  return extension->ShouldDisplayInExtensionSettings() &&
-      !Manifest::IsPolicyLocation(extension->location()) &&
-      !Manifest::IsComponentLocation(extension->location()) &&
-      !CanExecuteScriptEverywhere(extension) &&
-      permissions->ShouldWarnAllHosts();
-}
-
 bool PermissionsData::ShouldSkipPermissionWarnings(
     const std::string& extension_id) {
   // See http://b/4946060 for more details.
-  return extension_id == std::string("nckgahadagoaajjgafhacjanaoiihapd");
+  return extension_id == extension_misc::kProdHangoutsExtensionId;
 }
 
 // static
@@ -92,9 +93,13 @@ bool PermissionsData::IsRestrictedUrl(const GURL& document_url,
   if (!URLPattern::IsValidSchemeForExtensions(document_url.scheme()) &&
       document_url.spec() != url::kAboutBlankURL) {
     if (error) {
-      *error = ErrorUtils::FormatErrorMessage(
-                   manifest_errors::kCannotAccessPage,
-                   document_url.spec());
+      if (extension->permissions_data()->active_permissions().HasAPIPermission(
+              APIPermission::kTab)) {
+        *error = ErrorUtils::FormatErrorMessage(
+            manifest_errors::kCannotAccessPageWithUrl, document_url.spec());
+      } else {
+        *error = manifest_errors::kCannotAccessPage;
+      }
     }
     return true;
   }
@@ -121,61 +126,74 @@ bool PermissionsData::IsRestrictedUrl(const GURL& document_url,
   return false;
 }
 
+void PermissionsData::BindToCurrentThread() const {
+  DCHECK(!thread_checker_);
+  thread_checker_.reset(new base::ThreadChecker());
+}
+
 void PermissionsData::SetPermissions(
-    const scoped_refptr<const PermissionSet>& active,
-    const scoped_refptr<const PermissionSet>& withheld) const {
-  base::AutoLock auto_lock(runtime_lock_);
-  active_permissions_unsafe_ = active;
-  withheld_permissions_unsafe_ = withheld;
+    scoped_ptr<const PermissionSet> active,
+    scoped_ptr<const PermissionSet> withheld) const {
+  AutoLockOnValidThread lock(runtime_lock_, thread_checker_.get());
+  active_permissions_unsafe_ = std::move(active);
+  withheld_permissions_unsafe_ = std::move(withheld);
+}
+
+void PermissionsData::SetActivePermissions(
+    scoped_ptr<const PermissionSet> active) const {
+  AutoLockOnValidThread lock(runtime_lock_, thread_checker_.get());
+  active_permissions_unsafe_ = std::move(active);
 }
 
 void PermissionsData::UpdateTabSpecificPermissions(
     int tab_id,
-    scoped_refptr<const PermissionSet> permissions) const {
-  base::AutoLock auto_lock(runtime_lock_);
+    const PermissionSet& permissions) const {
+  AutoLockOnValidThread lock(runtime_lock_, thread_checker_.get());
   CHECK_GE(tab_id, 0);
-  TabPermissionsMap::iterator iter = tab_specific_permissions_.find(tab_id);
-  if (iter == tab_specific_permissions_.end())
-    tab_specific_permissions_[tab_id] = permissions;
-  else
-    iter->second =
-        PermissionSet::CreateUnion(iter->second.get(), permissions.get());
+  TabPermissionsMap::const_iterator iter =
+      tab_specific_permissions_.find(tab_id);
+  scoped_ptr<const PermissionSet> new_permissions = PermissionSet::CreateUnion(
+      iter == tab_specific_permissions_.end()
+          ? static_cast<const PermissionSet&>(PermissionSet())
+          : *iter->second,
+      permissions);
+  tab_specific_permissions_[tab_id] = std::move(new_permissions);
 }
 
 void PermissionsData::ClearTabSpecificPermissions(int tab_id) const {
-  base::AutoLock auto_lock(runtime_lock_);
+  AutoLockOnValidThread lock(runtime_lock_, thread_checker_.get());
   CHECK_GE(tab_id, 0);
   tab_specific_permissions_.erase(tab_id);
 }
 
 bool PermissionsData::HasAPIPermission(APIPermission::ID permission) const {
-  return active_permissions()->HasAPIPermission(permission);
+  base::AutoLock auto_lock(runtime_lock_);
+  return active_permissions_unsafe_->HasAPIPermission(permission);
 }
 
 bool PermissionsData::HasAPIPermission(
     const std::string& permission_name) const {
-  return active_permissions()->HasAPIPermission(permission_name);
+  base::AutoLock auto_lock(runtime_lock_);
+  return active_permissions_unsafe_->HasAPIPermission(permission_name);
 }
 
 bool PermissionsData::HasAPIPermissionForTab(
     int tab_id,
     APIPermission::ID permission) const {
-  if (HasAPIPermission(permission))
+  base::AutoLock auto_lock(runtime_lock_);
+  if (active_permissions_unsafe_->HasAPIPermission(permission))
     return true;
 
-  scoped_refptr<const PermissionSet> tab_permissions =
-      GetTabSpecificPermissions(tab_id);
-
-  // Place autolock below the HasAPIPermission() and
-  // GetTabSpecificPermissions(), since each already acquires the lock.
-  base::AutoLock auto_lock(runtime_lock_);
-  return tab_permissions.get() && tab_permissions->HasAPIPermission(permission);
+  const PermissionSet* tab_permissions = GetTabSpecificPermissions(tab_id);
+  return tab_permissions && tab_permissions->HasAPIPermission(permission);
 }
 
 bool PermissionsData::CheckAPIPermissionWithParam(
     APIPermission::ID permission,
     const APIPermission::CheckParam* param) const {
-  return active_permissions()->CheckAPIPermissionWithParam(permission, param);
+  base::AutoLock auto_lock(runtime_lock_);
+  return active_permissions_unsafe_->CheckAPIPermissionWithParam(permission,
+                                                                 param);
 }
 
 URLPatternSet PermissionsData::GetEffectiveHostPermissions() const {
@@ -187,41 +205,28 @@ URLPatternSet PermissionsData::GetEffectiveHostPermissions() const {
 }
 
 bool PermissionsData::HasHostPermission(const GURL& url) const {
-  return active_permissions()->HasExplicitAccessToOrigin(url);
+  base::AutoLock auto_lock(runtime_lock_);
+  return active_permissions_unsafe_->HasExplicitAccessToOrigin(url);
 }
 
 bool PermissionsData::HasEffectiveAccessToAllHosts() const {
-  return active_permissions()->HasEffectiveAccessToAllHosts();
+  base::AutoLock auto_lock(runtime_lock_);
+  return active_permissions_unsafe_->HasEffectiveAccessToAllHosts();
 }
 
-PermissionMessageIDs PermissionsData::GetLegacyPermissionMessageIDs() const {
-  if (ShouldSkipPermissionWarnings(extension_id_)) {
-    return PermissionMessageIDs();
-  } else {
-    return PermissionMessageProvider::Get()->GetLegacyPermissionMessageIDs(
-        active_permissions().get(), manifest_type_);
-  }
-}
-
-PermissionMessageStrings PermissionsData::GetPermissionMessageStrings() const {
-  if (ShouldSkipPermissionWarnings(extension_id_))
-    return PermissionMessageStrings();
-  return PermissionMessageProvider::Get()->GetPermissionMessageStrings(
-      active_permissions().get(), manifest_type_);
-}
-
-CoalescedPermissionMessages PermissionsData::GetCoalescedPermissionMessages()
-    const {
-  return PermissionMessageProvider::Get()->GetCoalescedPermissionMessages(
+PermissionMessages PermissionsData::GetPermissionMessages() const {
+  base::AutoLock auto_lock(runtime_lock_);
+  return PermissionMessageProvider::Get()->GetPermissionMessages(
       PermissionMessageProvider::Get()->GetAllPermissionIDs(
-          active_permissions().get(), manifest_type_));
+          *active_permissions_unsafe_, manifest_type_));
 }
 
 bool PermissionsData::HasWithheldImpliedAllHosts() const {
+  base::AutoLock auto_lock(runtime_lock_);
   // Since we currently only withhold all_hosts, it's sufficient to check
   // that either set is not empty.
-  return !withheld_permissions()->explicit_hosts().is_empty() ||
-         !withheld_permissions()->scriptable_hosts().is_empty();
+  return !withheld_permissions_unsafe_->explicit_hosts().is_empty() ||
+         !withheld_permissions_unsafe_->scriptable_hosts().is_empty();
 }
 
 bool PermissionsData::CanAccessPage(const Extension* extension,
@@ -229,13 +234,11 @@ bool PermissionsData::CanAccessPage(const Extension* extension,
                                     int tab_id,
                                     int process_id,
                                     std::string* error) const {
-  AccessType result = CanRunOnPage(extension,
-                                   document_url,
-                                   tab_id,
-                                   process_id,
-                                   active_permissions()->explicit_hosts(),
-                                   withheld_permissions()->explicit_hosts(),
-                                   error);
+  base::AutoLock auto_lock(runtime_lock_);
+  AccessType result =
+      CanRunOnPage(extension, document_url, tab_id, process_id,
+                   active_permissions_unsafe_->explicit_hosts(),
+                   withheld_permissions_unsafe_->explicit_hosts(), error);
   // TODO(rdevlin.cronin) Update callers so that they only need ACCESS_ALLOWED.
   return result == ACCESS_ALLOWED || result == ACCESS_WITHHELD;
 }
@@ -246,13 +249,10 @@ PermissionsData::AccessType PermissionsData::GetPageAccess(
     int tab_id,
     int process_id,
     std::string* error) const {
-  return CanRunOnPage(extension,
-                      document_url,
-                      tab_id,
-                      process_id,
-                      active_permissions()->explicit_hosts(),
-                      withheld_permissions()->explicit_hosts(),
-                      error);
+  base::AutoLock auto_lock(runtime_lock_);
+  return CanRunOnPage(extension, document_url, tab_id, process_id,
+                      active_permissions_unsafe_->explicit_hosts(),
+                      withheld_permissions_unsafe_->explicit_hosts(), error);
 }
 
 bool PermissionsData::CanRunContentScriptOnPage(const Extension* extension,
@@ -260,13 +260,11 @@ bool PermissionsData::CanRunContentScriptOnPage(const Extension* extension,
                                                 int tab_id,
                                                 int process_id,
                                                 std::string* error) const {
-  AccessType result = CanRunOnPage(extension,
-                                   document_url,
-                                   tab_id,
-                                   process_id,
-                                   active_permissions()->scriptable_hosts(),
-                                   withheld_permissions()->scriptable_hosts(),
-                                   error);
+  base::AutoLock auto_lock(runtime_lock_);
+  AccessType result =
+      CanRunOnPage(extension, document_url, tab_id, process_id,
+                   active_permissions_unsafe_->scriptable_hosts(),
+                   withheld_permissions_unsafe_->scriptable_hosts(), error);
   // TODO(rdevlin.cronin) Update callers so that they only need ACCESS_ALLOWED.
   return result == ACCESS_ALLOWED || result == ACCESS_WITHHELD;
 }
@@ -277,13 +275,10 @@ PermissionsData::AccessType PermissionsData::GetContentScriptAccess(
     int tab_id,
     int process_id,
     std::string* error) const {
-  return CanRunOnPage(extension,
-                      document_url,
-                      tab_id,
-                      process_id,
-                      active_permissions()->scriptable_hosts(),
-                      withheld_permissions()->scriptable_hosts(),
-                      error);
+  base::AutoLock auto_lock(runtime_lock_);
+  return CanRunOnPage(extension, document_url, tab_id, process_id,
+                      active_permissions_unsafe_->scriptable_hosts(),
+                      withheld_permissions_unsafe_->scriptable_hosts(), error);
 }
 
 bool PermissionsData::CanCaptureVisiblePage(int tab_id,
@@ -291,13 +286,13 @@ bool PermissionsData::CanCaptureVisiblePage(int tab_id,
   const URLPattern all_urls(URLPattern::SCHEME_ALL,
                             URLPattern::kAllUrlsPattern);
 
-  if (active_permissions()->explicit_hosts().ContainsPattern(all_urls))
+  base::AutoLock auto_lock(runtime_lock_);
+  if (active_permissions_unsafe_->explicit_hosts().ContainsPattern(all_urls))
     return true;
 
   if (tab_id >= 0) {
-    scoped_refptr<const PermissionSet> tab_permissions =
-        GetTabSpecificPermissions(tab_id);
-    if (tab_permissions.get() &&
+    const PermissionSet* tab_permissions = GetTabSpecificPermissions(tab_id);
+    if (tab_permissions &&
         tab_permissions->HasAPIPermission(APIPermission::kTab)) {
       return true;
     }
@@ -311,28 +306,22 @@ bool PermissionsData::CanCaptureVisiblePage(int tab_id,
   return false;
 }
 
-PermissionsData::TabPermissionsMap
-PermissionsData::CopyTabSpecificPermissionsMap() const {
-  base::AutoLock auto_lock(runtime_lock_);
-  return tab_specific_permissions_;
-}
-
-scoped_refptr<const PermissionSet> PermissionsData::GetTabSpecificPermissions(
+const PermissionSet* PermissionsData::GetTabSpecificPermissions(
     int tab_id) const {
-  base::AutoLock auto_lock(runtime_lock_);
   CHECK_GE(tab_id, 0);
+  runtime_lock_.AssertAcquired();
   TabPermissionsMap::const_iterator iter =
       tab_specific_permissions_.find(tab_id);
-  return (iter != tab_specific_permissions_.end()) ? iter->second : NULL;
+  return iter != tab_specific_permissions_.end() ? iter->second.get() : nullptr;
 }
 
 bool PermissionsData::HasTabSpecificPermissionToExecuteScript(
     int tab_id,
     const GURL& url) const {
+  runtime_lock_.AssertAcquired();
   if (tab_id >= 0) {
-    scoped_refptr<const PermissionSet> tab_permissions =
-        GetTabSpecificPermissions(tab_id);
-    if (tab_permissions.get() &&
+    const PermissionSet* tab_permissions = GetTabSpecificPermissions(tab_id);
+    if (tab_permissions &&
         tab_permissions->explicit_hosts().MatchesSecurityOrigin(url)) {
       return true;
     }
@@ -348,6 +337,7 @@ PermissionsData::AccessType PermissionsData::CanRunOnPage(
     const URLPatternSet& permitted_url_patterns,
     const URLPatternSet& withheld_url_patterns,
     std::string* error) const {
+  runtime_lock_.AssertAcquired();
   if (g_policy_delegate &&
       !g_policy_delegate->CanExecuteScriptOnPage(
           extension, document_url, tab_id, process_id, error)) {
@@ -367,9 +357,15 @@ PermissionsData::AccessType PermissionsData::CanRunOnPage(
     return ACCESS_WITHHELD;
 
   if (error) {
-    *error = ErrorUtils::FormatErrorMessage(manifest_errors::kCannotAccessPage,
-                                            document_url.spec());
+    if (extension->permissions_data()->active_permissions().HasAPIPermission(
+            APIPermission::kTab)) {
+      *error = ErrorUtils::FormatErrorMessage(
+          manifest_errors::kCannotAccessPageWithUrl, document_url.spec());
+    } else {
+      *error = manifest_errors::kCannotAccessPage;
+    }
   }
+
   return ACCESS_DENIED;
 }
 

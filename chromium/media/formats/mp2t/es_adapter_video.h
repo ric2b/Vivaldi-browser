@@ -5,11 +5,14 @@
 #ifndef MEDIA_FORMATS_MP2T_ES_ADAPTER_VIDEO_H_
 #define MEDIA_FORMATS_MP2T_ES_ADAPTER_VIDEO_H_
 
+#include <stdint.h>
+
 #include <deque>
 #include <list>
 #include <utility>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "media/base/media_export.h"
@@ -54,7 +57,7 @@ class MEDIA_EXPORT EsAdapterVideo {
 
  private:
   typedef std::deque<scoped_refptr<StreamParserBuffer> > BufferQueue;
-  typedef std::pair<int64, VideoDecoderConfig> ConfigEntry;
+  typedef std::pair<int64_t, VideoDecoderConfig> ConfigEntry;
 
   void ProcessPendingBuffers(bool flush);
 
@@ -80,7 +83,7 @@ class MEDIA_EXPORT EsAdapterVideo {
   std::list<ConfigEntry> config_list_;
 
   // Global index of the first buffer in |buffer_list_|.
-  int64 buffer_index_;
+  int64_t buffer_index_;
 
   // List of buffer to be emitted and PTS of frames already emitted.
   BufferQueue buffer_list_;

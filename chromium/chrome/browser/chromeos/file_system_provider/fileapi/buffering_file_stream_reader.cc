@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/file_system_provider/fileapi/buffering_file_stream_reader.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
@@ -16,16 +17,15 @@ namespace file_system_provider {
 BufferingFileStreamReader::BufferingFileStreamReader(
     scoped_ptr<storage::FileStreamReader> file_stream_reader,
     int preloading_buffer_length,
-    int64 max_bytes_to_read)
-    : file_stream_reader_(file_stream_reader.Pass()),
+    int64_t max_bytes_to_read)
+    : file_stream_reader_(std::move(file_stream_reader)),
       preloading_buffer_length_(preloading_buffer_length),
       max_bytes_to_read_(max_bytes_to_read),
       bytes_read_(0),
       preloading_buffer_(new net::IOBuffer(preloading_buffer_length)),
       preloading_buffer_offset_(0),
       preloaded_bytes_(0),
-      weak_ptr_factory_(this) {
-}
+      weak_ptr_factory_(this) {}
 
 BufferingFileStreamReader::~BufferingFileStreamReader() {
 }
@@ -65,9 +65,9 @@ int BufferingFileStreamReader::Read(net::IOBuffer* buffer,
   return net::ERR_IO_PENDING;
 }
 
-int64 BufferingFileStreamReader::GetLength(
+int64_t BufferingFileStreamReader::GetLength(
     const net::Int64CompletionCallback& callback) {
-  const int64 result = file_stream_reader_->GetLength(callback);
+  const int64_t result = file_stream_reader_->GetLength(callback);
   DCHECK_EQ(net::ERR_IO_PENDING, result);
 
   return result;
@@ -90,7 +90,7 @@ int BufferingFileStreamReader::CopyFromPreloadingBuffer(
 void BufferingFileStreamReader::Preload(
     const net::CompletionCallback& callback) {
   const int preload_bytes =
-      std::min(static_cast<int64>(preloading_buffer_length_),
+      std::min(static_cast<int64_t>(preloading_buffer_length_),
                max_bytes_to_read_ - bytes_read_);
 
   const int result = file_stream_reader_->Read(

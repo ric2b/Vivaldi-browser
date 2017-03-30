@@ -4,11 +4,14 @@
 
 #include "chrome/browser/renderer_host/chrome_render_message_filter.h"
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -35,19 +38,13 @@
 #include "extensions/common/manifest_handlers/default_locale_handler.h"
 #endif
 
-#if defined(USE_TCMALLOC)
-#include "chrome/browser/browser_about_handler.h"
-#endif
-
 using content::BrowserThread;
 using blink::WebCache;
 
 namespace {
 
-const uint32 kFilteredMessageClasses[] = {
-  ChromeMsgStart,
-  ContentSettingsMsgStart,
-  NetworkHintsMsgStart,
+const uint32_t kFilteredMessageClasses[] = {
+    ChromeMsgStart, ContentSettingsMsgStart, NetworkHintsMsgStart,
 };
 
 }  // namespace
@@ -97,6 +94,9 @@ bool ChromeRenderMessageFilter::OnMessageReceived(const IPC::Message& message) {
 void ChromeRenderMessageFilter::OverrideThreadForMessage(
     const IPC::Message& message, BrowserThread::ID* thread) {
   switch (message.type()) {
+#if defined(ENABLE_PLUGINS)
+    case ChromeViewHostMsg_IsCrashReportingEnabled::ID:
+#endif
     case ChromeViewHostMsg_UpdatedCacheStats::ID:
     case ChromeViewHostMsg_RecordRappor::ID:
     case ChromeViewHostMsg_RecordRapporURL::ID:
@@ -113,7 +113,9 @@ void ChromeRenderMessageFilter::OnDnsPrefetch(
     predictor_->DnsPrefetchList(request.hostname_list);
 }
 
-void ChromeRenderMessageFilter::OnPreconnect(const GURL& url, int count) {
+void ChromeRenderMessageFilter::OnPreconnect(const GURL& url,
+                                             bool allow_credentials,
+                                             int count) {
   if (count < 1) {
     LOG(WARNING) << "NetworkHintsMsg_Preconnect IPC with invalid count: "
                  << count;
@@ -121,8 +123,9 @@ void ChromeRenderMessageFilter::OnPreconnect(const GURL& url, int count) {
   }
   if (predictor_ && url.is_valid() && url.has_host() && url.has_scheme() &&
       url.SchemeIsHTTPOrHTTPS()) {
-    predictor_->PreconnectUrl(
-        url, GURL(), chrome_browser_net::UrlInfo::EARLY_LOAD_MOTIVATED, count);
+    predictor_->PreconnectUrl(url, GURL(),
+                              chrome_browser_net::UrlInfo::EARLY_LOAD_MOTIVATED,
+                              allow_credentials, count);
   }
 }
 
@@ -168,7 +171,7 @@ void ChromeRenderMessageFilter::OnRequestFileSystemAccessSync(
     const GURL& origin_url,
     const GURL& top_origin_url,
     IPC::Message* reply_msg) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
   base::Callback<void(bool)> callback =
       base::Bind(&ChromeRenderMessageFilter::
                  OnRequestFileSystemAccessSyncResponse,
@@ -195,7 +198,7 @@ void ChromeRenderMessageFilter::FileSystemAccessedSyncOnUIThread(
     const GURL& url,
     bool blocked_by_policy,
     IPC::Message* reply_msg) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   extensions::WebViewPermissionHelper* web_view_permission_helper =
       extensions::WebViewPermissionHelper::FromFrameID(
           render_process_id, render_frame_id);
@@ -213,7 +216,7 @@ void ChromeRenderMessageFilter::OnRequestFileSystemAccessAsync(
     int request_id,
     const GURL& origin_url,
     const GURL& top_origin_url) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
   base::Callback<void(bool)> callback =
       base::Bind(&ChromeRenderMessageFilter::
                  OnRequestFileSystemAccessAsyncResponse,
@@ -239,7 +242,7 @@ void ChromeRenderMessageFilter::OnRequestFileSystemAccess(
     const GURL& origin_url,
     const GURL& top_origin_url,
     base::Callback<void(bool)> callback) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   bool allowed =
       cookie_settings_->IsSettingCookieAllowed(origin_url, top_origin_url);
@@ -280,7 +283,7 @@ void ChromeRenderMessageFilter::FileSystemAccessedOnUIThread(
     const GURL& url,
     bool allowed,
     base::Callback<void(bool)> callback) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   extensions::WebViewPermissionHelper* web_view_permission_helper =
       extensions::WebViewPermissionHelper::FromFrameID(
           render_process_id, render_frame_id);
@@ -326,7 +329,7 @@ void ChromeRenderMessageFilter::OnAllowIndexedDB(int render_frame_id,
 
 #if defined(ENABLE_PLUGINS)
 void ChromeRenderMessageFilter::OnIsCrashReportingEnabled(bool* enabled) {
-  *enabled = ChromeMetricsServiceAccessor::IsCrashReportingEnabled();
+  *enabled = ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled();
 }
 #endif
 

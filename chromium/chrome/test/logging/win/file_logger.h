@@ -6,8 +6,9 @@
 #define CHROME_TEST_LOGGING_WIN_FILE_LOGGER_H_
 
 #include <guiddef.h>
+#include <stdint.h>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/win/event_trace_controller.h"
 
@@ -38,14 +39,11 @@ class FileLogger {
     CHROME_FRAME_LOG_PROVIDER   = 1 << 1,
     // Log messages from the current process.
     CHROME_TESTS_LOG_PROVIDER   = 1 << 2,
-    // Trace events.
-    CHROME_TRACE_EVENT_PROVIDER = 1 << 3,
   };
 
-  static const uint32 kAllEventProviders = (CHROME_LOG_PROVIDER |
-                                            CHROME_FRAME_LOG_PROVIDER |
-                                            CHROME_TESTS_LOG_PROVIDER |
-                                            CHROME_TRACE_EVENT_PROVIDER);
+  static const uint32_t kAllEventProviders =
+      (CHROME_LOG_PROVIDER | CHROME_FRAME_LOG_PROVIDER |
+       CHROME_TESTS_LOG_PROVIDER);
 
   FileLogger();
   ~FileLogger();
@@ -55,7 +53,7 @@ class FileLogger {
 
   // Initializes the instance to collect logs from the providers present in
   // the given mask; see EventProviderBits.
-  void Initialize(uint32 event_provider_mask);
+  void Initialize(uint32_t event_provider_mask);
 
   // Starts capturing logs from all providers into |log_file|.  The common file
   // extension for such files is .etl.  Returns false if the session could not
@@ -78,7 +76,7 @@ class FileLogger {
   static bool is_initialized_;
 
   base::win::EtwTraceController controller_;
-  uint32 event_provider_mask_;
+  uint32_t event_provider_mask_;
 
   DISALLOW_COPY_AND_ASSIGN(FileLogger);
 };

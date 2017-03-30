@@ -1,0 +1,28 @@
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module mash.wm.mojom;
+
+struct UserWindow {
+  uint32 window_id;
+  string window_title;
+};
+
+// An observer of user windows within mojom::CONTAINER_USER_WINDOWS.
+// TODO(msw): Observe focus changes, title/icon changes, etc.
+interface UserWindowObserver {
+  // Called when the observer is first added to supply the initial state.
+  OnUserWindowObserverAdded(array<UserWindow> user_windows);
+
+  OnUserWindowAdded(UserWindow user_window);
+  OnUserWindowRemoved(uint32 window_id);
+  OnUserWindowTitleChanged(uint32 window_id, string window_title);
+};
+
+// An interface allowing system UIs to manage the set of user windows.
+// TODO(msw): Add minimization, restoration, opening a chooser view, etc.
+interface UserWindowController {
+  AddUserWindowObserver(UserWindowObserver observer);
+  FocusUserWindow(uint32 window_id);
+};

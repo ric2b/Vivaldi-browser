@@ -28,24 +28,22 @@ static bool IsStreamValidAndEncrypted(DemuxerStream* stream) {
 DecryptingDemuxerStream::DecryptingDemuxerStream(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
     const scoped_refptr<MediaLog>& media_log,
-    const SetDecryptorReadyCB& set_decryptor_ready_cb,
     const base::Closure& waiting_for_decryption_key_cb)
     : task_runner_(task_runner),
       media_log_(media_log),
       state_(kUninitialized),
       waiting_for_decryption_key_cb_(waiting_for_decryption_key_cb),
       demuxer_stream_(NULL),
-      set_decryptor_ready_cb_(set_decryptor_ready_cb),
       decryptor_(NULL),
       key_added_while_decrypt_pending_(false),
-      weak_factory_(this) {
-}
+      weak_factory_(this) {}
 
 std::string DecryptingDemuxerStream::GetDisplayName() const {
   return "DecryptingDemuxerStream";
 }
 
 void DecryptingDemuxerStream::Initialize(DemuxerStream* stream,
+                                         const SetCdmReadyCB& set_cdm_ready_cb,
                                          const PipelineStatusCB& status_cb) {
   DVLOG(2) << __FUNCTION__;
   DCHECK(task_runner_->BelongsToCurrentThread());
@@ -54,13 +52,14 @@ void DecryptingDemuxerStream::Initialize(DemuxerStream* stream,
   DCHECK(!demuxer_stream_);
   weak_this_ = weak_factory_.GetWeakPtr();
   demuxer_stream_ = stream;
+  set_cdm_ready_cb_ = set_cdm_ready_cb;
   init_cb_ = BindToCurrentLoop(status_cb);
 
   InitializeDecoderConfig();
 
   state_ = kDecryptorRequested;
-  set_decryptor_ready_cb_.Run(BindToCurrentLoop(
-      base::Bind(&DecryptingDemuxerStream::SetDecryptor, weak_this_)));
+  set_cdm_ready_cb_.Run(BindToCurrentLoop(
+      base::Bind(&DecryptingDemuxerStream::SetCdm, weak_this_)));
 }
 
 void DecryptingDemuxerStream::Read(const ReadCB& read_cb) {
@@ -88,7 +87,7 @@ void DecryptingDemuxerStream::Reset(const base::Closure& closure) {
   // condition and clean up related tests.
   if (state_ == kDecryptorRequested) {
     DCHECK(!init_cb_.is_null());
-    set_decryptor_ready_cb_.Run(DecryptorReadyCB());
+    set_cdm_ready_cb_.Run(CdmReadyCB());
     base::ResetAndReturn(&init_cb_).Run(PIPELINE_ERROR_ABORT);
     DoReset();
     return;
@@ -160,8 +159,8 @@ DecryptingDemuxerStream::~DecryptingDemuxerStream() {
     decryptor_->CancelDecrypt(GetDecryptorStreamType());
     decryptor_ = NULL;
   }
-  if (!set_decryptor_ready_cb_.is_null())
-    base::ResetAndReturn(&set_decryptor_ready_cb_).Run(DecryptorReadyCB());
+  if (!set_cdm_ready_cb_.is_null())
+    base::ResetAndReturn(&set_cdm_ready_cb_).Run(CdmReadyCB());
   if (!init_cb_.is_null())
     base::ResetAndReturn(&init_cb_).Run(PIPELINE_ERROR_ABORT);
   if (!read_cb_.is_null())
@@ -171,26 +170,25 @@ DecryptingDemuxerStream::~DecryptingDemuxerStream() {
   pending_buffer_to_decrypt_ = NULL;
 }
 
-void DecryptingDemuxerStream::SetDecryptor(
-    Decryptor* decryptor,
-    const DecryptorAttachedCB& decryptor_attached_cb) {
+void DecryptingDemuxerStream::SetCdm(CdmContext* cdm_context,
+                                     const CdmAttachedCB& cdm_attached_cb) {
   DVLOG(2) << __FUNCTION__;
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK_EQ(state_, kDecryptorRequested) << state_;
   DCHECK(!init_cb_.is_null());
-  DCHECK(!set_decryptor_ready_cb_.is_null());
+  DCHECK(!set_cdm_ready_cb_.is_null());
 
-  set_decryptor_ready_cb_.Reset();
+  set_cdm_ready_cb_.Reset();
 
-  if (!decryptor) {
+  if (!cdm_context || !cdm_context->GetDecryptor()) {
     MEDIA_LOG(DEBUG, media_log_) << GetDisplayName() << ": decryptor not set";
     state_ = kUninitialized;
     base::ResetAndReturn(&init_cb_).Run(DECODER_ERROR_NOT_SUPPORTED);
-    decryptor_attached_cb.Run(false);
+    cdm_attached_cb.Run(false);
     return;
   }
 
-  decryptor_ = decryptor;
+  decryptor_ = cdm_context->GetDecryptor();
 
   decryptor_->RegisterNewKeyCB(
       GetDecryptorStreamType(),
@@ -199,7 +197,7 @@ void DecryptingDemuxerStream::SetDecryptor(
 
   state_ = kIdle;
   base::ResetAndReturn(&init_cb_).Run(PIPELINE_OK);
-  decryptor_attached_cb.Run(true);
+  cdm_attached_cb.Run(true);
 }
 
 void DecryptingDemuxerStream::DecryptBuffer(
@@ -385,9 +383,7 @@ void DecryptingDemuxerStream::InitializeDecoderConfig() {
                                input_audio_config.channel_layout(),
                                input_audio_config.samples_per_second(),
                                input_audio_config.extra_data(),
-                               input_audio_config.extra_data_size(),
                                false,  // Output audio is not encrypted.
-                               false,
                                input_audio_config.seek_preroll(),
                                input_audio_config.codec_delay());
       break;
@@ -396,17 +392,12 @@ void DecryptingDemuxerStream::InitializeDecoderConfig() {
     case VIDEO: {
       VideoDecoderConfig input_video_config =
           demuxer_stream_->video_decoder_config();
-      video_config_.Initialize(input_video_config.codec(),
-                               input_video_config.profile(),
-                               input_video_config.format(),
-                               VideoFrame::COLOR_SPACE_UNSPECIFIED,
-                               input_video_config.coded_size(),
-                               input_video_config.visible_rect(),
-                               input_video_config.natural_size(),
-                               input_video_config.extra_data(),
-                               input_video_config.extra_data_size(),
-                               false,  // Output video is not encrypted.
-                               false);
+      video_config_.Initialize(
+          input_video_config.codec(), input_video_config.profile(),
+          input_video_config.format(), input_video_config.color_space(),
+          input_video_config.coded_size(), input_video_config.visible_rect(),
+          input_video_config.natural_size(), input_video_config.extra_data(),
+          false);  // Output video is not encrypted.
       break;
     }
 

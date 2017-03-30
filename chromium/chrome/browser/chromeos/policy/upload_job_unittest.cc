@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/policy/upload_job.h"
 
+#include <stddef.h>
+
 #include <queue>
 #include <set>
 #include <utility>
@@ -11,6 +13,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
@@ -48,8 +51,9 @@ class RepeatingMimeBoundaryGenerator
   ~RepeatingMimeBoundaryGenerator() override {}
 
   // MimeBoundaryGenerator:
-  std::string GenerateBoundary(size_t length) const override {
-    return std::string(length, character_);
+  std::string GenerateBoundary() const override {
+    const int kMimeBoundarySize = 32;
+    return std::string(kMimeBoundarySize, character_);
   }
 
  private:
@@ -170,7 +174,7 @@ class UploadJobTestBase : public testing::Test, public UploadJob::Delegate {
   const GURL GetServerURL() const { return test_server_.GetURL(kUploadPath); }
 
   void SetExpectedError(scoped_ptr<UploadJob::ErrorCode> expected_error) {
-    expected_error_ = expected_error.Pass();
+    expected_error_ = std::move(expected_error);
   }
 
   // testing::Test:
@@ -178,7 +182,7 @@ class UploadJobTestBase : public testing::Test, public UploadJob::Delegate {
     request_context_getter_ = new net::TestURLRequestContextGetter(
         base::ThreadTaskRunnerHandle::Get());
     oauth2_service_.AddAccount("robot@gmail.com");
-    ASSERT_TRUE(test_server_.InitializeAndWaitUntilReady());
+    ASSERT_TRUE(test_server_.Start());
   }
 
   // testing::Test:
@@ -189,25 +193,26 @@ class UploadJobTestBase : public testing::Test, public UploadJob::Delegate {
  protected:
   scoped_ptr<UploadJob> PrepareUploadJob(scoped_ptr<
       UploadJobImpl::MimeBoundaryGenerator> mime_boundary_generator) {
-    scoped_ptr<UploadJob> upload_job(new UploadJobImpl(
-        GetServerURL(), kRobotAccountId, &oauth2_service_,
-        request_context_getter_.get(), this, mime_boundary_generator.Pass()));
+    scoped_ptr<UploadJob> upload_job(
+        new UploadJobImpl(GetServerURL(), kRobotAccountId, &oauth2_service_,
+                          request_context_getter_.get(), this,
+                          std::move(mime_boundary_generator)));
 
     std::map<std::string, std::string> header_entries;
     header_entries.insert(std::make_pair(kCustomField1, "CUSTOM1"));
     scoped_ptr<std::string> data(new std::string(kTestPayload1));
     upload_job->AddDataSegment("Name1", "file1.ext", header_entries,
-                               data.Pass());
+                               std::move(data));
 
     header_entries.insert(std::make_pair(kCustomField2, "CUSTOM2"));
     scoped_ptr<std::string> data2(new std::string(kTestPayload2));
-    upload_job->AddDataSegment("Name2", "", header_entries, data2.Pass());
-    return upload_job.Pass();
+    upload_job->AddDataSegment("Name2", "", header_entries, std::move(data2));
+    return upload_job;
   }
 
   content::TestBrowserThreadBundle test_browser_thread_bundle_;
   base::RunLoop run_loop_;
-  net::test_server::EmbeddedTestServer test_server_;
+  net::EmbeddedTestServer test_server_;
   scoped_refptr<net::TestURLRequestContextGetter> request_context_getter_;
   MockOAuth2TokenService oauth2_service_;
 
@@ -235,14 +240,14 @@ class UploadFlowTest : public UploadJobTestBase {
     const size_t pos = authorization_header.find(" ");
     if (pos == std::string::npos) {
       response->set_code(net::HTTP_UNAUTHORIZED);
-      return response.Pass();
+      return std::move(response);
     }
 
     const std::string token = authorization_header.substr(pos + 1);
     response->set_code(oauth2_service_.IsTokenValid(token)
                            ? net::HTTP_OK
                            : net::HTTP_UNAUTHORIZED);
-    return response.Pass();
+    return std::move(response);
   }
 };
 
@@ -304,7 +309,7 @@ class UploadRequestTest : public UploadJobTestBase {
         new net::test_server::BasicHttpResponse);
     response->set_code(net::HTTP_OK);
     EXPECT_EQ(expected_content_, request.content);
-    return response.Pass();
+    return std::move(response);
   }
 
   void SetExpectedRequestContent(const std::string& expected_content) {

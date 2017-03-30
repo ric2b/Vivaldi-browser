@@ -2,18 +2,27 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
         package="{{ APK_PACKAGE_NAME }}">
     <uses-sdk android:minSdkVersion="14"
-            android:targetSdkVersion="21"/>
+            android:targetSdkVersion="23"/>
     <uses-permission android:name="android.permission.GET_ACCOUNTS"/>
     <uses-permission android:name="android.permission.INTERNET"/>
-    <uses-permission android:name="android.permission.MANAGE_ACCOUNTS"/>
-    <uses-permission android:name="android.permission.USE_CREDENTIALS"/>
+{% if ENABLE_CARDBOARD == "1" %}
+    <uses-permission android:name="android.permission.NFC" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+{% endif %}
+
     <application android:label="@string/product_name_android"
+            android:name="org.chromium.chromoting.RemotingApplication"
             android:icon="@mipmap/logo_remote_desktop_launcher"
             android:theme="@style/BaseTheme"
             android:allowBackup="false">
         <meta-data
                 android:name="com.google.android.gms.version"
                 android:value="@integer/google_play_services_version"/>
+        <meta-data
+                android:name="enable_cardboard"
+                android:value="{{ ENABLE_CARDBOARD }}"/>        
         <activity android:name="org.chromium.chromoting.Chromoting"
                 android:configChanges="orientation|screenSize"
                 android:theme="@style/BaseTheme.NavigationDrawer"
@@ -38,11 +47,19 @@
             </intent-filter>
         </activity>
         <activity android:name="org.chromium.chromoting.Desktop"
-                android:configChanges="orientation|screenSize|keyboard|keyboardHidden"
-                android:theme="@style/BaseTheme.Desktop"
                 android:windowSoftInputMode="adjustResize"/>
+{% if ENABLE_CARDBOARD == "1" %}
+        <activity android:name="org.chromium.chromoting.cardboard.DesktopActivity"
+                android:windowSoftInputMode="adjustResize"
+                android:screenOrientation="sensorLandscape">
+            <intent-filter>    
+                <category android:name="com.google.intent.category.CARDBOARD" />        
+            </intent-filter>
+        </activity>
+ {% endif %}          
         <activity android:name="org.chromium.chromoting.HelpActivity"
                 android:configChanges="orientation|screenSize"
-                android:uiOptions="splitActionBarWhenNarrow"/>
+                android:uiOptions="splitActionBarWhenNarrow">
+        </activity>
     </application>
 </manifest>

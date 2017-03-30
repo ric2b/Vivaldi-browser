@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/extensions/extension_action_view_controller.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/api/commands/command_service.h"
@@ -17,11 +19,11 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/extensions/accelerator_priority.h"
 #include "chrome/browser/ui/extensions/extension_action_platform_delegate.h"
+#include "chrome/browser/ui/extensions/icon_with_badge_image_source.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_delegate.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_bar.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_bar.h"
 #include "chrome/common/extensions/api/extension_action/action_info.h"
-#include "chrome/common/icon_with_badge_image_source.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
@@ -61,7 +63,7 @@ ExtensionActionViewController::~ExtensionActionViewController() {
   DCHECK(!is_showing_popup());
 }
 
-const std::string& ExtensionActionViewController::GetId() const {
+std::string ExtensionActionViewController::GetId() const {
   return extension_->id();
 }
 
@@ -142,9 +144,10 @@ void ExtensionActionViewController::HidePopup() {
     popup_host_->Close();
     // We need to do these actions synchronously (instead of closing and then
     // performing the rest of the cleanup in OnExtensionHostDestroyed()) because
-    // the extension host can close asynchronously, and we need to keep the view
+    // the extension host may close asynchronously, and we need to keep the view
     // delegate up-to-date.
-    OnPopupClosed();
+    if (popup_host_)
+      OnPopupClosed();
   }
 }
 
@@ -156,17 +159,17 @@ ui::MenuModel* ExtensionActionViewController::GetContextMenu() {
   if (!ExtensionIsValid() || !extension()->ShowConfigureContextMenus())
     return nullptr;
 
-  ExtensionContextMenuModel::ButtonVisibility visibility =
-      ExtensionContextMenuModel::VISIBLE;
+  extensions::ExtensionContextMenuModel::ButtonVisibility visibility =
+      extensions::ExtensionContextMenuModel::VISIBLE;
   if (toolbar_actions_bar_) {
     if (toolbar_actions_bar_->popped_out_action() == this)
-      visibility = ExtensionContextMenuModel::TRANSITIVELY_VISIBLE;
-    else if (!toolbar_actions_bar_->IsActionVisible(this))
-      visibility = ExtensionContextMenuModel::OVERFLOWED;
+      visibility = extensions::ExtensionContextMenuModel::TRANSITIVELY_VISIBLE;
+    else if (!toolbar_actions_bar_->IsActionVisibleOnMainBar(this))
+      visibility = extensions::ExtensionContextMenuModel::OVERFLOWED;
     // Else, VISIBLE is correct.
   }
   // Reconstruct the menu every time because the menu's contents are dynamic.
-  context_menu_model_ = make_scoped_refptr(new ExtensionContextMenuModel(
+  context_menu_model_.reset(new extensions::ExtensionContextMenuModel(
       extension(), browser_, visibility, this));
   return context_menu_model_.get();
 }
@@ -177,10 +180,6 @@ void ExtensionActionViewController::OnContextMenuClosed() {
       !is_showing_popup()) {
     toolbar_actions_bar_->UndoPopOut();
   }
-}
-
-bool ExtensionActionViewController::CanDrag() const {
-  return true;
 }
 
 bool ExtensionActionViewController::ExecuteAction(bool by_user) {
@@ -318,18 +317,16 @@ bool ExtensionActionViewController::TriggerPopupWithUrl(
     toolbar_actions_bar_->SetPopupOwner(this);
 
   if (toolbar_actions_bar_ &&
-      !toolbar_actions_bar_->IsActionVisible(this) &&
+      !toolbar_actions_bar_->IsActionVisibleOnMainBar(this) &&
       extensions::FeatureSwitch::extension_action_redesign()->IsEnabled()) {
     platform_delegate_->CloseOverflowMenu();
     toolbar_actions_bar_->PopOutAction(
         this,
         base::Bind(&ExtensionActionViewController::ShowPopup,
-                   weak_factory_.GetWeakPtr(),
-                   base::Passed(host.Pass()),
-                   grant_tab_permissions,
-                   show_action));
+                   weak_factory_.GetWeakPtr(), base::Passed(std::move(host)),
+                   grant_tab_permissions, show_action));
   } else {
-    ShowPopup(host.Pass(), grant_tab_permissions, show_action);
+    ShowPopup(std::move(host), grant_tab_permissions, show_action);
   }
 
   return true;
@@ -343,8 +340,8 @@ void ExtensionActionViewController::ShowPopup(
   // (since it can open asynchronously). Check before proceeding.
   if (!popup_host_)
     return;
-  platform_delegate_->ShowPopup(
-      popup_host.Pass(), grant_tab_permissions, show_action);
+  platform_delegate_->ShowPopup(std::move(popup_host), grant_tab_permissions,
+                                show_action);
   view_delegate_->OnPopupShown(grant_tab_permissions);
 }
 
@@ -367,7 +364,9 @@ ExtensionActionViewController::GetIconImageSource(
   int tab_id = SessionTabHelper::IdForTab(web_contents);
   scoped_ptr<IconWithBadgeImageSource> image_source(
       new IconWithBadgeImageSource(size));
+
   image_source->SetIcon(icon_factory_.GetIcon(tab_id));
+
   scoped_ptr<IconWithBadgeImageSource::Badge> badge;
   std::string badge_text = extension_action_->GetBadgeText(tab_id);
   if (!badge_text.empty()) {
@@ -376,7 +375,7 @@ ExtensionActionViewController::GetIconImageSource(
             extension_action_->GetBadgeTextColor(tab_id),
             extension_action_->GetBadgeBackgroundColor(tab_id)));
   }
-  image_source->SetBadge(badge.Pass());
+  image_source->SetBadge(std::move(badge));
 
   // Greyscaling disabled actions and having a special wants-to-run decoration
   // are gated on the toolbar redesign.
@@ -393,5 +392,5 @@ ExtensionActionViewController::GetIconImageSource(
     image_source->set_paint_decoration(WantsToRun(web_contents) && is_overflow);
   }
 
-  return image_source.Pass();
+  return image_source;
 }

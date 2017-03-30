@@ -5,6 +5,8 @@
 #ifndef CONTENT_PUBLIC_COMMON_PLATFORM_NOTIFICATION_DATA_H_
 #define CONTENT_PUBLIC_COMMON_PLATFORM_NOTIFICATION_DATA_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
@@ -13,6 +15,18 @@
 #include "url/gurl.h"
 
 namespace content {
+
+// A notification action (button); corresponds to Blink WebNotificationAction.
+struct CONTENT_EXPORT PlatformNotificationAction {
+  PlatformNotificationAction();
+  ~PlatformNotificationAction();
+
+  // Action name that the author can use to distinguish them.
+  std::string action;
+
+  // Title of the button.
+  base::string16 title;
+};
 
 // Structure representing the information associated with a Web Notification.
 // This struct should include the developer-visible information, kept
@@ -25,18 +39,19 @@ struct CONTENT_EXPORT PlatformNotificationData {
   // property of this structure.
   static const size_t kMaximumDeveloperDataSize = 1024 * 1024;
 
-  enum NotificationDirection {
-    NotificationDirectionLeftToRight,
-    NotificationDirectionRightToLeft,
+  enum Direction {
+    DIRECTION_LEFT_TO_RIGHT,
+    DIRECTION_RIGHT_TO_LEFT,
+    DIRECTION_AUTO,
 
-    NotificationDirectionLast = NotificationDirectionRightToLeft
+    DIRECTION_LAST = DIRECTION_AUTO
   };
 
   // Title to be displayed with the Web Notification.
   base::string16 title;
 
   // Hint to determine the directionality of the displayed notification.
-  NotificationDirection direction = NotificationDirectionLeftToRight;
+  Direction direction = DIRECTION_LEFT_TO_RIGHT;
 
   // BCP 47 language tag describing the notification's contents. Optional.
   std::string lang;
@@ -59,9 +74,16 @@ struct CONTENT_EXPORT PlatformNotificationData {
   // be suppressed.
   bool silent = false;
 
+  // Whether the notification should remain onscreen indefinitely, rather than
+  // being auto-minimized to the notification center (if allowed by platform).
+  bool require_interaction = false;
+
   // Developer-provided data associated with the notification, in the form of
   // a serialized string. Must not exceed |kMaximumDeveloperDataSize| bytes.
   std::vector<char> data;
+
+  // Actions that should be shown as buttons on the notification.
+  std::vector<PlatformNotificationAction> actions;
 };
 
 }  // namespace content

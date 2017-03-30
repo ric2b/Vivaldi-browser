@@ -4,8 +4,11 @@
 
 #import "ui/app_list/cocoa/app_list_view_controller.h"
 
+#include <stddef.h>
+
 #include "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "skia/ext/skia_utils_mac.h"
@@ -61,11 +64,11 @@ const NSTimeInterval kResultsAnimationDuration = 0.2;
                                    xRadius:kBubbleCornerRadius
                                    yRadius:kBubbleCornerRadius] addClip];
 
-  [gfx::SkColorToSRGBNSColor(app_list::kContentsBackgroundColor) set];
+  [skia::SkColorToSRGBNSColor(app_list::kContentsBackgroundColor) set];
   NSRectFill(boundsRect);
-  [gfx::SkColorToSRGBNSColor(app_list::kSearchBoxBackground) set];
+  [skia::SkColorToSRGBNSColor(app_list::kSearchBoxBackground) set];
   NSRectFill(searchAreaRect);
-  [gfx::SkColorToSRGBNSColor(app_list::kTopSeparatorColor) set];
+  [skia::SkColorToSRGBNSColor(app_list::kTopSeparatorColor) set];
   NSRectFill(separatorRect);
 }
 

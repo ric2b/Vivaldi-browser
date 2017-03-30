@@ -2,21 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "chrome/browser/prefs/pref_service_syncable.h"
 #include "chrome/browser/signin/account_reconcilor_factory.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/fake_gaia_cookie_manager_service.h"
-#include "chrome/browser/signin/fake_profile_oauth2_token_service.h"
 #include "chrome/browser/signin/fake_profile_oauth2_token_service_builder.h"
-#include "chrome/browser/signin/fake_signin_manager.h"
+#include "chrome/browser/signin/fake_signin_manager_builder.h"
 #include "chrome/browser/signin/gaia_cookie_manager_service_factory.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
@@ -26,12 +27,14 @@
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/signin/core/browser/account_reconcilor.h"
 #include "components/signin/core/browser/account_tracker_service.h"
+#include "components/signin/core/browser/fake_profile_oauth2_token_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/browser/signin_metrics.h"
 #include "components/signin/core/browser/test_signin_client.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "components/signin/core/common/signin_switches.h"
+#include "components/syncable_prefs/pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "google_apis/gaia/fake_oauth2_token_service_delegate.h"
 #include "google_apis/gaia/gaia_constants.h"
@@ -66,7 +69,7 @@ scoped_ptr<KeyedService> MockAccountReconcilor::Build(
       ChromeSigninClientFactory::GetForProfile(profile),
       GaiaCookieManagerServiceFactory::GetForProfile(profile)));
   reconcilor->Initialize(false /* start_reconcile_if_tokens_available */);
-  return reconcilor.Pass();
+  return std::move(reconcilor);
 }
 
 MockAccountReconcilor::MockAccountReconcilor(
@@ -179,12 +182,12 @@ void AccountReconcilorTest::SetUp() {
       GaiaCookieManagerServiceFactory::GetInstance(),
       FakeGaiaCookieManagerService::Build));
   factories.push_back(std::make_pair(SigninManagerFactory::GetInstance(),
-      FakeSigninManagerBase::Build));
+                                     BuildFakeSigninManagerBase));
   factories.push_back(std::make_pair(AccountReconcilorFactory::GetInstance(),
       MockAccountReconcilor::Build));
 
   profile_ = testing_profile_manager_.get()->CreateTestingProfile("name",
-                              scoped_ptr<PrefServiceSyncable>(),
+                              scoped_ptr<syncable_prefs::PrefServiceSyncable>(),
                               base::UTF8ToUTF16("name"), 0, std::string(),
                               factories);
 
@@ -564,7 +567,52 @@ TEST_P(AccountReconcilorTest, StartReconcileAddToCookie) {
       "Signin.Reconciler.AddedToCookieJar.FirstRun", 1, 1);
   histogram_tester()->ExpectUniqueSample(
       "Signin.Reconciler.RemovedFromCookieJar.FirstRun", 0, 1);
+
+  base::HistogramTester::CountsMap expected_counts;
+  expected_counts["Signin.Reconciler.Duration.Success"] = 1;
+  EXPECT_THAT(histogram_tester()->GetTotalCountsForPrefix(
+      "Signin.Reconciler.Duration.Success"),
+      testing::ContainerEq(expected_counts));
 }
+
+#if !defined(OS_CHROMEOS)
+// This test does not run on ChromeOS because it calls
+// FakeSigninManagerForTesting::SignOut() which doesn't exist for ChromeOS.
+
+TEST_F(AccountReconcilorTest, SignoutAfterErrorDoesNotRecordUma) {
+  const std::string account_id =
+      ConnectProfileToAccount("12345", "user@gmail.com");
+  token_service()->UpdateCredentials(account_id, "refresh_token");
+  cookie_manager_service()->SetListAccountsResponseOneAccount(
+      "user@gmail.com", "12345");
+
+  const std::string account_id2 =
+      PickAccountIdForAccount("67890", "other@gmail.com");
+  token_service()->UpdateCredentials(account_id2, "refresh_token");
+
+  EXPECT_CALL(*GetMockReconcilor(), PerformMergeAction(account_id2));
+
+  AccountReconcilor* reconcilor = GetMockReconcilor();
+  reconcilor->StartReconcile();
+
+  base::RunLoop().RunUntilIdle();
+  ASSERT_TRUE(reconcilor->is_reconcile_started_);
+  GoogleServiceAuthError
+    error(GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS);
+  SimulateAddAccountToCookieCompleted(reconcilor, account_id2, error);
+  ASSERT_FALSE(reconcilor->is_reconcile_started_);
+
+  EXPECT_CALL(*GetMockReconcilor(), PerformLogoutAllAccountsAction());
+  signin_manager()->SignOut(signin_metrics::SIGNOUT_TEST);
+
+  base::HistogramTester::CountsMap expected_counts;
+  expected_counts["Signin.Reconciler.Duration.Failure"] = 1;
+  EXPECT_THAT(histogram_tester()->GetTotalCountsForPrefix(
+      "Signin.Reconciler.Duration.Failure"),
+      testing::ContainerEq(expected_counts));
+}
+
+#endif  // !defined(OS_CHROMEOS)
 
 TEST_P(AccountReconcilorTest, StartReconcileRemoveFromCookie) {
   const std::string account_id =
@@ -581,7 +629,7 @@ TEST_P(AccountReconcilorTest, StartReconcileRemoveFromCookie) {
   ASSERT_TRUE(reconcilor->is_reconcile_started_);
 
   base::RunLoop().RunUntilIdle();
-  SimulateAddAccountToCookieCompleted(reconcilor, "user@gmail.com",
+  SimulateAddAccountToCookieCompleted(reconcilor, account_id,
                                       GoogleServiceAuthError::AuthErrorNone());
   ASSERT_FALSE(reconcilor->is_reconcile_started_);
 
@@ -631,7 +679,7 @@ TEST_P(AccountReconcilorTest, StartReconcileAddToCookieTwice) {
   // Do another pass after I've added a third account to the token service
   cookie_manager_service()->SetListAccountsResponseTwoAccounts(
       "user@gmail.com", "12345", "other@gmail.com", "67890");
-  cookie_manager_service()->set_list_accounts_fetched_once_for_testing(false);
+  cookie_manager_service()->set_list_accounts_stale_for_testing(true);
 
   // This will cause the reconcilor to fire.
   token_service()->UpdateCredentials(account_id3, "refresh_token");
@@ -668,7 +716,7 @@ TEST_P(AccountReconcilorTest, StartReconcileBadPrimary) {
 
   token_service()->UpdateCredentials(account_id2, "refresh_token");
   cookie_manager_service()->SetListAccountsResponseTwoAccounts(
-      "other@gmail.com", "12345", "user@gmail.com", "67890");
+      "other@gmail.com", "67890", "user@gmail.com", "12345");
 
   EXPECT_CALL(*GetMockReconcilor(), PerformLogoutAllAccountsAction());
   EXPECT_CALL(*GetMockReconcilor(), PerformMergeAction(account_id));
@@ -721,7 +769,7 @@ TEST_P(AccountReconcilorTest, StartReconcileWithSessionInfoExpiredDefault) {
       PickAccountIdForAccount("67890", "other@gmail.com");
   token_service()->UpdateCredentials(account_id2, "refresh_token");
   cookie_manager_service()->SetListAccountsResponseTwoAccountsWithExpiry(
-      "user@gmail.com", true, "other@gmail.com", false);
+      "user@gmail.com", "12345", true, "other@gmail.com", "67890", false);
 
   EXPECT_CALL(*GetMockReconcilor(), PerformMergeAction(account_id));
 

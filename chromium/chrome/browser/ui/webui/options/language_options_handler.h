@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_OPTIONS_LANGUAGE_OPTIONS_HANDLER_H_
 #define CHROME_BROWSER_UI_WEBUI_OPTIONS_LANGUAGE_OPTIONS_HANDLER_H_
 
+#include "base/macros.h"
 #include "chrome/browser/ui/webui/options/language_options_handler_common.h"
 
 namespace options {
@@ -32,7 +33,6 @@ class LanguageOptionsHandler : public LanguageOptionsHandlerCommon {
 
  private:
   // LanguageOptionsHandlerCommon implementation.
-  base::string16 GetProductName() override;
   void SetApplicationLocale(const std::string& language_code) override;
 
   // Called when the restart button is clicked.

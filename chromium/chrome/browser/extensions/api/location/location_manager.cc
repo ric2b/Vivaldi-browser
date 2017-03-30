@@ -5,10 +5,12 @@
 #include "chrome/browser/extensions/api/location/location_manager.h"
 
 #include <math.h>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/time/time.h"
 #include "chrome/common/extensions/api/location.h"
 #include "content/public/browser/browser_thread.h"
@@ -313,6 +315,7 @@ void LocationManager::SendLocationUpdate(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   scoped_ptr<base::ListValue> args(new base::ListValue());
+  events::HistogramValue histogram_value = events::UNKNOWN;
   std::string event_name;
 
   if (position.Validate() &&
@@ -324,18 +327,21 @@ void LocationManager::SendLocationUpdate(
     location.timestamp = position.timestamp.ToJsTime();
 
     args->Append(location.ToValue().release());
+    histogram_value = events::LOCATION_ON_LOCATION_UPDATE;
     event_name = location::OnLocationUpdate::kEventName;
   } else {
     // Set data for onLocationError event.
     // TODO(vadimt): Set name.
     args->AppendString(position.error_message);
+    histogram_value = events::LOCATION_ON_LOCATION_ERROR;
     event_name = location::OnLocationError::kEventName;
   }
 
-  scoped_ptr<Event> event(new Event(events::UNKNOWN, event_name, args.Pass()));
+  scoped_ptr<Event> event(
+      new Event(histogram_value, event_name, std::move(args)));
 
   EventRouter::Get(browser_context_)
-      ->DispatchEventToExtension(extension_id, event.Pass());
+      ->DispatchEventToExtension(extension_id, std::move(event));
 }
 
 void LocationManager::OnExtensionLoaded(

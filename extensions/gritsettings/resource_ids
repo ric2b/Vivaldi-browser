@@ -1,0 +1,22 @@
+# Copyright (c) 2012 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+#
+# This file is used to assign starting resource ids for resources and strings
+# used by Chromium.  This is done to ensure that resource ids are unique
+# across all the grd files.  If you are adding a new grd file, please add
+# a new entry to this file.
+#
+# The first entry in the file, SRCDIR, is special: It is a relative path from
+# this file to the base of your checkout.
+#
+# The range of ID values, which is used by pak files, is from 0 to 2^16 - 1.
+{
+  "SRCDIR": "../..",
+
+  # Resource ids starting at 36000 are reserved for vivaldi
+
+  "extensions/vivaldi_extension_resources.grd": {
+    "includes": [37200],
+  },
+}

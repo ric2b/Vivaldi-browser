@@ -6,11 +6,13 @@
 
 #import <ApplicationServices/ApplicationServices.h>
 #import <Cocoa/Cocoa.h>
+#include <stdint.h>
 
 #include <map>
 
 #include "base/logging.h"
 #include "base/mac/sdk_forward_declarations.h"
+#include "base/macros.h"
 #include "base/timer/timer.h"
 #include "ui/gfx/display.h"
 #include "ui/gfx/display_change_notifier.h"
@@ -19,12 +21,12 @@ namespace {
 
 // The delay to handle the display configuration changes.
 // See comments in ScreenMac::HandleDisplayReconfiguration.
-const int64 kConfigureDelayMs = 500;
+const int64_t kConfigureDelayMs = 500;
 
 gfx::Rect ConvertCoordinateSystem(NSRect ns_rect) {
   // Primary monitor is defined as the monitor with the menubar,
   // which is always at index 0.
-  NSScreen* primary_screen = [[NSScreen screens] objectAtIndex:0];
+  NSScreen* primary_screen = [[NSScreen screens] firstObject];
   float primary_screen_height = [primary_screen frame].size.height;
   gfx::Rect rect(NSRectToCGRect(ns_rect));
   rect.set_y(primary_screen_height - rect.y() - rect.height());
@@ -58,7 +60,7 @@ gfx::Display GetDisplayForScreen(NSScreen* screen) {
 
   gfx::Display display(display_id, gfx::Rect(NSRectToCGRect(frame)));
   NSRect visible_frame = [screen visibleFrame];
-  NSScreen* primary = [[NSScreen screens] objectAtIndex:0];
+  NSScreen* primary = [[NSScreen screens] firstObject];
 
   // Convert work area's coordinate systems.
   if ([screen isEqual:primary]) {
@@ -103,7 +105,7 @@ class ScreenMac : public gfx::Screen {
   gfx::Point GetCursorScreenPoint() override {
     NSPoint mouseLocation  = [NSEvent mouseLocation];
     // Flip coordinates to gfx (0,0 in top-left corner) using primary screen.
-    NSScreen* screen = [[NSScreen screens] objectAtIndex:0];
+    NSScreen* screen = [[NSScreen screens] firstObject];
     mouseLocation.y = NSMaxY([screen frame]) - mouseLocation.y;
     return gfx::Point(mouseLocation.x, mouseLocation.y);
   }
@@ -161,7 +163,7 @@ class ScreenMac : public gfx::Screen {
   gfx::Display GetPrimaryDisplay() const override {
     // Primary display is defined as the display with the menubar,
     // which is always at index 0.
-    NSScreen* primary = [[NSScreen screens] objectAtIndex:0];
+    NSScreen* primary = [[NSScreen screens] firstObject];
     gfx::Display display = GetDisplayForScreen(primary);
     return display;
   }
@@ -192,7 +194,7 @@ class ScreenMac : public gfx::Screen {
       return;
     }
 
-    configure_timer_.reset(new base::OneShotTimer<ScreenMac>());
+    configure_timer_.reset(new base::OneShotTimer());
     configure_timer_->Start(
         FROM_HERE,
         base::TimeDelta::FromMilliseconds(kConfigureDelayMs),
@@ -225,12 +227,12 @@ class ScreenMac : public gfx::Screen {
       return std::vector<gfx::Display>(1, GetPrimaryDisplay());
     }
 
-    typedef std::map<int64, NSScreen*> ScreenIdsToScreensMap;
+    typedef std::map<int64_t, NSScreen*> ScreenIdsToScreensMap;
     ScreenIdsToScreensMap screen_ids_to_screens;
     for (NSScreen* screen in [NSScreen screens]) {
       NSDictionary* screen_device_description = [screen deviceDescription];
-      int64 screen_id = [[screen_device_description
-        objectForKey:@"NSScreenNumber"] unsignedIntValue];
+      int64_t screen_id = [[screen_device_description
+          objectForKey:@"NSScreenNumber"] unsignedIntValue];
       screen_ids_to_screens[screen_id] = screen;
     }
 
@@ -262,7 +264,7 @@ class ScreenMac : public gfx::Screen {
 
   // The timer to delay configuring outputs. See also the comments in
   // HandleDisplayReconfiguration().
-  scoped_ptr<base::OneShotTimer<ScreenMac> > configure_timer_;
+  scoped_ptr<base::OneShotTimer> configure_timer_;
 
   gfx::DisplayChangeNotifier change_notifier_;
 

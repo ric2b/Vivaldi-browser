@@ -5,6 +5,7 @@
 #include "base/command_line.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/windows_version.h"
+#include "build/build_config.h"
 #include "content/browser/media/media_browsertest.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
@@ -14,7 +15,7 @@
 #endif
 
 // Available key systems.
-const char kClearKeyKeySystem[] = "webkit-org.w3.clearkey";
+const char kClearKeyKeySystem[] = "org.w3.clearkey";
 
 // Supported media types.
 const char kWebMAudioOnly[] = "audio/webm; codecs=\"vorbis\"";
@@ -83,7 +84,6 @@ class EncryptedMediaTest : public content::MediaBrowserTest,
     base::StringPairs query_params;
     query_params.push_back(std::make_pair("keySystem", CurrentKeySystem()));
     query_params.push_back(std::make_pair("runEncrypted", "1"));
-    query_params.push_back(std::make_pair("usePrefixedEME", "1"));
     RunMediaTestPage("mse_config_change.html", query_params, kEnded, true);
   }
 
@@ -104,7 +104,6 @@ class EncryptedMediaTest : public content::MediaBrowserTest,
     query_params.push_back(std::make_pair("keySystem", key_system));
     if (src_type == MSE)
       query_params.push_back(std::make_pair("useMSE", "1"));
-    query_params.push_back(std::make_pair("usePrefixedEME", "1"));
     RunMediaTestPage(html_page, query_params, expectation, true);
   }
 
@@ -128,12 +127,10 @@ class EncryptedMediaTest : public content::MediaBrowserTest,
     title_watcher->AlsoWaitForTitle(base::ASCIIToUTF16(kEmeKeyError));
   }
 
-#if defined(OS_ANDROID)
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitch(
         switches::kDisableGestureRequirementForMediaPlayback);
   }
-#endif
 };
 
 using ::testing::Combine;
@@ -196,8 +193,7 @@ IN_PROC_BROWSER_TEST_P(EncryptedMediaTest, ConfigChangeVideo) {
   TestConfigChange();
 }
 
-// TODO: reenable in Vivaldi
-IN_PROC_BROWSER_TEST_P(EncryptedMediaTest, DISABLED_FrameSizeChangeVideo) {
+IN_PROC_BROWSER_TEST_P(EncryptedMediaTest, FrameSizeChangeVideo) {
   TestFrameSizeChange();
 }
 

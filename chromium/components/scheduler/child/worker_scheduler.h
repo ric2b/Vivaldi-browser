@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_SCHEDULER_CHILD_WORKER_SCHEDULER_H_
 #define COMPONENTS_SCHEDULER_CHILD_WORKER_SCHEDULER_H_
 
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "components/scheduler/child/child_scheduler.h"
 #include "components/scheduler/child/single_thread_idle_task_runner.h"
@@ -15,11 +16,13 @@ class MessageLoop;
 }
 
 namespace scheduler {
+class SchedulerTqmDelegate;
 
 class SCHEDULER_EXPORT WorkerScheduler : public ChildScheduler {
  public:
   ~WorkerScheduler() override;
-  static scoped_ptr<WorkerScheduler> Create(base::MessageLoop* message_loop);
+  static scoped_ptr<WorkerScheduler> Create(
+      scoped_refptr<SchedulerTqmDelegate> main_task_runner);
 
   // Must be called before the scheduler can be used. Does any post construction
   // initialization needed such as initializing idle period detection.

@@ -86,18 +86,36 @@
     "dependencies": ["permission:audio"],
     "contexts": ["blessed_extension"]
   },
-  "bluetooth": {
+  "bluetooth": [{
     "dependencies": ["manifest:bluetooth"],
     "contexts": ["blessed_extension"]
-  },
+  }, {
+    "channel": "stable",
+    "contexts": ["webui"],
+    "matches": [
+      "chrome://bluetooth-pairing/*",
+      "chrome://md-settings/*",
+      "chrome://settings/*",
+      "chrome://settings-frame/*"
+    ]
+  }],
   "bluetoothLowEnergy": {
     "dependencies": ["manifest:bluetooth"],
     "contexts": ["blessed_extension"]
   },
-  "bluetoothPrivate": {
+  "bluetoothPrivate": [{
     "dependencies": ["permission:bluetoothPrivate"],
     "contexts": ["blessed_extension"]
-  },
+  }, {
+    "channel": "stable",
+    "contexts": ["webui"],
+    "matches": [
+      "chrome://bluetooth-pairing/*",
+      "chrome://md-settings/*",
+      "chrome://settings/*",
+      "chrome://settings-frame/*"
+    ]
+  }],
   "bluetoothSocket": {
     "dependencies": ["manifest:bluetooth"],
     "contexts": ["blessed_extension"]
@@ -109,6 +127,10 @@
   "diagnostics": {
     "dependencies": ["permission:diagnostics"],
     "extension_types": ["platform_app"],
+    "contexts": ["blessed_extension"]
+  },
+  "displaySource": {
+    "dependencies": ["permission:displaySource"],
     "contexts": ["blessed_extension"]
   },
   "dns": {
@@ -127,11 +149,18 @@
     "extension_types": ["extension", "legacy_packaged_app", "platform_app"],
     "contexts": ["blessed_extension"]
   },
-  "extensionViewInternal": {
-    "internal": true,
-    "contexts": ["blessed_extension"],
-    "dependencies": ["permission:extensionview"]
-  },
+  "extensionViewInternal": [
+    {
+      "internal": true,
+      "contexts": ["blessed_extension"],
+      "dependencies": ["permission:extensionview"]
+    }, {
+      "internal": true,
+      "channel": "stable",
+      "contexts": ["webui"],
+      "matches": ["chrome://media-router/*"]
+    }
+  ],
   "events": {
     "internal": true,
     "channel": "stable",
@@ -188,7 +217,10 @@
     "matches": [
       "chrome://extensions/*",
       "chrome://extensions-frame/*",
-      "chrome://chrome/extensions/*"
+      "chrome://chrome/extensions/*",
+      "chrome://md-settings/*",
+      "chrome://settings/*",
+      "chrome://settings-frame/*"
     ]
   }],
   "management.getPermissionWarningsByManifest": {
@@ -215,8 +247,8 @@
     "channel": "stable",
     "extension_types": ["platform_app", "extension"],
     "whitelist": [
-      "EF2AB692559EA97C3BBDEA018A8C45F92457BD4E",  // http://crbug.com/448569
-      "C17CD9E6868D7B9C67926E0EC612EA25C768418F",
+      "226CF815E39A363090A1E547D53063472B8279FA",  // http://crbug.com/574889
+      "C17CD9E6868D7B9C67926E0EC612EA25C768418F",  // http://crbug.com/448569
       "A45DABDB47A31CC812E5490AB748C7D05E2D32E9",
       "BFEE2E3B80BE21A645E63E9346DFC383E7CB3BDA",
       "63ED55E43214C211F82122ED56407FF1A807F2A3"
@@ -330,12 +362,6 @@
   "storage": {
     "dependencies": ["permission:storage"],
     "contexts": ["blessed_extension", "unblessed_extension", "content_script"]
-  },
-  "surfaceWorkerInternal": {
-    "internal": true,
-    "channel": "trunk",
-    "contexts": "all",
-    "matches": ["<all_urls>"]
   },
   "system.cpu": {
     "dependencies": ["permission:system.cpu"],

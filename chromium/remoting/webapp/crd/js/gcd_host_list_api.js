@@ -61,8 +61,7 @@ remoting.GcdHostListApi.prototype.register = function(
         return {
           authCode: ticket.robotAccountAuthorizationCode,
           email: ticket.robotAccountEmail,
-          hostId: ticket.deviceId,
-          isLegacy: false
+          hostId: ticket.deviceId
         };
       }).
       catch(function(error) {
@@ -166,6 +165,9 @@ function deviceToHost(device) {
   host.publicKey = base.getStringAttr(baseState, '_publicKey');
   host.jabberId = base.getStringAttr(baseState, '_jabberId', '');
   host.hostVersion = base.getStringAttr(baseState, '_hostVersion', '');
+  host.hostOs = remoting.ChromotingEvent.toOs(
+      base.getStringAttr(baseState, '_hostOs', ''));
+  host.hostOsVersion = base.getStringAttr(baseState, '_hostOsVersion', '');
   var creationTimeMs = base.getNumberAttr(device, 'creationTimeMs', 0);
   if (creationTimeMs) {
     host.createdTime = new Date(creationTimeMs).toISOString();

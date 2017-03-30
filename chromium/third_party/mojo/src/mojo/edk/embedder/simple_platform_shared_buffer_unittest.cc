@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/edk/embedder/simple_platform_shared_buffer.h"
+#include "third_party/mojo/src/mojo/edk/embedder/simple_platform_shared_buffer.h"
 
 #include <limits>
 
@@ -171,8 +171,8 @@ TEST(SimplePlatformSharedBufferTest, MappingsOutliveBuffer) {
   {
     scoped_refptr<SimplePlatformSharedBuffer> buffer(
         SimplePlatformSharedBuffer::Create(100));
-    mapping1 = buffer->Map(0, 100).Pass();
-    mapping2 = buffer->Map(50, 50).Pass();
+    mapping1 = buffer->Map(0, 100);
+    mapping2 = buffer->Map(50, 50);
     static_cast<char*>(mapping1->GetBase())[50] = 'x';
   }
 

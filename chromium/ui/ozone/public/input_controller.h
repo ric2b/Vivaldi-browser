@@ -13,7 +13,7 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "ui/ozone/ozone_export.h"
+#include "ui/ozone/ozone_base_export.h"
 
 namespace base {
 class TimeDelta;
@@ -28,7 +28,7 @@ enum class DomCode;
 // The object provides methods for the preference page to configure input
 // devices w.r.t. the user setting. On ChromeOS, this replaces the inputcontrol
 // script that is originally located at /opt/google/chrome/.
-class OZONE_EXPORT InputController {
+class OZONE_BASE_EXPORT InputController {
  public:
   typedef base::Callback<void(scoped_ptr<std::string>)>
       GetTouchDeviceStatusReply;
@@ -52,6 +52,7 @@ class OZONE_EXPORT InputController {
                                  const base::TimeDelta& interval) = 0;
   virtual void GetAutoRepeatRate(base::TimeDelta* delay,
                                  base::TimeDelta* interval) = 0;
+  virtual bool SetCurrentLayoutByName(const std::string& layout_name) = 0;
 
   // Touchpad settings.
   virtual void SetTouchpadSensitivity(int value) = 0;
@@ -76,6 +77,9 @@ class OZONE_EXPORT InputController {
   virtual void SetTapToClickPaused(bool state) = 0;
 
   virtual void SetInternalTouchpadEnabled(bool enabled) = 0;
+  virtual bool IsInternalTouchpadEnabled() const = 0;
+
+  virtual void SetTouchscreensEnabled(bool enabled) = 0;
 
   // If |enable_filter| is true, all keys on the internal keyboard except
   // |allowed_keys| are disabled.
@@ -87,7 +91,7 @@ class OZONE_EXPORT InputController {
 };
 
 // Create an input controller that does nothing.
-OZONE_EXPORT scoped_ptr<InputController> CreateStubInputController();
+OZONE_BASE_EXPORT scoped_ptr<InputController> CreateStubInputController();
 
 }  // namespace ui
 

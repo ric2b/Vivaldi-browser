@@ -4,6 +4,10 @@
 
 #include "sync/internal_api/sync_backup_manager.h"
 
+#include <stdint.h>
+
+#include <vector>
+
 #include "sync/internal_api/public/read_node.h"
 #include "sync/internal_api/public/write_transaction.h"
 #include "sync/syncable/directory.h"
@@ -24,7 +28,7 @@ void SyncBackupManager::Init(InitArgs* args) {
           args->database_location,
           args->internal_components_factory.get(),
           InternalComponentsFactory::STORAGE_ON_DISK_DEFERRED,
-          args->unrecoverable_error_handler.Pass(),
+          args->unrecoverable_error_handler,
           args->report_unrecoverable_error_function)) {
     GetUserShare()->directory->CollectMetaHandleCounts(
         &status_.num_entries_by_type, &status_.num_to_delete_entries_by_type);
@@ -56,7 +60,7 @@ ModelTypeSet SyncBackupManager::HandleTransactionEndingChangeEvent(
   for (syncable::EntryKernelMutationMap::const_iterator it =
       write_transaction_info.Get().mutations.Get().begin();
       it != write_transaction_info.Get().mutations.Get().end(); ++it) {
-    int64 id = it->first;
+    int64_t id = it->first;
     if (unsynced_.find(id) == unsynced_.end()) {
       unsynced_.insert(id);
 
@@ -75,8 +79,8 @@ ModelTypeSet SyncBackupManager::HandleTransactionEndingChangeEvent(
 void SyncBackupManager::NormalizeEntries() {
   WriteTransaction trans(FROM_HERE, GetUserShare());
   in_normalization_ = true;
-  for (std::set<int64>::const_iterator it = unsynced_.begin();
-      it != unsynced_.end(); ++it) {
+  for (std::set<int64_t>::const_iterator it = unsynced_.begin();
+       it != unsynced_.end(); ++it) {
     syncable::MutableEntry entry(trans.GetWrappedWriteTrans(),
                                  syncable::GET_BY_HANDLE, *it);
     CHECK(entry.good());
@@ -99,9 +103,9 @@ void SyncBackupManager::HideSyncPreference(ModelType type) {
   if (BaseNode::INIT_OK != pref_root.InitTypeRoot(type))
     return;
 
-  std::vector<int64> pref_ids;
+  std::vector<int64_t> pref_ids;
   pref_root.GetChildIds(&pref_ids);
-  for (uint32 i = 0; i < pref_ids.size(); ++i) {
+  for (uint32_t i = 0; i < pref_ids.size(); ++i) {
     syncable::MutableEntry entry(trans.GetWrappedWriteTrans(),
                                  syncable::GET_BY_HANDLE, pref_ids[i]);
     if (entry.good()) {
@@ -140,5 +144,8 @@ bool SyncBackupManager::HasDirectoryTypeDebugInfoObserver(
     syncer::TypeDebugInfoObserver* observer) { return false; }
 
 void SyncBackupManager::RequestEmitDebugInfo() {}
+
+void SyncBackupManager::ClearServerData(
+    const ClearServerDataCallback& callback) {}
 
 }  // namespace syncer

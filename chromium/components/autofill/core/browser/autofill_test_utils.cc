@@ -4,11 +4,14 @@
 
 #include "components/autofill/core/browser/autofill_test_utils.h"
 
+#include <string>
+
 #include "base/guid.h"
 #include "base/prefs/pref_service.h"
 #include "base/prefs/pref_service_factory.h"
 #include "base/prefs/testing_pref_store.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/credit_card.h"
@@ -39,9 +42,17 @@ scoped_ptr<PrefService> PrefServiceForTesting() {
       new user_prefs::PrefRegistrySyncable());
   AutofillManager::RegisterProfilePrefs(registry.get());
 
-  // PDM depends on this pref, which is normally registered in
+  // PDM depends on these prefs, which are normally registered in
   // SigninManagerFactory.
   registry->RegisterStringPref(::prefs::kGoogleServicesAccountId,
+                               std::string());
+  registry->RegisterStringPref(::prefs::kGoogleServicesLastAccountId,
+                               std::string());
+  registry->RegisterStringPref(::prefs::kGoogleServicesLastUsername,
+                               std::string());
+  registry->RegisterStringPref(::prefs::kGoogleServicesUserAccountId,
+                               std::string());
+  registry->RegisterStringPref(::prefs::kGoogleServicesUsername,
                                std::string());
 
   // PDM depends on these prefs, which are normally registered in
@@ -78,7 +89,6 @@ void CreateTestAddressFormData(FormData* form,
   form->name = ASCIIToUTF16("MyForm");
   form->origin = GURL("http://myform.com/form.html");
   form->action = GURL("http://myform.com/submit.html");
-  form->user_submitted = true;
   types->clear();
 
   FormFieldData field;
@@ -281,16 +291,6 @@ void DisableSystemServices(PrefService* prefs) {
 #if defined(OS_MACOSX)
   OSCrypt::UseMockKeychain(true);
 #endif  // defined(OS_MACOSX)
-
-#if defined(OS_MACOSX) && !defined(OS_IOS)
-  // Don't use the Address Book on Mac, as it reaches out to system services.
-  if (prefs)
-    prefs->SetBoolean(prefs::kAutofillUseMacAddressBook, false);
-#else
-  // Disable auxiliary profiles for unit testing by default.
-  if (prefs)
-    prefs->SetBoolean(prefs::kAutofillAuxiliaryProfilesEnabled, false);
-#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
 }
 
 void SetServerCreditCards(AutofillTable* table,

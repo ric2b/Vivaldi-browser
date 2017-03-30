@@ -13,6 +13,7 @@
 #include "chrome/browser/media/router/media_router.mojom.h"
 #include "chrome/browser/media/router/media_sink.h"
 #include "chrome/browser/media/router/media_source.h"
+#include "content/public/browser/presentation_session.h"
 #include "mojo/common/common_type_converters.h"
 
 namespace mojo {
@@ -21,18 +22,17 @@ namespace mojo {
 // and vice versa.
 
 // MediaSink conversion.
+media_router::MediaSink::IconType SinkIconTypeFromMojo(
+    media_router::interfaces::MediaSink::IconType type);
+
+media_router::interfaces::MediaSink::IconType SinkIconTypeToMojo(
+    media_router::MediaSink::IconType type);
+
 template <>
 struct TypeConverter<media_router::MediaSink,
                      media_router::interfaces::MediaSinkPtr> {
   static media_router::MediaSink Convert(
       const media_router::interfaces::MediaSinkPtr& input);
-};
-
-template <>
-struct TypeConverter<media_router::interfaces::MediaSinkPtr,
-                     media_router::MediaSink> {
-  static media_router::interfaces::MediaSinkPtr Convert(
-      const media_router::MediaSink& input);
 };
 
 // MediaRoute conversion.
@@ -50,13 +50,6 @@ struct TypeConverter<scoped_ptr<media_router::MediaRoute>,
       const media_router::interfaces::MediaRoutePtr& input);
 };
 
-template <>
-struct TypeConverter<media_router::interfaces::MediaRoutePtr,
-                     media_router::MediaRoute> {
-  static media_router::interfaces::MediaRoutePtr Convert(
-      const media_router::MediaRoute& input);
-};
-
 // Issue conversion.
 media_router::Issue::Severity IssueSeverityFromMojo(
     media_router::interfaces::Issue::Severity severity);
@@ -69,6 +62,10 @@ struct TypeConverter<media_router::Issue, media_router::interfaces::IssuePtr> {
   static media_router::Issue Convert(
       const media_router::interfaces::IssuePtr& input);
 };
+
+// PresentationConnectionState conversion.
+content::PresentationConnectionState PresentationConnectionStateFromMojo(
+    media_router::interfaces::MediaRouter::PresentationConnectionState state);
 
 }  // namespace mojo
 

@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/autofill/expanding_textfield.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -50,8 +52,9 @@ ExpandingTextfield::~ExpandingTextfield() {}
 
 void ExpandingTextfield::SetText(const base::string16& text) {
   textfields_.front()->SetText(text);
-  std::vector<base::string16> strings;
-  base::SplitStringDontTrim(text, '\n', &strings);
+  std::vector<base::string16> strings = base::SplitString(
+      text, base::string16(1, '\n'),
+      base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
 
   size_t i = 0;
   for (std::list<DecoratedTextfield*>::iterator iter = textfields_.begin();

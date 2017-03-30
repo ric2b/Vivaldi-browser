@@ -4,9 +4,12 @@
 
 #include "chrome/browser/policy/profile_policy_connector.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
@@ -129,7 +132,7 @@ void ProfilePolicyConnector::Init(
 }
 
 void ProfilePolicyConnector::InitForTesting(scoped_ptr<PolicyService> service) {
-  policy_service_ = service.Pass();
+  policy_service_ = std::move(service);
 }
 
 void ProfilePolicyConnector::OverrideIsManagedForTesting(bool is_managed) {
@@ -138,10 +141,11 @@ void ProfilePolicyConnector::OverrideIsManagedForTesting(bool is_managed) {
 
 void ProfilePolicyConnector::Shutdown() {
 #if defined(OS_CHROMEOS)
-  BrowserPolicyConnectorChromeOS* connector =
-      g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  if (is_primary_user_)
+  if (is_primary_user_) {
+    BrowserPolicyConnectorChromeOS* connector =
+        g_browser_process->platform_part()->browser_policy_connector_chromeos();
     connector->SetUserPolicyDelegate(nullptr);
+  }
   if (special_user_policy_provider_)
     special_user_policy_provider_->Shutdown();
 #endif

@@ -9,7 +9,7 @@
 
 #include "base/callback_forward.h"
 #include "base/files/file_path.h"
-#include "chrome/browser/chromeos/drive/file_errors.h"
+#include "components/drive/file_errors.h"
 #include "url/gurl.h"
 
 class Profile;
@@ -28,6 +28,19 @@ namespace util {
 
 // Returns the Drive mount point path, which looks like "/special/drive-<hash>".
 base::FilePath GetDriveMountPointPath(Profile* profile);
+
+// Returns the Drive mount point path, which looks like
+// "/special/drive-<username_hash>", when provided with the |user_id_hash|.
+base::FilePath GetDriveMountPointPathForUserIdHash(
+    const std::string& user_id_hash);
+
+// Returns true if the given path is under the Drive mount point.
+bool IsUnderDriveMountPoint(const base::FilePath& path);
+
+// Extracts the Drive path from the given path located under the Drive mount
+// point. Returns an empty path if |path| is not under the Drive mount point.
+// Examples: ExtractDrivePath("/special/drive-xxx/foo.txt") => "drive/foo.txt"
+base::FilePath ExtractDrivePath(const base::FilePath& path);
 
 // Returns the FileSystem for the |profile|. If not available (not mounted
 // or disabled), returns NULL.

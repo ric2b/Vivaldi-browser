@@ -8,12 +8,14 @@
 #ifndef GPU_COMMAND_BUFFER_COMMON_GLES2_CMD_UTILS_H_
 #define GPU_COMMAND_BUFFER_COMMON_GLES2_CMD_UTILS_H_
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include <limits>
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/numerics/safe_math.h"
 #include "gpu/command_buffer/common/gles2_utils_export.h"
 
@@ -50,6 +52,24 @@ inline bool SafeAddInt32(int32_t a, int32_t b, int32_t* dst) {
   *dst = checked.ValueOrDefault(0);
   return checked.IsValid();
 }
+
+struct GLES2_UTILS_EXPORT PixelStoreParams {
+  PixelStoreParams()
+      : alignment(4),
+        row_length(0),
+        image_height(0),
+        skip_pixels(0),
+        skip_rows(0),
+        skip_images(0) {
+  }
+
+  int32_t alignment;
+  int32_t row_length;
+  int32_t image_height;
+  int32_t skip_pixels;
+  int32_t skip_rows;
+  int32_t skip_images;
+};
 
 // Utilties for GLES2 support.
 class GLES2_UTILS_EXPORT GLES2Util {
@@ -104,17 +124,27 @@ class GLES2_UTILS_EXPORT GLES2Util {
 
   // Computes the size of an image row including alignment padding
   static bool ComputeImagePaddedRowSize(
-      int width, int format, int type, int unpack_alignment,
+      int width, int format, int type, int alignment,
       uint32_t* padded_row_size);
 
   // Computes the size of image data for TexImage2D and TexSubImage2D.
-  // Optionally the unpadded and padded row sizes can be returned. If height < 2
-  // then the padded_row_size will be the same as the unpadded_row_size since
-  // padding is not necessary.
+  // Optionally the unpadded and padded row sizes can be returned.
   static bool ComputeImageDataSizes(
       int width, int height, int depth, int format, int type,
-      int unpack_alignment, uint32_t* size, uint32_t* unpadded_row_size,
-      uint32_t* padded_row_size);
+      int alignment, uint32_t* size, uint32_t* opt_unpadded_row_size,
+      uint32_t* opt_padded_row_size);
+
+  // Similar to the above function, but taking into consideration all ES3
+  // pixel pack/unpack parameters.
+  // Optionally the skipped bytes in the beginning can be returned.
+  // Note the returned |size| does NOT include |skip_size|.
+  // TODO(zmo): merging ComputeImageDataSize and ComputeImageDataSizeES3.
+  static bool ComputeImageDataSizesES3(
+      int width, int height, int depth, int format, int type,
+      const PixelStoreParams& params,
+      uint32_t* size, uint32_t* opt_unpadded_row_size,
+      uint32_t* opt_padded_row_size, uint32_t* opt_skip_size,
+      uint32_t* opt_padding);
 
   static size_t RenderbufferBytesPerPixel(int format);
 
@@ -127,7 +157,15 @@ class GLES2_UTILS_EXPORT GLES2Util {
 
   static size_t GetGLTypeSizeForTexturesAndBuffers(uint32_t type);
 
+  static size_t GetGLTypeSizeForPathCoordType(uint32_t type);
+
   static uint32_t GLErrorToErrorBit(uint32_t gl_error);
+
+  static size_t GetComponentCountForGLTransformType(uint32_t type);
+  static size_t GetGLTypeSizeForGLPathNameType(uint32_t type);
+
+  static size_t GetCoefficientCountForGLPathFragmentInputGenMode(
+      uint32_t gen_mode);
 
   static uint32_t GLErrorBitToGLError(uint32_t error_bit);
 
@@ -135,9 +173,10 @@ class GLES2_UTILS_EXPORT GLES2Util {
 
   static size_t GLTargetToFaceIndex(uint32_t target);
 
-  static uint32_t GetPreferredGLReadPixelsFormat(uint32_t internal_format);
+  static uint32_t GetGLReadPixelsImplementationFormat(
+      uint32_t internal_format);
 
-  static uint32_t GetPreferredGLReadPixelsType(
+  static uint32_t GetGLReadPixelsImplementationType(
       uint32_t internal_format, uint32_t texture_type);
 
   // Returns a bitmask for the channels the given format supports.
@@ -162,19 +201,6 @@ class GLES2_UTILS_EXPORT GLES2Util {
   static std::string GetStringBool(uint32_t value);
   static std::string GetStringError(uint32_t value);
 
-  // Parses a uniform name.
-  //   array_pos: the position of the last '[' character in name.
-  //   element_index: the index of the array element specifed in the name.
-  //   getting_array: True if name refers to array.
-  // returns true of parsing was successful. Returing true does NOT mean
-  // it's a valid uniform name. On the otherhand, returning false does mean
-  // it's an invalid uniform name.
-  static bool ParseUniformName(
-      const std::string& name,
-      size_t* array_pos,
-      int* element_index,
-      bool* getting_array);
-
   static size_t CalcClearBufferivDataCount(int buffer);
   static size_t CalcClearBufferfvDataCount(int buffer);
 
@@ -184,17 +210,59 @@ class GLES2_UTILS_EXPORT GLES2Util {
 
   static uint32_t MapBufferTargetToBindingEnum(uint32_t target);
 
+  static bool IsUnsignedIntegerFormat(uint32_t internal_format);
+  static bool IsSignedIntegerFormat(uint32_t internal_format);
+  static bool IsIntegerFormat(uint32_t internal_format);
+  static bool IsFloatFormat(uint32_t internal_format);
+
   #include "../common/gles2_cmd_utils_autogen.h"
 
  private:
   static std::string GetQualifiedEnumString(
       const EnumToString* table, size_t count, uint32_t value);
 
+  static bool ComputeImageRowSizeHelper(int width,
+                                        uint32_t bytes_per_group,
+                                        int alignment,
+                                        uint32_t* rt_unpadded_row_size,
+                                        uint32_t* rt_padded_row_size,
+                                        uint32_t* rt_padding);
+
   static const EnumToString* const enum_to_string_table_;
   static const size_t enum_to_string_table_len_;
 
   int num_compressed_texture_formats_;
   int num_shader_binary_formats_;
+};
+
+class GLES2_UTILS_EXPORT GLSLArrayName {
+ public:
+  explicit GLSLArrayName(const std::string& name);
+
+  // Returns true if the string is an array reference.
+  bool IsArrayName() const { return element_index_ >= 0; }
+  // Returns the name with the possible last array index specifier removed.
+  std::string base_name() const {
+    DCHECK(IsArrayName());
+    return base_name_;
+  }
+  // Returns the element index of a name which references an array element.
+  int element_index() const {
+    DCHECK(IsArrayName());
+    return element_index_;
+  }
+
+ private:
+  std::string base_name_;
+  int element_index_;
+  DISALLOW_COPY_AND_ASSIGN(GLSLArrayName);
+};
+
+enum ContextType {
+  CONTEXT_TYPE_WEBGL1,
+  CONTEXT_TYPE_WEBGL2,
+  CONTEXT_TYPE_OPENGLES2,
+  CONTEXT_TYPE_OPENGLES3
 };
 
 struct GLES2_UTILS_EXPORT ContextCreationAttribHelper {
@@ -216,8 +284,7 @@ struct GLES2_UTILS_EXPORT ContextCreationAttribHelper {
   bool bind_generates_resource;
   bool fail_if_major_perf_caveat;
   bool lose_context_when_out_of_memory;
-  // 0 if not a WebGL context.
-  unsigned webgl_version;
+  ContextType context_type;
 };
 
 }  // namespace gles2

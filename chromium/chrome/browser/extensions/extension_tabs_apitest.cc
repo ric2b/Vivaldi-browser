@@ -5,6 +5,7 @@
 #include "chrome/browser/extensions/extension_apitest.h"
 
 #include "base/prefs/pref_service.h"
+#include "build/build_config.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -47,23 +48,7 @@ class ExtensionApiNewTabTest : public ExtensionApiTest {
   }
 };
 
-class ExtensionApiTabAudioMutingTest : public ExtensionApiTest {
- public:
-  ExtensionApiTabAudioMutingTest() {}
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    ExtensionApiTest::SetUpCommandLine(command_line);
-
-    command_line->AppendSwitch(switches::kEnableTabAudioMuting);
-  }
-};
-
-// TODO(vivaldi) Reenable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_Tabs DISABLED_Tabs
-#else
-#define MAYBE_Tabs Tabs
-#endif
-IN_PROC_BROWSER_TEST_F(ExtensionApiNewTabTest, MAYBE_Tabs) {
+IN_PROC_BROWSER_TEST_F(ExtensionApiNewTabTest, Tabs) {
   // The test creates a tab and checks that the URL of the new tab
   // is that of the new tab page.  Make sure the pref that controls
   // this is set.
@@ -73,11 +58,12 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiNewTabTest, MAYBE_Tabs) {
   ASSERT_TRUE(RunExtensionSubtest("tabs/basics", "crud.html")) << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(ExtensionApiTabAudioMutingTest, TabAudible) {
+IN_PROC_BROWSER_TEST_F(ExtensionApiTest, TabAudible) {
   ASSERT_TRUE(RunExtensionSubtest("tabs/basics", "audible.html")) << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(ExtensionApiTabAudioMutingTest, TabMuted) {
+// http://crbug.com/521410
+IN_PROC_BROWSER_TEST_F(ExtensionApiTest, DISABLED_TabMuted) {
   ASSERT_TRUE(RunExtensionSubtest("tabs/basics", "muted.html")) << message_;
 }
 
@@ -92,19 +78,16 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, MAYBE_Tabs2) {
 }
 
 // crbug.com/149924
-//Disabled in vivaldi
 IN_PROC_BROWSER_TEST_F(ExtensionApiTest, DISABLED_TabDuplicate) {
   ASSERT_TRUE(RunExtensionSubtest("tabs/basics", "duplicate.html")) << message_;
 }
 
-//Disabled in vivaldi
-IN_PROC_BROWSER_TEST_F(ExtensionApiTest, DISABLED_TabSize) {
+IN_PROC_BROWSER_TEST_F(ExtensionApiTest, TabSize) {
   ASSERT_TRUE(RunExtensionSubtest("tabs/basics", "tab_size.html")) << message_;
 }
 
 // Flaky on linux: http://crbug.com/396364
-// TODO(vivaldi) Reenable windows for Vivaldi
-#if defined(OS_LINUX) || defined(OS_WIN)
+#if defined(OS_LINUX)
 #define MAYBE_TabUpdate DISABLED_TabUpdate
 #else
 #define MAYBE_TabUpdate TabUpdate
@@ -118,8 +101,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, TabPinned) {
 }
 
 // Flaky on windows: http://crbug.com/238667
-// TODO(vivaldi) Reenable mac for Vivaldi
-#if defined(OS_WIN) || defined(OS_MACOSX)
+#if defined(OS_WIN)
 #define MAYBE_TabMove DISABLED_TabMove
 #else
 #define MAYBE_TabMove TabMove
@@ -237,11 +219,17 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiCaptureTest, CaptureVisibleDisabled) {
                                   "test_disabled.html")) << message_;
 }
 
+IN_PROC_BROWSER_TEST_F(ExtensionApiTest, TabsOnCreated) {
+  ASSERT_TRUE(RunExtensionTest("tabs/on_created")) << message_;
+}
+
 IN_PROC_BROWSER_TEST_F(ExtensionApiTest, TabsOnUpdated) {
   ASSERT_TRUE(RunExtensionTest("tabs/on_updated")) << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionApiTest, TabsNoPermissions) {
+  host_resolver()->AddRule("a.com", "127.0.0.1");
+  ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionTest("tabs/no_permissions")) << message_;
 }
 

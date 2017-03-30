@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/sequence_checker.h"
 #include "content/common/content_export.h"
 
@@ -52,9 +53,15 @@ class CONTENT_EXPORT NotificationDatabase {
     // General failure code. More specific failures should be used if available.
     STATUS_ERROR_FAILED = 3,
 
+    // leveldb failed due to I/O error (read-only, full disk, etc.).
+    STATUS_IO_ERROR = 4,
+
+    // leveldb operation not supported
+    STATUS_NOT_SUPPORTED = 5,
+
     // Number of entries in the status enumeration. Used by UMA. Must always be
     // one higher than the otherwise highest value in this enumeration.
-    STATUS_COUNT = 4
+    STATUS_COUNT = 6
   };
 
   explicit NotificationDatabase(const base::FilePath& path);

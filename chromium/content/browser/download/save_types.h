@@ -5,17 +5,27 @@
 #ifndef CONTENT_BROWSER_DOWNLOAD_SAVE_TYPES_H_
 #define CONTENT_BROWSER_DOWNLOAD_SAVE_TYPES_H_
 
+#include <stdint.h>
+
+#include <map>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/files/file_path.h"
+#include "content/common/id_type.h"
 #include "url/gurl.h"
 
 namespace content {
-typedef std::vector<std::pair<int, base::FilePath> > FinalNameList;
-typedef std::vector<int> SaveIDList;
+
+class SavePackage;
+using SavePackageId = IdType32<SavePackage>;
+
+class SaveItem;
+using SaveItemId = IdType32<SaveItem>;
+
+// Map from save_item_id into final file path.
+using FinalNamesMap = std::map<SaveItemId, base::FilePath>;
 
 // This structure is used to handle and deliver some info
 // when processing each save item job.
@@ -33,12 +43,25 @@ struct SaveFileCreateInfo {
     SAVE_FILE_FROM_FILE
   };
 
+  // Constructor for SAVE_FILE_FROM_DOM and/or SAVE_FILE_FROM_FILE.
   SaveFileCreateInfo(const base::FilePath& path,
                      const GURL& url,
-                     SaveFileSource save_source,
-                     int32 save_id);
+                     SaveItemId save_item_id,
+                     SavePackageId save_package_id,
+                     int render_process_id,
+                     int render_frame_routing_id,
+                     SaveFileSource save_source);
 
-  SaveFileCreateInfo();
+  // Constructor for SAVE_FILE_FROM_NET case.
+  SaveFileCreateInfo(const GURL& url,
+                     const GURL& final_url,
+                     SaveItemId save_item_id,
+                     SavePackageId save_package_id,
+                     int render_process_id,
+                     int render_frame_routing_id,
+                     int request_id,
+                     const std::string& content_disposition,
+                     int64_t total_bytes);
 
   ~SaveFileCreateInfo();
 
@@ -49,18 +72,19 @@ struct SaveFileCreateInfo {
   GURL url;
   // Final URL of the saved resource since some URL might be redirected.
   GURL final_url;
-  // The unique identifier for saving job, assigned at creation by
-  // the SaveFileManager for its internal record keeping.
-  int save_id;
+  // The unique identifier of SaveItem object associated with this job.
+  SaveItemId save_item_id;
+  // ID of SavePackage object.
+  SavePackageId save_package_id;
   // IDs for looking up the contents we are associated with.
   int render_process_id;
-  int render_view_id;
+  int render_frame_routing_id;
   // Handle for informing the ResourceDispatcherHost of a UI based cancel.
   int request_id;
   // Disposition info from HTTP response.
   std::string content_disposition;
   // Total bytes of saved file.
-  int64 total_bytes;
+  int64_t total_bytes;
   // Source type of saved file.
   SaveFileSource save_source;
 };

@@ -5,6 +5,8 @@
 #ifndef SYNC_ENGINE_COMMIT_CONTRIBUTION_H_
 #define SYNC_ENGINE_COMMIT_CONTRIBUTION_H_
 
+#include <stddef.h>
+
 #include "sync/base/sync_export.h"
 #include "sync/internal_api/public/util/syncer_error.h"
 #include "sync/protocol/sync.pb.h"
@@ -20,7 +22,7 @@ class StatusController;
 // have been selected from a CommitContributor and prepared for commit.
 //
 // This class handles the bookkeeping related to the commit of these items.
-class SYNC_EXPORT_PRIVATE CommitContribution {
+class SYNC_EXPORT CommitContribution {
  public:
   CommitContribution();
   virtual ~CommitContribution() = 0;

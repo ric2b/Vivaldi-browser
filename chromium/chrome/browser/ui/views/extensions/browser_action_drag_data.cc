@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/extensions/browser_action_drag_data.h"
 
+#include <stdint.h>
+
 #include "base/logging.h"
 #include "base/pickle.h"
 #include "base/strings/string_util.h"
@@ -27,8 +29,8 @@ BrowserActionDragData::BrowserActionDragData(
 }
 
 bool BrowserActionDragData::GetDropFormats(
-    std::set<ui::OSExchangeData::CustomFormat>* custom_formats) {
-  custom_formats->insert(GetBrowserActionCustomFormat());
+    std::set<ui::Clipboard::FormatType>* format_types) {
+  format_types->insert(GetBrowserActionFormatType());
   return true;
 }
 
@@ -52,15 +54,15 @@ void BrowserActionDragData::Write(
   DCHECK(data);
   base::Pickle data_pickle;
   WriteToPickle(profile, &data_pickle);
-  data->SetPickledData(GetBrowserActionCustomFormat(), data_pickle);
+  data->SetPickledData(GetBrowserActionFormatType(), data_pickle);
 }
 
 bool BrowserActionDragData::Read(const ui::OSExchangeData& data) {
-  if (!data.HasCustomFormat(GetBrowserActionCustomFormat()))
+  if (!data.HasCustomFormat(GetBrowserActionFormatType()))
     return false;
 
   base::Pickle drag_data_pickle;
-  if (!data.GetPickledData(GetBrowserActionCustomFormat(), &drag_data_pickle))
+  if (!data.GetPickledData(GetBrowserActionFormatType(), &drag_data_pickle))
     return false;
 
   if (!ReadFromPickle(&drag_data_pickle))
@@ -70,10 +72,10 @@ bool BrowserActionDragData::Read(const ui::OSExchangeData& data) {
 }
 
 // static
-const ui::OSExchangeData::CustomFormat&
-BrowserActionDragData::GetBrowserActionCustomFormat() {
+const ui::Clipboard::FormatType&
+BrowserActionDragData::GetBrowserActionFormatType() {
   CR_DEFINE_STATIC_LOCAL(
-      ui::OSExchangeData::CustomFormat,
+      ui::Clipboard::FormatType,
       format,
       (ui::Clipboard::GetFormatType(kClipboardFormatString)));
 
@@ -99,7 +101,7 @@ bool BrowserActionDragData::ReadFromPickle(base::Pickle* pickle) {
   if (!data_iterator.ReadString(&id_))
     return false;
 
-  uint64 index;
+  uint64_t index;
   if (!data_iterator.ReadUInt64(&index))
     return false;
   index_ = static_cast<size_t>(index);

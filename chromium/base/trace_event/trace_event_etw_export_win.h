@@ -6,17 +6,20 @@
 #ifndef BASE_TRACE_EVENT_TRACE_EVENT_ETW_EXPORT_WIN_H_
 #define BASE_TRACE_EVENT_TRACE_EVENT_ETW_EXPORT_WIN_H_
 
+#include <stdint.h>
+
 #include <map>
 
 #include "base/base_export.h"
+#include "base/macros.h"
 #include "base/strings/string_piece.h"
 #include "base/trace_event/trace_event_impl.h"
 
-// Fwd.
+namespace base {
+
 template <typename Type>
 struct StaticMemorySingletonTraits;
 
-namespace base {
 namespace trace_event {
 
 class BASE_EXPORT TraceEventETWExport {
@@ -49,17 +52,8 @@ class BASE_EXPORT TraceEventETWExport {
       const unsigned long long* arg_values,
       const scoped_refptr<ConvertableToTraceFormat>* convertable_values);
 
-  // Exports an event to ETW. This should be used when exporting an event only
-  // to ETW. Supports three arguments to be passed to ETW.
-  // TODO(georgesak): Allow different providers.
-  static void AddCustomEvent(const char* name,
-                             const char* phase,
-                             const char* arg_name_1,
-                             const char* arg_value_1,
-                             const char* arg_name_2,
-                             const char* arg_value_2,
-                             const char* arg_name_3,
-                             const char* arg_value_3);
+  // Exports an ETW event that marks the end of a complete event.
+  static void AddCompleteEndEvent(const char* name);
 
   // Returns true if any category in the group is enabled.
   static bool IsCategoryGroupEnabled(const char* category_group_name);
@@ -67,6 +61,8 @@ class BASE_EXPORT TraceEventETWExport {
  private:
   // Ensure only the provider can construct us.
   friend struct StaticMemorySingletonTraits<TraceEventETWExport>;
+  // To have access to UpdateKeyword().
+  class ETWKeywordUpdateThread;
   TraceEventETWExport();
 
   // Updates the list of enabled categories by consulting the ETW keyword.
@@ -76,14 +72,23 @@ class BASE_EXPORT TraceEventETWExport {
   // Returns true if the category is enabled.
   bool IsCategoryEnabled(const char* category_name) const;
 
+  // Called back by the update thread to check for potential changes to the
+  // keyword.
+  static void UpdateETWKeyword();
+
   // True if ETW is enabled. Allows hiding the exporting behind a flag.
   bool etw_export_enabled_;
 
   // Maps category names to their status (enabled/disabled).
-  std::map<base::StringPiece, bool> categories_status_;
+  std::map<StringPiece, bool> categories_status_;
 
   // Local copy of the ETW keyword.
-  uint64 etw_match_any_keyword_;
+  uint64_t etw_match_any_keyword_;
+
+  // Background thread that monitors changes to the ETW keyword and updates
+  // the enabled categories when a change occurs.
+  scoped_ptr<ETWKeywordUpdateThread> keyword_update_thread_;
+  PlatformThreadHandle keyword_update_thread_handle_;
 
   DISALLOW_COPY_AND_ASSIGN(TraceEventETWExport);
 };

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grit latest_public_release="0" current_release="1">
+  <release seq="1" allow_pseudo="false">
+    <structures fallback_to_low_resolution="true">
+      <structure type="chrome_scaled_image" name="IDR_DEFAULT_FAVICON" file="vivaldi/default_favicon.png" />
+      <structure type="chrome_scaled_image" name="IDR_DEFAULT_FAVICON_32" file="vivaldi/default_favicon_32.png" />
+      <structure type="chrome_scaled_image" name="IDR_DEFAULT_FAVICON_64" file="vivaldi/default_favicon_64.png" />
+    </structures>
+  </release>
+</grit>

@@ -44,16 +44,16 @@ source_set("app_shell_lib") {
     "//content/shell:content_shell_lib",
     "//device/core",
     "//device/hid",
-    "//extensions/common/api",
-    "//extensions/common/api:api_registration",
+    "//extensions:extensions_resources",
+    "//extensions:shell_and_test_pak",
     "//extensions/browser",
     "//extensions/common",
+    "//extensions/common/api",
+    "//extensions/common/api:api_registration",
     "//extensions/renderer",
     "//extensions/shell/common/api",
     "//extensions/shell/common/api:api_registration",
     "//extensions/utility",
-    "//extensions:extensions_resources",
-    "//extensions:shell_and_test_pak",
     "//mojo/environment:chromium",
     "//skia",
     "//third_party/WebKit/public:blink",
@@ -89,28 +89,6 @@ source_set("app_shell_lib") {
     sources += chromeos_sources
   }
 
-  # TODO(GYP): Enable this when //components/nacl GN is done. See
-  # http://crbug.com/430602
-  if (false) {
-    if (enable_nacl) {
-      if (is_linux) {
-        deps += [ "//components/nacl:nacl_helper" ]
-      }
-      deps += [
-        "//components/nacl",
-        "//components/nacl:browser",
-        "//components/nacl:common",
-        "//components/nacl:renderer",
-        "//components/nacl:switches",
-      ]
-      nacl_sources =
-          rebase_path(app_shell_gypi_values.app_shell_lib_sources_nacl,
-                      ".",
-                      "//extensions/shell")
-      sources += nacl_sources
-    }
-  }
-
   if (enable_nacl) {
     sources += [
       "browser/shell_nacl_browser_delegate.cc",
@@ -118,17 +96,23 @@ source_set("app_shell_lib") {
     ]
 
     deps += [
-      "//components/nacl",
-      "//components/nacl:nacl_browser",
-      "//components/nacl:nacl_common",
-      "//components/nacl:nacl_renderer",
-      "//components/nacl:nacl_switches",
+      "//components/nacl/browser",
+      "//components/nacl/common",
+      "//components/nacl/loader",
+      "//components/nacl/renderer",
       "//components/nacl/renderer/plugin:nacl_trusted_plugin",
     ]
 
     if (is_linux) {
-      deps += [ "//components/nacl:nacl_helper" ]
+      deps += [
+        "//components/nacl/loader:helper_nonsfi",
+        "//components/nacl/loader:nacl_helper",
+      ]
     }
+  }
+
+  if (cld_version == 2) {
+    deps += [ "//third_party/cld_2:cld2_platform_impl" ]
   }
 }
 
@@ -141,6 +125,7 @@ if (!(is_chromeos && !use_ozone)) {
                           "//extensions/shell")
     deps = [
       ":app_shell_lib",
+      "//build/config/sanitizers:deps",
       "//extensions:shell_and_test_pak",
     ]
 
@@ -151,15 +136,37 @@ if (!(is_chromeos && !use_ozone)) {
     }
 
     if (is_mac) {
-      # TODO(GYP): Mac bundling
+      # TODO(GYP) bug 546894: Fix GN and toolchains to handle spaces here.
+      #output_name = "App Shell"
+      # TODO(GYP): Mac bundling. See also content_shell which this is basically
+      # a copy-paste of.
+      deps += [ ":app_shell_framework" ]
+      # TODO(GYP): Mac app_shell_helper stuff.
     }
   }
+}
+
+# TODO(GYP): Delete this after we've converted everything to GN.
+# The _run targets exist only for compatibility w/ GYP.
+group("app_shell_unittests_run") {
+  testonly = true
+  deps = [
+    ":app_shell_unittests",
+  ]
 }
 
 test("app_shell_unittests") {
   sources = rebase_path(app_shell_gypi_values.app_shell_unittests_sources,
                         ".",
                         "//extensions/shell")
+
+  data = [
+    "//extensions/test/data/",
+    "$root_out_dir/extensions_shell_and_test.pak",
+
+    #"$root_out_dir/natives_blob.bin", # move to gin
+    #"$root_out_dir/snapshot_blob.bin",
+  ]
 
   deps = [
     ":app_shell_lib",
@@ -169,6 +176,11 @@ test("app_shell_unittests") {
     "//extensions:shell_and_test_pak",
     "//extensions:test_support",
     "//testing/gtest",
+  ]
+
+  data_deps = [
+    # "//gin", # TODO(dpranke): Either gin or v8 data is needed ...
+    "//third_party/mesa:osmesa",
   ]
 
   if (use_aura) {
@@ -210,4 +222,20 @@ test("app_shell_unittests") {
 process_version("version_header") {
   template_file = "common/version.h.in"
   output = "$target_gen_dir/common/version.h"
+}
+
+if (is_mac) {
+  # TODO(GYP) this should be a bundle. Lots of other stuff in this target.
+  # Should be able to copy content shell framework (this is basically a
+  # copy-paste of that target).
+  shared_library("app_shell_framework") {
+    testonly = true
+    sources = [
+      "app/shell_main_mac.cc",
+      "app/shell_main_mac.h",
+    ]
+    deps = [
+      ":app_shell_lib",
+    ]
+  }
 }

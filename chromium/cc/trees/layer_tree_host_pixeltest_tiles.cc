@@ -2,10 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "cc/layers/content_layer_client.h"
 #include "cc/layers/picture_layer.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/playback/display_item_list.h"
+#include "cc/playback/display_item_list_settings.h"
 #include "cc/playback/drawing_display_item.h"
 #include "cc/test/layer_tree_pixel_test.h"
 #include "cc/test/test_gpu_memory_buffer_manager.h"
@@ -20,32 +23,40 @@ namespace {
 enum RasterMode {
   PARTIAL_ONE_COPY,
   FULL_ONE_COPY,
-  GPU,
-  BITMAP,
+  PARTIAL_GPU,
+  FULL_GPU,
+  PARTIAL_BITMAP,
+  FULL_BITMAP,
 };
 
 class LayerTreeHostTilesPixelTest : public LayerTreePixelTest {
  protected:
   void InitializeSettings(LayerTreeSettings* settings) override {
     LayerTreePixelTest::InitializeSettings(settings);
-    settings->use_display_lists = true;
     switch (raster_mode_) {
       case PARTIAL_ONE_COPY:
-        settings->use_one_copy = true;
         settings->use_zero_copy = false;
-        settings->use_persistent_map_for_gpu_memory_buffers = true;
+        settings->use_partial_raster = true;
         break;
       case FULL_ONE_COPY:
-        settings->use_one_copy = true;
         settings->use_zero_copy = false;
-        settings->use_persistent_map_for_gpu_memory_buffers = false;
+        settings->use_partial_raster = false;
         break;
-      case BITMAP:
-        // This is done via context creation. No settings to change here!
+      case PARTIAL_BITMAP:
+        settings->use_partial_raster = true;
         break;
-      case GPU:
+      case FULL_BITMAP:
+        settings->use_partial_raster = false;
+        break;
+      case PARTIAL_GPU:
         settings->gpu_rasterization_enabled = true;
         settings->gpu_rasterization_forced = true;
+        settings->use_partial_raster = true;
+        break;
+      case FULL_GPU:
+        settings->gpu_rasterization_enabled = true;
+        settings->gpu_rasterization_forced = true;
+        settings->use_partial_raster = false;
         break;
     }
   }
@@ -71,10 +82,12 @@ class LayerTreeHostTilesPixelTest : public LayerTreePixelTest {
     switch (mode) {
       case PARTIAL_ONE_COPY:
       case FULL_ONE_COPY:
-      case GPU:
+      case PARTIAL_GPU:
+      case FULL_GPU:
         test_type = PIXEL_TEST_GL;
         break;
-      case BITMAP:
+      case PARTIAL_BITMAP:
+      case FULL_BITMAP:
         test_type = PIXEL_TEST_SOFTWARE;
     }
 
@@ -94,16 +107,13 @@ class BlueYellowClient : public ContentLayerClient {
   explicit BlueYellowClient(const gfx::Size& size)
       : size_(size), blue_top_(true) {}
 
-  void PaintContents(SkCanvas* canvas,
-                     const gfx::Rect& clip,
-                     PaintingControlSetting painting_status) override {}
-
+  gfx::Rect PaintableRegion() override { return gfx::Rect(size_); }
   scoped_refptr<DisplayItemList> PaintContentsToDisplayList(
-      const gfx::Rect& clip,
       PaintingControlSetting painting_status) override {
-    bool use_cached_picture = false;
+    DisplayItemListSettings settings;
+    settings.use_cached_picture = false;
     scoped_refptr<DisplayItemList> display_list =
-        DisplayItemList::Create(clip, use_cached_picture);
+        DisplayItemList::Create(PaintableRegion(), settings);
 
     SkPictureRecorder recorder;
     skia::RefPtr<SkCanvas> canvas = skia::SharePtr(
@@ -122,17 +132,14 @@ class BlueYellowClient : public ContentLayerClient {
     paint.setColor(SK_ColorYELLOW);
     canvas->drawRect(gfx::RectToSkRect(yellow_rect), paint);
 
-    skia::RefPtr<SkPicture> picture =
-        skia::AdoptRef(recorder.endRecordingAsPicture());
-
-    auto* item = display_list->CreateAndAppendItem<DrawingDisplayItem>();
-    item->SetNew(picture.Pass());
-
+    display_list->CreateAndAppendItem<DrawingDisplayItem>(
+        PaintableRegion(), skia::AdoptRef(recorder.endRecordingAsPicture()));
     display_list->Finalize();
     return display_list;
   }
 
   bool FillsBoundsCompletely() const override { return true; }
+  size_t GetApproximateUnsharedMemoryUsage() const override { return 0; }
 
   void set_blue_top(bool b) { blue_top_ = b; }
 
@@ -160,6 +167,7 @@ class LayerTreeHostTilesTestPartialInvalidation
         // only re-raster the stuff in the rect. If it doesn't do partial raster
         // it would re-raster the whole thing instead.
         client_.set_blue_top(false);
+        Finish();
         picture_layer_->SetNeedsDisplayRect(gfx::Rect(50, 50, 100, 100));
 
         // Add a copy request to see what happened!
@@ -188,6 +196,13 @@ TEST_F(LayerTreeHostTilesTestPartialInvalidation,
 }
 
 TEST_F(LayerTreeHostTilesTestPartialInvalidation,
+       PartialRaster_MultiThread_OneCopy) {
+  RunRasterPixelTest(
+      true, PARTIAL_ONE_COPY, picture_layer_,
+      base::FilePath(FILE_PATH_LITERAL("blue_yellow_partial_flipped.png")));
+}
+
+TEST_F(LayerTreeHostTilesTestPartialInvalidation,
        FullRaster_MultiThread_OneCopy) {
   RunRasterPixelTest(
       true, FULL_ONE_COPY, picture_layer_,
@@ -197,15 +212,29 @@ TEST_F(LayerTreeHostTilesTestPartialInvalidation,
 TEST_F(LayerTreeHostTilesTestPartialInvalidation,
        PartialRaster_SingleThread_Software) {
   RunRasterPixelTest(
-      false, BITMAP, picture_layer_,
+      false, PARTIAL_BITMAP, picture_layer_,
       base::FilePath(FILE_PATH_LITERAL("blue_yellow_partial_flipped.png")));
+}
+
+TEST_F(LayerTreeHostTilesTestPartialInvalidation,
+       FulllRaster_SingleThread_Software) {
+  RunRasterPixelTest(
+      false, FULL_BITMAP, picture_layer_,
+      base::FilePath(FILE_PATH_LITERAL("blue_yellow_flipped.png")));
 }
 
 TEST_F(LayerTreeHostTilesTestPartialInvalidation,
        PartialRaster_SingleThread_GpuRaster) {
   RunRasterPixelTest(
-      false, GPU, picture_layer_,
+      false, PARTIAL_GPU, picture_layer_,
       base::FilePath(FILE_PATH_LITERAL("blue_yellow_partial_flipped.png")));
+}
+
+TEST_F(LayerTreeHostTilesTestPartialInvalidation,
+       FullRaster_SingleThread_GpuRaster) {
+  RunRasterPixelTest(
+      false, FULL_GPU, picture_layer_,
+      base::FilePath(FILE_PATH_LITERAL("blue_yellow_flipped.png")));
 }
 
 }  // namespace

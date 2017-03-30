@@ -8,7 +8,7 @@
 #include <jni.h>
 
 #include "base/android/jni_weak_ref.h"
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/process/kill.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -27,7 +27,7 @@ class WebContentsObserverProxy : public WebContentsObserver {
   WebContentsObserverProxy(JNIEnv* env, jobject obj, WebContents* web_contents);
   ~WebContentsObserverProxy() override;
 
-  void Destroy(JNIEnv* env, jobject obj);
+  void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
 
  private:
   void RenderViewReady() override;
@@ -73,6 +73,7 @@ class WebContentsObserverProxy : public WebContentsObserver {
       NavigationController::ReloadType reload_type) override;
   void MediaSessionStateChanged(bool is_controllable,
                                 bool is_suspended) override;
+  void SetToBaseURLForDataURLIfNeeded(std::string* url);
 
   void DidFailLoadInternal(bool is_provisional_load,
                            bool is_main_frame,
@@ -82,6 +83,7 @@ class WebContentsObserverProxy : public WebContentsObserver {
                            bool was_ignored_by_handler);
 
   base::android::ScopedJavaGlobalRef<jobject> java_observer_;
+  GURL base_url_of_last_started_data_url_;
 
   DISALLOW_COPY_AND_ASSIGN(WebContentsObserverProxy);
 };

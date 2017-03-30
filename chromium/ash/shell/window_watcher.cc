@@ -4,7 +4,9 @@
 
 #include "ash/shell/window_watcher.h"
 
-#include "ash/display/display_controller.h"
+#include <utility>
+
+#include "ash/display/window_tree_host_manager.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_item_delegate_manager.h"
 #include "ash/shelf/shelf_model.h"
@@ -118,7 +120,7 @@ void WindowWatcher::OnWindowAdded(aura::Window* new_window) {
       Shell::GetInstance()->shelf_item_delegate_manager();
   scoped_ptr<ShelfItemDelegate> delegate(
       new WindowWatcherShelfItemDelegate(id, this));
-  manager->SetShelfItemDelegate(id, delegate.Pass());
+  manager->SetShelfItemDelegate(id, std::move(delegate));
   SetShelfIDForWindow(id, new_window);
 }
 
@@ -137,8 +139,9 @@ void WindowWatcher::OnWillRemoveWindow(aura::Window* window) {
 }
 
 void WindowWatcher::OnDisplayAdded(const gfx::Display& new_display) {
-  aura::Window* root = Shell::GetInstance()->display_controller()->
-      GetRootWindowForDisplayId(new_display.id());
+  aura::Window* root = Shell::GetInstance()
+                           ->window_tree_host_manager()
+                           ->GetRootWindowForDisplayId(new_display.id());
   workspace_window_watcher_->RootWindowAdded(root);
 }
 

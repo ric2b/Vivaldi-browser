@@ -4,6 +4,8 @@
 
 #include "chromeos/audio/audio_device.h"
 
+#include <stdint.h>
+
 #include "base/format_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -15,7 +17,7 @@ namespace {
 
 // Get the priority for a particular device type. The priority returned
 // will be between 0 to 3, the higher number meaning a higher priority.
-uint8 GetDevicePriority(AudioDeviceType type, bool is_input) {
+uint8_t GetDevicePriority(AudioDeviceType type, bool is_input) {
   // Lower the priority of bluetooth mic to prevent unexpected bad eperience
   // to user because of bluetooth audio profile switching. Make priority to
   // zero so this mic will never be automatically chosen.
@@ -123,6 +125,7 @@ AudioDevice::AudioDevice(const AudioNode& node) {
   else
     display_name = node.device_name;
   device_name = node.device_name;
+  mic_positions = node.mic_positions;
   priority = GetDevicePriority(type, node.is_input);
   active = node.active;
   plugged_time = node.plugged_time;
@@ -151,6 +154,7 @@ std::string AudioDevice::ToString() const {
   base::StringAppendF(&result,
                       "plugged_time= %s ",
                       base::Uint64ToString(plugged_time).c_str());
+  base::StringAppendF(&result, "mic_positions = %s ", mic_positions.c_str());
 
   return result;
 }

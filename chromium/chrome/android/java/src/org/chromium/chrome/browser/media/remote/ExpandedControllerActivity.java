@@ -55,37 +55,53 @@ public class ExpandedControllerActivity
     private TransportPerformer mTransportPerformer = new TransportPerformer() {
         @Override
         public void onStart() {
+            if (mMediaRouteController == null) return;
             mMediaRouteController.resume();
+            RecordCastAction.recordFullscreenControlsAction(
+                    RecordCastAction.FULLSCREEN_CONTROLS_RESUME,
+                    mMediaRouteController.getMediaStateListener() != null);
         }
 
         @Override
         public void onStop() {
+            if (mMediaRouteController == null) return;
             onPause();
             mMediaRouteController.release();
         }
 
         @Override
         public void onPause() {
+            if (mMediaRouteController == null) return;
             mMediaRouteController.pause();
+            RecordCastAction.recordFullscreenControlsAction(
+                    RecordCastAction.FULLSCREEN_CONTROLS_PAUSE,
+                    mMediaRouteController.getMediaStateListener() != null);
         }
 
         @Override
         public long onGetDuration() {
+            if (mMediaRouteController == null) return 0;
             return mMediaRouteController.getDuration();
         }
 
         @Override
         public long onGetCurrentPosition() {
+            if (mMediaRouteController == null) return 0;
             return mMediaRouteController.getPosition();
         }
 
         @Override
         public void onSeekTo(long pos) {
-            mMediaRouteController.seekTo((int) pos);
+            if (mMediaRouteController == null) return;
+            mMediaRouteController.seekTo(pos);
+            RecordCastAction.recordFullscreenControlsAction(
+                    RecordCastAction.FULLSCREEN_CONTROLS_SEEK,
+                    mMediaRouteController.getMediaStateListener() != null);
         }
 
         @Override
         public boolean onIsPlaying() {
+            if (mMediaRouteController == null) return false;
             return mMediaRouteController.isPlaying();
         }
 
@@ -93,7 +109,7 @@ public class ExpandedControllerActivity
         public int onGetTransportControlFlags() {
             int flags = TransportMediator.FLAG_KEY_MEDIA_REWIND
                     | TransportMediator.FLAG_KEY_MEDIA_FAST_FORWARD;
-            if (mMediaRouteController.isPlaying()) {
+            if (mMediaRouteController != null && mMediaRouteController.isPlaying()) {
                 flags |= TransportMediator.FLAG_KEY_MEDIA_PAUSE;
             } else {
                 flags |= TransportMediator.FLAG_KEY_MEDIA_PLAY;
@@ -174,6 +190,12 @@ public class ExpandedControllerActivity
         super.onResume();
         if (mVideoInfo.state == PlayerState.FINISHED) finish();
         if (mMediaRouteController == null) return;
+
+        // Lifetime of the media element is bound to that of the {@link MediaStateListener}
+        // of the {@link MediaRouteController}.
+        RecordCastAction.recordFullscreenControlsShown(
+                mMediaRouteController.getMediaStateListener() != null);
+
         mMediaRouteController.prepareMediaRoute();
 
         ImageView iv = (ImageView) findViewById(R.id.cast_background_image);
@@ -291,14 +313,14 @@ public class ExpandedControllerActivity
     }
 
     @Override
-    public void onDurationUpdated(int durationMillis) {
+    public void onDurationUpdated(long durationMillis) {
         RemoteVideoInfo videoInfo = new RemoteVideoInfo(mVideoInfo);
         videoInfo.durationMillis = durationMillis;
         setVideoInfo(videoInfo);
     }
 
     @Override
-    public void onPositionChanged(int positionMillis) {
+    public void onPositionChanged(long positionMillis) {
         RemoteVideoInfo videoInfo = new RemoteVideoInfo(mVideoInfo);
         videoInfo.currentTimeMillis = positionMillis;
         setVideoInfo(videoInfo);

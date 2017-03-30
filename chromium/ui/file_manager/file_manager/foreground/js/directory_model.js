@@ -39,6 +39,11 @@ function DirectoryModel(
   this.scanFailures_ = 0;
   this.changeDirectorySequence_ = 0;
 
+  /**
+   * @private {boolean}
+   */
+  this.ignoreCurrentDirectoryDeletion_ = false;
+
   this.directoryChangeQueue_ = new AsyncUtil.Queue();
   this.rescanAggregator_ = new AsyncUtil.Aggregator(
       this.rescanSoon.bind(this, true), 500);
@@ -48,12 +53,12 @@ function DirectoryModel(
                                     this.onFilterChanged_.bind(this));
 
   this.currentFileListContext_ =
-      new FileListContext(fileFilter,  metadataModel);
+      new FileListContext(fileFilter, metadataModel);
   this.currentDirContents_ =
       DirectoryContents.createForDirectory(this.currentFileListContext_, null);
   /**
    * Empty file list which is used as a dummy for inactive view of file list.
-   * @type {!FileListModel}
+   * @private {!FileListModel}
    */
   this.emptyFileList_ = new FileListModel(metadataModel);
 
@@ -241,6 +246,16 @@ DirectoryModel.prototype.updateSelectionAndPublishEvent_ =
 };
 
 /**
+ * Sets to ignore current directory deletion. This method is used to prevent
+ * going up to the volume root with the deletion of current directory by rename
+ * operation in directory tree.
+ * @param {boolean} value True to ignore current directory deletion.
+ */
+DirectoryModel.prototype.setIgnoringCurrentDirectoryDeletion = function(value) {
+  this.ignoreCurrentDirectoryDeletion_ = value;
+};
+
+/**
  * Invoked when a change in the directory is detected by the watcher.
  * @param {Event} event Event object.
  * @private
@@ -248,17 +263,19 @@ DirectoryModel.prototype.updateSelectionAndPublishEvent_ =
 DirectoryModel.prototype.onWatcherDirectoryChanged_ = function(event) {
   var directoryEntry = this.getCurrentDirEntry();
 
-  // If the change is deletion of currentDir, move up to its parent directory.
-  directoryEntry.getDirectory(directoryEntry.fullPath, {create: false},
-      function() {},
-      function() {
-        var volumeInfo = this.volumeManager_.getVolumeInfo(directoryEntry);
-        if (volumeInfo) {
-          volumeInfo.resolveDisplayRoot().then(function(displayRoot) {
-            this.changeDirectoryEntry(displayRoot);
-          }.bind(this));
-        }
-      }.bind(this));
+  if (!this.ignoreCurrentDirectoryDeletion_) {
+    // If the change is deletion of currentDir, move up to its parent directory.
+    directoryEntry.getDirectory(directoryEntry.fullPath, {create: false},
+        function() {},
+        function() {
+          var volumeInfo = this.volumeManager_.getVolumeInfo(directoryEntry);
+          if (volumeInfo) {
+            volumeInfo.resolveDisplayRoot().then(function(displayRoot) {
+              this.changeDirectoryEntry(displayRoot);
+            }.bind(this));
+          }
+        }.bind(this));
+  }
 
   if (event.changedFiles) {
     var addedOrUpdatedFileUrls = [];
@@ -857,65 +874,38 @@ DirectoryModel.prototype.onRenameEntry = function(
 };
 
 /**
- * Creates directory and updates the file list.
- *
- * @param {string} name Directory name.
- * @param {function(DirectoryEntry)} successCallback Callback on success.
- * @param {function(DOMError)} errorCallback Callback on failure.
- * @param {function()} abortCallback Callback on abort (cancelled by user).
+ * Updates data model and selects new directory.
+ * @param {!DirectoryEntry} newDirectory Directory entry to be selected.
+ * @return {Promise} A promise which is resolved when new directory is selected.
+ *     If current directory has changed during the operation, this will be
+ *     rejected.
  */
-DirectoryModel.prototype.createDirectory = function(name,
-                                                    successCallback,
-                                                    errorCallback,
-                                                    abortCallback) {
-  // Obtain and check the current directory.
-  var entry = this.getCurrentDirEntry();
-  if (!entry || this.isSearching() || util.isFakeEntry(entry)) {
-    errorCallback(util.createDOMError(
-        util.FileError.INVALID_MODIFICATION_ERR));
-    return;
-  }
-  entry = /** @type {DirectoryEntry} */ (entry);
-
+DirectoryModel.prototype.updateAndSelectNewDirectory = function(newDirectory) {
+  // Refresh the cache.
+  this.metadataModel_.notifyEntriesCreated([newDirectory]);
   var dirContents = this.currentDirContents_;
-  var sequence = this.changeDirectorySequence_;
 
-  new Promise(entry.getDirectory.bind(
-      entry, name, {create: true, exclusive: true})).
+  return new Promise(function(onFulfilled, onRejected) {
+    dirContents.prefetchMetadata(
+        [newDirectory], false, onFulfilled);
+  }).then(function(sequence) {
+    // If current directory has changed during the prefetch, do not try to
+    // select new directory.
+    if (sequence !== this.changeDirectorySequence_)
+      return Promise.reject();
 
-      then(function(newEntry) {
-        // Refresh the cache.
-        this.metadataModel_.notifyEntriesCreated([newEntry]);
-        return new Promise(function(onFulfilled, onRejected) {
-          dirContents.prefetchMetadata(
-              [newEntry], false, onFulfilled.bind(null, newEntry));
-        }.bind(this));
-      }.bind(this)).
-
-      then(function(newEntry) {
-        // Do not change anything or call the callback if current
-        // directory changed.
-        if (this.changeDirectorySequence_ !== sequence) {
-          abortCallback();
-          return;
-        }
-
-        // If target directory is already in the list, just select it.
-        var existing = this.getFileList().slice().filter(
-            function(e) { return e.name === name; });
-        if (existing.length) {
-          this.selectEntry(newEntry);
-          successCallback(existing[0]);
-        } else {
-          this.fileListSelection_.beginChange();
-          this.getFileList().splice(0, 0, newEntry);
-          this.selectEntry(newEntry);
-          this.fileListSelection_.endChange();
-          successCallback(newEntry);
-        }
-      }.bind(this), function(reason) {
-        errorCallback(/** @type {DOMError} */ (reason));
-      });
+    // If target directory is already in the list, just select it.
+    var existing = this.getFileList().slice().filter(
+        function(e) { return e.name === newDirectory.name; });
+    if (existing.length) {
+      this.selectEntry(newDirectory);
+    } else {
+      this.fileListSelection_.beginChange();
+      this.getFileList().splice(0, 0, newDirectory);
+      this.selectEntry(newDirectory);
+      this.fileListSelection_.endChange();
+    }
+  }.bind(this, this.changeDirectorySequence_));
 };
 
 /**
@@ -1028,7 +1018,7 @@ DirectoryModel.prototype.onVolumeChanged_ = function(volumeInfo) {
               case VolumeManagerCommon.VolumeType.PROVIDED:
                 var extensionId = volumeInfo.extensionId;
                 var extensionName =
-                    metrics.getFileSystemProviderName(extensionId, 'unknown');
+                    metrics.getFileSystemProviderName(extensionId);
                 // Make note of an unrecognized extension id. When we see
                 // high counts for a particular id, we should add it to the
                 // whitelist in metrics_events.js.

@@ -2,11 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/edk/system/endpoint_relayer.h"
+#include "third_party/mojo/src/mojo/edk/system/endpoint_relayer.h"
+
+#include <utility>
 
 #include "base/logging.h"
-#include "mojo/edk/system/channel_endpoint.h"
-#include "mojo/edk/system/message_in_transit.h"
+#include "third_party/mojo/src/mojo/edk/system/channel_endpoint.h"
+#include "third_party/mojo/src/mojo/edk/system/message_in_transit.h"
 
 namespace mojo {
 namespace system {
@@ -31,14 +33,14 @@ void EndpointRelayer::Init(ChannelEndpoint* endpoint0,
 }
 
 void EndpointRelayer::SetFilter(scoped_ptr<Filter> filter) {
-  base::AutoLock locker(lock_);
-  filter_ = filter.Pass();
+  MutexLocker locker(&mutex_);
+  filter_ = std::move(filter);
 }
 
 bool EndpointRelayer::OnReadMessage(unsigned port, MessageInTransit* message) {
   DCHECK(message);
 
-  base::AutoLock locker(lock_);
+  MutexLocker locker(&mutex_);
 
   // If we're no longer the client, then reject the message.
   if (!endpoints_[port])
@@ -59,7 +61,7 @@ bool EndpointRelayer::OnReadMessage(unsigned port, MessageInTransit* message) {
 }
 
 void EndpointRelayer::OnDetachFromChannel(unsigned port) {
-  base::AutoLock locker(lock_);
+  MutexLocker locker(&mutex_);
 
   if (endpoints_[port]) {
     endpoints_[port]->DetachFromClient();

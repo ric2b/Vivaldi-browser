@@ -12,16 +12,17 @@
 
 #define IPC_MESSAGE_START ContentSettingsMsgStart
 
-IPC_ENUM_TRAITS_MAX_VALUE(ContentSettingsType, CONTENT_SETTINGS_NUM_TYPES - 1)
+IPC_ENUM_TRAITS_MAX_VALUE(ContentSettingsType,
+                          CONTENT_SETTINGS_NUM_TYPES_DO_NOT_USE - 1)
 
 //-----------------------------------------------------------------------------
 // These are messages sent from the browser to the renderer process.
 
-// Sent in response to ViewHostMsg_DidBlockDisplayingInsecureContent.
+// Sent in response to FrameHostMsg_DidBlockDisplayingInsecureContent.
 IPC_MESSAGE_ROUTED1(ChromeViewMsg_SetAllowDisplayingInsecureContent,
                     bool /* allowed */)
 
-// Sent in response to ViewHostMsg_DidBlockRunningInsecureContent.
+// Sent in response to FrameHostMsg_DidBlockRunningInsecureContent.
 IPC_MESSAGE_ROUTED1(ChromeViewMsg_SetAllowRunningInsecureContent,
                     bool /* allowed */)
 
@@ -71,6 +72,11 @@ IPC_SYNC_MESSAGE_CONTROL4_1(ChromeViewHostMsg_AllowDOMStorage,
                             GURL /* top origin url */,
                             bool /* if true local storage, otherwise session */,
                             bool /* allowed */)
+
+// Sent by the renderer process when a keygen element is rendered onto the
+// current page.
+IPC_MESSAGE_ROUTED1(ChromeViewHostMsg_DidUseKeygen,
+                    GURL /* origin_url */)
 
 // Sent by the renderer process to check whether access to FileSystem is
 // granted by content settings.

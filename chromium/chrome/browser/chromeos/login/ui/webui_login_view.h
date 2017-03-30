@@ -8,15 +8,13 @@
 #include <map>
 #include <string>
 
-#include "base/memory/scoped_ptr.h"
+#include "base/macros.h"
 #include "base/observer_list.h"
 #include "chrome/browser/ui/chrome_web_modal_dialog_manager_delegate.h"
-#include "components/web_modal/popup_manager.h"
 #include "components/web_modal/web_contents_modal_dialog_host.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/web_contents_delegate.h"
-#include "content/public/browser/web_contents_observer.h"
 #include "ui/views/controls/webview/unhandled_keyboard_event_handler.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -39,17 +37,10 @@ namespace chromeos {
 // WebUI based start up and lock screens. It contains a WebView.
 class WebUILoginView : public views::View,
                        public content::WebContentsDelegate,
-                       public content::WebContentsObserver,
                        public content::NotificationObserver,
                        public ChromeWebModalDialogManagerDelegate,
                        public web_modal::WebContentsModalDialogHost {
  public:
-  class FrameObserver {
-   public:
-    // Called when a frame failed to load.
-    virtual void OnFrameError(const std::string& frame_unique_name) = 0;
-  };
-
   // Internal class name.
   static const char kViewClassName[];
 
@@ -108,9 +99,6 @@ class WebUILoginView : public views::View,
     should_emit_login_prompt_visible_ = emit;
   }
 
-  void AddFrameObserver(FrameObserver* frame_observer);
-  void RemoveFrameObserver(FrameObserver* frame_observer);
-
  protected:
   // Overridden from views::View:
   void Layout() override;
@@ -147,22 +135,11 @@ class WebUILoginView : public views::View,
   bool PreHandleGestureEvent(content::WebContents* source,
                              const blink::WebGestureEvent& event) override;
 
-  // Overridden from content::WebContentsObserver.
-  void DidFailProvisionalLoad(content::RenderFrameHost* render_frame_host,
-                              const GURL& validated_url,
-                              int error_code,
-                              const base::string16& error_description,
-                              bool was_ignored_by_handler) override;
-
   // Performs series of actions when login prompt is considered
   // to be ready and visible.
   // 1. Emits LoginPromptVisible signal if needed
   // 2. Notifies OOBE/sign classes.
   void OnLoginPromptVisible();
-
-  // Called when focus is returned from status area.
-  // |reverse| is true when focus is traversed backwards (using Shift-Tab).
-  void ReturnFocus(bool reverse);
 
   content::NotificationRegistrar registrar_;
 
@@ -186,12 +163,6 @@ class WebUILoginView : public views::View,
   bool forward_keyboard_event_;
 
   base::ObserverList<web_modal::ModalDialogHostObserver> observer_list_;
-  base::ObserverList<FrameObserver> frame_observer_list_;
-
-  // Manage popups appearing over the login window.
-  // TODO(gbillock): See if we can get rid of this. Perhaps in favor of
-  // in-content styled popups or something? There oughtta be a way...
-  scoped_ptr<web_modal::PopupManager> popup_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(WebUILoginView);
 };

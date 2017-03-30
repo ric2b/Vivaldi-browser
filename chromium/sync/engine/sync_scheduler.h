@@ -24,7 +24,7 @@ namespace syncer {
 
 struct ServerConnectionEvent;
 
-struct SYNC_EXPORT_PRIVATE ConfigurationParams {
+struct SYNC_EXPORT ConfigurationParams {
   ConfigurationParams();
   ConfigurationParams(
       const sync_pb::GetUpdatesCallerInfo::GetUpdatesSource& source,
@@ -46,8 +46,15 @@ struct SYNC_EXPORT_PRIVATE ConfigurationParams {
   base::Closure retry_task;
 };
 
-class SYNC_EXPORT_PRIVATE SyncScheduler
-    : public sessions::SyncSession::Delegate {
+struct SYNC_EXPORT ClearParams {
+  explicit ClearParams(const base::Closure& report_success_task);
+  ~ClearParams();
+
+  // Callback to invoke on successful completion.
+  base::Closure report_success_task;
+};
+
+class SYNC_EXPORT SyncScheduler : public sessions::SyncSession::Delegate {
  public:
   enum Mode {
     // In this mode, the thread only performs configuration tasks.  This is
@@ -55,6 +62,10 @@ class SYNC_EXPORT_PRIVATE SyncScheduler
     // specific type only, and not continue syncing until we are moved into
     // normal mode.
     CONFIGURATION_MODE,
+    // This mode is used to issue a clear server data command.  The scheduler
+    // may only transition to this mode from the CONFIGURATION_MODE.  When in
+    // this mode, the only schedulable operation is |SchedulerClearServerData|.
+    CLEAR_SERVER_DATA_MODE,
     // Resumes polling and allows nudges, drops configuration tasks.  Runs
     // through entire sync cycle.
     NORMAL_MODE,
@@ -80,6 +91,11 @@ class SYNC_EXPORT_PRIVATE SyncScheduler
   // called when configuration finishes.
   // Note: must already be in CONFIGURATION mode.
   virtual void ScheduleConfiguration(const ConfigurationParams& params) = 0;
+
+  // Schedules clear of server data in preparation for transitioning to
+  // passphrase encryption. The scheduler must be in CLEAR_SERVER_DATA_MODE
+  // before calling this method.
+  virtual void ScheduleClearServerData(const ClearParams& params) = 0;
 
   // Request that the syncer avoid starting any new tasks and prepare for
   // shutdown.

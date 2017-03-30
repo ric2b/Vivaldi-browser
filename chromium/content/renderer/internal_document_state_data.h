@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/supports_user_data.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
@@ -28,15 +29,6 @@ class InternalDocumentStateData : public base::SupportsUserData::Data {
   static InternalDocumentStateData* FromDataSource(blink::WebDataSource* ds);
   static InternalDocumentStateData* FromDocumentState(DocumentState* ds);
 
-  // Set to true once RenderViewImpl::didFirstVisuallyNonEmptyLayout() is
-  // invoked.
-  bool did_first_visually_non_empty_layout() const {
-    return did_first_visually_non_empty_layout_;
-  }
-  void set_did_first_visually_non_empty_layout(bool value) {
-    did_first_visually_non_empty_layout_ = value;
-  }
-
   int http_status_code() const { return http_status_code_; }
   void set_http_status_code(int http_status_code) {
     http_status_code_ = http_status_code;
@@ -49,13 +41,6 @@ class InternalDocumentStateData : public base::SupportsUserData::Data {
   }
   void set_searchable_form_encoding(const std::string& encoding) {
     searchable_form_encoding_ = encoding;
-  }
-
-  // True if an error page should be used, if the http status code also
-  // indicates an error.
-  bool use_error_page() const { return use_error_page_; }
-  void set_use_error_page(bool use_error_page) {
-    use_error_page_ = use_error_page;
   }
 
   // True if the user agent was overridden for this page.
@@ -96,12 +81,9 @@ class InternalDocumentStateData : public base::SupportsUserData::Data {
   ~InternalDocumentStateData() override;
 
  private:
-  bool did_first_visually_non_empty_layout_;
-  bool did_first_visually_non_empty_paint_;
   int http_status_code_;
   GURL searchable_form_url_;
   std::string searchable_form_encoding_;
-  bool use_error_page_;
   bool is_overriding_user_agent_;
   bool must_reset_scroll_and_scale_state_;
   bool cache_policy_override_set_;

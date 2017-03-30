@@ -5,10 +5,13 @@
 #ifndef COMPONENTS_TRANSLATE_CORE_BROWSER_TRANSLATE_UI_DELEGATE_H_
 #define COMPONENTS_TRANSLATE_CORE_BROWSER_TRANSLATE_UI_DELEGATE_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
@@ -24,6 +27,14 @@ class TranslatePrefs;
 
 // The TranslateUIDelegate is a generic delegate for UI which offers Translate
 // feature to the user.
+
+// Note that the API offers a way to read/set language values through array
+// indices. Such indices are only valid as long as the visual representation
+// (infobar, bubble...) is in sync with the underlying language list which
+// can actually change at run time (see translate_language_list.h).
+// It is recommended that languages are only updated by language code to
+// avoid bugs like crbug.com/555124
+
 class TranslateUIDelegate {
  public:
   static const size_t kNoIndex = static_cast<size_t>(-1);
@@ -45,26 +56,30 @@ class TranslateUIDelegate {
   // Returns the original language index.
   size_t GetOriginalLanguageIndex() const;
 
+  // Returns the original language code.
+  std::string GetOriginalLanguageCode() const;
+
   // Updates the original language index.
   void UpdateOriginalLanguageIndex(size_t language_index);
+
+  void UpdateOriginalLanguage(const std::string& language_code);
 
   // Returns the target language index.
   size_t GetTargetLanguageIndex() const;
 
+  // Returns the target language code.
+  std::string GetTargetLanguageCode() const;
+
   // Updates the target language index.
   void UpdateTargetLanguageIndex(size_t language_index);
+
+  void UpdateTargetLanguage(const std::string& language_code);
 
   // Returns the ISO code for the language at |index|.
   std::string GetLanguageCodeAt(size_t index) const;
 
   // Returns the displayable name for the language at |index|.
   base::string16 GetLanguageNameAt(size_t index) const;
-
-  // The original language for Translate.
-  std::string GetOriginalLanguageCode() const;
-
-  // The target language for Translate.
-  std::string GetTargetLanguageCode() const;
 
   // Starts translating the current page.
   void Translate();
@@ -103,11 +118,10 @@ class TranslateUIDelegate {
   TranslateDriver* translate_driver_;
   base::WeakPtr<TranslateManager> translate_manager_;
 
+  // ISO code (en, fr...) -> displayable name in the current locale
   typedef std::pair<std::string, base::string16> LanguageNamePair;
 
   // The list supported languages for translation.
-  // The pair first string is the language ISO code (ex: en, fr...), the second
-  // string is the displayable name on the current locale.
   // The languages are sorted alphabetically based on the displayable name.
   std::vector<LanguageNamePair> languages_;
 

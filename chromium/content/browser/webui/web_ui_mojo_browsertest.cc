@@ -3,10 +3,13 @@
 // found in the LICENSE file.
 
 #include <limits>
+#include <utility>
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
+#include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "content/browser/webui/web_ui_controller_factory_registry.h"
@@ -26,10 +29,11 @@
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "content/test/data/web_ui_test_mojo_bindings.mojom.h"
+#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/interface_request.h"
+#include "mojo/public/js/constants.h"
 #include "mojo/test/test_utils.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/binding.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/interface_request.h"
-#include "third_party/mojo/src/mojo/public/js/constants.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 
 namespace content {
 namespace {
@@ -51,10 +55,23 @@ bool GetResource(const std::string& id,
       id == mojo::kValidatorModuleName)
     return false;
 
+  if (id.find(".mojom") != std::string::npos) {
+    std::string contents;
+    CHECK(base::ReadFileToString(mojo::test::GetFilePathForJSResource(id),
+                                 &contents, std::string::npos))
+        << id;
+    base::RefCountedString* ref_contents = new base::RefCountedString;
+    ref_contents->data() = contents;
+    callback.Run(ref_contents);
+    return true;
+  }
+
+  base::FilePath path;
+  CHECK(base::PathService::Get(content::DIR_TEST_DATA, &path));
+  path = path.AppendASCII(id.substr(0, id.find("?")));
   std::string contents;
-  CHECK(base::ReadFileToString(mojo::test::GetFilePathForJSResource(id),
-                               &contents,
-                               std::string::npos)) << id;
+  CHECK(base::ReadFileToString(path, &contents, std::string::npos))
+      << path.value();
   base::RefCountedString* ref_contents = new base::RefCountedString;
   ref_contents->data() = contents;
   callback.Run(ref_contents);
@@ -65,7 +82,7 @@ class BrowserTargetImpl : public BrowserTarget {
  public:
   BrowserTargetImpl(base::RunLoop* run_loop,
                     mojo::InterfaceRequest<BrowserTarget> request)
-      : run_loop_(run_loop), binding_(this, request.Pass()) {}
+      : run_loop_(run_loop), binding_(this, std::move(request)) {}
 
   ~BrowserTargetImpl() override {}
 
@@ -89,13 +106,14 @@ class BrowserTargetImpl : public BrowserTarget {
 // WebUIController that sets up mojo bindings.
 class TestWebUIController : public WebUIController {
  public:
-   TestWebUIController(WebUI* web_ui, base::RunLoop* run_loop)
-      : WebUIController(web_ui),
-        run_loop_(run_loop) {
+  TestWebUIController(WebUI* web_ui, base::RunLoop* run_loop)
+      : WebUIController(web_ui), run_loop_(run_loop) {
     content::WebUIDataSource* data_source =
-        WebUIDataSource::AddMojoDataSource(
-            web_ui->GetWebContents()->GetBrowserContext());
+        WebUIDataSource::Create("mojo-web-ui");
+    data_source->AddMojoResources();
     data_source->SetRequestFilter(base::Bind(&GetResource));
+    content::WebUIDataSource::Add(web_ui->GetWebContents()->GetBrowserContext(),
+                                  data_source);
   }
 
  protected:
@@ -123,7 +141,7 @@ class PingTestWebUIController : public TestWebUIController {
   }
 
   void CreateHandler(mojo::InterfaceRequest<BrowserTarget> request) {
-    browser_target_.reset(new BrowserTargetImpl(run_loop_, request.Pass()));
+    browser_target_.reset(new BrowserTargetImpl(run_loop_, std::move(request)));
   }
 
  private:
@@ -201,10 +219,10 @@ IN_PROC_BROWSER_TEST_F(WebUIMojoTest, EndToEndPing) {
     return;
 
   got_message = false;
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
   base::RunLoop run_loop;
   factory()->set_run_loop(&run_loop);
-  GURL test_url(test_server()->GetURL("files/web_ui_mojo.html?ping"));
+  GURL test_url("chrome://mojo-web-ui/web_ui_mojo.html?ping");
   NavigateToURL(shell(), test_url);
   // RunLoop is quit when message received from page.
   run_loop.Run();
@@ -231,9 +249,9 @@ IN_PROC_BROWSER_TEST_F(WebUIMojoTest, ConnectToApplication) {
           "content/public/test/test_mojo_service.mojom"))
     return;
 
-  ASSERT_TRUE(test_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
   NavigateToURL(shell(),
-                test_server()->GetURL("files/web_ui_mojo_shell_test.html"));
+                GURL("chrome://mojo-web-ui/web_ui_mojo_shell_test.html"));
 
   DOMMessageQueue message_queue;
   std::string message;

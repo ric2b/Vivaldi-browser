@@ -8,12 +8,12 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Point;
 import android.os.Looper;
-import android.util.Log;
 
-import org.chromium.base.CalledByNative;
-import org.chromium.base.JNINamespace;
+import org.chromium.base.ContextUtils;
+import org.chromium.base.Log;
+import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.JNINamespace;
 import org.chromium.chromoting.CapabilityManager;
-import org.chromium.chromoting.R;
 import org.chromium.chromoting.SessionAuthenticator;
 
 import java.nio.ByteBuffer;
@@ -25,6 +25,8 @@ import java.nio.ByteOrder;
  */
 @JNINamespace("remoting")
 public class JniInterface {
+    private static final String TAG = "Chromoting";
+
     /*
      * Library-loading state machine.
      */
@@ -33,79 +35,6 @@ public class JniInterface {
 
     /** Used for authentication-related UX during connection. Accessed on the UI thread. */
     private static SessionAuthenticator sAuthenticator;
-
-    /** Interface used for connection state notifications. */
-    public interface ConnectionListener {
-        /**
-         * This enum must match the C++ enumeration remoting::protocol::ConnectionToHost::State.
-         */
-        public enum State {
-            INITIALIZING(0),
-            CONNECTING(1),
-            AUTHENTICATED(2),
-            CONNECTED(3),
-            FAILED(4),
-            CLOSED(5);
-
-            private final int mValue;
-
-            State(int value) {
-                mValue = value;
-            }
-
-            public int value() {
-                return mValue;
-            }
-
-            public static State fromValue(int value) {
-                return values()[value];
-            }
-        }
-
-        /**
-         * This enum must match the C++ enumeration remoting::protocol::ErrorCode.
-         */
-        public enum Error {
-            OK(0, 0),
-            PEER_IS_OFFLINE(1, R.string.error_host_is_offline),
-            SESSION_REJECTED(2, R.string.error_invalid_access_code),
-            INCOMPATIBLE_PROTOCOL(3, R.string.error_incompatible_protocol),
-            AUTHENTICATION_FAILED(4, R.string.error_invalid_access_code),
-            CHANNEL_CONNECTION_ERROR(5, R.string.error_p2p_failure),
-            SIGNALING_ERROR(6, R.string.error_p2p_failure),
-            SIGNALING_TIMEOUT(7, R.string.error_p2p_failure),
-            HOST_OVERLOAD(8, R.string.error_host_overload),
-            UNKNOWN_ERROR(9, R.string.error_unexpected);
-
-            private final int mValue;
-            private final int mMessage;
-
-            Error(int value, int message) {
-                mValue = value;
-                mMessage = message;
-            }
-
-            public int value() {
-                return mValue;
-            }
-
-            public int message() {
-                return mMessage;
-            }
-
-            public static Error fromValue(int value) {
-                return values()[value];
-            }
-        }
-
-
-        /**
-         * Notified on connection state change.
-         * @param state The new connection state.
-         * @param error The error code, if state is STATE_FAILED.
-         */
-        void onConnectionState(State state, Error error);
-    }
 
     /*
      * Connection-initiating state machine.
@@ -138,21 +67,21 @@ public class JniInterface {
     private static CapabilityManager sCapabilityManager = CapabilityManager.getInstance();
 
     /**
-     * To be called once from the main Activity. Any subsequent calls will update the application
-     * context, but not reload the library. This is useful e.g. when the activity is closed and the
-     * user later wants to return to the application. Called on the UI thread.
+     * To be called once from the main Activity. Loads and initializes the native code.
+     * Called on the UI thread.
      */
     public static void loadLibrary(Context context) {
         if (sLoaded) return;
 
         System.loadLibrary("remoting_client_jni");
 
-        nativeLoadNative(context);
+        ContextUtils.initApplicationContext(context.getApplicationContext());
+        nativeLoadNative();
         sLoaded = true;
     }
 
     /** Performs the native portion of the initialization. */
-    private static native void nativeLoadNative(Context context);
+    private static native void nativeLoadNative();
 
     /*
      * API/OAuth2 keys access.
@@ -167,8 +96,8 @@ public class JniInterface {
     }
 
     /** Attempts to form a connection to the user-selected host. Called on the UI thread. */
-    public static void connectToHost(String username, String authToken,
-            String hostJid, String hostId, String hostPubkey, ConnectionListener listener,
+    public static void connectToHost(String username, String authToken, String hostJid,
+            String hostId, String hostPubkey, ConnectionListener listener,
             SessionAuthenticator authenticator) {
         disconnectFromHost();
 
@@ -191,8 +120,8 @@ public class JniInterface {
             return;
         }
 
-        sConnectionListener.onConnectionState(ConnectionListener.State.CLOSED,
-                ConnectionListener.Error.OK);
+        sConnectionListener.onConnectionState(
+                ConnectionListener.State.CLOSED, ConnectionListener.Error.OK);
 
         disconnectFromHostWithoutNotification();
     }
@@ -206,6 +135,7 @@ public class JniInterface {
         nativeDisconnect();
         sConnectionListener = null;
         sConnected = false;
+        sCapabilityManager.onHostDisconnect();
 
         // Drop the reference to free the Bitmap for GC.
         synchronized (sFrameLock) {
@@ -242,15 +172,15 @@ public class JniInterface {
      * @param deviceName The device name to appear in the pairing registry. Only used if createPair
      *                   is true.
      */
-    public static void handleAuthenticationResponse(String pin, boolean createPair,
-            String deviceName) {
+    public static void handleAuthenticationResponse(
+            String pin, boolean createPair, String deviceName) {
         assert sConnected;
         nativeAuthenticationResponse(pin, createPair, deviceName);
     }
 
     /** Native implementation of handleAuthenticationResponse(). */
-    private static native void nativeAuthenticationResponse(String pin, boolean createPair,
-            String deviceName);
+    private static native void nativeAuthenticationResponse(
+            String pin, boolean createPair, String deviceName);
 
     /** Saves newly-received pairing credentials to permanent storage. Called on the UI thread. */
     @CalledByNative
@@ -271,8 +201,8 @@ public class JniInterface {
     }
 
     /** Passes mouse information to the native handling code. */
-    private static native void nativeSendMouseEvent(int x, int y, int whichButton,
-            boolean buttonDown);
+    private static native void nativeSendMouseEvent(
+            int x, int y, int whichButton, boolean buttonDown);
 
     /** Injects a mouse-wheel event with delta values. Called on the UI thread. */
     public static void sendMouseWheelEvent(int deltaX, int deltaY) {
@@ -286,17 +216,22 @@ public class JniInterface {
     /** Passes mouse-wheel information to the native handling code. */
     private static native void nativeSendMouseWheelEvent(int deltaX, int deltaY);
 
-    /** Presses or releases the specified (nonnegative) key. Called on the UI thread. */
-    public static boolean sendKeyEvent(int keyCode, boolean keyDown) {
+    /**
+     * Presses or releases the specified (nonnegative) key. Called on the UI thread. If scanCode
+     * is not zero then keyCode is ignored.
+     */
+    public static boolean sendKeyEvent(int scanCode, int keyCode, boolean keyDown) {
         if (!sConnected) {
             return false;
         }
 
-        return nativeSendKeyEvent(keyCode, keyDown);
+        return nativeSendKeyEvent(scanCode, keyCode, keyDown);
     }
 
-    /** Passes key press information to the native handling code. */
-    private static native boolean nativeSendKeyEvent(int keyCode, boolean keyDown);
+    /**
+     * Passes key press information to the native handling code.
+     */
+    private static native boolean nativeSendKeyEvent(int scanCode, int keyCode, boolean keyDown);
 
     /** Sends TextEvent to the host. Called on the UI thread. */
     public static void sendTextEvent(String text) {
@@ -309,6 +244,14 @@ public class JniInterface {
 
     /** Passes text event information to the native handling code. */
     private static native void nativeSendTextEvent(String text);
+
+    /** Sends an array of TouchEvents to the host. Called on the UI thread. */
+    public static void sendTouchEvent(TouchEventData.EventType eventType, TouchEventData[] data) {
+        nativeSendTouchEvent(eventType.value(), data);
+    }
+
+    /** Passes touch event information to the native handling code. */
+    private static native void nativeSendTouchEvent(int eventType, TouchEventData[] data);
 
     /**
      * Enables or disables the video channel. Called on the UI thread in response to Activity
@@ -363,7 +306,7 @@ public class JniInterface {
      */
     public static Bitmap getVideoFrame() {
         if (Looper.myLooper() == Looper.getMainLooper()) {
-            Log.w("jniiface", "Canvas being redrawn on UI thread");
+            Log.w(TAG, "Canvas being redrawn on UI thread");
         }
 
         synchronized (sFrameLock) {
@@ -377,7 +320,7 @@ public class JniInterface {
     @CalledByNative
     private static void setVideoFrame(Bitmap bitmap) {
         if (Looper.myLooper() == Looper.getMainLooper()) {
-            Log.w("jniiface", "Video frame updated on UI thread");
+            Log.w(TAG, "Video frame updated on UI thread");
         }
 
         synchronized (sFrameLock) {
@@ -399,8 +342,8 @@ public class JniInterface {
      * shape from the host.
      */
     @CalledByNative
-    public static void updateCursorShape(int width, int height, int hotspotX, int hotspotY,
-                                         ByteBuffer buffer) {
+    public static void updateCursorShape(
+            int width, int height, int hotspotX, int hotspotY, ByteBuffer buffer) {
         sCursorHotspot = new Point(hotspotX, hotspotY);
 
         int[] data = new int[width * height];

@@ -4,14 +4,17 @@
 
 #include "components/invalidation/impl/profile_invalidation_provider.h"
 
+#include <utility>
+
+#include "components/invalidation/impl/invalidation_prefs.h"
 #include "components/invalidation/public/invalidation_service.h"
+#include "components/pref_registry/pref_registry_syncable.h"
 
 namespace invalidation {
 
 ProfileInvalidationProvider::ProfileInvalidationProvider(
     scoped_ptr<InvalidationService> invalidation_service)
-    : invalidation_service_(invalidation_service.Pass()) {
-}
+    : invalidation_service_(std::move(invalidation_service)) {}
 
 ProfileInvalidationProvider::~ProfileInvalidationProvider() {
 }
@@ -22,6 +25,14 @@ InvalidationService* ProfileInvalidationProvider::GetInvalidationService() {
 
 void ProfileInvalidationProvider::Shutdown() {
   invalidation_service_.reset();
+}
+
+// static
+void ProfileInvalidationProvider::RegisterProfilePrefs(
+    user_prefs::PrefRegistrySyncable* registry) {
+  registry->RegisterBooleanPref(
+      prefs::kInvalidationServiceUseGCMChannel,
+      true);  // if no value in prefs, use GCM channel.
 }
 
 }  // namespace invalidation

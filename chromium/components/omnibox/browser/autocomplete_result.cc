@@ -18,7 +18,7 @@
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_switches.h"
 #include "components/search/search.h"
-#include "components/url_fixer/url_fixer.h"
+#include "components/url_formatter/url_fixer.h"
 
 using metrics::OmniboxEventProto;
 
@@ -173,13 +173,29 @@ void AutocompleteResult::AppendMatches(const AutocompleteInput& input,
               i.description);
 #endif
     matches_.push_back(i);
-    if (!AutocompleteMatch::IsSearchType(i.type) && !i.description.empty() &&
-        base::CommandLine::ForCurrentProcess()->
-            HasSwitch(switches::kEmphasizeTitlesInOmniboxDropdown) &&
-        ((input.type() == metrics::OmniboxInputType::QUERY) ||
-         (input.type() == metrics::OmniboxInputType::FORCED_QUERY)) &&
-        AutocompleteMatch::HasMatchStyle(i.description_class)) {
-      matches_.back().swap_contents_and_description = true;
+    if (!AutocompleteMatch::IsSearchType(i.type)) {
+      const OmniboxFieldTrial::EmphasizeTitlesCondition condition(
+          OmniboxFieldTrial::GetEmphasizeTitlesConditionForInput(input.type()));
+      bool emphasize = false;
+      switch (condition) {
+        case OmniboxFieldTrial::EMPHASIZE_WHEN_NONEMPTY:
+          emphasize = !i.description.empty();
+          break;
+        case OmniboxFieldTrial::EMPHASIZE_WHEN_TITLE_MATCHES:
+          emphasize = !i.description.empty() &&
+              AutocompleteMatch::HasMatchStyle(i.description_class);
+          break;
+        case OmniboxFieldTrial::EMPHASIZE_WHEN_ONLY_TITLE_MATCHES:
+          emphasize = !i.description.empty() &&
+              AutocompleteMatch::HasMatchStyle(i.description_class) &&
+              !AutocompleteMatch::HasMatchStyle(i.contents_class);
+          break;
+        case OmniboxFieldTrial::EMPHASIZE_NEVER:
+          break;
+        default:
+          NOTREACHED();
+      }
+      matches_.back().swap_contents_and_description = emphasize;
     }
   }
   default_match_ = end();
@@ -250,7 +266,7 @@ void AutocompleteResult::SortAndCull(
           const std::string& in_scheme = base::UTF16ToUTF8(input.scheme());
           const std::string& dest_scheme =
               default_match_->destination_url.scheme();
-          DCHECK(url_fixer::IsEquivalentScheme(in_scheme, dest_scheme))
+          DCHECK(url_formatter::IsEquivalentScheme(in_scheme, dest_scheme))
               << debug_info;
         }
       }

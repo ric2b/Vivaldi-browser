@@ -8,9 +8,10 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
-#include "components/user_manager/user_id.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user_image/user_image.h"
 #include "components/user_manager/user_info.h"
 #include "components/user_manager/user_manager_export.h"
@@ -79,24 +80,15 @@ class USER_MANAGER_EXPORT User : public UserInfo {
   // Returns true if user type has gaia account.
   static bool TypeHasGaiaAccount(UserType user_type);
 
-  // Returns the user type.
-  virtual UserType GetType() const = 0;
-
-  // The email the user used to log in.
-  const std::string& email() const { return email_; }
-
-  // The displayed user name.
-  base::string16 display_name() const { return display_name_; }
-
-  // If the user has to use SAML to log in.
-  bool using_saml() const { return using_saml_; }
-
   // UserInfo
   std::string GetEmail() const override;
   base::string16 GetDisplayName() const override;
   base::string16 GetGivenName() const override;
   const gfx::ImageSkia& GetImage() const override;
-  UserID GetUserID() const override;
+  const AccountId& GetAccountId() const override;
+
+  // Returns the user type.
+  virtual UserType GetType() const = 0;
 
   // Allows managing child status of the user. Used for RegularUser.
   virtual void SetIsChild(bool is_child);
@@ -108,15 +100,31 @@ class USER_MANAGER_EXPORT User : public UserInfo {
   // Returns true if user is supervised.
   virtual bool IsSupervised() const;
 
+  // True if user image can be synced.
+  virtual bool CanSyncImage() const;
+
+  // The displayed (non-canonical) user email.
+  virtual std::string display_email() const;
+
+  // True if the user is affiliated to the device.
+  virtual bool IsAffiliated() const;
+
+  // The email the user used to log in.
+  // TODO(alemate): rename this to GetUserEmail() (see crbug.com/548923)
+  const std::string& email() const;
+
+  // The displayed user name.
+  base::string16 display_name() const { return display_name_; }
+
+  // If the user has to use SAML to log in.
+  bool using_saml() const { return using_saml_; }
+
   // Returns the account name part of the email. Use the display form of the
   // email if available and use_display_name == true. Otherwise use canonical.
   std::string GetAccountName(bool use_display_email) const;
 
   // Whether the user has a default image.
   bool HasDefaultImage() const;
-
-  // True if user image can be synced.
-  virtual bool CanSyncImage() const;
 
   int image_index() const { return image_index_; }
   bool has_raw_image() const { return user_image_.has_raw_image(); }
@@ -138,9 +146,6 @@ class USER_MANAGER_EXPORT User : public UserInfo {
 
   // True if image is being loaded from file.
   bool image_is_loading() const { return image_is_loading_; }
-
-  // The displayed (non-canonical) user email.
-  virtual std::string display_email() const;
 
   // OAuth token status for this user.
   OAuthTokenStatus oauth_token_status() const { return oauth_token_status_; }
@@ -177,15 +182,16 @@ class USER_MANAGER_EXPORT User : public UserInfo {
   friend class chromeos::FakeChromeUserManager;
   friend class chromeos::MockUserManager;
   friend class chromeos::UserAddingScreenTest;
+  FRIEND_TEST_ALL_PREFIXES(UserTest, DeviceLocalAccountAffiliation);
 
   // Do not allow anyone else to create new User instances.
-  static User* CreateRegularUser(const UserID& email);
-  static User* CreateGuestUser();
-  static User* CreateKioskAppUser(const UserID& kiosk_app_username);
-  static User* CreateSupervisedUser(const UserID& username);
-  static User* CreatePublicAccountUser(const UserID& email);
+  static User* CreateRegularUser(const AccountId& account_id);
+  static User* CreateGuestUser(const AccountId& guest_account_id);
+  static User* CreateKioskAppUser(const AccountId& kiosk_app_account_id);
+  static User* CreateSupervisedUser(const AccountId& account_id);
+  static User* CreatePublicAccountUser(const AccountId& account_id);
 
-  explicit User(const std::string& email);
+  explicit User(const AccountId& account_id);
   ~User() override;
 
   const std::string* GetAccountLocale() const { return account_locale_.get(); }
@@ -243,16 +249,18 @@ class USER_MANAGER_EXPORT User : public UserInfo {
   // True if user has google account (not a guest or managed user).
   bool has_gaia_account() const;
 
+  virtual void SetAffiliation(bool is_affiliated);
+
  private:
-  std::string email_;
+  AccountId account_id_;
   base::string16 display_name_;
   base::string16 given_name_;
   // The displayed user email, defaults to |email_|.
   std::string display_email_;
-  bool using_saml_;
+  bool using_saml_ = false;
   UserImage user_image_;
-  OAuthTokenStatus oauth_token_status_;
-  bool force_online_signin_;
+  OAuthTokenStatus oauth_token_status_ = OAUTH_TOKEN_STATUS_UNKNOWN;
+  bool force_online_signin_ = false;
 
   // This is set to chromeos locale if account data has been downloaded.
   // (Or failed to download, but at least one download attempt finished).
@@ -265,31 +273,34 @@ class USER_MANAGER_EXPORT User : public UserInfo {
 
   // Either index of a default image for the user, |USER_IMAGE_EXTERNAL| or
   // |USER_IMAGE_PROFILE|.
-  int image_index_;
+  int image_index_ = USER_IMAGE_INVALID;
 
   // True if current user image is a stub set by a |SetStubImage| call.
-  bool image_is_stub_;
+  bool image_is_stub_ = false;
 
   // True if current user image is being loaded from file.
-  bool image_is_loading_;
+  bool image_is_loading_ = false;
 
   // True if user is able to lock screen.
-  bool can_lock_;
+  bool can_lock_ = false;
 
   // True if user is currently logged in in current session.
-  bool is_logged_in_;
+  bool is_logged_in_ = false;
 
   // True if user is currently logged in and active in current session.
-  bool is_active_;
+  bool is_active_ = false;
 
   // True if user Profile is created
-  bool profile_is_created_;
+  bool profile_is_created_ = false;
+
+  // True if the user is affiliated to the device.
+  bool is_affiliated_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(User);
 };
 
 // List of known users.
-typedef std::vector<User*> UserList;
+using UserList = std::vector<User*>;
 
 }  // namespace user_manager
 

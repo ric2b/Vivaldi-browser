@@ -5,77 +5,91 @@
 Polymer({
   is: 'viewer-zoom-button',
 
-  behaviors: [
-    Polymer.NeonAnimationRunnerBehavior
-  ],
-
   properties: {
-    icon: String,
+    /**
+     * Icons to be displayed on the FAB. Multiple icons should be separated with
+     * spaces, and will be cycled through every time the FAB is clicked.
+     */
+    icons: String,
 
-    opened: {
-      type: Boolean,
-      value: true
+    /**
+     * Array version of the list of icons. Polymer does not allow array
+     * properties to be set from HTML, so we must use a string property and
+     * perform the conversion manually.
+     * @private
+     */
+    icons_: {
+      type: Array,
+      value: [''],
+      computed: 'computeIconsArray_(icons)'
     },
 
-    delay: Number,
+    tooltips: Array,
 
-    animationConfig: {
-      type: Object,
-      computed: 'computeAnimationConfig(delay)'
+    closed: {
+      type: Boolean,
+      reflectToAttribute: true,
+      value: false
+    },
+
+    delay: {
+      type: Number,
+      observer: 'delayChanged_'
+    },
+
+    /**
+     * Index of the icon currently being displayed.
+     */
+    activeIndex: {
+      type: Number,
+      value: 0
+    },
+
+    /**
+     * Icon currently being displayed on the FAB.
+     * @private
+     */
+    visibleIcon_: {
+      type: String,
+      computed: 'computeVisibleIcon_(icons_, activeIndex)'
+    },
+
+    visibleTooltip_: {
+      type: String,
+      computed: 'computeVisibleTooltip_(tooltips, activeIndex)'
     }
   },
 
-  computeAnimationConfig: function(delay) {
-    return {
-      'entry': {
-        name: 'transform-animation',
-        node: this,
-        timing: {
-          easing: 'cubic-bezier(0, 0, 0.2, 1)',
-          duration: 250,
-          delay: delay
-        },
-        transformFrom: 'translateX(100%)'
-      },
-      'exit': {
-        name: 'transform-animation',
-        node: this,
-        timing: {
-          easing: 'cubic-bezier(0.4, 0, 1, 1)',
-          duration: 250,
-          delay: delay
-        },
-        transformTo: 'translateX(100%)'
-      }
-    };
+  computeIconsArray_: function(icons) {
+    return icons.split(' ');
   },
 
-  listeners: {
-    'neon-animation-finish': '_onAnimationFinished'
+  computeVisibleIcon_: function(icons, activeIndex) {
+    return icons[activeIndex];
   },
 
-  _onAnimationFinished: function() {
-    // Must use visibility: hidden so that the buttons do not change layout as
-    // they are hidden.
-    if (!this.opened)
-      this.style.visibility = 'hidden';
+  computeVisibleTooltip_: function(tooltips, activeIndex) {
+    return tooltips[activeIndex];
+  },
+
+  delayChanged_: function() {
+    this.$.wrapper.style.transitionDelay = this.delay + 'ms';
   },
 
   show: function() {
-    if (!this.opened) {
-      this.toggle_();
-      this.style.visibility = 'initial';
-    }
+    this.closed = false;
   },
 
   hide: function() {
-    if (this.opened)
-      this.toggle_();
+    this.closed = true;
   },
 
-  toggle_: function() {
-    this.opened = !this.opened;
-    this.cancelAnimation();
-    this.playAnimation(this.opened ? 'entry' : 'exit');
-  },
+  fireClick: function() {
+    // We cannot attach an on-click to the entire viewer-zoom-button, as this
+    // will include clicks on the margins. Instead, proxy clicks on the FAB
+    // through.
+    this.fire('fabclick');
+
+    this.activeIndex = (this.activeIndex + 1) % this.icons_.length;
+  }
 });

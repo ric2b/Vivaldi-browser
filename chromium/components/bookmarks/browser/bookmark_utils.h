@@ -5,6 +5,9 @@
 #ifndef COMPONENTS_BOOKMARKS_BROWSER_BOOKMARK_UTILS_H_
 #define COMPONENTS_BOOKMARKS_BROWSER_BOOKMARK_UTILS_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
@@ -75,6 +78,11 @@ void GetMostRecentlyAddedEntries(BookmarkModel* model,
                                  size_t count,
                                  std::vector<const BookmarkNode*>* nodes);
 
+// Returns true if the nickname exists in bookmark model, false otherwise
+// If |id| is -1 then the bookmark is being created, otherwise the nickname
+// is being updated
+bool DoesNickExists(BookmarkModel* model, base::string16 nickname, int64_t id);
+
 // Returns true if |n1| was added more recently than |n2|.
 bool MoreRecentlyAdded(const BookmarkNode* n1, const BookmarkNode* n2);
 
@@ -101,7 +109,8 @@ const BookmarkNode* GetParentForNewNodes(
     int* index);
 
 // Deletes the bookmark folders for the given list of |ids|.
-void DeleteBookmarkFolders(BookmarkModel* model, const std::vector<int64>& ids);
+void DeleteBookmarkFolders(BookmarkModel* model,
+                           const std::vector<int64_t>& ids);
 
 // If there are no user bookmarks for url, a bookmark is created.
 void AddIfNotBookmarked(BookmarkModel* model,
@@ -112,12 +121,12 @@ void AddIfNotBookmarked(BookmarkModel* model,
 void RemoveAllBookmarks(BookmarkModel* model, const GURL& url);
 
 // Truncates an overly-long URL, unescapes it and interprets the characters
-// as UTF-8 (both via net::FormatUrl()), and lower-cases it, returning the
-// result.  |languages| is passed to net::FormatUrl().  |adjustments|, if
-// non-NULL, is set to reflect the transformations the URL spec underwent to
-// become the return value.  If a caller computes offsets (e.g., for the
-// position of matched text) in this cleaned-up string, it can use
-// |adjustments| to calculate the location of these offsets in the original
+// as UTF-8 (both via url_formatter::FormatUrl()), and lower-cases it, returning
+// the result.  |languages| is passed to url_formatter::FormatUrl().
+// |adjustments|, if non-NULL, is set to reflect the transformations the URL
+// spec underwent to become the return value.  If a caller computes offsets
+// (e.g., for the position of matched text) in this cleaned-up string, it can
+// use |adjustments| to calculate the location of these offsets in the original
 // string (via base::OffsetAdjuster::UnadjustOffsets()).  This is useful if
 // later the original string gets formatted in a different way for displaying.
 // In this case, knowing the offsets in the original string will allow them to
@@ -148,7 +157,7 @@ bool CanAllBeEditedByUser(BookmarkClient* client,
 bool IsBookmarkedByUser(BookmarkModel* model, const GURL& url);
 
 // Returns the node with |id|, or NULL if there is no node with |id|.
-const BookmarkNode* GetBookmarkNodeByID(const BookmarkModel* model, int64 id);
+const BookmarkNode* GetBookmarkNodeByID(const BookmarkModel* model, int64_t id);
 
 // Returns true if |node| is a descendant of |root|.
 bool IsDescendantOf(const BookmarkNode* node, const BookmarkNode* root);

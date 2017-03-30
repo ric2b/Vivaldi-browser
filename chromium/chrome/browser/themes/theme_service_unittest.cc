@@ -5,24 +5,30 @@
 #include "chrome/browser/themes/theme_service.h"
 
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/path_service.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_service_test_base.h"
 #include "chrome/browser/extensions/unpacked_installer.h"
 #include "chrome/browser/themes/custom_theme_supplier.h"
+#include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "content/public/browser/notification_observer.h"
+#include "content/public/browser/notification_registrar.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/browser/uninstall_reason.h"
 #include "extensions/common/extension.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/resource/material_design/material_design_controller.h"
 
 #if defined(ENABLE_SUPERVISED_USERS)
 #include "chrome/browser/supervised_user/supervised_user_service.h"
@@ -104,7 +110,6 @@ class ThemeServiceTest : public extensions::ExtensionServiceTestBase {
  protected:
   bool is_supervised_;
   ExtensionRegistry* registry_;
-
 };
 
 // Installs then uninstalls a theme and makes sure that the ThemeService
@@ -235,6 +240,100 @@ TEST_F(ThemeServiceTest, ThemeUpgrade) {
   EXPECT_EQ(extension2_id, theme_service->GetThemeID());
   EXPECT_TRUE(registry_->GetExtensionById(extension1_id,
                                           ExtensionRegistry::DISABLED));
+}
+
+TEST_F(ThemeServiceTest, IncognitoTest) {
+  ThemeService* theme_service =
+      ThemeServiceFactory::GetForProfile(profile_.get());
+  theme_service->UseDefaultTheme();
+  // Let the ThemeService uninstall unused themes.
+  base::MessageLoop::current()->RunUntilIdle();
+
+  // Should get the same ThemeService for incognito and original profiles.
+  ThemeService* otr_theme_service =
+      ThemeServiceFactory::GetForProfile(profile_->GetOffTheRecordProfile());
+  EXPECT_EQ(theme_service, otr_theme_service);
+
+#if !defined(OS_MACOSX)
+  // Should get a different ThemeProvider for incognito and original profiles.
+  const ui::ThemeProvider& provider =
+      ThemeService::GetThemeProviderForProfile(profile_.get());
+  const ui::ThemeProvider& otr_provider =
+      ThemeService::GetThemeProviderForProfile(
+          profile_->GetOffTheRecordProfile());
+  EXPECT_NE(&provider, &otr_provider);
+  // And (some) colors should be different in MD mode.
+  if (ui::MaterialDesignController::IsModeMaterial()) {
+    EXPECT_NE(provider.GetColor(ThemeProperties::COLOR_TOOLBAR),
+              otr_provider.GetColor(ThemeProperties::COLOR_TOOLBAR));
+  }
+#endif
+}
+
+namespace {
+
+// NotificationObserver which emulates an infobar getting destroyed when the
+// theme changes.
+class InfobarDestroyerOnThemeChange : public content::NotificationObserver {
+ public:
+  explicit InfobarDestroyerOnThemeChange(Profile* profile)
+      : theme_service_(ThemeServiceFactory::GetForProfile(profile)) {
+    registrar_.Add(this, chrome::NOTIFICATION_BROWSER_THEME_CHANGED,
+        content::Source<ThemeService>(theme_service_));
+  }
+
+  ~InfobarDestroyerOnThemeChange() override {}
+
+ private:
+  void Observe(int type,
+               const content::NotificationSource& source,
+               const content::NotificationDetails& details) override {
+    theme_service_->OnInfobarDestroyed();
+  }
+
+  // Not owned.
+  ThemeService* theme_service_;
+
+  content::NotificationRegistrar registrar_;
+
+  DISALLOW_COPY_AND_ASSIGN(InfobarDestroyerOnThemeChange);
+};
+
+}  // namespace
+
+// crbug.com/468280
+TEST_F(ThemeServiceTest, UninstallThemeOnThemeChangeNotification) {
+  // Setup.
+  ThemeService* theme_service =
+      ThemeServiceFactory::GetForProfile(profile_.get());
+  theme_service->UseDefaultTheme();
+  // Let the ThemeService uninstall unused themes.
+  base::MessageLoop::current()->RunUntilIdle();
+
+  base::ScopedTempDir temp_dir1;
+  ASSERT_TRUE(temp_dir1.CreateUniqueTempDir());
+  base::ScopedTempDir temp_dir2;
+  ASSERT_TRUE(temp_dir2.CreateUniqueTempDir());
+
+  const std::string& extension1_id = LoadUnpackedThemeAt(temp_dir1.path());
+  ASSERT_EQ(extension1_id, theme_service->GetThemeID());
+
+  // Show an infobar.
+  theme_service->OnInfobarDisplayed();
+
+  // Install another theme. Emulate the infobar destroying itself (and
+  // causing unused themes to be uninstalled) as a result of the
+  // NOTIFICATION_BROWSER_THEME_CHANGED notification.
+  {
+    InfobarDestroyerOnThemeChange destroyer(profile_.get());
+    const std::string& extension2_id = LoadUnpackedThemeAt(temp_dir2.path());
+    ASSERT_EQ(extension2_id, theme_service->GetThemeID());
+    ASSERT_FALSE(service_->GetInstalledExtension(extension1_id));
+  }
+
+  // Check that it is possible to reinstall extension1.
+  ASSERT_EQ(extension1_id, LoadUnpackedThemeAt(temp_dir1.path()));
+  EXPECT_EQ(extension1_id, theme_service->GetThemeID());
 }
 
 #if defined(ENABLE_SUPERVISED_USERS)

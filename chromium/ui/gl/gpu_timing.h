@@ -5,9 +5,13 @@
 #ifndef UI_GL_GPU_TIMING_H_
 #define UI_GL_GPU_TIMING_H_
 
+#include <stdint.h>
+
+#include <memory>
 #include <queue>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "ui/gl/gl_export.h"
 
@@ -43,12 +47,9 @@
 namespace gfx {
 
 class GLContextReal;
-class GPUTiming;
 class GPUTimingClient;
 class GPUTimingImpl;
 class QueryResult;
-class TimeElapsedTimerQuery;
-class TimerQuery;
 
 class GPUTiming {
  public:
@@ -61,7 +62,7 @@ class GPUTiming {
   };
 
  protected:
-  friend struct base::DefaultDeleter<GPUTiming>;
+  friend std::default_delete<GPUTiming>;
   friend class GLContextReal;
 
   static GPUTiming* CreateGPUTiming(GLContextReal* context);
@@ -86,14 +87,20 @@ class GL_EXPORT GPUTimer {
   // this object.
   void Destroy(bool have_context);
 
+  // Clears current queries.
+  void Reset();
+
+  // Start an instant timer, start and end will be equal.
+  void QueryTimeStamp();
+
   // Start a timer range.
   void Start();
   void End();
 
   bool IsAvailable();
 
-  void GetStartEndTimestamps(int64* start, int64* end);
-  int64 GetDeltaElapsed();
+  void GetStartEndTimestamps(int64_t* start, int64_t* end);
+  int64_t GetDeltaElapsed();
 
  private:
   friend class GPUTimingClient;
@@ -102,8 +109,12 @@ class GL_EXPORT GPUTimer {
                     bool use_elapsed_timer);
 
   bool use_elapsed_timer_ = false;
-  bool end_requested_ = false;
-  bool end_available_ = false;
+  enum TimerState {
+    kTimerState_Ready,
+    kTimerState_WaitingForEnd,
+    kTimerState_WaitingForResult,
+    kTimerState_ResultAvailable
+  } timer_state_ = kTimerState_Ready;
   scoped_refptr<GPUTimingClient> gpu_timing_client_;
   scoped_refptr<QueryResult> time_stamp_result_;
   scoped_refptr<QueryResult> elapsed_timer_result_;
@@ -130,8 +141,8 @@ class GL_EXPORT GPUTimingClient
   // discarded.
   bool CheckAndResetTimerErrors();
 
-  int64 GetCurrentCPUTime();
-  void SetCpuTimeForTesting(const base::Callback<int64(void)>& cpu_time);
+  int64_t GetCurrentCPUTime();
+  void SetCpuTimeForTesting(const base::Callback<int64_t(void)>& cpu_time);
 
   bool IsForceTimeElapsedQuery();
   void ForceTimeElapsedQuery();

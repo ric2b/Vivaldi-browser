@@ -5,6 +5,7 @@
 #ifndef UI_EVENTS_TEST_EVENTS_TEST_UTILS_H_
 #define UI_EVENTS_TEST_EVENTS_TEST_UTILS_H_
 
+#include "base/macros.h"
 #include "ui/events/event.h"
 #include "ui/events/event_dispatcher.h"
 #include "ui/events/event_target.h"
@@ -40,7 +41,10 @@ class LocatedEventTestApi : public EventTestApi {
   ~LocatedEventTestApi() override;
 
   void set_location(const gfx::Point& location) {
-    located_event_->location_ = location;
+    located_event_->set_location(location);
+  }
+  void set_location_f(const gfx::PointF& location) {
+    located_event_->set_location_f(location);
   }
 
  private:

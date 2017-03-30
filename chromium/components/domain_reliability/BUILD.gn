@@ -14,24 +14,30 @@ baked_in_configs_gypi = exec_script("//build/gypi_to_gn.py",
                                     [ rebase_path("baked_in_configs.gypi") ],
                                     "scope",
                                     [ "baked_in_configs.gypi" ])
+
+# The config file names in the .gypi are relative to "//components".
 baked_in_configs =
-    rebase_path(baked_in_configs_gypi.baked_in_configs, "domain_reliability")
+    rebase_path(baked_in_configs_gypi.baked_in_configs, ".", "//components")
 
 action("bake_in_configs") {
   visibility = [ ":*" ]
   script = "bake_in_configs.py"
 
   inputs = baked_in_configs
+  output_file = "$target_gen_dir/baked_in_configs.cc"
   outputs = [
-    "$target_gen_dir/baked_in_configs.cc",
+    output_file,
   ]
 
-  # The actual list of JSON files will overflow the command line length limit
-  # on Windows, so pass the name of the .gypi file and bake_in_configs.py will
-  # read the filenames out of it manually.
-  args = [ rebase_path("//components", root_build_dir) ] +
-         [ rebase_path("baked_in_configs.gypi", root_build_dir) ] +
-         rebase_path(outputs, root_build_dir)
+  # The JSON file list is too long for the command line on Windows, so put
+  # them in a response file.
+  response_file_contents = rebase_path(inputs, root_build_dir)
+  args = [
+    "--file-list",
+    "{{response_file_name}}",
+    "--output",
+    rebase_path(output_file, root_build_dir),
+  ]
 }
 
 component("domain_reliability") {
@@ -49,6 +55,8 @@ component("domain_reliability") {
     "dispatcher.cc",
     "dispatcher.h",
     "domain_reliability_export.h",
+    "google_configs.cc",
+    "google_configs.h",
     "monitor.cc",
     "monitor.h",
     "scheduler.cc",
@@ -67,8 +75,8 @@ component("domain_reliability") {
   deps = [
     ":bake_in_configs",
     "//base",
+    "//components/data_use_measurement/core",
     "//components/keyed_service/core",
-    "//content/public/browser",
     "//net",
     "//url",
   ]
@@ -80,6 +88,7 @@ source_set("unit_tests") {
     "config_unittest.cc",
     "context_unittest.cc",
     "dispatcher_unittest.cc",
+    "google_configs_unittest.cc",
     "monitor_unittest.cc",
     "scheduler_unittest.cc",
     "test_util.cc",

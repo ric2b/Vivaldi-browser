@@ -10,17 +10,26 @@
 #include "cc/trees/layer_tree_host_impl.h"
 #include "cc/trees/single_thread_proxy.h"
 
+namespace gpu {
+class GpuMemoryBufferManager;
+}
+
 namespace cc {
 
 class FakeLayerTreeHostImpl : public LayerTreeHostImpl {
  public:
-  FakeLayerTreeHostImpl(Proxy* proxy,
+  FakeLayerTreeHostImpl(TaskRunnerProvider* task_runner_provider,
                         SharedBitmapManager* manager,
                         TaskGraphRunner* task_graph_runner);
   FakeLayerTreeHostImpl(const LayerTreeSettings& settings,
-                        Proxy* proxy,
+                        TaskRunnerProvider* task_runner_provider,
                         SharedBitmapManager* manager,
                         TaskGraphRunner* task_graph_runner);
+  FakeLayerTreeHostImpl(const LayerTreeSettings& settings,
+                        TaskRunnerProvider* task_runner_provider,
+                        SharedBitmapManager* manager,
+                        TaskGraphRunner* task_graph_runner,
+                        gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager);
   ~FakeLayerTreeHostImpl() override;
 
   void ForcePrepareToDraw() {
@@ -31,6 +40,7 @@ class FakeLayerTreeHostImpl : public LayerTreeHostImpl {
 
   void CreatePendingTree() override;
 
+  void NotifyTileStateChanged(const Tile* tile) override;
   BeginFrameArgs CurrentBeginFrameArgs() const override;
   void AdvanceToNextFrame(base::TimeDelta advance_by);
   void UpdateNumChildrenAndDrawPropertiesForActiveTree();
@@ -42,9 +52,17 @@ class FakeLayerTreeHostImpl : public LayerTreeHostImpl {
   using LayerTreeHostImpl::is_likely_to_require_a_draw;
   using LayerTreeHostImpl::RemoveRenderPasses;
 
+  bool notify_tile_state_changed_called() const {
+    return notify_tile_state_changed_called_;
+  }
+  void set_notify_tile_state_changed_called(bool called) {
+    notify_tile_state_changed_called_ = called;
+  }
+
  private:
   FakeLayerTreeHostImplClient client_;
   FakeRenderingStatsInstrumentation stats_instrumentation_;
+  bool notify_tile_state_changed_called_;
 };
 
 }  // namespace cc

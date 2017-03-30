@@ -41,13 +41,13 @@
   SkColor topColor = infobars::InfoBar::GetTopColor(infobarType);
   SkColor bottomColor = infobars::InfoBar::GetBottomColor(infobarType);
   base::scoped_nsobject<NSGradient> gradient([[NSGradient alloc]
-      initWithStartingColor:gfx::SkColorToCalibratedNSColor(topColor)
-                endingColor:gfx::SkColorToCalibratedNSColor(bottomColor)]);
+      initWithStartingColor:skia::SkColorToCalibratedNSColor(topColor)
+                endingColor:skia::SkColorToCalibratedNSColor(bottomColor)]);
   [self setGradient:gradient];
 }
 
 - (NSColor*)strokeColor {
-  ui::ThemeProvider* themeProvider = [[self window] themeProvider];
+  const ui::ThemeProvider* themeProvider = [[self window] themeProvider];
   if (!themeProvider)
     return [NSColor blackColor];
 

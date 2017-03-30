@@ -5,6 +5,8 @@
 #ifndef CONTENT_RENDERER_ACCESSIBILITY_BLINK_AX_ENUM_CONVERSION_H_
 #define CONTENT_RENDERER_ACCESSIBILITY_BLINK_AX_ENUM_CONVERSION_H_
 
+#include <stdint.h>
+
 #include "third_party/WebKit/public/web/WebAXObject.h"
 #include "ui/accessibility/ax_enums.h"
 
@@ -20,7 +22,7 @@ ui::AXEvent AXEventFromBlink(blink::WebAXEvent event);
 // accessors and a state bitmask stored in an AXNodeData.
 // (Note that some rare states are sent as boolean attributes
 // in AXNodeData instead.)
-uint32 AXStateFromBlink(const blink::WebAXObject& o);
+uint32_t AXStateFromBlink(const blink::WebAXObject& o);
 
 // Convert a Blink WebAXTextDirection to an AXTextDirection defined in
 // ui/accessibility.
@@ -38,6 +40,11 @@ ui::AXInvalidState AXInvalidStateFromBlink(
 // ui/accessibility.
 ui::AXSortDirection AXSortDirectionFromBlink(
     blink::WebAXSortDirection sort_direction);
+
+ui::AXNameFrom AXNameFromFromBlink(blink::WebAXNameFrom name_from);
+
+ui::AXDescriptionFrom AXDescriptionFromFromBlink(
+    blink::WebAXDescriptionFrom description_from);
 
 }  // namespace content
 

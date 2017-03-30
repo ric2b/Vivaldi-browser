@@ -11,18 +11,19 @@
 #include "base/prefs/scoped_user_pref_update.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/browser/prefs/command_line_pref_store.h"
-#include "chrome/browser/prefs/pref_service_mock_factory.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
-#include "chrome/test/base/testing_pref_service_syncable.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/policy/core/browser/configuration_policy_pref_store.h"
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/syncable_prefs/pref_service_mock_factory.h"
+#include "components/syncable_prefs/testing_pref_service_syncable.h"
 #include "content/public/common/web_preferences.h"
 #include "content/public/test/test_renderer_host.h"
 #include "ui/base/test/data/resource.h"
@@ -98,7 +99,7 @@ class ChromePrefServiceWebKitPrefs : public ChromeRenderViewHostTestHarness {
     // harness is not supposed to overwrite a profile if it's already created.
 
     // Set some (WebKit) user preferences.
-    TestingPrefServiceSyncable* pref_services =
+    syncable_prefs::TestingPrefServiceSyncable* pref_services =
         profile()->GetTestingPrefService();
     pref_services->SetUserPref(prefs::kDefaultCharset,
                                new base::StringValue("utf8"));

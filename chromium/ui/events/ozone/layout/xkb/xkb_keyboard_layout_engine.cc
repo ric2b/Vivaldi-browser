@@ -4,22 +4,24 @@
 
 #include "ui/events/ozone/layout/xkb/xkb_keyboard_layout_engine.h"
 
+#include <stddef.h>
 #include <xkbcommon/xkbcommon-names.h>
 
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/worker_pool.h"
+#include "build/build_config.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/dom_key.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
 #include "ui/events/keycodes/keyboard_code_conversion_xkb.h"
-#include "ui/events/ozone/layout/xkb/xkb_keyboard_code_conversion.h"
 
 namespace ui {
 
@@ -62,6 +64,7 @@ struct PrintableSubEntry {
   KeyboardCode key_code;
 };
 
+// The two designated Unicode "not-a-character" values are used as sentinels.
 const base::char16 kNone = 0xFFFE;
 const base::char16 kAny = 0xFFFF;
 
@@ -90,7 +93,7 @@ const PrintableSubEntry kU0024[] = {
 // U+0027 apostrophe
 const PrintableSubEntry kU0027[] = {
     {DomCode::DIGIT4, 0, 0, kAny, kAny, VKEY_4},
-    {DomCode::KEY_Q, 0, 0, kAny, kAny, VKEY_OEM_7},
+    {DomCode::US_Q, 0, 0, kAny, kAny, VKEY_OEM_7},
     {DomCode::BRACKET_RIGHT, 0, 0, kAny, kAny, VKEY_OEM_1},
     {DomCode::SLASH, 0, 0, kAny, kAny, VKEY_OEM_7},
     {DomCode::QUOTE, 1, 0, 0x0022, kAny, VKEY_OEM_7},        // quote
@@ -102,8 +105,8 @@ const PrintableSubEntry kU0027[] = {
     {DomCode::QUOTE, 1, 0, 0x0040, kAny, VKEY_OEM_3},        // @
     {DomCode::BACKSLASH, 1, 1, 0x002A, 0x00BD, VKEY_OEM_5},  // *, one half
     {DomCode::BACKSLASH, 1, 0, 0x002A, kAny, VKEY_OEM_2},    // *, NoSymbol
-    {DomCode::KEY_Z, 1, 1, 0x0022, 0x0158, VKEY_OEM_7},      // quote, R caron
-    {DomCode::KEY_Z, 1, 0, 0x0022, kAny, VKEY_Z}};           // quote
+    {DomCode::US_Z, 1, 1, 0x0022, 0x0158, VKEY_OEM_7},      // quote, R caron
+    {DomCode::US_Z, 1, 0, 0x0022, kAny, VKEY_Z}};           // quote
 
 // U+0028 left parenthesis
 const PrintableSubEntry kU0028[] = {
@@ -130,7 +133,6 @@ const PrintableSubEntry kU002B[] = {
     {DomCode::BRACKET_RIGHT, 0, 0, kAny, kAny, VKEY_OEM_PLUS},
     {DomCode::SEMICOLON, 0, 0, kAny, kAny, VKEY_OEM_PLUS},
     {DomCode::BACKSLASH, 0, 0, kAny, kAny, VKEY_OEM_2},
-    {DomCode::MINUS, 1, 1, 0x003F, 0x005C, VKEY_OEM_MINUS},  // ?, backslash
     {DomCode::MINUS, 1, 0, 0x003F, kAny, VKEY_OEM_PLUS}};    // ?
 
 // U+002C comma
@@ -139,9 +141,9 @@ const PrintableSubEntry kU002C[] = {
     {DomCode::DIGIT5, 0, 0, kAny, kAny, VKEY_5},
     {DomCode::DIGIT6, 0, 0, kAny, kAny, VKEY_6},
     {DomCode::DIGIT9, 0, 0, kAny, kAny, VKEY_9},
-    {DomCode::KEY_W, 0, 0, kAny, kAny, VKEY_OEM_COMMA},
-    {DomCode::KEY_V, 0, 0, kAny, kAny, VKEY_OEM_COMMA},
-    {DomCode::KEY_M, 0, 0, kAny, kAny, VKEY_OEM_COMMA},
+    {DomCode::US_W, 0, 0, kAny, kAny, VKEY_OEM_COMMA},
+    {DomCode::US_V, 0, 0, kAny, kAny, VKEY_OEM_COMMA},
+    {DomCode::US_M, 0, 0, kAny, kAny, VKEY_OEM_COMMA},
     {DomCode::COMMA, 0, 0, kAny, kAny, VKEY_OEM_COMMA}};
 
 // U+002D hyphen-minus
@@ -149,7 +151,7 @@ const PrintableSubEntry kU002D[] = {
     {DomCode::DIGIT2, 0, 0, kAny, kAny, VKEY_2},
     {DomCode::DIGIT6, 0, 0, kAny, kAny, VKEY_6},
     {DomCode::MINUS, 0, 0, kAny, kAny, VKEY_OEM_MINUS},
-    {DomCode::KEY_A, 0, 0, kAny, kAny, VKEY_OEM_MINUS},
+    {DomCode::US_A, 0, 0, kAny, kAny, VKEY_OEM_MINUS},
     {DomCode::QUOTE, 0, 0, kAny, kAny, VKEY_OEM_MINUS},
     {DomCode::SLASH, 1, 0, 0x003D, kAny, VKEY_OEM_MINUS},   // =
     {DomCode::EQUAL, 1, 1, 0x005F, 0x0157, VKEY_OEM_4},     // _, r cedilla
@@ -161,9 +163,9 @@ const PrintableSubEntry kU002D[] = {
 const PrintableSubEntry kU002E[] = {
     {DomCode::DIGIT7, 0, 0, kAny, kAny, VKEY_7},
     {DomCode::DIGIT8, 0, 0, kAny, kAny, VKEY_8},
-    {DomCode::KEY_E, 0, 0, kAny, kAny, VKEY_OEM_PERIOD},
-    {DomCode::KEY_R, 0, 0, kAny, kAny, VKEY_OEM_PERIOD},
-    {DomCode::KEY_O, 0, 0, kAny, kAny, VKEY_OEM_PERIOD},
+    {DomCode::US_E, 0, 0, kAny, kAny, VKEY_OEM_PERIOD},
+    {DomCode::US_R, 0, 0, kAny, kAny, VKEY_OEM_PERIOD},
+    {DomCode::US_O, 0, 0, kAny, kAny, VKEY_OEM_PERIOD},
     {DomCode::QUOTE, 0, 0, kAny, kAny, VKEY_OEM_7},
     {DomCode::PERIOD, 0, 0, kAny, kAny, VKEY_OEM_PERIOD},
     {DomCode::SLASH, 0, 0, kAny, kAny, VKEY_OEM_2}};
@@ -191,12 +193,12 @@ const PrintableSubEntry kU003A[] = {
 const PrintableSubEntry kU003B[] = {
     {DomCode::DIGIT4, 0, 0, kAny, kAny, VKEY_4},
     {DomCode::DIGIT8, 0, 0, kAny, kAny, VKEY_8},
-    {DomCode::KEY_Q, 0, 0, kAny, kAny, VKEY_OEM_1},
+    {DomCode::US_Q, 0, 0, kAny, kAny, VKEY_OEM_1},
     {DomCode::BRACKET_LEFT, 0, 0, kAny, kAny, VKEY_OEM_1},
     {DomCode::BRACKET_RIGHT, 0, 0, kAny, kAny, VKEY_OEM_6},
     {DomCode::SEMICOLON, 0, 0, kAny, kAny, VKEY_OEM_1},
     {DomCode::BACKQUOTE, 0, 0, kAny, kAny, VKEY_OEM_3},
-    {DomCode::KEY_Z, 0, 0, kAny, kAny, VKEY_OEM_1},
+    {DomCode::US_Z, 0, 0, kAny, kAny, VKEY_OEM_1},
     {DomCode::COMMA, 0, 0, kAny, kAny, VKEY_OEM_PERIOD},
     {DomCode::SLASH, 0, 0, kAny, kAny, VKEY_OEM_2}};
 // U+003D =
@@ -378,7 +380,7 @@ const PrintableSubEntry kU00FA[] = {
 
 // U+00FC u diaeresis
 const PrintableSubEntry kU00FC[] = {
-    {DomCode::KEY_W, 0, 0, kAny, kAny, VKEY_W},
+    {DomCode::US_W, 0, 0, kAny, kAny, VKEY_W},
     {DomCode::BRACKET_LEFT, 1, 0, 0x00E8, kAny, VKEY_OEM_1},    // e grave
     {DomCode::MINUS, 1, 0, 0x00DC, kAny, VKEY_OEM_2},           // U diaresis
     {DomCode::BRACKET_LEFT, 1, 1, 0x00DC, 0x0141, VKEY_OEM_3},  // U dia., L-
@@ -392,14 +394,14 @@ const PrintableSubEntry kU0103[] = {
 // U+0105 a ogonek
 const PrintableSubEntry kU0105[] = {
     {DomCode::DIGIT1, 0, 0, kAny, kAny, VKEY_1},
-    {DomCode::KEY_Q, 0, 0, kAny, kAny, VKEY_Q},
+    {DomCode::US_Q, 0, 0, kAny, kAny, VKEY_Q},
     {DomCode::QUOTE, 0, 0, kAny, kAny, VKEY_OEM_7}};
 
 // U+010D c caron
 const PrintableSubEntry kU010D[] = {
     {DomCode::DIGIT2, 0, 0, kAny, kAny, VKEY_2},
     {DomCode::DIGIT4, 0, 0, kAny, kAny, VKEY_4},
-    {DomCode::KEY_P, 0, 0, kAny, kAny, VKEY_X},
+    {DomCode::US_P, 0, 0, kAny, kAny, VKEY_X},
     {DomCode::SEMICOLON, 0, 0, kAny, kAny, VKEY_OEM_1},
     {DomCode::COMMA, 0, 0, kAny, kAny, VKEY_OEM_COMMA}};
 
@@ -439,15 +441,15 @@ const PrintableSubEntry kU0161[] = {
     {DomCode::DIGIT3, 0, 0, kAny, kAny, VKEY_3},
     {DomCode::DIGIT6, 0, 0, kAny, kAny, VKEY_6},
     {DomCode::BRACKET_LEFT, 0, 0, kAny, kAny, VKEY_OEM_4},
-    {DomCode::KEY_A, 0, 0, kAny, kAny, VKEY_OEM_1},
-    {DomCode::KEY_F, 0, 0, kAny, kAny, VKEY_F},
+    {DomCode::US_A, 0, 0, kAny, kAny, VKEY_OEM_1},
+    {DomCode::US_F, 0, 0, kAny, kAny, VKEY_F},
     {DomCode::PERIOD, 0, 0, kAny, kAny, VKEY_OEM_PERIOD}};
 
 // U+016B u macron
 const PrintableSubEntry kU016B[] = {
     {DomCode::DIGIT8, 0, 0, kAny, kAny, VKEY_8},
-    {DomCode::KEY_Q, 0, 0, kAny, kAny, VKEY_Q},
-    {DomCode::KEY_X, 0, 0, kAny, kAny, VKEY_X}};
+    {DomCode::US_Q, 0, 0, kAny, kAny, VKEY_Q},
+    {DomCode::US_X, 0, 0, kAny, kAny, VKEY_X}};
 
 // U+0173 u ogonek
 const PrintableSubEntry kU0173[] = {
@@ -464,7 +466,7 @@ const PrintableSubEntry kU017C[] = {
 const PrintableSubEntry kU017E[] = {
     {DomCode::DIGIT6, 0, 0, kAny, kAny, VKEY_6},
     {DomCode::EQUAL, 0, 0, kAny, kAny, VKEY_OEM_PLUS},
-    {DomCode::KEY_W, 0, 0, kAny, kAny, VKEY_W},
+    {DomCode::US_W, 0, 0, kAny, kAny, VKEY_W},
     {DomCode::BRACKET_LEFT, 0, 0, kAny, kAny, VKEY_Y},
     {DomCode::BACKSLASH, 0, 0, kAny, kAny, VKEY_OEM_5}};
 
@@ -628,15 +630,8 @@ void LoadKeymap(const std::string& layout_name,
 }
 #endif
 
-KeyboardCode DomCodeToUsLayoutKeyboardCode(DomCode dom_code) {
-  DomKey dummy_dom_key;
-  base::char16 dummy_character;
-  KeyboardCode key_code;
-  if (DomCodeToUsLayoutMeaning(dom_code, EF_NONE, &dummy_dom_key,
-                               &dummy_character, &key_code)) {
-    return key_code;
-  }
-  return VKEY_UNKNOWN;
+bool IsControlCharacter(uint32_t character) {
+  return (character < 0x20) || (character > 0x7E && character < 0xA0);
 }
 
 }  // anonymous namespace
@@ -687,22 +682,18 @@ bool XkbKeyboardLayoutEngine::SetCurrentLayoutByName(
       base::Bind(&LoadKeymap, layout_name, base::ThreadTaskRunnerHandle::Get(),
                  reply_callback),
       true);
-#else
-  xkb_keymap* keymap = xkb_map_new_from_string(
-      xkb_context_.get(), layout_name.c_str(), XKB_KEYMAP_FORMAT_TEXT_V1,
-      XKB_KEYMAP_COMPILE_NO_FLAGS);
-  if (!keymap)
-    return false;
-  SetKeymap(keymap);
-#endif  // defined(OS_CHROMEOS)
   return true;
+#else
+  // NOTIMPLEMENTED();
+  return false;
+#endif  // defined(OS_CHROMEOS)
 }
 
 void XkbKeyboardLayoutEngine::OnKeymapLoaded(
     const std::string& layout_name,
     scoped_ptr<char, base::FreeDeleter> keymap_str) {
   if (keymap_str) {
-    xkb_keymap* keymap = xkb_map_new_from_string(
+    xkb_keymap* keymap = xkb_keymap_new_from_string(
         xkb_context_.get(), keymap_str.get(), XKB_KEYMAP_FORMAT_TEXT_V1,
         XKB_KEYMAP_COMPILE_NO_FLAGS);
     XkbKeymapEntry entry = {layout_name, keymap};
@@ -727,9 +718,7 @@ bool XkbKeyboardLayoutEngine::UsesAltGr() const {
 bool XkbKeyboardLayoutEngine::Lookup(DomCode dom_code,
                                      int flags,
                                      DomKey* dom_key,
-                                     base::char16* character,
-                                     KeyboardCode* key_code,
-                                     uint32* platform_keycode) const {
+                                     KeyboardCode* key_code) const {
   if (dom_code == DomCode::NONE)
     return false;
   // Convert DOM physical key to XKB representation.
@@ -743,33 +732,65 @@ bool XkbKeyboardLayoutEngine::Lookup(DomCode dom_code,
   xkb_mod_mask_t xkb_flags = EventFlagsToXkbFlags(flags);
   // Obtain keysym and character.
   xkb_keysym_t xkb_keysym;
-  if (!XkbLookup(xkb_keycode, xkb_flags, &xkb_keysym, character))
+  uint32_t character = 0;
+  if (!XkbLookup(xkb_keycode, xkb_flags, &xkb_keysym, &character))
     return false;
-  *platform_keycode = xkb_keysym;
+
   // Classify the keysym and convert to DOM and VKEY representations.
-  *dom_key = NonPrintableXKeySymToDomKey(xkb_keysym);
-  if (*dom_key == DomKey::NONE) {
-    *dom_key = CharacterToDomKey(*character);
-    *key_code = AlphanumericKeyboardCode(*character);
-    if (*key_code == VKEY_UNKNOWN) {
-      *key_code = DifficultKeyboardCode(dom_code, flags, xkb_keycode, xkb_flags,
-                                        xkb_keysym, *dom_key, *character);
-      if (*key_code == VKEY_UNKNOWN)
-        *key_code = DomCodeToUsLayoutKeyboardCode(dom_code);
+  if ((character == 0) &&
+      ((xkb_keysym != XKB_KEY_at) || (flags & EF_CONTROL_DOWN) == 0)) {
+    // Non-character key. (We only support NUL as ^@.)
+    *dom_key = NonPrintableXKeySymToDomKey(xkb_keysym);
+    if (*dom_key == DomKey::NONE) {
+      *dom_key = DomKey::UNIDENTIFIED;
+      *key_code = VKEY_UNKNOWN;
+    } else {
+      *key_code = NonPrintableDomKeyToKeyboardCode(*dom_key);
     }
-    // If the Control key is down, only allow ASCII control characters to be
-    // returned, regardless of the key layout. crbug.com/450849
-    if ((flags & EF_CONTROL_DOWN) && (*character >= 0x20))
-      *character = 0;
-  } else if (*dom_key == DomKey::DEAD) {
-    *character = DeadXkbKeySymToCombiningCharacter(xkb_keysym);
-    *key_code = DomCodeToUsLayoutKeyboardCode(dom_code);
-  } else {
-    *key_code = NonPrintableDomKeyToKeyboardCode(*dom_key);
     if (*key_code == VKEY_UNKNOWN)
-      *key_code = DomCodeToUsLayoutKeyboardCode(dom_code);
+      *key_code = DomCodeToUsLayoutNonLocatedKeyboardCode(dom_code);
+    return true;
+  }
+
+  // Per UI Events rules for determining |key|, if the character is
+  // non-printable and a non-shiftlike modifier is down, we preferentially
+  // return a printable key as if the modifier were not down.
+  // https://w3c.github.io/uievents/#keys-guidelines
+  const int kNonShiftlikeModifiers =
+      EF_CONTROL_DOWN | EF_ALT_DOWN | EF_COMMAND_DOWN;
+  if ((flags & kNonShiftlikeModifiers) && IsControlCharacter(character)) {
+    int normal_ui_flags = flags & ~kNonShiftlikeModifiers;
+    xkb_mod_mask_t normal_xkb_flags = EventFlagsToXkbFlags(normal_ui_flags);
+    xkb_keysym_t normal_keysym;
+    uint32_t normal_character = 0;
+    if (XkbLookup(xkb_keycode, normal_xkb_flags, &normal_keysym,
+                  &normal_character) &&
+        !IsControlCharacter(normal_character)) {
+      flags = normal_ui_flags;
+      xkb_flags = normal_xkb_flags;
+      character = normal_character;
+      xkb_keysym = normal_keysym;
+    }
+  }
+
+  *dom_key = DomKey::FromCharacter(character);
+  *key_code = AlphanumericKeyboardCode(character);
+  if (*key_code == VKEY_UNKNOWN) {
+    *key_code = DifficultKeyboardCode(dom_code, flags, xkb_keycode, xkb_flags,
+                                      xkb_keysym, character);
+    if (*key_code == VKEY_UNKNOWN)
+      *key_code = DomCodeToUsLayoutNonLocatedKeyboardCode(dom_code);
   }
   return true;
+}
+
+void XkbKeyboardLayoutEngine::SetKeymapFromStringForTest(
+    const char* keymap_string) {
+  xkb_keymap* keymap = xkb_keymap_new_from_string(
+      xkb_context_.get(), keymap_string, XKB_KEYMAP_FORMAT_TEXT_V1,
+      XKB_KEYMAP_COMPILE_NO_FLAGS);
+  if (keymap)
+    SetKeymap(keymap);
 }
 
 void XkbKeyboardLayoutEngine::SetKeymap(xkb_keymap* keymap) {
@@ -778,13 +799,13 @@ void XkbKeyboardLayoutEngine::SetKeymap(xkb_keymap* keymap) {
   static const struct {
     int ui_flag;
     const char* xkb_name;
-  } flags[] = {{ui::EF_CONTROL_DOWN, XKB_MOD_NAME_CTRL},
-               {ui::EF_SHIFT_DOWN, XKB_MOD_NAME_SHIFT},
+  } flags[] = {{ui::EF_SHIFT_DOWN, XKB_MOD_NAME_SHIFT},
+               {ui::EF_CONTROL_DOWN, XKB_MOD_NAME_CTRL},
                {ui::EF_ALT_DOWN, XKB_MOD_NAME_ALT},
-               {ui::EF_CAPS_LOCK_DOWN, XKB_MOD_NAME_CAPS},
                {ui::EF_COMMAND_DOWN, XKB_MOD_NAME_LOGO},
+               {ui::EF_ALTGR_DOWN, "Mod5"},
                {ui::EF_MOD3_DOWN, "Mod3"},
-               {ui::EF_ALTGR_DOWN, "Mod5"}};
+               {ui::EF_CAPS_LOCK_ON, XKB_MOD_NAME_CAPS}};
   xkb_flag_map_.clear();
   xkb_flag_map_.resize(arraysize(flags));
   for (size_t i = 0; i < arraysize(flags); ++i) {
@@ -821,7 +842,7 @@ xkb_mod_mask_t XkbKeyboardLayoutEngine::EventFlagsToXkbFlags(
 bool XkbKeyboardLayoutEngine::XkbLookup(xkb_keycode_t xkb_keycode,
                                         xkb_mod_mask_t xkb_flags,
                                         xkb_keysym_t* xkb_keysym,
-                                        base::char16* character) const {
+                                        uint32_t* character) const {
   if (!xkb_state_) {
     LOG(ERROR) << "No current XKB state";
     return false;
@@ -830,9 +851,7 @@ bool XkbKeyboardLayoutEngine::XkbLookup(xkb_keycode_t xkb_keycode,
   *xkb_keysym = xkb_state_key_get_one_sym(xkb_state_.get(), xkb_keycode);
   if (*xkb_keysym == XKB_KEY_NoSymbol)
     return false;
-  uint32_t c = xkb_state_key_get_utf32(xkb_state_.get(), xkb_keycode);
-  DLOG_IF(ERROR, c != (c & 0xFFFF)) << "Non-BMP character:" << c;
-  *character = static_cast<base::char16>(c);
+  *character = xkb_state_key_get_utf32(xkb_state_.get(), xkb_keycode);
   return true;
 }
 
@@ -842,19 +861,18 @@ KeyboardCode XkbKeyboardLayoutEngine::DifficultKeyboardCode(
     xkb_keycode_t xkb_keycode,
     xkb_mod_mask_t xkb_flags,
     xkb_keysym_t xkb_keysym,
-    DomKey dom_key,
     base::char16 character) const {
   // Get the layout interpretation without modifiers, so that
   // e.g. Ctrl+D correctly generates VKEY_D.
   xkb_keysym_t plain_keysym;
-  base::char16 plain_character;
+  uint32_t plain_character;
   if (!XkbLookup(xkb_keycode, 0, &plain_keysym, &plain_character))
     return VKEY_UNKNOWN;
 
   // If the plain key is non-printable, that determines the VKEY.
   DomKey plain_key = NonPrintableXKeySymToDomKey(plain_keysym);
   if (plain_key != ui::DomKey::NONE)
-    return NonPrintableDomKeyToKeyboardCode(dom_key);
+    return NonPrintableDomKeyToKeyboardCode(plain_key);
 
   // Plain ASCII letters and digits map directly to VKEY values.
   KeyboardCode key_code = AlphanumericKeyboardCode(plain_character);
@@ -917,7 +935,7 @@ base::char16 XkbKeyboardLayoutEngine::XkbSubCharacter(
   if (flags == base_flags)
     return base_character;
   xkb_keysym_t keysym;
-  base::char16 character = 0;
+  uint32_t character = 0;
   if (!XkbLookup(xkb_keycode, flags, &keysym, &character))
     character = kNone;
   return character;

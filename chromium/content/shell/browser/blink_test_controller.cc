@@ -4,9 +4,12 @@
 
 #include "content/shell/browser/blink_test_controller.h"
 
+#include <stddef.h>
+
 #include <iostream>
 
 #include "base/base64.h"
+#include "base/callback.h"
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/run_loop.h"
@@ -14,6 +17,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/dom_storage_context.h"
 #include "content/public/browser/gpu_data_manager.h"
@@ -23,11 +27,14 @@
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
+#include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
+#include "content/shell/browser/layout_test/layout_test_bluetooth_chooser_factory.h"
 #include "content/shell/browser/layout_test/layout_test_devtools_frontend.h"
 #include "content/shell/browser/shell.h"
 #include "content/shell/browser/shell_browser_context.h"
@@ -273,9 +280,15 @@ bool BlinkTestController::PrepareForLayoutTest(
     // Shell::SizeTo is not implemented on all platforms.
     main_window_->SizeTo(initial_size_);
 #endif
-    main_window_->web_contents()->GetRenderViewHost()->GetView()
+    main_window_->web_contents()
+        ->GetRenderViewHost()
+        ->GetWidget()
+        ->GetView()
         ->SetSize(initial_size_);
-    main_window_->web_contents()->GetRenderViewHost()->WasResized();
+    main_window_->web_contents()
+        ->GetRenderViewHost()
+        ->GetWidget()
+        ->WasResized();
     RenderViewHost* render_view_host =
         main_window_->web_contents()->GetRenderViewHost();
     WebPreferences prefs = render_view_host->GetWebkitPreferences();
@@ -290,8 +303,9 @@ bool BlinkTestController::PrepareForLayoutTest(
     main_window_->web_contents()->GetController().LoadURLWithParams(params);
     main_window_->web_contents()->Focus();
   }
-  main_window_->web_contents()->GetRenderViewHost()->SetActive(true);
-  main_window_->web_contents()->GetRenderViewHost()->Focus();
+  main_window_->web_contents()->GetRenderViewHost()->GetWidget()->SetActive(
+      true);
+  main_window_->web_contents()->GetRenderViewHost()->GetWidget()->Focus();
   return true;
 }
 
@@ -324,12 +338,6 @@ void BlinkTestController::SetTempPath(const base::FilePath& temp_path) {
 void BlinkTestController::RendererUnresponsive() {
   DCHECK(CalledOnValidThread());
   LOG(WARNING) << "renderer unresponsive";
-}
-
-void BlinkTestController::WorkerCrashed() {
-  DCHECK(CalledOnValidThread());
-  printer_->AddErrorMessage("#CRASHED - worker");
-  DiscardMainWindow();
 }
 
 void BlinkTestController::OverrideWebkitPrefs(WebPreferences* prefs) {
@@ -367,6 +375,17 @@ bool BlinkTestController::IsMainWindow(WebContents* web_contents) const {
   return main_window_ && web_contents == main_window_->web_contents();
 }
 
+scoped_ptr<BluetoothChooser> BlinkTestController::RunBluetoothChooser(
+    WebContents* web_contents,
+    const BluetoothChooser::EventHandler& event_handler,
+    const GURL& origin) {
+  if (bluetooth_chooser_factory_) {
+    return bluetooth_chooser_factory_->RunBluetoothChooser(
+        web_contents, event_handler, origin);
+  }
+  return nullptr;
+}
+
 bool BlinkTestController::OnMessageReceived(const IPC::Message& message) {
   DCHECK(CalledOnValidThread());
   bool handled = true;
@@ -391,6 +410,12 @@ bool BlinkTestController::OnMessageReceived(const IPC::Message& message) {
                         OnCloseRemainingWindows)
     IPC_MESSAGE_HANDLER(ShellViewHostMsg_ResetDone, OnResetDone)
     IPC_MESSAGE_HANDLER(ShellViewHostMsg_LeakDetectionDone, OnLeakDetectionDone)
+    IPC_MESSAGE_HANDLER(ShellViewHostMsg_SetBluetoothManualChooser,
+                        OnSetBluetoothManualChooser)
+    IPC_MESSAGE_HANDLER(ShellViewHostMsg_GetBluetoothManualChooserEvents,
+                        OnGetBluetoothManualChooserEvents)
+    IPC_MESSAGE_HANDLER(ShellViewHostMsg_SendBluetoothManualChooserEvent,
+                        OnSendBluetoothManualChooserEvent)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
 
@@ -484,7 +509,7 @@ void BlinkTestController::DiscardMainWindow() {
   if (test_phase_ != BETWEEN_TESTS) {
     Shell::CloseAllWindows();
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::MessageLoop::QuitClosure());
+        FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
     test_phase_ = CLEAN_UP;
   } else if (main_window_) {
     main_window_->Close();
@@ -517,8 +542,12 @@ void BlinkTestController::OnTestFinished() {
   RenderViewHost* render_view_host =
       main_window_->web_contents()->GetRenderViewHost();
   main_window_->web_contents()->ExitFullscreen();
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
+
+  ShellBrowserContext* browser_context =
+      ShellContentBrowserClient::Get()->browser_context();
+  StoragePartition* storage_partition =
+      BrowserContext::GetStoragePartition(browser_context, nullptr);
+  storage_partition->GetServiceWorkerContext()->ClearAllServiceWorkersForTest(
       base::Bind(base::IgnoreResult(&BlinkTestController::Send),
                  base::Unretained(this),
                  new ShellViewMsg_Reset(render_view_host->GetRoutingID())));
@@ -537,7 +566,7 @@ void BlinkTestController::OnImageDump(const std::string& actual_pixel_hash,
 
     bool discard_transparency = true;
     if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kEnableOverlayFullscreenVideo))
+            switches::kForceOverlayFullscreenVideo))
       discard_transparency = false;
 
     std::vector<gfx::PNGCodec::Comment> comments;
@@ -683,14 +712,14 @@ void BlinkTestController::OnResetDone() {
   }
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::MessageLoop::QuitClosure());
+      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
 }
 
 void BlinkTestController::OnLeakDetectionDone(
     const LeakDetectionResult& result) {
   if (!result.leaked) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::MessageLoop::QuitClosure());
+        FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
     return;
   }
 
@@ -700,6 +729,50 @@ void BlinkTestController::OnLeakDetectionDone(
   CHECK(!crash_when_leak_found_);
 
   DiscardMainWindow();
+}
+
+void BlinkTestController::OnSetBluetoothManualChooser(bool enable) {
+  bluetooth_chooser_factory_.reset();
+  if (enable) {
+    bluetooth_chooser_factory_.reset(new LayoutTestBluetoothChooserFactory());
+  }
+}
+
+void BlinkTestController::OnGetBluetoothManualChooserEvents() {
+  if (!bluetooth_chooser_factory_) {
+    printer_->AddErrorMessage(
+        "FAIL: Must call setBluetoothManualChooser before "
+        "getBluetoothManualChooserEvents.");
+    return;
+  }
+  Send(new ShellViewMsg_ReplyBluetoothManualChooserEvents(
+      main_window_->web_contents()->GetRoutingID(),
+      bluetooth_chooser_factory_->GetAndResetEvents()));
+}
+
+void BlinkTestController::OnSendBluetoothManualChooserEvent(
+    const std::string& event_name,
+    const std::string& argument) {
+  if (!bluetooth_chooser_factory_) {
+    printer_->AddErrorMessage(
+        "FAIL: Must call setBluetoothManualChooser before "
+        "sendBluetoothManualChooserEvent.");
+    return;
+  }
+  BluetoothChooser::Event event;
+  if (event_name == "cancelled") {
+    event = BluetoothChooser::Event::CANCELLED;
+  } else if (event_name == "selected") {
+    event = BluetoothChooser::Event::SELECTED;
+  } else if (event_name == "rescan") {
+    event = BluetoothChooser::Event::RESCAN;
+  } else {
+    printer_->AddErrorMessage(base::StringPrintf(
+        "FAIL: Unexpected sendBluetoothManualChooserEvent() event name '%s'.",
+        event_name.c_str()));
+    return;
+  }
+  bluetooth_chooser_factory_->SendEvent(event, argument);
 }
 
 }  // namespace content

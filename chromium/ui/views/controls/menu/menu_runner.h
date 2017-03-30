@@ -5,8 +5,10 @@
 #ifndef UI_VIEWS_CONTROLS_MENU_MENU_RUNNER_H_
 #define UI_VIEWS_CONTROLS_MENU_MENU_RUNNER_H_
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/views/controls/menu/menu_types.h"
@@ -68,26 +70,30 @@ class VIEWS_EXPORT MenuRunner {
 
     // The menu is a nested context menu. For example, click a folder on the
     // bookmark bar, then right click an entry to get its context menu.
-    IS_NESTED     = 1 << 1,
+    IS_NESTED = 1 << 1,
 
     // Used for showing a menu during a drop operation. This does NOT block the
     // caller, instead the delegate is notified when the menu closes via the
     // DropMenuClosed method.
-    FOR_DROP      = 1 << 2,
+    FOR_DROP = 1 << 2,
 
     // The menu is a context menu (not necessarily nested), for example right
     // click on a link on a website in the browser.
-    CONTEXT_MENU  = 1 << 3,
+    CONTEXT_MENU = 1 << 3,
 
     // The menu should behave like a Windows native Combobox dropdow menu.
     // This behavior includes accepting the pending item and closing on F4.
-    COMBOBOX  = 1 << 4,
+    COMBOBOX = 1 << 4,
 
     // A child view is performing a drag-and-drop operation, so the menu should
     // stay open (even if it doesn't receive drag updated events). In this case,
     // the caller is responsible for closing the menu upon completion of the
     // drag-and-drop.
     NESTED_DRAG = 1 << 5,
+
+    // Used for showing a menu which does NOT block the caller. Instead the
+    // delegate is notified when the menu closes via OnMenuClosed.
+    ASYNC = 1 << 6,
   };
 
   enum RunResult {
@@ -100,8 +106,8 @@ class VIEWS_EXPORT MenuRunner {
 
   // Creates a new MenuRunner.
   // |run_types| is a bitmask of RunTypes.
-  MenuRunner(ui::MenuModel* menu_model, int32 run_types);
-  MenuRunner(MenuItemView* menu, int32 run_types);
+  MenuRunner(ui::MenuModel* menu_model, int32_t run_types);
+  MenuRunner(MenuItemView* menu, int32_t run_types);
   ~MenuRunner();
 
   // Runs the menu. If this returns MENU_DELETED the method is returning
@@ -131,7 +137,7 @@ class VIEWS_EXPORT MenuRunner {
   // Sets an implementation of RunMenuAt. This is intended to be used at test.
   void SetRunnerHandler(scoped_ptr<MenuRunnerHandler> runner_handler);
 
-  const int32 run_types_;
+  const int32_t run_types_;
 
   // We own this. No scoped_ptr because it is destroyed by calling Release().
   internal::MenuRunnerImplInterface* impl_;

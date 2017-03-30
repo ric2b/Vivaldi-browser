@@ -4,12 +4,16 @@
 
 #include "components/resource_provider/resource_provider_impl.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "components/resource_provider/file_utils.h"
 #include "mojo/platform_handle/platform_handle_functions.h"
+#include "url/gurl.h"
 
 using mojo::ScopedHandle;
 
@@ -36,14 +40,16 @@ ScopedHandle GetHandleForPath(const base::FilePath& path) {
     return ScopedHandle();
   }
 
-  return ScopedHandle(mojo::Handle(mojo_handle)).Pass();
+  return ScopedHandle(mojo::Handle(mojo_handle));
 }
 
 }  // namespace
 
 ResourceProviderImpl::ResourceProviderImpl(
-    const base::FilePath& application_path)
-    : application_path_(application_path) {
+    const base::FilePath& application_path,
+    const std::string& resource_provider_app_url)
+    : application_path_(application_path),
+      resource_provider_app_url_(resource_provider_app_url) {
   CHECK(!application_path_.empty());
 }
 
@@ -60,7 +66,7 @@ void ResourceProviderImpl::GetResources(mojo::Array<mojo::String> paths,
           GetPathForResourceNamed(application_path_, paths[i]));
     }
   }
-  callback.Run(handles.Pass());
+  callback.Run(std::move(handles));
 }
 
 }  // namespace resource_provider

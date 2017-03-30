@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/threading/platform_thread.h"
 #include "net/base/ip_endpoint.h"
@@ -86,7 +87,9 @@ class TransportClientSocketPoolTest : public testing::Test {
     test_base_.ReleaseAllConnections(keep_alive);
   }
 
-  ScopedVector<TestSocketRequest>* requests() { return test_base_.requests(); }
+  std::vector<scoped_ptr<TestSocketRequest>>* requests() {
+    return test_base_.requests();
+  }
   size_t completion_count() const { return test_base_.completion_count(); }
 
   bool connect_backup_jobs_enabled_;

@@ -43,14 +43,7 @@
         ],
       },
     }],
-    ['OS=="android"', {
-      'variables': {
-        'files': [
-          '<(PRODUCT_DIR)/content_shell/assets/content_shell.pak',
-        ],
-      },
-    }],
-    ['OS=="linux" or OS=="mac" or OS=="win"', {
+    ['OS=="linux" or OS=="mac" or OS=="win" or OS=="android"', {
       'variables': {
         'files': [
           '<(PRODUCT_DIR)/content_shell.pak',
@@ -61,7 +54,6 @@
       'variables': {
         'files': [
           '../testing/test_env.py',
-          '<(PRODUCT_DIR)/content_unittests<(EXECUTABLE_SUFFIX)',
         ],
       },
     }],
@@ -105,6 +97,6 @@
   'includes': [
     '../base/base.isolate',
     '../gin/v8.isolate',
-    '../third_party/angle/angle.isolate',
+    '../ui/gl/gl.isolate',
   ],
 }

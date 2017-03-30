@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/non_thread_safe.h"
@@ -28,15 +29,15 @@ class CONTENT_EXPORT RtcDtmfSenderHandler
       NON_EXPORTED_BASE(public base::NonThreadSafe) {
  public:
   explicit RtcDtmfSenderHandler(webrtc::DtmfSenderInterface* dtmf_sender);
-  virtual ~RtcDtmfSenderHandler();
+  ~RtcDtmfSenderHandler() override;
 
   // blink::WebRTCDTMFSenderHandler implementation.
-  void setClient(
-      blink::WebRTCDTMFSenderHandlerClient* client) override;
+  void setClient(blink::WebRTCDTMFSenderHandlerClient* client) override;
   blink::WebString currentToneBuffer() override;
   bool canInsertDTMF() override;
-  bool insertDTMF(const blink::WebString& tones, long duration,
-                          long interToneGap) override;
+  bool insertDTMF(const blink::WebString& tones,
+                  long duration,
+                  long interToneGap) override;
 
   void OnToneChange(const std::string& tone);
 

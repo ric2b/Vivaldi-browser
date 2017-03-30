@@ -18,14 +18,18 @@ source_set("ble") {
     "fake_wire_message.h",
     "pref_names.cc",
     "pref_names.h",
-    "proximity_auth_ble_system.cc",
-    "proximity_auth_ble_system.h",
     "remote_attribute.h",
   ]
 
   deps = [
     "//base",
-    "//components/proximity_auth",
+    "//base:prefs",
+    "//components/proximity_auth/logging",
+
+    # TODO(https://crbug.com/562683): This component has a circular dependency
+    # with the root proximity auth target. It is whitelisted in that target for
+    # includes.
+    #"//components/proximity_auth",
     "//device/bluetooth",
     "//net",
   ]
@@ -42,15 +46,15 @@ source_set("unit_tests") {
     "bluetooth_low_energy_connection_finder_unittest.cc",
     "bluetooth_low_energy_connection_unittest.cc",
     "bluetooth_low_energy_device_whitelist_unittest.cc",
-    "proximity_auth_ble_system_unittest.cc",
   ]
 
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
 
   deps = [
     ":ble",
-    "//components/proximity_auth",
+    "//base:prefs_test_support",
     "//base/test:test_support",
+    "//components/proximity_auth:test_support",
     "//device/bluetooth:mocks",
     "//testing/gmock",
     "//testing/gtest",

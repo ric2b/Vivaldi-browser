@@ -4,6 +4,9 @@
 
 #include "ipc/mojo/ipc_message_pipe_reader.h"
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/location.h"
@@ -18,59 +21,66 @@ namespace internal {
 
 MessagePipeReader::MessagePipeReader(mojo::ScopedMessagePipeHandle handle,
                                      MessagePipeReader::Delegate* delegate)
-    : pipe_(handle.Pass()),
+    : pipe_(std::move(handle)),
+      handle_copy_(pipe_.get().value()),
       delegate_(delegate),
-      async_waiter_(
-          new AsyncHandleWaiter(base::Bind(&MessagePipeReader::PipeIsReady,
-                                           base::Unretained(this)))),
-      pending_send_error_(MOJO_RESULT_OK) {
-}
+      async_waiter_(new AsyncHandleWaiter(
+          base::Bind(&MessagePipeReader::PipeIsReady, base::Unretained(this)))),
+      pending_send_error_(MOJO_RESULT_OK) {}
 
 MessagePipeReader::~MessagePipeReader() {
+  DCHECK(thread_checker_.CalledOnValidThread());
   // The pipe should be closed before deletion.
   CHECK(!IsValid());
-  DCHECK_EQ(pending_send_error_, MOJO_RESULT_OK);
 }
 
 void MessagePipeReader::Close() {
-  // All pending errors should be signaled before Close().
-  DCHECK_EQ(pending_send_error_, MOJO_RESULT_OK);
+  DCHECK(thread_checker_.CalledOnValidThread());
   async_waiter_.reset();
   pipe_.reset();
   OnPipeClosed();
 }
 
 void MessagePipeReader::CloseWithError(MojoResult error) {
+  DCHECK(thread_checker_.CalledOnValidThread());
   OnPipeError(error);
   Close();
 }
 
 void MessagePipeReader::CloseWithErrorIfPending() {
-  if (pending_send_error_ == MOJO_RESULT_OK)
+  DCHECK(thread_checker_.CalledOnValidThread());
+  MojoResult pending_error = base::subtle::NoBarrier_Load(&pending_send_error_);
+  if (pending_error == MOJO_RESULT_OK)
     return;
-  MojoResult error = pending_send_error_;
-  pending_send_error_ = MOJO_RESULT_OK;
-  CloseWithError(error);
+  // NOTE: This races with Send(), and therefore the value of
+  // pending_send_error() can change.
+  CloseWithError(pending_error);
   return;
 }
 
 void MessagePipeReader::CloseWithErrorLater(MojoResult error) {
-  pending_send_error_ = error;
+  DCHECK_NE(error, MOJO_RESULT_OK);
+  // NOTE: No assumptions about the value of |pending_send_error_| or whether or
+  // not the error has been signaled can be made. If Send() is called
+  // immediately before Close() and errors, it's possible for the error to not
+  // be signaled.
+  base::subtle::NoBarrier_Store(&pending_send_error_, error);
 }
 
 bool MessagePipeReader::Send(scoped_ptr<Message> message) {
-  DCHECK(IsValid());
-
-  message->TraceMessageBegin();
+  TRACE_EVENT_WITH_FLOW0(TRACE_DISABLED_BY_DEFAULT("ipc.flow"),
+                         "MessagePipeReader::Send",
+                         message->flags(),
+                         TRACE_EVENT_FLAG_FLOW_OUT);
   std::vector<MojoHandle> handles;
   MojoResult result = MOJO_RESULT_OK;
   result = ChannelMojo::ReadFromMessageAttachmentSet(message.get(), &handles);
   if (result == MOJO_RESULT_OK) {
     result = MojoWriteMessage(handle(),
                               message->data(),
-                              static_cast<uint32>(message->size()),
+                              static_cast<uint32_t>(message->size()),
                               handles.empty() ? nullptr : &handles[0],
-                              static_cast<uint32>(handles.size()),
+                              static_cast<uint32_t>(handles.size()),
                               MOJO_WRITE_MESSAGE_FLAG_NONE);
   }
 
@@ -89,7 +99,7 @@ bool MessagePipeReader::Send(scoped_ptr<Message> message) {
 
 void MessagePipeReader::OnMessageReceived() {
   Message message(data_buffer().empty() ? "" : &data_buffer()[0],
-                  static_cast<uint32>(data_buffer().size()));
+                  static_cast<uint32_t>(data_buffer().size()));
 
   std::vector<MojoHandle> handle_buffer;
   TakeHandleBuffer(&handle_buffer);
@@ -100,11 +110,15 @@ void MessagePipeReader::OnMessageReceived() {
     return;
   }
 
-  message.TraceMessageEnd();
+  TRACE_EVENT_WITH_FLOW0(TRACE_DISABLED_BY_DEFAULT("ipc.flow"),
+                         "MessagePipeReader::OnMessageReceived",
+                         message.flags(),
+                         TRACE_EVENT_FLAG_FLOW_IN);
   delegate_->OnMessageReceived(message);
 }
 
 void MessagePipeReader::OnPipeClosed() {
+  DCHECK(thread_checker_.CalledOnValidThread());
   if (!delegate_)
     return;
   delegate_->OnPipeClosed(this);
@@ -112,12 +126,14 @@ void MessagePipeReader::OnPipeClosed() {
 }
 
 void MessagePipeReader::OnPipeError(MojoResult error) {
+  DCHECK(thread_checker_.CalledOnValidThread());
   if (!delegate_)
     return;
   delegate_->OnPipeError(this);
 }
 
 MojoResult MessagePipeReader::ReadMessageBytes() {
+  DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(handle_buffer_.empty());
 
   uint32_t num_bytes = static_cast<uint32_t>(data_buffer_.size());
@@ -147,6 +163,7 @@ MojoResult MessagePipeReader::ReadMessageBytes() {
 }
 
 void MessagePipeReader::ReadAvailableMessages() {
+  DCHECK(thread_checker_.CalledOnValidThread());
   while (pipe_.is_valid()) {
     MojoResult read_result = ReadMessageBytes();
     if (read_result == MOJO_RESULT_SHOULD_WAIT)
@@ -165,6 +182,7 @@ void MessagePipeReader::ReadAvailableMessages() {
 }
 
 void MessagePipeReader::ReadMessagesThenWait() {
+  DCHECK(thread_checker_.CalledOnValidThread());
   while (true) {
     ReadAvailableMessages();
     if (!pipe_.is_valid())
@@ -191,6 +209,7 @@ void MessagePipeReader::ReadMessagesThenWait() {
 }
 
 void MessagePipeReader::PipeIsReady(MojoResult wait_result) {
+  DCHECK(thread_checker_.CalledOnValidThread());
   CloseWithErrorIfPending();
   if (!IsValid()) {
     // There was a pending error and it closed the pipe.

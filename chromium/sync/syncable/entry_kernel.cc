@@ -4,8 +4,13 @@
 
 #include "sync/syncable/entry_kernel.h"
 
+#include <stdint.h>
+#include <utility>
+
+#include "base/json/string_escape.h"
 #include "base/strings/string_number_conversions.h"
 #include "sync/protocol/proto_value_conversions.h"
+#include "sync/syncable/syncable_columns.h"
 #include "sync/syncable/syncable_enum_conversions.h"
 #include "sync/util/cryptographer.h"
 
@@ -107,13 +112,13 @@ void SetEncryptableProtoValues(
     } else {
       value = EntitySpecificsToValue(kernel.ref(field));
     }
-    dictionary_value->Set(key, value.Pass());
+    dictionary_value->Set(key, std::move(value));
   }
 }
 
 // Helper functions for SetFieldValues().
 
-base::StringValue* Int64ToValue(int64 i) {
+base::StringValue* Int64ToValue(int64_t i) {
   return new base::StringValue(base::Int64ToString(i));
 }
 
@@ -236,5 +241,54 @@ base::DictionaryValue* EntryKernelMutationToValue(
   return dict;
 }
 
-}  // namespace syncer
+std::ostream& operator<<(std::ostream& os, const EntryKernel& entry_kernel) {
+  int i;
+  EntryKernel* const kernel = const_cast<EntryKernel*>(&entry_kernel);
+  for (i = BEGIN_FIELDS; i < INT64_FIELDS_END; ++i) {
+    os << g_metas_columns[i].name << ": "
+       << kernel->ref(static_cast<Int64Field>(i)) << ", ";
+  }
+  for (; i < TIME_FIELDS_END; ++i) {
+    os << g_metas_columns[i].name << ": "
+       << GetTimeDebugString(kernel->ref(static_cast<TimeField>(i))) << ", ";
+  }
+  for (; i < ID_FIELDS_END; ++i) {
+    os << g_metas_columns[i].name << ": "
+       << kernel->ref(static_cast<IdField>(i)) << ", ";
+  }
+  os << "Flags: ";
+  for (; i < BIT_FIELDS_END; ++i) {
+    if (kernel->ref(static_cast<BitField>(i)))
+      os << g_metas_columns[i].name << ", ";
+  }
+  for (; i < STRING_FIELDS_END; ++i) {
+    const std::string& field = kernel->ref(static_cast<StringField>(i));
+    os << g_metas_columns[i].name << ": " << field << ", ";
+  }
+  for (; i < PROTO_FIELDS_END; ++i) {
+    std::string escaped_str = base::EscapeBytesAsInvalidJSONString(
+        kernel->ref(static_cast<ProtoField>(i)).SerializeAsString(), false);
+    os << g_metas_columns[i].name << ": " << escaped_str << ", ";
+  }
+  for (; i < UNIQUE_POSITION_FIELDS_END; ++i) {
+    os << g_metas_columns[i].name << ": "
+       << kernel->ref(static_cast<UniquePositionField>(i)).ToDebugString()
+       << ", ";
+  }
+  for (; i < ATTACHMENT_METADATA_FIELDS_END; ++i) {
+    std::string escaped_str = base::EscapeBytesAsInvalidJSONString(
+        kernel->ref(static_cast<AttachmentMetadataField>(i))
+            .SerializeAsString(),
+        false);
+    os << g_metas_columns[i].name << ": " << escaped_str << ", ";
+  }
+  os << "TempFlags: ";
+  for (; i < BIT_TEMPS_END; ++i) {
+    if (kernel->ref(static_cast<BitTemp>(i)))
+      os << "#" << i - BIT_TEMPS_BEGIN << ", ";
+  }
+  return os;
+}
+
 }  // namespace syncable
+}  // namespace syncer

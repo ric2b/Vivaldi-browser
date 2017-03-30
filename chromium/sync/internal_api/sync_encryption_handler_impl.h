@@ -6,9 +6,11 @@
 #define SYNC_INTERNAL_API_SYNC_ENCRYPTION_HANDLER_IMPL_H_
 
 #include <string>
+#include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -42,9 +44,8 @@ class WriteTransaction;
 // sync methods.
 // All methods are non-thread-safe and should only be called from the sync
 // thread unless explicitly noted otherwise.
-class SYNC_EXPORT_PRIVATE SyncEncryptionHandlerImpl
-    : public SyncEncryptionHandler,
-      public syncable::NigoriHandler {
+class SYNC_EXPORT SyncEncryptionHandlerImpl : public SyncEncryptionHandler,
+                                              public syncable::NigoriHandler {
  public:
   // |clear_data_option| controls whether this object should update the Nigori
   // node to indiciate that we are to clear server data as part of the
@@ -65,7 +66,7 @@ class SYNC_EXPORT_PRIVATE SyncEncryptionHandlerImpl
                                bool is_explicit) override;
   void SetDecryptionPassphrase(const std::string& passphrase) override;
   void EnableEncryptEverything() override;
-  bool EncryptEverythingEnabled() const override;
+  bool IsEncryptEverythingEnabled() const override;
   PassphraseType GetPassphraseType() const override;
 
   // NigoriHandler implementation.
@@ -276,10 +277,6 @@ class SYNC_EXPORT_PRIVATE SyncEncryptionHandlerImpl
   // Notify observers when a custom passphrase is set by this device.
   void NotifyObserversOfLocalCustomPassphrase(WriteTransaction* trans);
 
-  // Update the Nigori node to indicate that we're transitioning to passphrsae
-  // encryption.
-  void UpdateNigoriForTransitionToPassphraseEncryption(WriteTransaction* trans);
-
   base::ThreadChecker thread_checker_;
 
   base::ObserverList<SyncEncryptionHandler::Observer> observers_;
@@ -331,4 +328,4 @@ class SYNC_EXPORT_PRIVATE SyncEncryptionHandlerImpl
 
 }  // namespace syncer
 
-#endif  // SYNC_INTERNAL_API_PUBLIC_SYNC_ENCRYPTION_HANDLER_IMPL_H_
+#endif  // SYNC_INTERNAL_API_SYNC_ENCRYPTION_HANDLER_IMPL_H_

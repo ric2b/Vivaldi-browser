@@ -4,11 +4,15 @@
 
 #include "content/common/gpu/client/gpu_jpeg_decode_accelerator_host.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/shared_memory_handle.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/waitable_event.h"
+#include "build/build_config.h"
 #include "content/common/gpu/client/gpu_channel_host.h"
 #include "content/common/gpu/gpu_messages.h"
 #include "ipc/ipc_listener.h"
@@ -94,7 +98,7 @@ class GpuJpegDecodeAcceleratorHost::Receiver : public IPC::Listener,
 
 GpuJpegDecodeAcceleratorHost::GpuJpegDecodeAcceleratorHost(
     GpuChannelHost* channel,
-    int32 route_id,
+    int32_t route_id,
     const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner)
     : channel_(channel),
       decoder_route_id_(route_id),
@@ -179,6 +183,10 @@ void GpuJpegDecodeAcceleratorHost::Decode(
   decode_params.output_video_frame_handle = output_handle;
   decode_params.output_buffer_size = output_buffer_size;
   Send(new AcceleratedJpegDecoderMsg_Decode(decoder_route_id_, decode_params));
+}
+
+bool GpuJpegDecodeAcceleratorHost::IsSupported() {
+  return channel_->gpu_info().jpeg_decode_accelerator_supported;
 }
 
 void GpuJpegDecodeAcceleratorHost::Send(IPC::Message* message) {

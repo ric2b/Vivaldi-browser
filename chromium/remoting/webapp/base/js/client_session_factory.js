@@ -24,7 +24,8 @@ remoting.ClientSessionFactory = function(container, capabilities) {
     remoting.ClientSession.Capability.SEND_INITIAL_RESOLUTION,
     remoting.ClientSession.Capability.RATE_LIMIT_RESIZE_REQUESTS,
     remoting.ClientSession.Capability.VIDEO_RECORDER,
-    remoting.ClientSession.Capability.TOUCH_EVENTS
+    remoting.ClientSession.Capability.TOUCH_EVENTS,
+    remoting.ClientSession.Capability.DESKTOP_SHAPE
   ];
 
   // Append the app-specific capabilities.
@@ -36,12 +37,12 @@ remoting.ClientSessionFactory = function(container, capabilities) {
  * Creates a session.
  *
  * @param {remoting.ClientSession.EventHandler} listener
- * @param {boolean=} opt_useApiaryForLogging
+ * @param {remoting.SessionLogger} logger
  * @return {Promise<!remoting.ClientSession>} Resolves with the client session
  *     if succeeded or rejects with remoting.Error on failure.
  */
 remoting.ClientSessionFactory.prototype.createSession =
-    function(listener, opt_useApiaryForLogging) {
+    function(listener, logger) {
   var that = this;
   /** @type {string} */
   var token;
@@ -49,9 +50,10 @@ remoting.ClientSessionFactory.prototype.createSession =
   var signalStrategy;
   /** @type {remoting.ClientPlugin} */
   var clientPlugin;
-  var useApiaryForLogging = Boolean(opt_useApiaryForLogging);
 
-  function OnError(/** remoting.Error */ error) {
+  function OnError(/** !remoting.Error */ error) {
+    logger.logSessionStateChange(
+        remoting.ChromotingEvent.SessionState.CONNECTION_FAILED, error);
     base.dispose(signalStrategy);
     base.dispose(clientPlugin);
     throw error;
@@ -62,14 +64,17 @@ remoting.ClientSessionFactory.prototype.createSession =
     token = authToken;
     return remoting.identity.getUserInfo();
   }).then(function(/** {email: string, name: string} */ userInfo) {
+    logger.logSessionStateChange(
+        remoting.ChromotingEvent.SessionState.SIGNALING);
     return connectSignaling(userInfo.email, token);
   }).then(function(/** remoting.SignalStrategy */ strategy) {
     signalStrategy = strategy;
+    logger.logSessionStateChange(
+        remoting.ChromotingEvent.SessionState.CREATING_PLUGIN);
     return createPlugin(that.container_, that.requiredCapabilities_);
   }).then(function(/** remoting.ClientPlugin */ plugin) {
     clientPlugin = plugin;
-    return new remoting.ClientSession(
-        plugin, signalStrategy, useApiaryForLogging, listener);
+    return new remoting.ClientSession(plugin, signalStrategy, logger, listener);
   }).catch(
     remoting.Error.handler(OnError)
   );
@@ -113,27 +118,9 @@ function connectSignaling(email, token) {
 function createPlugin(container, capabilities) {
   var plugin = remoting.ClientPlugin.factory.createPlugin(
       container, capabilities);
-  var deferred = new base.Deferred();
-
-  function onInitialized(/** boolean */ initialized) {
-    if (!initialized) {
-      console.error('ERROR: remoting plugin not loaded');
-      plugin.dispose();
-      deferred.reject(new remoting.Error(remoting.Error.Tag.MISSING_PLUGIN));
-      return;
-    }
-
-    if (!plugin.isSupportedVersion()) {
-      console.error('ERROR: bad plugin version');
-      plugin.dispose();
-      deferred.reject(
-          new remoting.Error(remoting.Error.Tag.BAD_PLUGIN_VERSION));
-      return;
-    }
-    deferred.resolve(plugin);
-  }
-  plugin.initialize(onInitialized);
-  return deferred.promise();
+  return plugin.initialize().then(function() {
+    return plugin;
+  });
 }
 
 })();

@@ -2,13 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/edk/system/awakable_list.h"
+#include "third_party/mojo/src/mojo/edk/system/awakable_list.h"
 
 #include <algorithm>
 
 #include "base/logging.h"
-#include "mojo/edk/system/awakable.h"
-#include "mojo/edk/system/handle_signals_state.h"
+#include "third_party/mojo/src/mojo/edk/system/awakable.h"
+#include "third_party/mojo/src/mojo/edk/system/handle_signals_state.h"
 
 namespace mojo {
 namespace system {
@@ -51,7 +51,7 @@ void AwakableList::CancelAll() {
 
 void AwakableList::Add(Awakable* awakable,
                        MojoHandleSignals signals,
-                       uint32_t context) {
+                       uintptr_t context) {
   awakables_.push_back(AwakeInfo(awakable, signals, context));
 }
 

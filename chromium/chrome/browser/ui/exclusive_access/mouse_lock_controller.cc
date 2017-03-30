@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/exclusive_access/mouse_lock_controller.h"
 
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
@@ -13,6 +14,7 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 
@@ -21,8 +23,8 @@ using content::WebContents;
 
 MouseLockController::MouseLockController(ExclusiveAccessManager* manager)
     : ExclusiveAccessControllerBase(manager),
-      mouse_lock_state_(MOUSELOCK_NOT_REQUESTED) {
-}
+      mouse_lock_state_(MOUSELOCK_NOT_REQUESTED),
+      fake_mouse_lock_for_test_(false) {}
 
 MouseLockController::~MouseLockController() {
 }
@@ -68,7 +70,8 @@ void MouseLockController::RequestToLockMouse(WebContents* web_contents,
         mouse_lock_state_ = MOUSELOCK_REQUESTED;
       } else {
         // Lock mouse.
-        if (web_contents->GotResponseToLockMouseRequest(true)) {
+        if (fake_mouse_lock_for_test_ ||
+            web_contents->GotResponseToLockMouseRequest(true)) {
           if (last_unlocked_by_target) {
             mouse_lock_state_ = MOUSELOCK_ACCEPTED_SILENTLY;
           } else {
@@ -137,10 +140,9 @@ bool MouseLockController::OnAcceptExclusiveAccessPermission() {
   if (mouse_lock && !IsMouseLocked()) {
     DCHECK(IsMouseLockRequested());
 
-    HostContentSettingsMap* settings_map = exclusive_access_manager()
-                                               ->context()
-                                               ->GetProfile()
-                                               ->GetHostContentSettingsMap();
+    HostContentSettingsMap* settings_map =
+        HostContentSettingsMapFactory::GetForProfile(
+            exclusive_access_manager()->context()->GetProfile());
 
     GURL url = GetExclusiveAccessBubbleURL();
     ContentSettingsPattern pattern = ContentSettingsPattern::FromURL(url);
@@ -221,7 +223,7 @@ void MouseLockController::UnlockMouse() {
   if (!mouse_lock_view) {
     RenderViewHost* const rvh = exclusive_access_tab()->GetRenderViewHost();
     if (rvh)
-      mouse_lock_view = rvh->GetView();
+      mouse_lock_view = rvh->GetWidget()->GetView();
   }
 
   if (mouse_lock_view)
@@ -229,6 +231,13 @@ void MouseLockController::UnlockMouse() {
 }
 
 ContentSetting MouseLockController::GetMouseLockSetting(const GURL& url) const {
+  // If simplified UI is enabled, never ask the user, just auto-allow. We no
+  // longer give users control over this at the settings level (since it is very
+  // easy to escape mouse lock when it happens). Even if the user has blocked
+  // access to this site in the past, we now ignore that setting.
+  if (ExclusiveAccessManager::IsSimplifiedFullscreenUIEnabled())
+    return CONTENT_SETTING_ALLOW;
+
   // Always ask on file:// URLs, since we can't meaningfully make the
   // decision stick for a particular origin.
   // TODO(estark): Revisit this when crbug.com/455882 is fixed.
@@ -240,10 +249,11 @@ ContentSetting MouseLockController::GetMouseLockSetting(const GURL& url) const {
           ->IsPrivilegedFullscreenForTab())
     return CONTENT_SETTING_ALLOW;
 
-  HostContentSettingsMap* settings_map = exclusive_access_manager()
-                                             ->context()
-                                             ->GetProfile()
-                                             ->GetHostContentSettingsMap();
-  return settings_map->GetContentSetting(
+  HostContentSettingsMap* settings_map =
+      HostContentSettingsMapFactory::GetForProfile(
+          exclusive_access_manager()->context()->GetProfile());
+  ContentSetting setting = settings_map->GetContentSetting(
       url, url, CONTENT_SETTINGS_TYPE_MOUSELOCK, std::string());
+
+  return setting;
 }

@@ -4,11 +4,15 @@
 
 #include "printing/image.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/win/scoped_gdi_object.h"
 #include "base/win/scoped_hdc.h"
 #include "base/win/scoped_select_object.h"
 #include "printing/metafile.h"
-#include "skia/ext/platform_device.h"
+#include "skia/ext/skia_utils_win.h"
 #include "ui/gfx/gdi_util.h"  // EMF support
 #include "ui/gfx/geometry/rect.h"
 
@@ -23,7 +27,7 @@ namespace {
 // destructor.
 class DisableFontSmoothing {
  public:
-  explicit DisableFontSmoothing() : enable_again_(false) {
+  DisableFontSmoothing() : enable_again_(false) {
     BOOL enabled;
     if (SystemParametersInfo(SPI_GETFONTSMOOTHING, 0, &enabled, 0) &&
         enabled) {
@@ -70,14 +74,14 @@ bool Image::LoadMetafile(const Metafile& metafile) {
   base::win::ScopedBitmap bitmap(
       ::CreateDIBSection(hdc.Get(), reinterpret_cast<BITMAPINFO*>(&hdr), 0,
                          reinterpret_cast<void**>(&bits), NULL, 0));
-  DCHECK(bitmap);
-  base::win::ScopedSelectObject select_object(hdc.Get(), bitmap);
+  DCHECK(bitmap.is_valid());
+  base::win::ScopedSelectObject select_object(hdc.Get(), bitmap.get());
 
   skia::InitializeDC(hdc.Get());
 
   bool success = metafile.Playback(hdc.Get(), NULL);
 
-  row_length_ = size_.width() * sizeof(uint32);
+  row_length_ = size_.width() * sizeof(uint32_t);
   size_t bytes = row_length_ * size_.height();
   DCHECK(bytes);
 

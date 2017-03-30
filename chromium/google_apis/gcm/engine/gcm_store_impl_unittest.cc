@@ -4,7 +4,9 @@
 
 #include "google_apis/gcm/engine/gcm_store_impl.h"
 
+#include <stdint.h>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -12,9 +14,9 @@
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/message_loop/message_loop.h"
-#include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/test/test_simple_task_runner.h"
+#include "base/thread_task_runner_handle.h"
 #include "google_apis/gcm/base/fake_encryptor.h"
 #include "google_apis/gcm/base/mcs_message.h"
 #include "google_apis/gcm/base/mcs_util.h"
@@ -38,8 +40,8 @@ const char kAppName2[] = "my_app_2";
 // Category name for testing.
 const char kCategoryName[] = "my_category";
 
-const uint64 kDeviceId = 22;
-const uint64 kDeviceToken = 55;
+const uint64_t kDeviceId = 22;
+const uint64_t kDeviceToken = 55;
 
 class GCMStoreImplTest : public testing::Test {
  public:
@@ -61,18 +63,19 @@ class GCMStoreImplTest : public testing::Test {
   void UpdateCallback(bool success);
 
  protected:
-  base::MessageLoop message_loop_;
+  scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
+  base::ThreadTaskRunnerHandle task_runner_handle_;
   base::ScopedTempDir temp_directory_;
   bool expected_success_;
-  uint64 next_persistent_id_;
-  scoped_ptr<base::RunLoop> run_loop_;
+  uint64_t next_persistent_id_;
 };
 
 GCMStoreImplTest::GCMStoreImplTest()
-    : expected_success_(true),
+    : task_runner_(new base::TestSimpleTaskRunner()),
+      task_runner_handle_(task_runner_),
+      expected_success_(true),
       next_persistent_id_(base::Time::Now().ToInternalValue()) {
   EXPECT_TRUE(temp_directory_.CreateUniqueTempDir());
-  run_loop_.reset(new base::RunLoop());
 }
 
 GCMStoreImplTest::~GCMStoreImplTest() {}
@@ -83,7 +86,7 @@ scoped_ptr<GCMStoreImpl> GCMStoreImplTest::BuildGCMStore() {
       // behavior in the production code. Currently GCMStoreImpl checks if
       // the directory exist or not to determine the store existence.
       temp_directory_.path().Append(FILE_PATH_LITERAL("GCM Store")),
-      message_loop_.task_runner(),
+      task_runner_,
       make_scoped_ptr<Encryptor>(new FakeEncryptor)));
 }
 
@@ -101,21 +104,19 @@ std::string GCMStoreImplTest::GetNextPersistentId() {
   return base::Uint64ToString(next_persistent_id_++);
 }
 
-void GCMStoreImplTest::PumpLoop() { message_loop_.RunUntilIdle(); }
+void GCMStoreImplTest::PumpLoop() { task_runner_->RunUntilIdle(); }
 
 void GCMStoreImplTest::LoadCallback(
     scoped_ptr<GCMStore::LoadResult>* result_dst,
     scoped_ptr<GCMStore::LoadResult> result) {
   ASSERT_TRUE(result->success);
-  LoadWithoutCheckCallback(result_dst, result.Pass());
+  LoadWithoutCheckCallback(result_dst, std::move(result));
 }
 
 void GCMStoreImplTest::LoadWithoutCheckCallback(
     scoped_ptr<GCMStore::LoadResult>* result_dst,
     scoped_ptr<GCMStore::LoadResult> result) {
-  *result_dst = result.Pass();
-  run_loop_->Quit();
-  run_loop_.reset(new base::RunLoop());
+  *result_dst = std::move(result);
 }
 
 void GCMStoreImplTest::UpdateCallback(bool success) {
@@ -162,7 +163,7 @@ TEST_F(GCMStoreImplTest, DeviceCredentials) {
       base::Bind(&GCMStoreImplTest::UpdateCallback, base::Unretained(this)));
   PumpLoop();
 
-  gcm_store = BuildGCMStore().Pass();
+  gcm_store = BuildGCMStore();
   LoadGCMStore(gcm_store.get(), &load_result);
 
   ASSERT_EQ(kDeviceId, load_result->device_android_id);
@@ -185,7 +186,7 @@ TEST_F(GCMStoreImplTest, LastCheckinInfo) {
       base::Bind(&GCMStoreImplTest::UpdateCallback, base::Unretained(this)));
   PumpLoop();
 
-  gcm_store = BuildGCMStore().Pass();
+  gcm_store = BuildGCMStore();
   LoadGCMStore(gcm_store.get(), &load_result);
   ASSERT_EQ(last_checkin_time, load_result->last_checkin_time);
   ASSERT_EQ(accounts, load_result->last_checkin_accounts);
@@ -197,7 +198,7 @@ TEST_F(GCMStoreImplTest, LastCheckinInfo) {
       base::Bind(&GCMStoreImplTest::UpdateCallback, base::Unretained(this)));
   PumpLoop();
 
-  gcm_store = BuildGCMStore().Pass();
+  gcm_store = BuildGCMStore();
   LoadGCMStore(gcm_store.get(), &load_result);
   EXPECT_EQ(base::Time(), load_result->last_checkin_time);
 }
@@ -219,7 +220,7 @@ TEST_F(GCMStoreImplTest, GServicesSettings_ProtocolV2) {
       base::Bind(&GCMStoreImplTest::UpdateCallback, base::Unretained(this)));
   PumpLoop();
 
-  gcm_store = BuildGCMStore().Pass();
+  gcm_store = BuildGCMStore();
   LoadGCMStore(gcm_store.get(), &load_result);
 
   ASSERT_EQ(settings, load_result->gservices_settings);
@@ -237,7 +238,7 @@ TEST_F(GCMStoreImplTest, GServicesSettings_ProtocolV2) {
       base::Bind(&GCMStoreImplTest::UpdateCallback, base::Unretained(this)));
   PumpLoop();
 
-  gcm_store = BuildGCMStore().Pass();
+  gcm_store = BuildGCMStore();
   LoadGCMStore(gcm_store.get(), &load_result);
 
   ASSERT_EQ(settings, load_result->gservices_settings);
@@ -265,7 +266,7 @@ TEST_F(GCMStoreImplTest, Registrations) {
       base::Bind(&GCMStoreImplTest::UpdateCallback, base::Unretained(this)));
   PumpLoop();
 
-  gcm_store = BuildGCMStore().Pass();
+  gcm_store = BuildGCMStore();
   LoadGCMStore(gcm_store.get(), &load_result);
 
   ASSERT_EQ(2u, load_result->registrations.size());
@@ -281,7 +282,7 @@ TEST_F(GCMStoreImplTest, Registrations) {
       base::Bind(&GCMStoreImplTest::UpdateCallback, base::Unretained(this)));
   PumpLoop();
 
-  gcm_store = BuildGCMStore().Pass();
+  gcm_store = BuildGCMStore();
   LoadGCMStore(gcm_store.get(), &load_result);
 
   ASSERT_EQ(1u, load_result->registrations.size());
@@ -306,7 +307,7 @@ TEST_F(GCMStoreImplTest, IncomingMessages) {
     PumpLoop();
   }
 
-  gcm_store = BuildGCMStore().Pass();
+  gcm_store = BuildGCMStore();
   LoadGCMStore(gcm_store.get(), &load_result);
 
   ASSERT_EQ(persistent_ids, load_result->incoming_messages);
@@ -317,7 +318,7 @@ TEST_F(GCMStoreImplTest, IncomingMessages) {
       base::Bind(&GCMStoreImplTest::UpdateCallback, base::Unretained(this)));
   PumpLoop();
 
-  gcm_store = BuildGCMStore().Pass();
+  gcm_store = BuildGCMStore();
   load_result->incoming_messages.clear();
   LoadGCMStore(gcm_store.get(), &load_result);
 
@@ -346,7 +347,7 @@ TEST_F(GCMStoreImplTest, OutgoingMessages) {
     PumpLoop();
   }
 
-  gcm_store = BuildGCMStore().Pass();
+  gcm_store = BuildGCMStore();
   LoadGCMStore(gcm_store.get(), &load_result);
 
   ASSERT_TRUE(load_result->incoming_messages.empty());
@@ -366,7 +367,7 @@ TEST_F(GCMStoreImplTest, OutgoingMessages) {
       base::Bind(&GCMStoreImplTest::UpdateCallback, base::Unretained(this)));
   PumpLoop();
 
-  gcm_store = BuildGCMStore().Pass();
+  gcm_store = BuildGCMStore();
   load_result->outgoing_messages.clear();
   LoadGCMStore(gcm_store.get(), &load_result);
 
@@ -399,7 +400,7 @@ TEST_F(GCMStoreImplTest, IncomingAndOutgoingMessages) {
     PumpLoop();
   }
 
-  gcm_store = BuildGCMStore().Pass();
+  gcm_store = BuildGCMStore();
   LoadGCMStore(gcm_store.get(), &load_result);
 
   ASSERT_EQ(persistent_ids, load_result->incoming_messages);
@@ -423,7 +424,7 @@ TEST_F(GCMStoreImplTest, IncomingAndOutgoingMessages) {
       base::Bind(&GCMStoreImplTest::UpdateCallback, base::Unretained(this)));
   PumpLoop();
 
-  gcm_store = BuildGCMStore().Pass();
+  gcm_store = BuildGCMStore();
   load_result->incoming_messages.clear();
   load_result->outgoing_messages.clear();
   LoadGCMStore(gcm_store.get(), &load_result);
@@ -466,7 +467,7 @@ TEST_F(GCMStoreImplTest, PerAppMessageLimits) {
   }
 
   // Tear down and restore the database.
-  gcm_store = BuildGCMStore().Pass();
+  gcm_store = BuildGCMStore();
   LoadGCMStore(gcm_store.get(), &load_result);
 
   // Adding more messages should still fail.
@@ -537,7 +538,7 @@ TEST_F(GCMStoreImplTest, AccountMapping) {
       base::Bind(&GCMStoreImplTest::UpdateCallback, base::Unretained(this)));
   PumpLoop();
 
-  gcm_store = BuildGCMStore().Pass();
+  gcm_store = BuildGCMStore();
   LoadGCMStore(gcm_store.get(), &load_result);
 
   EXPECT_EQ(2UL, load_result->account_mappings.size());
@@ -564,7 +565,7 @@ TEST_F(GCMStoreImplTest, AccountMapping) {
       base::Bind(&GCMStoreImplTest::UpdateCallback, base::Unretained(this)));
   PumpLoop();
 
-  gcm_store = BuildGCMStore().Pass();
+  gcm_store = BuildGCMStore();
   LoadGCMStore(gcm_store.get(), &load_result);
 
   EXPECT_EQ(1UL, load_result->account_mappings.size());
@@ -599,7 +600,7 @@ TEST_F(GCMStoreImplTest, HeartbeatInterval) {
       base::Bind(&GCMStoreImplTest::UpdateCallback, base::Unretained(this)));
   PumpLoop();
 
-  gcm_store = BuildGCMStore().Pass();
+  gcm_store = BuildGCMStore();
   LoadGCMStore(gcm_store.get(), &load_result);
 
   EXPECT_EQ(2UL, load_result->heartbeat_intervals.size());
@@ -615,7 +616,7 @@ TEST_F(GCMStoreImplTest, HeartbeatInterval) {
       base::Bind(&GCMStoreImplTest::UpdateCallback, base::Unretained(this)));
   PumpLoop();
 
-  gcm_store = BuildGCMStore().Pass();
+  gcm_store = BuildGCMStore();
   LoadGCMStore(gcm_store.get(), &load_result);
 
   EXPECT_EQ(1UL, load_result->heartbeat_intervals.size());
@@ -673,7 +674,7 @@ TEST_F(GCMStoreImplTest, LastTokenFetchTime) {
       base::Bind(&GCMStoreImplTest::UpdateCallback, base::Unretained(this)));
   PumpLoop();
 
-  gcm_store = BuildGCMStore().Pass();
+  gcm_store = BuildGCMStore();
   LoadGCMStore(gcm_store.get(), &load_result);
   EXPECT_EQ(last_token_fetch_time, load_result->last_token_fetch_time);
 
@@ -684,7 +685,7 @@ TEST_F(GCMStoreImplTest, LastTokenFetchTime) {
       base::Bind(&GCMStoreImplTest::UpdateCallback, base::Unretained(this)));
   PumpLoop();
 
-  gcm_store = BuildGCMStore().Pass();
+  gcm_store = BuildGCMStore();
   LoadGCMStore(gcm_store.get(), &load_result);
   EXPECT_EQ(base::Time(), load_result->last_token_fetch_time);
 }
@@ -708,7 +709,7 @@ TEST_F(GCMStoreImplTest, InstanceIDData) {
       base::Bind(&GCMStoreImplTest::UpdateCallback, base::Unretained(this)));
   PumpLoop();
 
-  gcm_store = BuildGCMStore().Pass();
+  gcm_store = BuildGCMStore();
   LoadGCMStore(gcm_store.get(), &load_result);
 
   ASSERT_EQ(2u, load_result->instance_id_data.size());
@@ -724,7 +725,7 @@ TEST_F(GCMStoreImplTest, InstanceIDData) {
       base::Bind(&GCMStoreImplTest::UpdateCallback, base::Unretained(this)));
   PumpLoop();
 
-  gcm_store = BuildGCMStore().Pass();
+  gcm_store = BuildGCMStore();
   LoadGCMStore(gcm_store.get(), &load_result);
 
   ASSERT_EQ(1u, load_result->instance_id_data.size());

@@ -2,15 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include <vector>
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "media/base/video_frame.h"
 #include "media/cast/cast_environment.h"
+#include "media/cast/constants.h"
 #include "media/cast/logging/simple_event_subscriber.h"
 #include "media/cast/net/cast_transport_config.h"
 #include "media/cast/net/cast_transport_sender_impl.h"
@@ -29,7 +32,7 @@ namespace media {
 namespace cast {
 
 namespace {
-static const uint8 kPixelValue = 123;
+static const uint8_t kPixelValue = 123;
 static const int kWidth = 320;
 static const int kHeight = 240;
 
@@ -58,7 +61,7 @@ class TestPacketSender : public PacketSender {
       callback_ = cb;
       return false;
     }
-    if (Rtcp::IsRtcpPacket(&packet->data[0], packet->data.size())) {
+    if (IsRtcpPacket(&packet->data[0], packet->data.size())) {
       ++number_of_rtcp_packets_;
     } else {
       // Check that at least one RTCP packet was sent before the first RTP
@@ -72,7 +75,7 @@ class TestPacketSender : public PacketSender {
     return true;
   }
 
-  int64 GetBytesSent() final { return 0; }
+  int64_t GetBytesSent() final { return 0; }
 
   int number_of_rtp_packets() const { return number_of_rtp_packets_; }
 
@@ -117,6 +120,7 @@ class PeerVideoSender : public VideoSender {
                     base::Bind(&IgnorePlayoutDelayChanges)) {}
   using VideoSender::OnReceivedCastFeedback;
 };
+
 }  // namespace
 
 class VideoSenderTest : public ::testing::Test {
@@ -124,11 +128,11 @@ class VideoSenderTest : public ::testing::Test {
   VideoSenderTest()
       : testing_clock_(new base::SimpleTestTickClock()),
         task_runner_(new test::FakeSingleThreadTaskRunner(testing_clock_)),
-        cast_environment_(new CastEnvironment(
-            scoped_ptr<base::TickClock>(testing_clock_).Pass(),
-            task_runner_,
-            task_runner_,
-            task_runner_)),
+        cast_environment_(
+            new CastEnvironment(scoped_ptr<base::TickClock>(testing_clock_),
+                                task_runner_,
+                                task_runner_,
+                                task_runner_)),
         operational_status_(STATUS_UNINITIALIZED),
         vea_factory_(task_runner_) {
     testing_clock_->Advance(base::TimeTicks::Now() - base::TimeTicks());
@@ -161,7 +165,7 @@ class VideoSenderTest : public ::testing::Test {
   }
 
   // If |external| is true then external video encoder (VEA) is used.
-  // |expect_init_sucess| is true if initialization is expected to succeed.
+  // |expect_init_success| is true if initialization is expected to succeed.
   void InitEncoder(bool external, bool expect_init_success) {
     VideoSenderConfig video_config = GetDefaultVideoSenderConfig();
     video_config.use_external_encoder = external;
@@ -198,7 +202,7 @@ class VideoSenderTest : public ::testing::Test {
     gfx::Size size(kWidth, kHeight);
     scoped_refptr<media::VideoFrame> video_frame =
         media::VideoFrame::CreateFrame(
-            VideoFrame::I420, size, gfx::Rect(size), size,
+            PIXEL_FORMAT_I420, size, gfx::Rect(size), size,
             testing_clock_->NowTicks() - first_frame_timestamp_);
     PopulateVideoFrame(video_frame.get(), last_pixel_value_++);
     return video_frame;
@@ -210,7 +214,7 @@ class VideoSenderTest : public ::testing::Test {
     gfx::Size size(kWidth, kHeight);
     scoped_refptr<media::VideoFrame> video_frame =
         media::VideoFrame::CreateFrame(
-            VideoFrame::I420, size, gfx::Rect(size), size,
+            PIXEL_FORMAT_I420, size, gfx::Rect(size), size,
             testing_clock_->NowTicks() - first_frame_timestamp_);
     PopulateVideoFrameWithNoise(video_frame.get());
     return video_frame;
@@ -231,6 +235,7 @@ class VideoSenderTest : public ::testing::Test {
   int last_pixel_value_;
   base::TimeTicks first_frame_timestamp_;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(VideoSenderTest);
 };
 
@@ -316,7 +321,7 @@ TEST_F(VideoSenderTest, RtcpTimer) {
 
   // Make sure that we send at least one RTCP packet.
   base::TimeDelta max_rtcp_timeout =
-      base::TimeDelta::FromMilliseconds(1 + kDefaultRtcpIntervalMs * 3 / 2);
+      base::TimeDelta::FromMilliseconds(1 + kRtcpReportIntervalMs * 3 / 2);
 
   RunTasks(max_rtcp_timeout.InMilliseconds());
   EXPECT_LE(1, transport_.number_of_rtp_packets());
@@ -364,7 +369,7 @@ TEST_F(VideoSenderTest, LogAckReceivedEvent) {
   ASSERT_EQ(STATUS_INITIALIZED, operational_status_);
 
   SimpleEventSubscriber event_subscriber;
-  cast_environment_->Logging()->AddRawEventSubscriber(&event_subscriber);
+  cast_environment_->logger()->Subscribe(&event_subscriber);
 
   int num_frames = 10;
   for (int i = 0; i < num_frames; i++) {
@@ -390,7 +395,7 @@ TEST_F(VideoSenderTest, LogAckReceivedEvent) {
   EXPECT_EQ(VIDEO_EVENT, frame_events.rbegin()->media_type);
   EXPECT_EQ(num_frames - 1u, frame_events.rbegin()->frame_id);
 
-  cast_environment_->Logging()->RemoveRawEventSubscriber(&event_subscriber);
+  cast_environment_->logger()->Unsubscribe(&event_subscriber);
 }
 
 TEST_F(VideoSenderTest, StopSendingInTheAbsenceOfAck) {

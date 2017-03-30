@@ -4,12 +4,15 @@
 
 #include "chrome/browser/extensions/activity_log/fullstream_ui_policy.h"
 
+#include <stddef.h>
+
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/extensions/activity_log/activity_action_constants.h"
@@ -132,7 +135,7 @@ scoped_ptr<Action::ActionVector> FullStreamUIPolicy::DoReadFilteredData(
 
   sql::Connection* db = GetDatabaseConnection();
   if (!db) {
-    return actions.Pass();
+    return actions;
   }
 
   // Build up the query based on which parameters were specified.
@@ -178,8 +181,8 @@ scoped_ptr<Action::ActionVector> FullStreamUIPolicy::DoReadFilteredData(
   if (!arg_url.empty())
     query.BindString(++i, arg_url + "%");
   if (days_ago >= 0) {
-    int64 early_bound;
-    int64 late_bound;
+    int64_t early_bound;
+    int64_t late_bound;
     Util::ComputeDatabaseTimeBounds(Now(), days_ago, &early_bound, &late_bound);
     query.BindInt64(++i, early_bound);
     query.BindInt64(++i, late_bound);
@@ -194,8 +197,8 @@ scoped_ptr<Action::ActionVector> FullStreamUIPolicy::DoReadFilteredData(
                    query.ColumnString(3), query.ColumnInt64(9));
 
     if (query.ColumnType(4) != sql::COLUMN_TYPE_NULL) {
-      scoped_ptr<base::Value> parsed_value(
-          base::JSONReader::DeprecatedRead(query.ColumnString(4)));
+      scoped_ptr<base::Value> parsed_value =
+          base::JSONReader::Read(query.ColumnString(4));
       if (parsed_value && parsed_value->IsType(base::Value::TYPE_LIST)) {
         action->set_args(make_scoped_ptr(
             static_cast<base::ListValue*>(parsed_value.release())));
@@ -207,8 +210,8 @@ scoped_ptr<Action::ActionVector> FullStreamUIPolicy::DoReadFilteredData(
     action->ParseArgUrl(query.ColumnString(7));
 
     if (query.ColumnType(8) != sql::COLUMN_TYPE_NULL) {
-      scoped_ptr<base::Value> parsed_value(
-          base::JSONReader::DeprecatedRead(query.ColumnString(8)));
+      scoped_ptr<base::Value> parsed_value =
+          base::JSONReader::Read(query.ColumnString(8));
       if (parsed_value && parsed_value->IsType(base::Value::TYPE_DICTIONARY)) {
         action->set_other(make_scoped_ptr(
             static_cast<base::DictionaryValue*>(parsed_value.release())));
@@ -217,10 +220,11 @@ scoped_ptr<Action::ActionVector> FullStreamUIPolicy::DoReadFilteredData(
     actions->push_back(action);
   }
 
-  return actions.Pass();
+  return actions;
 }
 
-void FullStreamUIPolicy::DoRemoveActions(const std::vector<int64>& action_ids) {
+void FullStreamUIPolicy::DoRemoveActions(
+    const std::vector<int64_t>& action_ids) {
   if (action_ids.empty())
     return;
 
@@ -410,7 +414,7 @@ void FullStreamUIPolicy::ReadFilteredData(
       callback);
 }
 
-void FullStreamUIPolicy::RemoveActions(const std::vector<int64>& action_ids) {
+void FullStreamUIPolicy::RemoveActions(const std::vector<int64_t>& action_ids) {
   ScheduleAndForget(this, &FullStreamUIPolicy::DoRemoveActions, action_ids);
 }
 

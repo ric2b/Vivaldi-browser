@@ -5,6 +5,10 @@
 #ifndef UI_BASE_IME_DUMMY_TEXT_INPUT_CLIENT_H_
 #define UI_BASE_IME_DUMMY_TEXT_INPUT_CLIENT_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "ui/base/ime/text_input_client.h"
 
 namespace ui {
@@ -21,13 +25,13 @@ class DummyTextInputClient : public TextInputClient {
   void ConfirmCompositionText() override;
   void ClearCompositionText() override;
   void InsertText(const base::string16& text) override;
-  void InsertChar(base::char16 ch, int flags) override;
+  void InsertChar(const KeyEvent& event) override;
   TextInputType GetTextInputType() const override;
   TextInputMode GetTextInputMode() const override;
   int GetTextInputFlags() const override;
   bool CanComposeInline() const override;
   gfx::Rect GetCaretBounds() const override;
-  bool GetCompositionCharacterBounds(uint32 index,
+  bool GetCompositionCharacterBounds(uint32_t index,
                                      gfx::Rect* rect) const override;
   bool HasCompositionText() const override;
   bool GetTextRange(gfx::Range* range) const override;

@@ -83,7 +83,7 @@ class NonSfiUnitTestPlatformDelegate : public base::UnitTestPlatformDelegate {
     return true;
   }
 
-  bool GetTests(std::vector<base::SplitTestName>* output) override {
+  bool GetTests(std::vector<base::TestIdentifier>* output) override {
     base::FilePath output_file;
     if (!base::CreateTemporaryFile(&output_file)) {
       LOG(ERROR) << "Failed to create a temp file.";
@@ -113,7 +113,7 @@ class NonSfiUnitTestPlatformDelegate : public base::UnitTestPlatformDelegate {
     cmd_line.AppendSwitchPath(
         switches::kTestLauncherOutput, output_file);
     cmd_line.AppendSwitchASCII(
-        base::kGTestFilterFlag, JoinString(test_names, ":"));
+        base::kGTestFilterFlag, base::JoinString(test_names, ":"));
     return cmd_line;
   }
 

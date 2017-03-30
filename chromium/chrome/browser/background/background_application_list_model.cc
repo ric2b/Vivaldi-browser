@@ -25,7 +25,6 @@
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
-#include "extensions/browser/extension_util.h"
 #include "extensions/browser/image_loader.h"
 #include "extensions/browser/notification_types.h"
 #include "extensions/common/extension.h"
@@ -51,24 +50,11 @@ using extensions::UpdatedExtensionPermissionsInfo;
 
 class ExtensionNameComparator {
  public:
-  explicit ExtensionNameComparator(icu::Collator* collator);
   bool operator()(const scoped_refptr<const Extension>& x,
-                  const scoped_refptr<const Extension>& y);
-
- private:
-  icu::Collator* collator_;
+                  const scoped_refptr<const Extension>& y) {
+    return x->name() < y->name();
+  }
 };
-
-ExtensionNameComparator::ExtensionNameComparator(icu::Collator* collator)
-  : collator_(collator) {
-}
-
-bool ExtensionNameComparator::operator()(
-    const scoped_refptr<const Extension>& x,
-    const scoped_refptr<const Extension>& y) {
-  return l10n_util::StringComparator<base::string16>(collator_)(
-      base::UTF8ToUTF16(x->name()), base::UTF8ToUTF16(y->name()));
-}
 
 // Background application representation, private to the
 // BackgroundApplicationListModel class.
@@ -98,10 +84,7 @@ void GetServiceApplications(ExtensionService* service,
   ExtensionRegistry* registry = ExtensionRegistry::Get(service->profile());
   const ExtensionSet& enabled_extensions = registry->enabled_extensions();
 
-  for (ExtensionSet::const_iterator cursor = enabled_extensions.begin();
-       cursor != enabled_extensions.end();
-       ++cursor) {
-    const Extension* extension = cursor->get();
+  for (const auto& extension : enabled_extensions) {
     if (BackgroundApplicationListModel::IsBackgroundApp(*extension,
                                                         service->profile())) {
       applications_result->push_back(extension);
@@ -111,22 +94,15 @@ void GetServiceApplications(ExtensionService* service,
   // Walk the list of terminated extensions also (just because an extension
   // crashed doesn't mean we should ignore it).
   const ExtensionSet& terminated_extensions = registry->terminated_extensions();
-  for (ExtensionSet::const_iterator cursor = terminated_extensions.begin();
-       cursor != terminated_extensions.end();
-       ++cursor) {
-    const Extension* extension = cursor->get();
+  for (const auto& extension : terminated_extensions) {
     if (BackgroundApplicationListModel::IsBackgroundApp(*extension,
                                                         service->profile())) {
       applications_result->push_back(extension);
     }
   }
 
-  std::string locale = g_browser_process->GetApplicationLocale();
-  icu::Locale loc(locale.c_str());
-  UErrorCode error = U_ZERO_ERROR;
-  scoped_ptr<icu::Collator> collator(icu::Collator::createInstance(loc, error));
   std::sort(applications_result->begin(), applications_result->end(),
-       ExtensionNameComparator(collator.get()));
+            ExtensionNameComparator());
 }
 
 }  // namespace
@@ -269,11 +245,10 @@ int BackgroundApplicationListModel::GetPosition(
     const Extension* extension) const {
   int position = 0;
   const std::string& id = extension->id();
-  for (ExtensionList::const_iterator cursor = extensions_.begin();
-       cursor != extensions_.end();
-       ++cursor, ++position) {
-    if (id == cursor->get()->id())
+  for (const auto& it : extensions_) {
+    if (id == it->id())
       return position;
+    ++position;
   }
   NOTREACHED();
   return -1;
@@ -287,11 +262,6 @@ bool BackgroundApplicationListModel::IsBackgroundApp(
   // 1) It is an extension (not a hosted app).
   // 2) It is a hosted app, and has a background contents registered or in the
   //    manifest.
-
-  // Ephemeral apps are denied any background activity after their event page
-  // has been destroyed, thus they cannot be background apps.
-  if (extensions::util::IsEphemeralApp(extension.id(), profile))
-    return false;
 
   // Not a background app if we don't have the background permission.
   if (!extension.permissions_data()->HasAPIPermission(
@@ -387,8 +357,8 @@ void BackgroundApplicationListModel::OnExtensionUnloaded(
 void BackgroundApplicationListModel::OnExtensionPermissionsUpdated(
     const Extension* extension,
     UpdatedExtensionPermissionsInfo::Reason reason,
-    const PermissionSet* permissions) {
-  if (permissions->HasAPIPermission(APIPermission::kBackground)) {
+    const PermissionSet& permissions) {
+  if (permissions.HasAPIPermission(APIPermission::kBackground)) {
     switch (reason) {
       case UpdatedExtensionPermissionsInfo::ADDED:
         DCHECK(IsBackgroundApp(*extension, profile_));

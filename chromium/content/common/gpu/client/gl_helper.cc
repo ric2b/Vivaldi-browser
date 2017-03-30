@@ -4,12 +4,16 @@
 
 #include "content/common/gpu/client/gl_helper.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <queue>
 #include <string>
 
 #include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_util.h"
@@ -133,8 +137,8 @@ class GLHelper::CopyTextureToImpl
   ~CopyTextureToImpl() { CancelRequests(); }
 
   GLuint ConsumeMailboxToTexture(const gpu::Mailbox& mailbox,
-                                 uint32 sync_point) {
-    return helper_->ConsumeMailboxToTexture(mailbox, sync_point);
+                                 const gpu::SyncToken& sync_token) {
+    return helper_->ConsumeMailboxToTexture(mailbox, sync_token);
   }
 
   void CropScaleReadbackAndCleanTexture(
@@ -160,14 +164,15 @@ class GLHelper::CopyTextureToImpl
 
   // Reads back bytes from the currently bound frame buffer.
   // Note that dst_size is specified in bytes, not pixels.
-  void ReadbackAsync(const gfx::Size& dst_size,
-                     int32 bytes_per_row,     // generally dst_size.width() * 4
-                     int32 row_stride_bytes,  // generally dst_size.width() * 4
-                     unsigned char* out,
-                     GLenum format,
-                     GLenum type,
-                     size_t bytes_per_pixel,
-                     const base::Callback<void(bool)>& callback);
+  void ReadbackAsync(
+      const gfx::Size& dst_size,
+      int32_t bytes_per_row,     // generally dst_size.width() * 4
+      int32_t row_stride_bytes,  // generally dst_size.width() * 4
+      unsigned char* out,
+      GLenum format,
+      GLenum type,
+      size_t bytes_per_pixel,
+      const base::Callback<void(bool)>& callback);
 
   void ReadbackPlane(TextureFrameBufferPair* source,
                      const scoped_refptr<media::VideoFrame>& target,
@@ -211,8 +216,8 @@ class GLHelper::CopyTextureToImpl
   // must be deleted by the main thread gl.
   struct Request {
     Request(const gfx::Size& size_,
-            int32 bytes_per_row_,
-            int32 row_stride_bytes_,
+            int32_t bytes_per_row_,
+            int32_t row_stride_bytes_,
             unsigned char* pixels_,
             const base::Callback<void(bool)>& callback_)
         : done(false),
@@ -273,7 +278,7 @@ class GLHelper::CopyTextureToImpl
                     ReadbackSwizzle swizzle);
 
     void ReadbackYUV(const gpu::Mailbox& mailbox,
-                     uint32 sync_point,
+                     const gpu::SyncToken& sync_token,
                      const scoped_refptr<media::VideoFrame>& target,
                      const gfx::Point& paste_location,
                      const base::Callback<void(bool)>& callback) override;
@@ -309,7 +314,7 @@ class GLHelper::CopyTextureToImpl
                     ReadbackSwizzle swizzle);
 
     void ReadbackYUV(const gpu::Mailbox& mailbox,
-                     uint32 sync_point,
+                     const gpu::SyncToken& sync_token,
                      const scoped_refptr<media::VideoFrame>& target,
                      const gfx::Point& paste_location,
                      const base::Callback<void(bool)>& callback) override;
@@ -485,8 +490,8 @@ GLuint GLHelper::CopyTextureToImpl::EncodeTextureAsGrayscale(
 
 void GLHelper::CopyTextureToImpl::ReadbackAsync(
     const gfx::Size& dst_size,
-    int32 bytes_per_row,
-    int32 row_stride_bytes,
+    int32_t bytes_per_row,
+    int32_t row_stride_bytes,
     unsigned char* out,
     GLenum format,
     GLenum type,
@@ -612,9 +617,9 @@ void GLHelper::CopyTextureToImpl::CropScaleReadbackAndCleanTexture(
                             texture,
                             0);
 
-  int32 bytes_per_row = out_color_type == kAlpha_8_SkColorType
-                            ? dst_size.width()
-                            : dst_size.width() * bytes_per_pixel;
+  int32_t bytes_per_row = out_color_type == kAlpha_8_SkColorType
+                              ? dst_size.width()
+                              : dst_size.width() * bytes_per_pixel;
 
   ReadbackAsync(readback_texture_size,
                 bytes_per_row,
@@ -815,7 +820,7 @@ void GLHelper::CropScaleReadbackAndCleanTexture(
 
 void GLHelper::CropScaleReadbackAndCleanMailbox(
     const gpu::Mailbox& src_mailbox,
-    uint32 sync_point,
+    const gpu::SyncToken& sync_token,
     const gfx::Size& src_size,
     const gfx::Rect& src_subrect,
     const gfx::Size& dst_size,
@@ -823,7 +828,7 @@ void GLHelper::CropScaleReadbackAndCleanMailbox(
     const SkColorType out_color_type,
     const base::Callback<void(bool)>& callback,
     GLHelper::ScalerQuality quality) {
-  GLuint mailbox_texture = ConsumeMailboxToTexture(src_mailbox, sync_point);
+  GLuint mailbox_texture = ConsumeMailboxToTexture(src_mailbox, sync_token);
   CropScaleReadbackAndCleanTexture(mailbox_texture,
                                    src_size,
                                    src_subrect,
@@ -914,7 +919,8 @@ GLint GLHelper::MaxDrawBuffers() {
   return copy_texture_to_impl_->MaxDrawBuffers();
 }
 
-void GLHelper::CopySubBufferDamage(GLuint texture,
+void GLHelper::CopySubBufferDamage(GLenum target,
+                                   GLuint texture,
                                    GLuint previous_texture,
                                    const SkRegion& new_damage,
                                    const SkRegion& old_damage) {
@@ -923,23 +929,15 @@ void GLHelper::CopySubBufferDamage(GLuint texture,
     ScopedFramebuffer dst_framebuffer(gl_);
     ScopedFramebufferBinder<GL_FRAMEBUFFER> framebuffer_binder(gl_,
                                                                dst_framebuffer);
-    ScopedTextureBinder<GL_TEXTURE_2D> texture_binder(gl_, texture);
-    gl_->FramebufferTexture2D(GL_FRAMEBUFFER,
-                              GL_COLOR_ATTACHMENT0,
-                              GL_TEXTURE_2D,
-                              previous_texture,
-                              0);
+    gl_->BindTexture(target, texture);
+    gl_->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, target,
+                              previous_texture, 0);
     for (SkRegion::Iterator it(region); !it.done(); it.next()) {
       const SkIRect& rect = it.rect();
-      gl_->CopyTexSubImage2D(GL_TEXTURE_2D,
-                             0,
-                             rect.x(),
-                             rect.y(),
-                             rect.x(),
-                             rect.y(),
-                             rect.width(),
-                             rect.height());
+      gl_->CopyTexSubImage2D(target, 0, rect.x(), rect.y(), rect.x(), rect.y(),
+                             rect.width(), rect.height());
     }
+    gl_->BindTexture(target, 0);
     gl_->Flush();
   }
 }
@@ -959,10 +957,14 @@ void GLHelper::DeleteTexture(GLuint texture_id) {
   gl_->DeleteTextures(1, &texture_id);
 }
 
-uint32 GLHelper::InsertSyncPoint() { return gl_->InsertSyncPointCHROMIUM(); }
+void GLHelper::GenerateSyncToken(gpu::SyncToken* sync_token) {
+  const uint64_t fence_sync = gl_->InsertFenceSyncCHROMIUM();
+  gl_->ShallowFlushCHROMIUM();
+  gl_->GenSyncTokenCHROMIUM(fence_sync, sync_token->GetData());
+}
 
-void GLHelper::WaitSyncPoint(uint32 sync_point) {
-  gl_->WaitSyncPointCHROMIUM(sync_point);
+void GLHelper::WaitSyncToken(const gpu::SyncToken& sync_token) {
+  gl_->WaitSyncTokenCHROMIUM(sync_token.GetConstData());
 }
 
 gpu::MailboxHolder GLHelper::ProduceMailboxHolderFromTexture(
@@ -970,15 +972,19 @@ gpu::MailboxHolder GLHelper::ProduceMailboxHolderFromTexture(
   gpu::Mailbox mailbox;
   gl_->GenMailboxCHROMIUM(mailbox.name);
   gl_->ProduceTextureDirectCHROMIUM(texture_id, GL_TEXTURE_2D, mailbox.name);
-  return gpu::MailboxHolder(mailbox, GL_TEXTURE_2D, InsertSyncPoint());
+
+  gpu::SyncToken sync_token;
+  GenerateSyncToken(&sync_token);
+
+  return gpu::MailboxHolder(mailbox, sync_token, GL_TEXTURE_2D);
 }
 
 GLuint GLHelper::ConsumeMailboxToTexture(const gpu::Mailbox& mailbox,
-                                         uint32 sync_point) {
+                                         const gpu::SyncToken& sync_token) {
   if (mailbox.IsZero())
     return 0;
-  if (sync_point)
-    WaitSyncPoint(sync_point);
+  if (sync_token.HasData())
+    WaitSyncToken(sync_token);
   GLuint texture =
       gl_->CreateAndConsumeTextureCHROMIUM(GL_TEXTURE_2D, mailbox.name);
   return texture;
@@ -1124,7 +1130,7 @@ static void CallbackKeepingVideoFrameAlive(
 
 void GLHelper::CopyTextureToImpl::ReadbackYUVImpl::ReadbackYUV(
     const gpu::Mailbox& mailbox,
-    uint32 sync_point,
+    const gpu::SyncToken& sync_token,
     const scoped_refptr<media::VideoFrame>& target,
     const gfx::Point& paste_location,
     const base::Callback<void(bool)>& callback) {
@@ -1132,7 +1138,7 @@ void GLHelper::CopyTextureToImpl::ReadbackYUVImpl::ReadbackYUV(
   DCHECK(!(paste_location.y() & 1));
 
   GLuint mailbox_texture =
-      copy_impl_->ConsumeMailboxToTexture(mailbox, sync_point);
+      copy_impl_->ConsumeMailboxToTexture(mailbox, sync_token);
 
   // Scale texture to right size.
   scaler_.Scale(mailbox_texture);
@@ -1245,7 +1251,7 @@ GLHelper::CopyTextureToImpl::ReadbackYUV_MRT::ReadbackYUV_MRT(
 
 void GLHelper::CopyTextureToImpl::ReadbackYUV_MRT::ReadbackYUV(
     const gpu::Mailbox& mailbox,
-    uint32 sync_point,
+    const gpu::SyncToken& sync_token,
     const scoped_refptr<media::VideoFrame>& target,
     const gfx::Point& paste_location,
     const base::Callback<void(bool)>& callback) {
@@ -1253,7 +1259,7 @@ void GLHelper::CopyTextureToImpl::ReadbackYUV_MRT::ReadbackYUV(
   DCHECK(!(paste_location.y() & 1));
 
   GLuint mailbox_texture =
-      copy_impl_->ConsumeMailboxToTexture(mailbox, sync_point);
+      copy_impl_->ConsumeMailboxToTexture(mailbox, sync_token);
 
   GLuint texture;
   if (quality_ == GLHelper::SCALER_QUALITY_FAST) {

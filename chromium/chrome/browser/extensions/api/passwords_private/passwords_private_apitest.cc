@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <sstream>
 
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/observer_list_threadsafe.h"
 #include "base/strings/utf_string_conversions.h"
@@ -54,7 +57,7 @@ class TestDelegate : public PasswordsPrivateDelegate {
   TestDelegate() : observers_(new base::ObserverListThreadSafe<Observer>()) {
     // Create mock data.
     for (size_t i = 0; i < kNumMocks; i++) {
-      current_entries_.push_back(CreateEntry(i));;
+      current_entries_.push_back(CreateEntry(i));
       current_exceptions_.push_back(CreateException(i));
     }
   }
@@ -177,10 +180,6 @@ class PasswordsPrivateApiTest : public ExtensionApiTest {
 TestDelegate* PasswordsPrivateApiTest::s_test_delegate_ = nullptr;
 
 }  // namespace
-
-IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, CanPasswordAccountBeManaged) {
-  EXPECT_TRUE(RunPasswordsSubtest("canPasswordAccountBeManaged")) << message_;
-}
 
 IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, RemoveSavedPassword) {
   EXPECT_TRUE(RunPasswordsSubtest("removeSavedPassword")) << message_;

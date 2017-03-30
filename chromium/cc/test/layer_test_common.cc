@@ -4,12 +4,19 @@
 
 #include "cc/test/layer_test_common.h"
 
+#include <stddef.h>
+
+#include "cc/animation/animation_host.h"
+#include "cc/animation/animation_id_provider.h"
+#include "cc/animation/animation_player.h"
 #include "cc/base/math_util.h"
 #include "cc/base/region.h"
 #include "cc/layers/append_quads_data.h"
 #include "cc/quads/draw_quad.h"
 #include "cc/quads/render_pass.h"
+#include "cc/test/animation_test_common.h"
 #include "cc/test/fake_output_surface.h"
+#include "cc/test/layer_tree_settings_for_testing.h"
 #include "cc/test/mock_occlusion_tracker.h"
 #include "cc/trees/layer_tree_host_common.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -29,11 +36,9 @@ static bool CanRectFBeSafelyRoundedToRect(const gfx::RectF& r) {
     return false;
 
   // Ensure that the values are actually integers.
-  if (gfx::ToFlooredPoint(r.origin()) == r.origin() &&
-      gfx::ToFlooredSize(r.size()) == r.size())
-    return true;
-
-  return false;
+  gfx::RectF floored_rect(std::floor(r.x()), std::floor(r.y()),
+                          std::floor(r.width()), std::floor(r.height()));
+  return floored_rect == r;
 }
 
 void LayerTestCommon::VerifyQuadsExactlyCoverRect(const QuadList& quads,
@@ -84,10 +89,11 @@ void LayerTestCommon::VerifyQuadsAreOccluded(const QuadList& quads,
                  .IsPositiveScaleOrTranslation())
           << quad->shared_quad_state->quad_to_target_transform.ToString();
       gfx::RectF target_rectf = MathUtil::MapClippedRect(
-          quad->shared_quad_state->quad_to_target_transform, quad->rect);
+          quad->shared_quad_state->quad_to_target_transform,
+          gfx::RectF(quad->rect));
       // Scale transforms allowed, as long as the final transformed rect
       // ends up on integer boundaries for ease of testing.
-      DCHECK_EQ(target_rectf.ToString(), gfx::RectF(target_rect).ToString());
+      ASSERT_EQ(target_rectf, gfx::RectF(target_rect));
     }
     gfx::Rect target_visible_rect = MathUtil::MapEnclosingClippedRect(
         quad->shared_quad_state->quad_to_target_transform, quad->visible_rect);
@@ -110,27 +116,45 @@ void LayerTestCommon::VerifyQuadsAreOccluded(const QuadList& quads,
 }
 
 LayerTestCommon::LayerImplTest::LayerImplTest()
-    : LayerImplTest(LayerTreeSettings()) {
-}
+    : LayerImplTest(LayerTreeSettingsForTesting()) {}
 
 LayerTestCommon::LayerImplTest::LayerImplTest(const LayerTreeSettings& settings)
     : client_(FakeLayerTreeHostClient::DIRECT_3D),
+      output_surface_(FakeOutputSurface::Create3d()),
       host_(FakeLayerTreeHost::Create(&client_, &task_graph_runner_, settings)),
       root_layer_impl_(LayerImpl::Create(host_->host_impl()->active_tree(), 1)),
       render_pass_(RenderPass::Create()),
       layer_impl_id_(2) {
   root_layer_impl_->SetHasRenderSurface(true);
-  scoped_ptr<FakeOutputSurface> output_surface = FakeOutputSurface::Create3d();
-  host_->host_impl()->InitializeRenderer(FakeOutputSurface::Create3d());
+  host_->host_impl()->SetVisible(true);
+  host_->host_impl()->InitializeRenderer(output_surface_.get());
+
+  if (host_->settings().use_compositor_animation_timelines) {
+    const int timeline_id = AnimationIdProvider::NextTimelineId();
+    timeline_ = AnimationTimeline::Create(timeline_id);
+    host_->animation_host()->AddAnimationTimeline(timeline_);
+    // Create impl-side instance.
+    host_->animation_host()->PushPropertiesTo(
+        host_->host_impl()->animation_host());
+    timeline_impl_ =
+        host_->host_impl()->animation_host()->GetTimelineById(timeline_id);
+  }
 }
 
-LayerTestCommon::LayerImplTest::~LayerImplTest() {}
+LayerTestCommon::LayerImplTest::~LayerImplTest() {
+  if (host_->settings().use_compositor_animation_timelines) {
+    host_->animation_host()->RemoveAnimationTimeline(timeline_);
+    timeline_ = nullptr;
+  }
+}
 
 void LayerTestCommon::LayerImplTest::CalcDrawProps(
     const gfx::Size& viewport_size) {
   LayerImplList layer_list;
+  host_->host_impl()->active_tree()->IncrementRenderSurfaceListIdForTesting();
   LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting inputs(
-      root_layer_impl_.get(), viewport_size, &layer_list);
+      root_layer_impl_.get(), viewport_size, &layer_list,
+      host_->host_impl()->active_tree()->current_render_surface_list_id());
   LayerTreeHostCommon::CalculateDrawProperties(&inputs);
 }
 
@@ -142,9 +166,8 @@ void LayerTestCommon::LayerImplTest::AppendQuadsWithOcclusion(
   render_pass_->quad_list.clear();
   render_pass_->shared_quad_state_list.clear();
 
-  Occlusion occlusion(layer_impl->draw_transform(),
-                      SimpleEnclosedRegion(occluded),
-                      SimpleEnclosedRegion());
+  Occlusion occlusion(layer_impl->DrawTransform(),
+                      SimpleEnclosedRegion(occluded), SimpleEnclosedRegion());
   layer_impl->draw_properties().occlusion_in_content_space = occlusion;
 
   layer_impl->WillDraw(DRAW_MODE_HARDWARE, resource_provider());
@@ -161,9 +184,8 @@ void LayerTestCommon::LayerImplTest::AppendQuadsForPassWithOcclusion(
   given_render_pass->quad_list.clear();
   given_render_pass->shared_quad_state_list.clear();
 
-  Occlusion occlusion(layer_impl->draw_transform(),
-                      SimpleEnclosedRegion(occluded),
-                      SimpleEnclosedRegion());
+  Occlusion occlusion(layer_impl->DrawTransform(),
+                      SimpleEnclosedRegion(occluded), SimpleEnclosedRegion());
   layer_impl->draw_properties().occlusion_in_content_space = occlusion;
 
   layer_impl->WillDraw(DRAW_MODE_HARDWARE, resource_provider());

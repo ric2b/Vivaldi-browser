@@ -5,6 +5,7 @@
 #include "chrome/browser/media_galleries/fileapi/native_media_file_util.h"
 
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -56,10 +57,10 @@ void DidOpenSnapshot(
     base::File file) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   if (!file.IsValid()) {
-    callback.Run(file.Pass(), base::Closure());
+    callback.Run(std::move(file), base::Closure());
     return;
   }
-  callback.Run(file.Pass(), base::Bind(&HoldFileRef, file_ref));
+  callback.Run(std::move(file), base::Bind(&HoldFileRef, file_ref));
 }
 
 }  // namespace
@@ -82,7 +83,7 @@ base::File::Error NativeMediaFileUtil::IsMediaFile(
   char buffer[net::kMaxBytesToSniff];
 
   // Read as much as net::SniffMimeTypeFromLocalData() will bother looking at.
-  int64 len = file.Read(0, buffer, net::kMaxBytesToSniff);
+  int64_t len = file.Read(0, buffer, net::kMaxBytesToSniff);
   if (len < 0)
     return base::File::FILE_ERROR_FAILED;
 
@@ -132,12 +133,9 @@ void NativeMediaFileUtil::CreateOrOpen(
   }
   scoped_refptr<base::SequencedTaskRunner> task_runner = context->task_runner();
   CreateSnapshotFile(
-      context.Pass(),
-      url,
+      std::move(context), url,
       base::Bind(&NativeMediaFileUtil::CreatedSnapshotFileForCreateOrOpen,
-                 task_runner,
-                 file_flags,
-                 callback));
+                 task_runner, file_flags, callback));
 }
 
 void NativeMediaFileUtil::EnsureFileExists(
@@ -167,6 +165,7 @@ void NativeMediaFileUtil::CreateDirectory(
 void NativeMediaFileUtil::GetFileInfo(
     scoped_ptr<storage::FileSystemOperationContext> context,
     const storage::FileSystemURL& url,
+    int /* fields */,
     const GetFileInfoCallback& callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   storage::FileSystemOperationContext* context_ptr = context.get();
@@ -205,7 +204,7 @@ void NativeMediaFileUtil::Touch(
 void NativeMediaFileUtil::Truncate(
     scoped_ptr<storage::FileSystemOperationContext> context,
     const storage::FileSystemURL& url,
-    int64 length,
+    int64_t length,
     const StatusCallback& callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   callback.Run(base::File::FILE_ERROR_SECURITY);
@@ -579,8 +578,6 @@ base::File::Error NativeMediaFileUtil::ReadDirectorySync(
     storage::DirectoryEntry entry;
     entry.is_directory = info.IsDirectory();
     entry.name = enum_path.BaseName().value();
-    entry.size = info.GetSize();
-    entry.last_modified_time = info.GetLastModifiedTime();
 
     file_list->push_back(entry);
   }

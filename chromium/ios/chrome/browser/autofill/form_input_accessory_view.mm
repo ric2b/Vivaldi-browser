@@ -9,10 +9,11 @@
 #include "base/i18n/rtl.h"
 #include "base/ios/weak_nsobject.h"
 #include "base/mac/scoped_nsobject.h"
-#include "components/autofill/ios/browser/autofill_field_trial_ios.h"
 #import "ios/chrome/browser/autofill/form_input_accessory_view_delegate.h"
 #import "ios/chrome/browser/ui/image_util.h"
 #include "ios/chrome/browser/ui/ui_util.h"
+#include "ios/chrome/grit/ios_strings.h"
+#include "ui/base/l10n/l10n_util.h"
 
 namespace {
 
@@ -39,23 +40,12 @@ BOOL ShouldShowCloseButton() {
   return !IsIPadIdiom();
 }
 
-// Returns YES if the previous and next navigation buttons should be shown on
-// the accessory.
-BOOL ShouldShowPreviousAndNextButtons() {
-  return !autofill::AutofillFieldTrialIOS::IsFullFormAutofillEnabled();
-}
-
 // Returns the width of navigation view.
 CGFloat GetNavigationViewWidth() {
   // The number of naviation buttons (includes close button if shown).
-  NSUInteger numberNavigationButtons = 0;
-  if (ShouldShowPreviousAndNextButtons())
-    numberNavigationButtons += 2;
+  NSUInteger numberNavigationButtons = 2;
   if (ShouldShowCloseButton())
     numberNavigationButtons++;
-  if (numberNavigationButtons == 0)
-    return 0;
-
   return numberNavigationButtons * kNavigationButtonWidth +
          (numberNavigationButtons - 1) * kNavigationButtonSeparatorWidth +
          kNavigationAreaSeparatorWidth;
@@ -126,6 +116,20 @@ CGFloat GetNavigationViewWidth() {
     [self initializeViewWithCustomView:_customView
                              leftFrame:leftFrame
                             rightFrame:rightFrame];
+  }
+  return self;
+}
+
+- (instancetype)initWithFrame:(CGRect)frame customView:(UIView*)customView {
+  self = [super initWithFrame:frame];
+  if (self) {
+    _customView.reset([customView retain]);
+    customView.frame =
+        CGRectMake(0, 0, CGRectGetWidth(frame), CGRectGetHeight(frame));
+    [self addSubview:customView];
+
+    [[self class] addBackgroundImageInView:self
+                             withImageName:@"autofill_keyboard_background"];
   }
   return self;
 }
@@ -249,20 +253,54 @@ UIImage* ButtonImage(NSString* name) {
     currentX = kNavigationAreaSeparatorWidth;
   }
 
-  if (ShouldShowPreviousAndNextButtons()) {
-    UIButton* previousButton = [self
-        keyboardNavButtonWithNormalImage:ButtonImage(@"autofill_prev")
-                            pressedImage:ButtonImage(@"autofill_prev_pressed")
-                           disabledImage:ButtonImage(@"autofill_prev_inactive")
-                                  target:_delegate
-                                  action:@selector(selectPreviousElement)
-                                 enabled:NO
-                                 originX:currentX
-                                 originY:firstRow
-                                  height:CGRectGetHeight(frame)];
-    [navView addSubview:previousButton];
-    currentX += kNavigationButtonWidth;
+  UIButton* previousButton = [self
+      keyboardNavButtonWithNormalImage:ButtonImage(@"autofill_prev")
+                          pressedImage:ButtonImage(@"autofill_prev_pressed")
+                         disabledImage:ButtonImage(@"autofill_prev_inactive")
+                                target:_delegate
+                                action:@selector(
+                                           selectPreviousElementWithButtonPress)
+                               enabled:NO
+                               originX:currentX
+                               originY:firstRow
+                                height:CGRectGetHeight(frame)];
+  [previousButton
+      setAccessibilityLabel:l10n_util::GetNSString(
+                                IDS_IOS_AUTOFILL_ACCNAME_PREVIOUS_FIELD)];
+  [navView addSubview:previousButton];
+  currentX += kNavigationButtonWidth;
 
+  // Add internal separator.
+  [[self class] addImageViewWithImageName:@"autofill_middle_sep"
+                                  originX:currentX
+                                  originY:firstRow
+                                    width:kNavigationButtonSeparatorWidth
+                                   inView:navView];
+  currentX += kNavigationButtonSeparatorWidth;
+
+  UIButton* nextButton = [self
+      keyboardNavButtonWithNormalImage:ButtonImage(@"autofill_next")
+                          pressedImage:ButtonImage(@"autofill_next_pressed")
+                         disabledImage:ButtonImage(@"autofill_next_inactive")
+                                target:_delegate
+                                action:@selector(
+                                           selectNextElementWithButtonPress)
+                               enabled:NO
+                               originX:currentX
+                               originY:firstRow
+                                height:CGRectGetHeight(frame)];
+  [nextButton setAccessibilityLabel:l10n_util::GetNSString(
+                                        IDS_IOS_AUTOFILL_ACCNAME_NEXT_FIELD)];
+  [navView addSubview:nextButton];
+  currentX += kNavigationButtonWidth;
+
+  [_delegate fetchPreviousAndNextElementsPresenceWithCompletionHandler:
+                 ^(BOOL hasPreviousElement, BOOL hasNextElement) {
+                   previousButton.enabled = hasPreviousElement;
+                   nextButton.enabled = hasNextElement;
+                 }];
+
+  if (ShouldShowCloseButton()) {
     // Add internal separator.
     [[self class] addImageViewWithImageName:@"autofill_middle_sep"
                                     originX:currentX
@@ -271,47 +309,20 @@ UIImage* ButtonImage(NSString* name) {
                                      inView:navView];
     currentX += kNavigationButtonSeparatorWidth;
 
-    UIButton* nextButton = [self
-        keyboardNavButtonWithNormalImage:ButtonImage(@"autofill_next")
-                            pressedImage:ButtonImage(@"autofill_next_pressed")
-                           disabledImage:ButtonImage(@"autofill_next_inactive")
-                                  target:_delegate
-                                  action:@selector(selectNextElement)
-                                 enabled:NO
-                                 originX:currentX
-                                 originY:firstRow
-                                  height:CGRectGetHeight(frame)];
-    [navView addSubview:nextButton];
-    currentX += kNavigationButtonWidth;
-
-    [_delegate fetchPreviousAndNextElementsPresenceWithCompletionHandler:
-                   ^(BOOL hasPreviousElement, BOOL hasNextElement) {
-                     previousButton.enabled = hasPreviousElement;
-                     nextButton.enabled = hasNextElement;
-                   }];
-  }
-
-  if (ShouldShowCloseButton()) {
-    if (ShouldShowPreviousAndNextButtons()) {
-      // Add internal separator.
-      [[self class] addImageViewWithImageName:@"autofill_middle_sep"
-                                      originX:currentX
-                                      originY:firstRow
-                                        width:kNavigationButtonSeparatorWidth
-                                       inView:navView];
-      currentX += kNavigationButtonSeparatorWidth;
-    }
-
-    [navView addSubview:[self
+    UIButton* closeButton = [self
         keyboardNavButtonWithNormalImage:ButtonImage(@"autofill_close")
                             pressedImage:ButtonImage(@"autofill_close_pressed")
                            disabledImage:nil
                                   target:_delegate
-                                  action:@selector(closeKeyboard)
+                                  action:@selector(closeKeyboardWithButtonPress)
                                  enabled:YES
                                  originX:currentX
                                  originY:firstRow
-                                  height:CGRectGetHeight(frame)]];
+                                  height:CGRectGetHeight(frame)];
+    [closeButton
+        setAccessibilityLabel:l10n_util::GetNSString(
+                                  IDS_IOS_AUTOFILL_ACCNAME_HIDE_KEYBOARD)];
+    [navView addSubview:closeButton];
     currentX += kNavigationButtonWidth;
   }
 

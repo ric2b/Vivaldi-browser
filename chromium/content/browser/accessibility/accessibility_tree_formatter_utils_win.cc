@@ -9,8 +9,10 @@
 #include <map>
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "third_party/iaccessible2/ia2_api_all.h"
 
 namespace content {
@@ -20,25 +22,26 @@ class AccessibilityEnumMap {
  public:
   static AccessibilityEnumMap* GetInstance();
 
-  std::map<int32, base::string16> ia_role_string_map;
-  std::map<int32, base::string16> ia2_role_string_map;
-  std::map<int32, base::string16> ia_state_string_map;
-  std::map<int32, base::string16> ia2_state_string_map;
-  std::map<int32, base::string16> event_string_map;
+  std::map<int32_t, base::string16> ia_role_string_map;
+  std::map<int32_t, base::string16> ia2_role_string_map;
+  std::map<int32_t, base::string16> ia_state_string_map;
+  std::map<int32_t, base::string16> ia2_state_string_map;
+  std::map<int32_t, base::string16> event_string_map;
 
  private:
   AccessibilityEnumMap();
   virtual ~AccessibilityEnumMap() {}
 
-  friend struct DefaultSingletonTraits<AccessibilityEnumMap>;
+  friend struct base::DefaultSingletonTraits<AccessibilityEnumMap>;
 
   DISALLOW_COPY_AND_ASSIGN(AccessibilityEnumMap);
 };
 
 // static
 AccessibilityEnumMap* AccessibilityEnumMap::GetInstance() {
-  return Singleton<AccessibilityEnumMap,
-                   LeakySingletonTraits<AccessibilityEnumMap> >::get();
+  return base::Singleton<
+      AccessibilityEnumMap,
+      base::LeakySingletonTraits<AccessibilityEnumMap>>::get();
 }
 
 AccessibilityEnumMap::AccessibilityEnumMap() {
@@ -292,49 +295,49 @@ AccessibilityEnumMap::AccessibilityEnumMap() {
 
 }  // namespace.
 
-base::string16 IAccessibleRoleToString(int32 ia_role) {
+base::string16 IAccessibleRoleToString(int32_t ia_role) {
   return AccessibilityEnumMap::GetInstance()->ia_role_string_map[ia_role];
 }
 
-base::string16 IAccessible2RoleToString(int32 ia_role) {
+base::string16 IAccessible2RoleToString(int32_t ia_role) {
   return AccessibilityEnumMap::GetInstance()->ia2_role_string_map[ia_role];
 }
 
-void IAccessibleStateToStringVector(int32 ia_state,
+void IAccessibleStateToStringVector(int32_t ia_state,
                                     std::vector<base::string16>* result) {
-  const std::map<int32, base::string16>& state_string_map =
+  const std::map<int32_t, base::string16>& state_string_map =
       AccessibilityEnumMap::GetInstance()->ia_state_string_map;
-  std::map<int32, base::string16>::const_iterator it;
+  std::map<int32_t, base::string16>::const_iterator it;
   for (it = state_string_map.begin(); it != state_string_map.end(); ++it) {
     if (it->first & ia_state)
       result->push_back(it->second);
   }
 }
 
-base::string16 IAccessibleStateToString(int32 ia_state) {
+base::string16 IAccessibleStateToString(int32_t ia_state) {
   std::vector<base::string16> strings;
   IAccessibleStateToStringVector(ia_state, &strings);
-  return JoinString(strings, ',');
+  return base::JoinString(strings, base::ASCIIToUTF16(","));
 }
 
-void IAccessible2StateToStringVector(int32 ia2_state,
+void IAccessible2StateToStringVector(int32_t ia2_state,
                                      std::vector<base::string16>* result) {
-  const std::map<int32, base::string16>& state_string_map =
+  const std::map<int32_t, base::string16>& state_string_map =
       AccessibilityEnumMap::GetInstance()->ia2_state_string_map;
-  std::map<int32, base::string16>::const_iterator it;
+  std::map<int32_t, base::string16>::const_iterator it;
   for (it = state_string_map.begin(); it != state_string_map.end(); ++it) {
     if (it->first & ia2_state)
       result->push_back(it->second);
   }
 }
 
-base::string16 IAccessible2StateToString(int32 ia2_state) {
+base::string16 IAccessible2StateToString(int32_t ia2_state) {
   std::vector<base::string16> strings;
   IAccessible2StateToStringVector(ia2_state, &strings);
-  return JoinString(strings, ',');
+  return base::JoinString(strings, base::ASCIIToUTF16(","));
 }
 
-base::string16 AccessibilityEventToString(int32 event_id) {
+base::string16 AccessibilityEventToString(int32_t event_id) {
   return AccessibilityEnumMap::GetInstance()->event_string_map[event_id];
 }
 

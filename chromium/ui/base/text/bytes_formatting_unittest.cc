@@ -2,6 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/text/bytes_formatting.h"
@@ -10,7 +14,7 @@ namespace ui {
 
 TEST(BytesFormattingTest, GetByteDisplayUnits) {
   static const struct {
-    int64 bytes;
+    int64_t bytes;
     DataUnits expected;
   } cases[] = {
     {0, DATA_UNITS_BYTE},
@@ -29,15 +33,9 @@ TEST(BytesFormattingTest, GetByteDisplayUnits) {
     EXPECT_EQ(cases[i].expected, GetByteDisplayUnits(cases[i].bytes));
 }
 
-// TODO: Re-enable for Vivaldi VB-29
-#if defined(OS_MACOSX)
-#define MAYBE_FormatBytes DISABLED_FormatBytes
-#else
-#define MAYBE_FormatBytes FormatBytes
-#endif
-TEST(BytesFormattingTest, MAYBE_FormatBytes) {
+TEST(BytesFormattingTest, FormatBytes) {
   static const struct {
-    int64 bytes;
+    int64_t bytes;
     DataUnits units;
     const char* expected;
     const char* expected_with_units;

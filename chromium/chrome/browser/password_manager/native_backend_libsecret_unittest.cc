@@ -3,8 +3,9 @@
 // found in the LICENSE file.
 
 #include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
 
-#include "base/basictypes.h"
 #include "base/location.h"
 #include "base/prefs/pref_service.h"
 #include "base/single_thread_task_runner.h"
@@ -166,7 +167,8 @@ gboolean mock_secret_password_clear_sync(const SecretSchema* schema,
   global_mock_libsecret_items->swap(kept_mock_libsecret_items);
 
   g_hash_table_unref(attributes);
-  return true;
+  return
+      global_mock_libsecret_items->size() != kept_mock_libsecret_items.size();
 }
 
 MockSecretValue* mock_secret_item_get_secret(MockSecretItem* self) {
@@ -223,32 +225,34 @@ void CheckPasswordChanges(const PasswordStoreChangeList& expected_list,
   ASSERT_EQ(expected_list.size(), actual_list.size());
   for (size_t i = 0; i < expected_list.size(); ++i) {
     EXPECT_EQ(expected_list[i].type(), actual_list[i].type());
-    const PasswordForm& expected = expected_list[i].form();
-    const PasswordForm& actual = actual_list[i].form();
-
-    EXPECT_EQ(expected.origin, actual.origin);
-    EXPECT_EQ(expected.password_value, actual.password_value);
-    EXPECT_EQ(expected.action, actual.action);
-    EXPECT_EQ(expected.username_element, actual.username_element);
-    EXPECT_EQ(expected.username_value, actual.username_value);
-    EXPECT_EQ(expected.password_element, actual.password_element);
-    EXPECT_EQ(expected.submit_element, actual.submit_element);
-    EXPECT_EQ(expected.signon_realm, actual.signon_realm);
-    EXPECT_EQ(expected.ssl_valid, actual.ssl_valid);
-    EXPECT_EQ(expected.preferred, actual.preferred);
-    EXPECT_EQ(expected.date_created, actual.date_created);
-    EXPECT_EQ(expected.blacklisted_by_user, actual.blacklisted_by_user);
-    EXPECT_EQ(expected.type, actual.type);
-    EXPECT_EQ(expected.times_used, actual.times_used);
-    EXPECT_EQ(expected.scheme, actual.scheme);
-    EXPECT_EQ(expected.date_synced, actual.date_synced);
-    EXPECT_EQ(expected.display_name, actual.display_name);
-    EXPECT_EQ(expected.avatar_url, actual.avatar_url);
-    EXPECT_EQ(expected.federation_url, actual.federation_url);
-    EXPECT_EQ(expected.skip_zero_click, actual.skip_zero_click);
-    EXPECT_EQ(expected.generation_upload_status,
-              actual.generation_upload_status);
+    EXPECT_EQ(expected_list[i].form(), actual_list[i].form());
   }
+}
+
+void VerifiedAdd(NativeBackendLibsecret* backend, const PasswordForm& form) {
+  SCOPED_TRACE("VerifiedAdd");
+  PasswordStoreChangeList changes = backend->AddLogin(form);
+  PasswordStoreChangeList expected(1,
+                                   PasswordStoreChange(PasswordStoreChange::ADD,
+                                                       form));
+  CheckPasswordChanges(expected, changes);
+}
+
+void VerifiedUpdate(NativeBackendLibsecret* backend, const PasswordForm& form) {
+  SCOPED_TRACE("VerifiedUpdate");
+  PasswordStoreChangeList changes;
+  EXPECT_TRUE(backend->UpdateLogin(form, &changes));
+  PasswordStoreChangeList expected(1, PasswordStoreChange(
+      PasswordStoreChange::UPDATE, form));
+  CheckPasswordChanges(expected, changes);
+}
+
+void VerifiedRemove(NativeBackendLibsecret* backend, const PasswordForm& form) {
+  SCOPED_TRACE("VerifiedRemove");
+  PasswordStoreChangeList changes;
+  EXPECT_TRUE(backend->RemoveLogin(form, &changes));
+  CheckPasswordChanges(PasswordStoreChangeList(1, PasswordStoreChange(
+      PasswordStoreChange::REMOVE, form)), changes);
 }
 
 }  // anonymous namespace
@@ -284,12 +288,11 @@ class NativeBackendLibsecretTest : public testing::Test {
     form_google_.date_created = base::Time::Now();
     form_google_.date_synced = base::Time::Now();
     form_google_.display_name = UTF8ToUTF16("Joe Schmoe");
-    form_google_.avatar_url = GURL("http://www.google.com/avatar");
+    form_google_.icon_url = GURL("http://www.google.com/icon");
     form_google_.federation_url = GURL("http://www.google.com/federation_url");
     form_google_.skip_zero_click = true;
     form_google_.generation_upload_status = PasswordForm::POSITIVE_SIGNAL_SENT;
     form_google_.form_data.name = UTF8ToUTF16("form_name");
-    form_google_.form_data.user_submitted = true;
 
     form_facebook_.origin = GURL("http://www.facebook.com/");
     form_facebook_.action = GURL("http://www.facebook.com/login");
@@ -302,7 +305,7 @@ class NativeBackendLibsecretTest : public testing::Test {
     form_facebook_.date_created = base::Time::Now();
     form_facebook_.date_synced = base::Time::Now();
     form_facebook_.display_name = UTF8ToUTF16("Joe Schmoe");
-    form_facebook_.avatar_url = GURL("http://www.facebook.com/avatar");
+    form_facebook_.icon_url = GURL("http://www.facebook.com/icon");
     form_facebook_.federation_url = GURL("http://www.facebook.com/federation");
     form_facebook_.skip_zero_click = true;
     form_facebook_.generation_upload_status = PasswordForm::NO_SIGNAL_SENT;
@@ -328,7 +331,7 @@ class NativeBackendLibsecretTest : public testing::Test {
 
   void TearDown() override {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::MessageLoop::QuitClosure());
+        FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
     base::MessageLoop::current()->Run();
     ASSERT_TRUE(global_mock_libsecret_items);
     global_mock_libsecret_items = nullptr;
@@ -388,7 +391,7 @@ class NativeBackendLibsecretTest : public testing::Test {
         item, "date_synced",
         base::Int64ToString(form.date_synced.ToInternalValue()));
     CheckStringAttribute(item, "display_name", UTF16ToUTF8(form.display_name));
-    CheckStringAttribute(item, "avatar_url", form.avatar_url.spec());
+    CheckStringAttribute(item, "avatar_url", form.icon_url.spec());
     CheckStringAttribute(item, "federation_url", form.federation_url.spec());
     CheckUint32Attribute(item, "skip_zero_click", form.skip_zero_click);
     CheckUint32Attribute(item, "generation_upload_status",
@@ -411,7 +414,7 @@ class NativeBackendLibsecretTest : public testing::Test {
                                    PasswordForm* result) {
     NativeBackendLibsecret backend(321);
 
-    backend.AddLogin(credentials);
+    VerifiedAdd(&backend, credentials);
 
     PasswordForm target_form;
     target_form.origin = url;
@@ -424,7 +427,7 @@ class NativeBackendLibsecretTest : public testing::Test {
       target_form.scheme = scheme;
     }
     ScopedVector<autofill::PasswordForm> form_list;
-    backend.GetLogins(target_form, &form_list);
+    EXPECT_TRUE(backend.GetLogins(target_form, &form_list));
 
     EXPECT_EQ(1u, global_mock_libsecret_items->size());
     if (!global_mock_libsecret_items->empty())
@@ -448,7 +451,7 @@ class NativeBackendLibsecretTest : public testing::Test {
   void CheckPSLUpdate(UpdateType update_type) {
     NativeBackendLibsecret backend(321);
 
-    backend.AddLogin(form_facebook_);
+    VerifiedAdd(&backend, form_facebook_);
 
     // Get the PSL-matched copy of the saved login for m.facebook.
     const GURL kMobileURL("http://m.facebook.com/");
@@ -456,17 +459,17 @@ class NativeBackendLibsecretTest : public testing::Test {
     m_facebook_lookup.origin = kMobileURL;
     m_facebook_lookup.signon_realm = kMobileURL.spec();
     ScopedVector<autofill::PasswordForm> form_list;
-    backend.GetLogins(m_facebook_lookup, &form_list);
+    EXPECT_TRUE(backend.GetLogins(m_facebook_lookup, &form_list));
 
     EXPECT_EQ(1u, global_mock_libsecret_items->size());
     EXPECT_EQ(1u, form_list.size());
     PasswordForm m_facebook = *form_list[0];
     form_list.clear();
-    EXPECT_EQ(kMobileURL, m_facebook.origin);
-    EXPECT_EQ(kMobileURL.spec(), m_facebook.signon_realm);
+    m_facebook.origin = kMobileURL;
+    m_facebook.signon_realm = kMobileURL.spec();
 
     // Add the PSL-matched copy to saved logins.
-    backend.AddLogin(m_facebook);
+    VerifiedAdd(&backend, m_facebook);
     EXPECT_EQ(2u, global_mock_libsecret_items->size());
 
     // Update www.facebook.com login.
@@ -475,12 +478,12 @@ class NativeBackendLibsecretTest : public testing::Test {
     const base::string16 kNewPassword(UTF8ToUTF16("new_b"));
     EXPECT_NE(kOldPassword, kNewPassword);
     new_facebook.password_value = kNewPassword;
-    scoped_ptr<PasswordStoreChangeList> not_used(new PasswordStoreChangeList());
     switch (update_type) {
       case UPDATE_BY_UPDATELOGIN:
-        backend.UpdateLogin(new_facebook, not_used.get());
+        VerifiedUpdate(&backend, new_facebook);
         break;
       case UPDATE_BY_ADDLOGIN:
+        // This is an overwrite call.
         backend.AddLogin(new_facebook);
         break;
     }
@@ -488,12 +491,12 @@ class NativeBackendLibsecretTest : public testing::Test {
     EXPECT_EQ(2u, global_mock_libsecret_items->size());
 
     // Check that m.facebook.com login was not modified by the update.
-    backend.GetLogins(m_facebook_lookup, &form_list);
+    EXPECT_TRUE(backend.GetLogins(m_facebook_lookup, &form_list));
 
     // There should be two results -- the exact one, and the PSL-matched one.
     EXPECT_EQ(2u, form_list.size());
     size_t index_non_psl = 0;
-    if (!form_list[index_non_psl]->original_signon_realm.empty())
+    if (form_list[index_non_psl]->is_public_suffix_match)
       index_non_psl = 1;
     EXPECT_EQ(kMobileURL, form_list[index_non_psl]->origin);
     EXPECT_EQ(kMobileURL.spec(), form_list[index_non_psl]->signon_realm);
@@ -501,11 +504,11 @@ class NativeBackendLibsecretTest : public testing::Test {
     form_list.clear();
 
     // Check that www.facebook.com login was modified by the update.
-    backend.GetLogins(form_facebook_, &form_list);
+    EXPECT_TRUE(backend.GetLogins(form_facebook_, &form_list));
     // There should be two results -- the exact one, and the PSL-matched one.
     EXPECT_EQ(2u, form_list.size());
     index_non_psl = 0;
-    if (!form_list[index_non_psl]->original_signon_realm.empty())
+    if (form_list[index_non_psl]->is_public_suffix_match)
       index_non_psl = 1;
     EXPECT_EQ(form_facebook_.origin, form_list[index_non_psl]->origin);
     EXPECT_EQ(form_facebook_.signon_realm,
@@ -551,8 +554,8 @@ class NativeBackendLibsecretTest : public testing::Test {
       form_isc_.date_synced = next_day;
     }
 
-    backend.AddLogin(form_google_);
-    backend.AddLogin(form_isc_);
+    VerifiedAdd(&backend, form_google_);
+    VerifiedAdd(&backend, form_isc_);
 
     PasswordStoreChangeList expected_changes;
     expected_changes.push_back(
@@ -599,7 +602,7 @@ class NativeBackendLibsecretTest : public testing::Test {
 TEST_F(NativeBackendLibsecretTest, BasicAddLogin) {
   NativeBackendLibsecret backend(42);
 
-  backend.AddLogin(form_google_);
+  VerifiedAdd(&backend, form_google_);
 
   EXPECT_EQ(1u, global_mock_libsecret_items->size());
   if (!global_mock_libsecret_items->empty())
@@ -610,14 +613,13 @@ TEST_F(NativeBackendLibsecretTest, BasicAddLogin) {
 TEST_F(NativeBackendLibsecretTest, BasicListLogins) {
   NativeBackendLibsecret backend(42);
 
-  backend.AddLogin(form_google_);
+  VerifiedAdd(&backend, form_google_);
 
   ScopedVector<autofill::PasswordForm> form_list;
-  backend.GetAutofillableLogins(&form_list);
+  EXPECT_TRUE(backend.GetAutofillableLogins(&form_list));
 
-  // Quick check that we got something back.
-  EXPECT_EQ(1u, form_list.size());
-  form_list.clear();
+  ASSERT_EQ(1u, form_list.size());
+  EXPECT_EQ(form_google_, *form_list[0]);
 
   EXPECT_EQ(1u, global_mock_libsecret_items->size());
   if (!global_mock_libsecret_items->empty())
@@ -631,8 +633,8 @@ TEST_F(NativeBackendLibsecretTest, PSLMatchingPositive) {
   const GURL kMobileURL("http://m.facebook.com/");
   EXPECT_TRUE(CheckCredentialAvailability(form_facebook_, kMobileURL,
                                           PasswordForm::SCHEME_HTML, &result));
-  EXPECT_EQ(kMobileURL, result.origin);
-  EXPECT_EQ(kMobileURL.spec(), result.signon_realm);
+  EXPECT_EQ(form_facebook_.origin, result.origin);
+  EXPECT_EQ(form_facebook_.signon_realm, result.signon_realm);
 }
 
 // Save a password for www.facebook.com and see it not suggested for
@@ -670,24 +672,21 @@ TEST_F(NativeBackendLibsecretTest, PSLUpdatingStrictAddLogin) {
 TEST_F(NativeBackendLibsecretTest, BasicUpdateLogin) {
   NativeBackendLibsecret backend(42);
 
-  backend.AddLogin(form_google_);
+  VerifiedAdd(&backend, form_google_);
 
   PasswordForm new_form_google(form_google_);
   new_form_google.times_used = 1;
   new_form_google.action = GURL("http://www.google.com/different/login");
 
   EXPECT_EQ(1u, global_mock_libsecret_items->size());
-  if (!global_mock_libsecret_items->empty())
+  if (!global_mock_libsecret_items->empty()) {
     CheckMockSecretItem((*global_mock_libsecret_items)[0], form_google_,
                         "chrome-42");
+  }
 
   // Update login
-  PasswordStoreChangeList changes;
-  backend.UpdateLogin(new_form_google, &changes);
+  VerifiedUpdate(&backend, new_form_google);
 
-  ASSERT_EQ(1u, changes.size());
-  EXPECT_EQ(PasswordStoreChange::UPDATE, changes.front().type());
-  EXPECT_EQ(new_form_google, changes.front().form());
   EXPECT_EQ(1u, global_mock_libsecret_items->size());
   if (!global_mock_libsecret_items->empty())
     CheckMockSecretItem((*global_mock_libsecret_items)[0], new_form_google,
@@ -697,14 +696,14 @@ TEST_F(NativeBackendLibsecretTest, BasicUpdateLogin) {
 TEST_F(NativeBackendLibsecretTest, BasicRemoveLogin) {
   NativeBackendLibsecret backend(42);
 
-  backend.AddLogin(form_google_);
+  VerifiedAdd(&backend, form_google_);
 
   EXPECT_EQ(1u, global_mock_libsecret_items->size());
   if (!global_mock_libsecret_items->empty())
     CheckMockSecretItem((*global_mock_libsecret_items)[0], form_google_,
                         "chrome-42");
 
-  backend.RemoveLogin(form_google_);
+  VerifiedRemove(&backend, form_google_);
 
   EXPECT_TRUE(global_mock_libsecret_items->empty());
 }
@@ -713,7 +712,7 @@ TEST_F(NativeBackendLibsecretTest, BasicRemoveLogin) {
 TEST_F(NativeBackendLibsecretTest, RemoveLoginActionMismatch) {
   NativeBackendLibsecret backend(42);
 
-  backend.AddLogin(form_google_);
+  VerifiedAdd(&backend, form_google_);
 
   EXPECT_EQ(1u, global_mock_libsecret_items->size());
   if (!global_mock_libsecret_items->empty())
@@ -722,8 +721,7 @@ TEST_F(NativeBackendLibsecretTest, RemoveLoginActionMismatch) {
 
   // Action url match not required for removal.
   form_google_.action = GURL("https://some.other.url.com/path");
-
-  backend.RemoveLogin(form_google_);
+  VerifiedRemove(&backend, form_google_);
 
   EXPECT_TRUE(global_mock_libsecret_items->empty());
 }
@@ -732,7 +730,7 @@ TEST_F(NativeBackendLibsecretTest, RemoveNonexistentLogin) {
   NativeBackendLibsecret backend(42);
 
   // First add an unrelated login.
-  backend.AddLogin(form_google_);
+  VerifiedAdd(&backend, form_google_);
 
   EXPECT_EQ(1u, global_mock_libsecret_items->size());
   if (!global_mock_libsecret_items->empty())
@@ -740,11 +738,13 @@ TEST_F(NativeBackendLibsecretTest, RemoveNonexistentLogin) {
                         "chrome-42");
 
   // Attempt to remove a login that doesn't exist.
-  backend.RemoveLogin(form_isc_);
+  PasswordStoreChangeList changes;
+  EXPECT_TRUE(backend.RemoveLogin(form_isc_, &changes));
+  CheckPasswordChanges(PasswordStoreChangeList(), changes);
 
   // Make sure we can still get the first form back.
   ScopedVector<autofill::PasswordForm> form_list;
-  backend.GetAutofillableLogins(&form_list);
+  EXPECT_TRUE(backend.GetAutofillableLogins(&form_list));
 
   // Quick check that we got something back.
   EXPECT_EQ(1u, form_list.size());
@@ -760,41 +760,62 @@ TEST_F(NativeBackendLibsecretTest, UpdateNonexistentLogin) {
   NativeBackendLibsecret backend(42);
 
   // First add an unrelated login.
-  backend.AddLogin(form_google_);
+  VerifiedAdd(&backend, form_google_);
 
   EXPECT_EQ(1u, global_mock_libsecret_items->size());
-  if (!global_mock_libsecret_items->empty())
+  if (!global_mock_libsecret_items->empty()) {
     CheckMockSecretItem((*global_mock_libsecret_items)[0], form_google_,
                         "chrome-42");
+  }
 
   // Attempt to update a login that doesn't exist.
   PasswordStoreChangeList changes;
-  backend.UpdateLogin(form_isc_, &changes);
+  EXPECT_TRUE(backend.UpdateLogin(form_isc_, &changes));
+  CheckPasswordChanges(PasswordStoreChangeList(), changes);
 
-  EXPECT_EQ(PasswordStoreChangeList(), changes);
   EXPECT_EQ(1u, global_mock_libsecret_items->size());
   if (!global_mock_libsecret_items->empty())
     CheckMockSecretItem((*global_mock_libsecret_items)[0], form_google_,
                         "chrome-42");
 }
 
+TEST_F(NativeBackendLibsecretTest, UpdateSameLogin) {
+  NativeBackendLibsecret backend(42);
+
+  VerifiedAdd(&backend, form_google_);
+
+  EXPECT_EQ(1u, global_mock_libsecret_items->size());
+  if (!global_mock_libsecret_items->empty()) {
+    CheckMockSecretItem((*global_mock_libsecret_items)[0], form_google_,
+                        "chrome-42");
+  }
+
+  // Attempt to update the same login without changing anything.
+  PasswordStoreChangeList changes;
+  EXPECT_TRUE(backend.UpdateLogin(form_google_, &changes));
+  CheckPasswordChanges(PasswordStoreChangeList(), changes);
+
+  EXPECT_EQ(1u, global_mock_libsecret_items->size());
+  if (!global_mock_libsecret_items->empty()) {
+    CheckMockSecretItem((*global_mock_libsecret_items)[0], form_google_,
+                        "chrome-42");
+  }
+}
+
 TEST_F(NativeBackendLibsecretTest, AddDuplicateLogin) {
   NativeBackendLibsecret backend(42);
 
-  PasswordStoreChangeList expected_changes, actual_changes;
-  expected_changes.push_back(
-      PasswordStoreChange(PasswordStoreChange::ADD, form_google_));
-  actual_changes = backend.AddLogin(form_google_);
-  CheckPasswordChanges(expected_changes, actual_changes);
+  VerifiedAdd(&backend, form_google_);
 
-  expected_changes.clear();
+  PasswordStoreChangeList expected_changes;
   expected_changes.push_back(
       PasswordStoreChange(PasswordStoreChange::REMOVE, form_google_));
   form_google_.times_used++;
+  form_google_.submit_element = UTF8ToUTF16("submit2");
   expected_changes.push_back(
       PasswordStoreChange(PasswordStoreChange::ADD, form_google_));
 
-  actual_changes = backend.AddLogin(form_google_);
+  PasswordStoreChangeList actual_changes = backend.AddLogin(form_google_);
   CheckPasswordChanges(expected_changes, actual_changes);
 
   EXPECT_EQ(1u, global_mock_libsecret_items->size());
@@ -816,10 +837,10 @@ TEST_F(NativeBackendLibsecretTest, AndroidCredentials) {
   saved_android_form.password_value = base::UTF8ToUTF16("password");
   saved_android_form.date_created = base::Time::Now();
 
-  backend.AddLogin(saved_android_form);
+  VerifiedAdd(&backend, saved_android_form);
 
   ScopedVector<autofill::PasswordForm> form_list;
-  backend.GetAutofillableLogins(&form_list);
+  EXPECT_TRUE(backend.GetAutofillableLogins(&form_list));
 
   EXPECT_EQ(1u, form_list.size());
   EXPECT_EQ(saved_android_form, *form_list[0]);
@@ -837,7 +858,7 @@ TEST_F(NativeBackendLibsecretTest, SomeKeyringAttributesAreMissing) {
   // Absent attributes should be filled with default values.
   NativeBackendLibsecret backend(42);
 
-  backend.AddLogin(form_google_);
+  VerifiedAdd(&backend, form_google_);
 
   EXPECT_EQ(1u, global_mock_libsecret_items->size());
   // Remove a string attribute.
@@ -846,11 +867,49 @@ TEST_F(NativeBackendLibsecretTest, SomeKeyringAttributesAreMissing) {
   (*global_mock_libsecret_items)[0]->RemoveAttribute("ssl_valid");
 
   ScopedVector<autofill::PasswordForm> form_list;
-  backend.GetAutofillableLogins(&form_list);
+  EXPECT_TRUE(backend.GetAutofillableLogins(&form_list));
 
   EXPECT_EQ(1u, form_list.size());
-  EXPECT_EQ(GURL(""), form_list[0]->avatar_url);
+  EXPECT_EQ(GURL(""), form_list[0]->icon_url);
   EXPECT_FALSE(form_list[0]->ssl_valid);
+}
+
+TEST_F(NativeBackendLibsecretTest, ReadDuplicateForms) {
+  NativeBackendLibsecret backend(42);
+
+  // Add 2 slightly different password forms.
+  const char unique_string[] = "unique_unique_string";
+  const char unique_string_replacement[] = "uniKue_unique_string";
+  form_google_.origin =
+      GURL(std::string("http://www.google.com/") + unique_string);
+  VerifiedAdd(&backend, form_google_);
+  form_google_.origin =
+      GURL(std::string("http://www.google.com/") + unique_string_replacement);
+  VerifiedAdd(&backend, form_google_);
+
+  // Read the raw value back. Change the |unique_string| to
+  // |unique_string_replacement| so the forms become unique.
+  ASSERT_EQ(2u, global_mock_libsecret_items->size());
+  gpointer item_value = g_hash_table_lookup(
+      global_mock_libsecret_items->front()->attributes, "origin_url");
+  ASSERT_TRUE(item_value);
+  char* substr = strstr(static_cast<char*>(item_value), unique_string);
+  ASSERT_TRUE(substr);
+  ASSERT_EQ(strlen(unique_string), strlen(unique_string_replacement));
+  strncpy(substr, unique_string_replacement, strlen(unique_string));
+
+  // Now test that GetAutofillableLogins returns only one form.
+  ScopedVector<autofill::PasswordForm> form_list;
+  EXPECT_TRUE(backend.GetAutofillableLogins(&form_list));
+
+  EXPECT_EQ(1u, form_list.size());
+  EXPECT_EQ(form_google_, *form_list[0]);
+
+  EXPECT_EQ(1u, global_mock_libsecret_items->size());
+  if (!global_mock_libsecret_items->empty()) {
+    CheckMockSecretItem((*global_mock_libsecret_items)[0], form_google_,
+                        "chrome-42");
+  }
 }
 
 // TODO(mdm): add more basic tests here at some point.

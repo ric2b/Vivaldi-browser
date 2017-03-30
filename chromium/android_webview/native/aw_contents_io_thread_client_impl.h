@@ -7,9 +7,11 @@
 
 #include "android_webview/browser/aw_contents_io_thread_client.h"
 
+#include <stdint.h>
+
 #include "base/android/scoped_java_ref.h"
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 
 class GURL;
@@ -38,6 +40,12 @@ class AwContentsIoThreadClientImpl : public AwContentsIoThreadClient {
   static void Associate(content::WebContents* web_contents,
                         const base::android::JavaRef<jobject>& jclient);
 
+  // Sets the |jclient| java instance to which service worker related
+  // callbacks should be delegated.
+  static void SetServiceWorkerIoThreadClient(
+      const base::android::JavaRef<jobject>& jclient,
+      const base::android::JavaRef<jobject>& browser_context);
+
   // Either |pending_associate| is true or |jclient| holds a non-null
   // Java object.
   AwContentsIoThreadClientImpl(bool pending_associate,
@@ -47,8 +55,9 @@ class AwContentsIoThreadClientImpl : public AwContentsIoThreadClient {
   // Implementation of AwContentsIoThreadClient.
   bool PendingAssociation() const override;
   CacheMode GetCacheMode() const override;
-  scoped_ptr<AwWebResourceResponse> ShouldInterceptRequest(
-      const net::URLRequest* request) override;
+  void ShouldInterceptRequestAsync(
+      const net::URLRequest* request,
+      const ShouldInterceptRequestResultCallback callback) override;
   bool ShouldBlockContentUrls() const override;
   bool ShouldBlockFileUrls() const override;
   bool ShouldAcceptThirdPartyCookies() const override;
@@ -57,7 +66,7 @@ class AwContentsIoThreadClientImpl : public AwContentsIoThreadClient {
                    const std::string& user_agent,
                    const std::string& content_disposition,
                    const std::string& mime_type,
-                   int64 content_length) override;
+                   int64_t content_length) override;
   void NewLoginRequest(const std::string& realm,
                        const std::string& account,
                        const std::string& args) override;
@@ -69,6 +78,7 @@ class AwContentsIoThreadClientImpl : public AwContentsIoThreadClient {
  private:
   bool pending_association_;
   base::android::ScopedJavaGlobalRef<jobject> java_object_;
+  base::android::ScopedJavaGlobalRef<jobject> bg_thread_client_object_;
 
   DISALLOW_COPY_AND_ASSIGN(AwContentsIoThreadClientImpl);
 };

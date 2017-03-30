@@ -175,12 +175,14 @@ cr.define('options', function() {
         // The number of saved passwords shouldn't be too big for us to handle.
         var query = this.lastQuery_;
         var filter = function(entry, index, list) {
-          // Search both URL and username.
-          if (entry[0].toLowerCase().indexOf(query.toLowerCase()) >= 0 ||
-              entry[1].toLowerCase().indexOf(query.toLowerCase()) >= 0) {
+          // Search both shown URL and username.
+          var shownUrl = entry[options.passwordManager.SHOWN_URL_FIELD];
+          var username = entry[options.passwordManager.USERNAME_FIELD];
+          if (shownUrl.toLowerCase().indexOf(query.toLowerCase()) >= 0 ||
+              username.toLowerCase().indexOf(query.toLowerCase()) >= 0) {
             // Keep the original index so we can delete correctly. See also
             // deleteItemAtIndex() in password_manager_list.js that uses this.
-            entry[4] = index;
+            entry[options.passwordManager.ORIGINAL_INDEX_FIELD] = index;
             return true;
           }
           return false;
@@ -214,7 +216,8 @@ cr.define('options', function() {
         // index in the model, but each entry stores its original index, so
         // we can find the item using a linear search.
         for (var i = 0; i < model.length; ++i) {
-          if (model.item(i)[4] == index) {
+          if (model.item(i)[options.passwordManager.ORIGINAL_INDEX_FIELD] ==
+              index) {
             index = i;
             break;
           }
@@ -224,14 +227,6 @@ cr.define('options', function() {
       // Reveal the password in the UI.
       var item = this.savedPasswordsList_.getListItemByIndex(index);
       item.showPassword(password);
-    },
-
-    /**
-     * @param {boolean} visible Whether the link should be visible.
-     * @private
-     */
-    setManageAccountLinkVisibility_: function(visible) {
-      $('manage-passwords-span').hidden = !visible;
     },
   };
 
@@ -259,7 +254,6 @@ cr.define('options', function() {
 
   // Forward public APIs to private implementations on the singleton instance.
   cr.makePublic(PasswordManager, [
-    'setManageAccountLinkVisibility',
     'setSavedPasswordsList',
     'setPasswordExceptionsList',
     'showPassword'

@@ -7,11 +7,12 @@
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/sync_driver/sync_service.h"
 #include "ios/chrome/browser/application_context.h"
+#include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
 #include "ios/public/provider/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/public/provider/chrome/browser/browser_state/chrome_browser_state_manager.h"
-#include "ios/public/provider/chrome/browser/keyed_service_provider.h"
 #include "ios/web/public/web_thread.h"
 
 namespace ios {
@@ -28,15 +29,14 @@ void StartSyncOnUIThread(const base::FilePath& browser_state_path,
   }
 
   ios::ChromeBrowserState* browser_state =
-      browser_state_manager->GetChromeBrowserState(browser_state_path);
+      browser_state_manager->GetBrowserState(browser_state_path);
   if (!browser_state) {
     DVLOG(2) << "ChromeBrowserState not found, can't start sync.";
     return;
   }
 
   sync_driver::SyncService* sync_service =
-      ios::GetKeyedServiceProvider()->GetSyncServiceForBrowserState(
-          browser_state);
+      IOSChromeProfileSyncServiceFactory::GetForBrowserState(browser_state);
   if (!sync_service) {
     DVLOG(2) << "No SyncService for browser state, can't start sync.";
     return;

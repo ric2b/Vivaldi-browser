@@ -4,6 +4,9 @@
 
 #include "ui/views/controls/webview/webview.h"
 
+#include <utility>
+
+#include "build/build_config.h"
 #include "content/public/browser/browser_accessibility_state.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_controller.h"
@@ -65,7 +68,7 @@ void WebView::SetWebContents(content::WebContents* replacement) {
   }
   // web_contents() now returns |replacement| from here onwards.
   SetFocusable(!!web_contents());
-  if (wc_owner_ != replacement)
+  if (wc_owner_.get() != replacement)
     wc_owner_.reset();
   if (embed_fullscreen_widget_mode_enabled_) {
     is_embedding_fullscreen_widget_ =
@@ -74,7 +77,7 @@ void WebView::SetWebContents(content::WebContents* replacement) {
     DCHECK(!is_embedding_fullscreen_widget_);
   }
   AttachWebContents();
-  NotifyMaybeTextInputClientAndAccessibilityChanged();
+  NotifyAccessibilityWebContentsChanged();
 }
 
 void WebView::SetEmbedFullscreenWidgetMode(bool enable) {
@@ -113,12 +116,12 @@ scoped_ptr<content::WebContents> WebView::SwapWebContents(
     scoped_ptr<content::WebContents> new_web_contents) {
   if (wc_owner_)
     wc_owner_->SetDelegate(NULL);
-  scoped_ptr<content::WebContents> old_web_contents(wc_owner_.Pass());
-  wc_owner_ = new_web_contents.Pass();
+  scoped_ptr<content::WebContents> old_web_contents(std::move(wc_owner_));
+  wc_owner_ = std::move(new_web_contents);
   if (wc_owner_)
     wc_owner_->SetDelegate(this);
   SetWebContents(wc_owner_.get());
-  return old_web_contents.Pass();
+  return old_web_contents;
 }
 
 void WebView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
@@ -151,10 +154,10 @@ void WebView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
     // TODO(miu): This is basically media::ComputeLetterboxRegion(), and it
     // looks like others have written this code elsewhere.  Let's considate
     // into a shared function ui/gfx/geometry or around there.
-    const int64 x = static_cast<int64>(capture_size.width()) *
-        holder_bounds.height();
-    const int64 y = static_cast<int64>(capture_size.height()) *
-        holder_bounds.width();
+    const int64_t x =
+        static_cast<int64_t>(capture_size.width()) * holder_bounds.height();
+    const int64_t y =
+        static_cast<int64_t>(capture_size.height()) * holder_bounds.width();
     if (y < x) {
       holder_bounds.ClampToCenteredSize(gfx::Size(
           holder_bounds.width(), static_cast<int>(y / capture_size.width())));
@@ -237,7 +240,7 @@ gfx::Size WebView::GetPreferredSize() const {
 void WebView::RenderProcessExited(content::RenderProcessHost* host,
                                   base::TerminationStatus status,
                                   int exit_code) {
-  NotifyMaybeTextInputClientAndAccessibilityChanged();
+  NotifyAccessibilityWebContentsChanged();
 }
 
 void WebView::RenderProcessHostDestroyed(content::RenderProcessHost* host) {
@@ -258,11 +261,11 @@ bool WebView::EmbedsFullscreenWidget() const {
 // WebView, content::WebContentsObserver implementation:
 
 void WebView::RenderViewReady() {
-  NotifyMaybeTextInputClientAndAccessibilityChanged();
+  NotifyAccessibilityWebContentsChanged();
 }
 
 void WebView::RenderViewDeleted(content::RenderViewHost* render_view_host) {
-  NotifyMaybeTextInputClientAndAccessibilityChanged();
+  NotifyAccessibilityWebContentsChanged();
 }
 
 void WebView::RenderViewHostChanged(content::RenderViewHost* old_host,
@@ -270,7 +273,7 @@ void WebView::RenderViewHostChanged(content::RenderViewHost* old_host,
   FocusManager* const focus_manager = GetFocusManager();
   if (focus_manager && focus_manager->GetFocusedView() == this)
     OnFocus();
-  NotifyMaybeTextInputClientAndAccessibilityChanged();
+  NotifyAccessibilityWebContentsChanged();
 }
 
 void WebView::WebContentsDestroyed() {
@@ -278,7 +281,7 @@ void WebView::WebContentsDestroyed() {
     observing_render_process_host_->RemoveObserver(this);
     observing_render_process_host_ = nullptr;
   }
-  NotifyMaybeTextInputClientAndAccessibilityChanged();
+  NotifyAccessibilityWebContentsChanged();
 }
 
 void WebView::DidShowFullscreenWidget(int routing_id) {
@@ -297,11 +300,11 @@ void WebView::DidToggleFullscreenModeForTab(bool entered_fullscreen) {
 }
 
 void WebView::DidAttachInterstitialPage() {
-  NotifyMaybeTextInputClientAndAccessibilityChanged();
+  NotifyAccessibilityWebContentsChanged();
 }
 
 void WebView::DidDetachInterstitialPage() {
-  NotifyMaybeTextInputClientAndAccessibilityChanged();
+  NotifyAccessibilityWebContentsChanged();
 }
 
 void WebView::OnWebContentsFocused() {
@@ -341,6 +344,8 @@ void WebView::AttachWebContents() {
         parent()->GetNativeViewAccessible());
   }
 #endif
+
+  OnWebContentsAttached();
 }
 
 void WebView::DetachWebContents() {
@@ -369,14 +374,12 @@ void WebView::ReattachForFullscreenChange(bool enter_fullscreen) {
     // the same.  So, do not change attachment.
     OnBoundsChanged(bounds());
   }
-  NotifyMaybeTextInputClientAndAccessibilityChanged();
+  NotifyAccessibilityWebContentsChanged();
 }
 
-void WebView::NotifyMaybeTextInputClientAndAccessibilityChanged() {
-#if defined(OS_CHROMEOS)
+void WebView::NotifyAccessibilityWebContentsChanged() {
   if (web_contents())
     NotifyAccessibilityEvent(ui::AX_EVENT_CHILDREN_CHANGED, false);
-#endif  // defined OS_CHROMEOS
 }
 
 content::WebContents* WebView::CreateWebContents(

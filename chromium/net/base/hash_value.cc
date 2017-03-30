@@ -9,6 +9,7 @@
 #include "base/sha1.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "crypto/sha2.h"
 
 namespace net {
 
@@ -29,6 +30,15 @@ bool SHA1HashValue::Equals(const SHA1HashValue& other) const {
 
 bool SHA256HashValue::Equals(const SHA256HashValue& other) const {
   return memcmp(data, other.data, sizeof(data)) == 0;
+}
+
+HashValue::HashValue(const SHA1HashValue& hash) : HashValue(HASH_VALUE_SHA1) {
+  fingerprint.sha1 = hash;
+}
+
+HashValue::HashValue(const SHA256HashValue& hash)
+    : HashValue(HASH_VALUE_SHA256) {
+  fingerprint.sha256 = hash;
 }
 
 bool HashValue::Equals(const HashValue& other) const {
@@ -111,12 +121,12 @@ const unsigned char* HashValue::data() const {
   }
 }
 
-bool IsSHA1HashInSortedArray(const SHA1HashValue& hash,
-                             const uint8_t* array,
-                             size_t array_byte_len) {
-  DCHECK_EQ(0u, array_byte_len % base::kSHA1Length);
-  const size_t arraylen = array_byte_len / base::kSHA1Length;
-  return NULL != bsearch(hash.data, array, arraylen, base::kSHA1Length,
+bool IsSHA256HashInSortedArray(const SHA256HashValue& hash,
+                               const uint8_t* array,
+                               size_t array_byte_len) {
+  DCHECK_EQ(0u, array_byte_len % crypto::kSHA256Length);
+  const size_t arraylen = array_byte_len / crypto::kSHA256Length;
+  return NULL != bsearch(hash.data, array, arraylen, crypto::kSHA256Length,
                          CompareSHA1Hashes);
 }
 

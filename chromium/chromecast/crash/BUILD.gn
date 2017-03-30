@@ -27,8 +27,6 @@ source_set("crash") {
     "linux/synchronized_minidump_manager.h",
   ]
 
-  configs += [ "//chromecast:config" ]
-
   deps = [
     "//base",
     "//breakpad:client",
@@ -37,22 +35,39 @@ source_set("crash") {
   ]
 }
 
-test("cast_crash_unittests") {
+source_set("test_support") {
   sources = [
-    "cast_crashdump_uploader_unittest.cc",
-    "linux/dummy_minidump_generator_unittest.cc",
-    "linux/dump_info_unittest.cc",
-    "linux/minidump_writer_unittest.cc",
-    "linux/synchronized_minidump_manager_unittest.cc",
+    "linux/crash_testing_utils.cc",
+    "linux/crash_testing_utils.h",
   ]
 
   deps = [
     ":crash",
     "//base",
-    "//base/test:run_all_unittests",
-    "//base/test:test_support",
-    "//breakpad:client",
-    "//testing/gmock",
-    "//testing/gtest",
+    "//chromecast/base",
   ]
+}
+
+if (is_linux) {
+  test("cast_crash_unittests") {
+    sources = [
+      "cast_crashdump_uploader_unittest.cc",
+      "linux/dummy_minidump_generator_unittest.cc",
+      "linux/dump_info_unittest.cc",
+      "linux/minidump_writer_unittest.cc",
+      "linux/synchronized_minidump_manager_unittest.cc",
+    ]
+
+    deps = [
+      ":crash",
+      ":test_support",
+      "//base",
+      "//base/test:run_all_unittests",
+      "//base/test:test_support",
+      "//breakpad:client",
+      "//chromecast/base:test_support",
+      "//testing/gmock",
+      "//testing/gtest",
+    ]
+  }
 }

@@ -15,8 +15,8 @@ class RasterOrderComparator {
   explicit RasterOrderComparator(TreePriority tree_priority)
       : tree_priority_(tree_priority) {}
 
-  bool operator()(const TilingSetRasterQueueAll* a_queue,
-                  const TilingSetRasterQueueAll* b_queue) const {
+  bool operator()(const scoped_ptr<TilingSetRasterQueueAll>& a_queue,
+                  const scoped_ptr<TilingSetRasterQueueAll>& b_queue) const {
     // Note that in this function, we have to return true if and only if
     // a is strictly lower priority than b.
     const TilePriority& a_priority = a_queue->Top().priority();
@@ -51,7 +51,7 @@ class RasterOrderComparator {
 void CreateTilingSetRasterQueues(
     const std::vector<PictureLayerImpl*>& layers,
     TreePriority tree_priority,
-    ScopedPtrVector<TilingSetRasterQueueAll>* queues) {
+    std::vector<scoped_ptr<TilingSetRasterQueueAll>>* queues) {
   DCHECK(queues->empty());
 
   for (auto* layer : layers) {
@@ -64,9 +64,10 @@ void CreateTilingSetRasterQueues(
         new TilingSetRasterQueueAll(tiling_set, prioritize_low_res));
     // Queues will only contain non empty tiling sets.
     if (!tiling_set_queue->IsEmpty())
-      queues->push_back(tiling_set_queue.Pass());
+      queues->push_back(std::move(tiling_set_queue));
   }
-  queues->make_heap(RasterOrderComparator(tree_priority));
+  std::make_heap(queues->begin(), queues->end(),
+                 RasterOrderComparator(tree_priority));
 }
 
 }  // namespace
@@ -93,32 +94,37 @@ bool RasterTilePriorityQueueAll::IsEmpty() const {
 
 const PrioritizedTile& RasterTilePriorityQueueAll::Top() const {
   DCHECK(!IsEmpty());
-  const ScopedPtrVector<TilingSetRasterQueueAll>& next_queues = GetNextQueues();
+  const auto& next_queues = GetNextQueues();
   return next_queues.front()->Top();
 }
 
 void RasterTilePriorityQueueAll::Pop() {
   DCHECK(!IsEmpty());
 
-  ScopedPtrVector<TilingSetRasterQueueAll>& next_queues = GetNextQueues();
-  next_queues.pop_heap(RasterOrderComparator(tree_priority_));
-  TilingSetRasterQueueAll* queue = next_queues.back();
+  auto& next_queues = GetNextQueues();
+  std::pop_heap(next_queues.begin(), next_queues.end(),
+                RasterOrderComparator(tree_priority_));
+  TilingSetRasterQueueAll* queue = next_queues.back().get();
   queue->Pop();
 
   // Remove empty queues.
-  if (queue->IsEmpty())
+  if (queue->IsEmpty()) {
     next_queues.pop_back();
-  else
-    next_queues.push_heap(RasterOrderComparator(tree_priority_));
+  } else {
+    std::push_heap(next_queues.begin(), next_queues.end(),
+                   RasterOrderComparator(tree_priority_));
+  }
 }
 
-ScopedPtrVector<TilingSetRasterQueueAll>&
+std::vector<scoped_ptr<TilingSetRasterQueueAll>>&
 RasterTilePriorityQueueAll::GetNextQueues() {
-  return const_cast<ScopedPtrVector<TilingSetRasterQueueAll>&>(
-      static_cast<const RasterTilePriorityQueueAll*>(this)->GetNextQueues());
+  const auto* const_this = static_cast<const RasterTilePriorityQueueAll*>(this);
+  const auto& const_queues = const_this->GetNextQueues();
+  return const_cast<std::vector<scoped_ptr<TilingSetRasterQueueAll>>&>(
+      const_queues);
 }
 
-const ScopedPtrVector<TilingSetRasterQueueAll>&
+const std::vector<scoped_ptr<TilingSetRasterQueueAll>>&
 RasterTilePriorityQueueAll::GetNextQueues() const {
   DCHECK(!IsEmpty());
 
@@ -136,13 +142,14 @@ RasterTilePriorityQueueAll::GetNextQueues() const {
 
   switch (tree_priority_) {
     case SMOOTHNESS_TAKES_PRIORITY: {
-      // If we're down to eventually bin tiles on the active tree, process the
-      // pending tree to allow tiles required for activation to be initialized
-      // when memory policy only allows prepaint.
-      if (active_priority.priority_bin == TilePriority::EVENTUALLY &&
-          pending_priority.priority_bin == TilePriority::NOW) {
+      // If we're down to eventually bin tiles on the active tree and there
+      // is a pending tree, process the entire pending tree to allow tiles
+      // required for activation to be initialized when memory policy only
+      // allows prepaint. The eventually bin tiles on the active tree are
+      // lowest priority since that work is likely to be thrown away when
+      // we activate.
+      if (active_priority.priority_bin == TilePriority::EVENTUALLY)
         return pending_queues_;
-      }
       return active_queues_;
     }
     case NEW_CONTENT_TAKES_PRIORITY: {

@@ -5,16 +5,21 @@
 #ifndef CHROMECAST_MEDIA_CMA_BASE_AV_PIPELINE_IMPL_H_
 #define CHROMECAST_MEDIA_CMA_BASE_AV_PIPELINE_IMPL_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <list>
 
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
-#include "chromecast/media/cma/backend/media_component_device.h"
 #include "chromecast/media/cma/pipeline/av_pipeline_client.h"
+#include "chromecast/public/media/media_pipeline_backend.h"
 #include "chromecast/public/media/stream_id.h"
+#include "media/base/pipeline_status.h"
 
 namespace media {
 class AudioDecoderConfig;
@@ -28,10 +33,31 @@ class BufferingFrameProvider;
 class BufferingState;
 class CodedFrameProvider;
 class DecoderBufferBase;
-class MediaComponentDevice;
 
-class AvPipelineImpl {
+class AvPipelineImpl : MediaPipelineBackend::Decoder::Delegate {
  public:
+  AvPipelineImpl(MediaPipelineBackend::Decoder* decoder,
+                 const AvPipelineClient& client);
+  ~AvPipelineImpl() override;
+
+  void SetCdm(BrowserCdmCast* media_keys);
+
+  // Setup the pipeline and ensure samples are available for the given media
+  // time, then start rendering samples.
+  bool StartPlayingFrom(base::TimeDelta time,
+                        const scoped_refptr<BufferingState>& buffering_state);
+
+  bool StartFlush();
+  void Flush(const ::media::PipelineStatusCB& status_cb);
+  // Resets any pending buffers after the backend has been stopped.
+  void BackendStopped();
+
+  // Tear down the pipeline and release the hardware resources.
+  void Stop();
+
+  virtual void UpdateStatistics() = 0;
+
+ protected:
   // Pipeline states.
   enum State {
     kUninitialized,
@@ -42,50 +68,37 @@ class AvPipelineImpl {
     kError,
   };
 
-  typedef base::Callback<
-      void(StreamId id,
-           const ::media::AudioDecoderConfig&,
-           const ::media::VideoDecoderConfig&)> UpdateConfigCB;
+  State state() const { return state_; }
+  const AvPipelineClient& client() const { return client_; }
 
-  AvPipelineImpl(
-      MediaComponentDevice* media_component_device,
-      const UpdateConfigCB& update_config_cb);
-  ~AvPipelineImpl();
+  virtual void OnUpdateConfig(
+      StreamId id,
+      const ::media::AudioDecoderConfig& audio_config,
+      const ::media::VideoDecoderConfig& video_config) = 0;
 
-  // Setting the frame provider or the client must be done in the
-  // |kUninitialized| state.
+  void TransitionToState(State state);
+  // Setting the frame provider must be done in the |kUninitialized| state.
   void SetCodedFrameProvider(scoped_ptr<CodedFrameProvider> frame_provider,
                              size_t max_buffer_size,
                              size_t max_frame_size);
-  void SetClient(const AvPipelineClient& client);
 
-  // Initialize the pipeline.
-  bool Initialize();
-
-  // Setup the pipeline and ensure samples are available for the given media
-  // time, then start rendering samples.
-  bool StartPlayingFrom(base::TimeDelta time,
-                        const scoped_refptr<BufferingState>& buffering_state);
-
-  // Flush any remaining samples in the pipeline.
-  // Invoke |done_cb| when flush is completed.
-  void Flush(const base::Closure& done_cb);
-
-  // Tear down the pipeline and release the hardware resources.
-  void Stop();
-
-  State GetState() const { return state_; }
-  void TransitionToState(State state);
-
-  void SetCdm(BrowserCdmCast* media_keys);
+  ::media::PipelineStatistics previous_stats_;
 
  private:
+  void OnFlushDone(const ::media::PipelineStatusCB& status_cb);
+
+  // MediaPipelineBackend::Decoder::Delegate implementation:
+  void OnPushBufferComplete(BufferStatus status) override;
+  void OnEndOfStream() override;
+  void OnDecoderError() override;
+  void OnKeyStatusChanged(const std::string& key_id,
+                          CastKeyStatus key_status,
+                          uint32_t system_code) override;
+  void OnVideoResolutionChanged(const Size& size) override;
+
   // Callback invoked when the CDM state has changed in a way that might
   // impact media playback.
   void OnCdmStateChange();
-
-  // Callback invoked when playback has reached the end of stream.
-  void OnEos();
 
   // Feed the pipeline, getting the frames from |frame_provider_|.
   void FetchBufferIfNeeded();
@@ -98,28 +111,22 @@ class AvPipelineImpl {
   // Process a pending buffer.
   void ProcessPendingBuffer();
 
-  void OnFramePushed(MediaComponentDevice::FrameStatus status);
-
   // Callbacks:
   // - when BrowserCdm updated its state.
   // - when BrowserCdm has been destroyed.
   void OnCdmStateChanged();
   void OnCdmDestroyed();
 
-  // Callback invoked when a frame has been buffered by |frame_provider_|
+  // Callback invoked when a media buffer has been buffered by |frame_provider_|
   // which is a BufferingFrameProvider.
-  void OnFrameBuffered(const scoped_refptr<DecoderBufferBase>& buffer,
-                       bool is_at_max_capacity);
+  void OnDataBuffered(const scoped_refptr<DecoderBufferBase>& buffer,
+                      bool is_at_max_capacity);
   void UpdatePlayableFrames();
 
   base::ThreadChecker thread_checker_;
 
-  UpdateConfigCB update_config_cb_;
-
-  AvPipelineClient client_;
-
-  // Backends.
-  MediaComponentDevice* media_component_device_;
+  MediaPipelineBackend::Decoder* const decoder_;
+  const AvPipelineClient client_;
 
   // AV pipeline state.
   State state_;
@@ -147,11 +154,11 @@ class AvPipelineImpl {
   // Indicate whether there is a pending buffer read.
   bool pending_read_;
 
-  // Pending buffer.
+  // Pending buffer (not pushed to device yet)
   scoped_refptr<DecoderBufferBase> pending_buffer_;
 
-  // Indicate if there is a frame being pushed to the audio device.
-  bool pending_push_;
+  // Buffer that has been pushed to the device but not processed yet.
+  scoped_refptr<DecoderBufferBase> pushed_buffer_;
 
   // The media time is retrieved at regular intervals.
   // Indicate whether time update is enabled.

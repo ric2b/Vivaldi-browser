@@ -6,18 +6,21 @@
 
 #include <algorithm>
 
+#include "ash/ash_layout_constants.h"
 #include "ash/frame/caption_buttons/frame_caption_button_container_view.h"
 #include "ash/frame/default_header_painter.h"
 #include "ash/frame/frame_border_hit_test_controller.h"
 #include "ash/frame/header_painter_util.h"
 #include "ash/shell.h"
 #include "base/profiler/scoped_tracker.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/frame/browser_frame.h"
 #include "chrome/browser/ui/views/frame/browser_header_painter_ash.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -36,12 +39,14 @@
 #include "ui/aura/window.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/layout.h"
+#include "ui/base/resource/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/theme_provider.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/image/image_skia.h"
+#include "ui/gfx/scoped_canvas.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/layout_constants.h"
 #include "ui/views/widget/widget.h"
@@ -53,17 +58,10 @@
 
 namespace {
 
-// The avatar ends 2 px above the bottom of the tabstrip (which, given the
-// way the tabstrip draws its bottom edge, will appear like a 1 px gap to the
-// user).
-const int kAvatarBottomSpacing = 2;
-// There are 2 px on each side of the avatar (between the frame border and
-// it on the left, and between it and the tabstrip on the right).
-const int kAvatarSideSpacing = 2;
+#if defined(FRAME_AVATAR_BUTTON)
 // Space between the new avatar button and the minimize button.
 const int kNewAvatarButtonOffset = 5;
-// Space between left edge of window and tabstrip.
-const int kTabstripLeftSpacing = 0;
+#endif
 // Space between right edge of tabstrip and maximize button.
 const int kTabstripRightSpacing = 10;
 // Height of the shadow of the content area, at the top of the toolbar.
@@ -171,20 +169,26 @@ gfx::Rect BrowserNonClientFrameViewAsh::GetBoundsForTabStrip(
   int left_inset = GetTabStripLeftInset();
   int right_inset = GetTabStripRightInset();
   return gfx::Rect(left_inset,
-                   GetTopInset(),
+                   GetTopInset(false),
                    std::max(0, width() - left_inset - right_inset),
                    tabstrip->GetPreferredSize().height());
 }
 
-int BrowserNonClientFrameViewAsh::GetTopInset() const {
+int BrowserNonClientFrameViewAsh::GetTopInset(bool restored) const {
   if (!ShouldPaint() || UseImmersiveLightbarHeaderStyle())
     return 0;
 
   if (browser_view()->IsTabStripVisible()) {
-    if (frame()->IsMaximized() || frame()->IsFullscreen())
-      return kTabstripTopSpacingShort;
-    else
-      return kTabstripTopSpacingTall;
+    if (ui::MaterialDesignController::IsModeMaterial()) {
+      const int header_height = restored
+          ? GetAshLayoutSize(
+                AshLayoutSize::BROWSER_RESTORED_CAPTION_BUTTON).height()
+          : header_painter_->GetHeaderHeight();
+      return header_height - browser_view()->GetTabStripHeight();
+    }
+
+    return ((frame()->IsMaximized() || frame()->IsFullscreen()) && !restored) ?
+        kTabstripTopSpacingShort : kTabstripTopSpacingTall;
   }
 
   if (UsePackagedAppHeaderStyle() || UseWebAppHeaderStyle())
@@ -242,24 +246,12 @@ int BrowserNonClientFrameViewAsh::NonClientHitTest(const gfx::Point& point) {
   int hit_test = ash::FrameBorderHitTestController::NonClientHitTest(this,
       caption_button_container_, point);
 
-  // See if the point is actually within either of the avatar menu buttons.
-  if (hit_test == HTCAPTION && avatar_button() &&
-      ConvertedHitTest(this, avatar_button(), point)) {
-#if defined(OS_CHROMEOS)
-    // In ChromeOS, a browser window which has an avatar badging on the top
-    // left corner means it's a teleported browser window. We should treat the
-    // avatar as part of the browser non client frame (e.g., clicking on it
-    // allows the user to drag the browser window around.)
-    return HTCAPTION;
-#else
-    return HTCLIENT;
-#endif
-  }
-
+#if defined(FRAME_AVATAR_BUTTON)
   if (hit_test == HTCAPTION && new_avatar_button() &&
       ConvertedHitTest(this, new_avatar_button(), point)) {
     return HTCLIENT;
   }
+#endif
 
   // See if the point is actually within the web app back button.
   if (hit_test == HTCAPTION && web_app_left_header_view_ &&
@@ -349,28 +341,27 @@ void BrowserNonClientFrameViewAsh::Layout() {
   // position of the window controls.
   header_painter_->LayoutHeader();
 
-  int painted_height = 0;
+  int painted_height = GetTopInset(false);
   if (browser_view()->IsTabStripVisible()) {
-    painted_height = GetTopInset() +
-        browser_view()->tabstrip()->GetPreferredSize().height();
+    painted_height += browser_view()->tabstrip()->GetPreferredSize().height();
   } else if (browser_view()->IsToolbarVisible()) {
     // Paint the header so that it overlaps with the top few pixels of the
     // toolbar because the top few pixels of the toolbar are not opaque.
-    painted_height = GetTopInset() + kFrameShadowThickness * 2;
-  } else {
-    painted_height = GetTopInset();
+    const int kToolbarTopEdgeExclusion = 2;
+    painted_height += kToolbarTopEdgeExclusion;
   }
   header_painter_->SetHeaderHeightForPainting(painted_height);
 
   if (avatar_button()) {
     LayoutAvatar();
     header_painter_->UpdateLeftViewXInset(avatar_button()->bounds().right());
-  } else {
-    if (new_avatar_button())
-      LayoutNewStyleAvatar();
-    header_painter_->UpdateLeftViewXInset(
-        ash::HeaderPainterUtil::GetDefaultLeftViewXInset());
   }
+#if defined(FRAME_AVATAR_BUTTON)
+  if (new_avatar_button())
+    LayoutNewStyleAvatar();
+#endif
+  header_painter_->UpdateLeftViewXInset(
+      ash::HeaderPainterUtil::GetDefaultLeftViewXInset());
   BrowserNonClientFrameView::Layout();
 }
 
@@ -406,7 +397,11 @@ void BrowserNonClientFrameViewAsh::
   // size changes.
   if (!browser_view()->initialized())
     return;
-  if (child == caption_button_container_ || child == new_avatar_button()) {
+  bool needs_layout = child == caption_button_container_;
+#if defined(FRAME_AVATAR_BUTTON)
+  needs_layout = needs_layout || child == new_avatar_button();
+#endif
+  if (needs_layout) {
     InvalidateLayout();
     frame()->GetRootView()->Layout();
   }
@@ -430,7 +425,7 @@ void BrowserNonClientFrameViewAsh::OnMaximizeModeEnded() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// chrome::TabIconViewModel:
+// TabIconViewModel:
 
 bool BrowserNonClientFrameViewAsh::ShouldTabIconViewAnimate() const {
   // This function is queried during the creation of the window as the
@@ -452,6 +447,9 @@ gfx::ImageSkia BrowserNonClientFrameViewAsh::GetFaviconForTabIconView() {
 
 void BrowserNonClientFrameViewAsh::ButtonPressed(views::Button* sender,
                                                  const ui::Event& event) {
+#if !defined(FRAME_AVATAR_BUTTON)
+  NOTREACHED();
+#else
   DCHECK(sender == new_avatar_button());
   int command = IDC_SHOW_AVATAR_MENU;
   if (event.IsMouseEvent() &&
@@ -459,6 +457,7 @@ void BrowserNonClientFrameViewAsh::ButtonPressed(views::Button* sender,
     command = IDC_SHOW_FAST_USER_SWITCHER;
   }
   chrome::ExecuteCommand(browser_view()->browser(), command);
+#endif
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -466,7 +465,9 @@ void BrowserNonClientFrameViewAsh::ButtonPressed(views::Button* sender,
 
 // BrowserNonClientFrameView:
 void BrowserNonClientFrameViewAsh::UpdateNewAvatarButtonImpl() {
+#if defined(FRAME_AVATAR_BUTTON)
   UpdateNewAvatarButton(this, NewAvatarButton::NATIVE_BUTTON);
+#endif
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -499,22 +500,28 @@ bool BrowserNonClientFrameViewAsh::DoesIntersectRect(
   }
 
   // Claim |rect| if it is above the top of the topmost view in the client area.
-  return rect.y() < GetTopInset();
+  return rect.y() < GetTopInset(false);
 }
 
 int BrowserNonClientFrameViewAsh::GetTabStripLeftInset() const {
-  return avatar_button() ? kAvatarSideSpacing +
-      browser_view()->GetOTRAvatarIcon().width() + kAvatarSideSpacing :
-      kTabstripLeftSpacing;
+  const gfx::Insets insets(GetLayoutInsets(AVATAR_ICON));
+  const int avatar_right = avatar_button() ?
+      (insets.left() + browser_view()->GetOTRAvatarIcon().width()) : 0;
+  return avatar_right + insets.right();
 }
 
 int BrowserNonClientFrameViewAsh::GetTabStripRightInset() const {
   int tabstrip_width = kTabstripRightSpacing +
       caption_button_container_->GetPreferredSize().width();
 
-  return new_avatar_button() ? kNewAvatarButtonOffset +
-      new_avatar_button()->GetPreferredSize().width() + tabstrip_width :
-      tabstrip_width;
+#if defined(FRAME_AVATAR_BUTTON)
+  if (new_avatar_button()) {
+    tabstrip_width += kNewAvatarButtonOffset +
+         new_avatar_button()->GetPreferredSize().width();
+  }
+#endif
+
+  return tabstrip_width;
 }
 
 bool BrowserNonClientFrameViewAsh::UseImmersiveLightbarHeaderStyle() const {
@@ -526,18 +533,14 @@ bool BrowserNonClientFrameViewAsh::UseImmersiveLightbarHeaderStyle() const {
 }
 
 bool BrowserNonClientFrameViewAsh::UsePackagedAppHeaderStyle() const {
+  Browser* browser = browser_view()->browser();
+  // For non tabbed trusted source windows, e.g. Settings, use the packaged
+  // app style frame.
+  if (!browser->is_type_tabbed() && browser->is_trusted_source())
+    return true;
   // Use the packaged app style for apps that aren't using the newer WebApp
-  // style, and that aren't bookmark apps.
-  if (!browser_view()->browser()->is_app() || UseWebAppHeaderStyle())
-    return false;
-
-  const std::string extension_id = web_app::GetExtensionIdFromApplicationName(
-      browser_view()->browser()->app_name());
-  const extensions::Extension* extension =
-      extensions::ExtensionRegistry::Get(browser_view()->browser()->profile())
-          ->GetExtensionById(extension_id,
-                             extensions::ExtensionRegistry::EVERYTHING);
-  return !extension || !extension->from_bookmark();
+  // style.
+  return browser->is_app() && !UseWebAppHeaderStyle();
 }
 
 bool BrowserNonClientFrameViewAsh::UseWebAppHeaderStyle() const {
@@ -552,14 +555,15 @@ void BrowserNonClientFrameViewAsh::LayoutAvatar() {
   DCHECK(browser_view()->IsTabStripVisible());
 #endif
   gfx::ImageSkia incognito_icon = browser_view()->GetOTRAvatarIcon();
-
-  int avatar_bottom = GetTopInset() +
-      browser_view()->GetTabStripHeight() - kAvatarBottomSpacing;
-  int avatar_restored_y = avatar_bottom - incognito_icon.height();
-  int avatar_y =
-      (browser_view()->IsTabStripVisible() &&
-       (frame()->IsMaximized() || frame()->IsFullscreen())) ?
-      GetTopInset() + kContentShadowHeight : avatar_restored_y;
+  gfx::Insets avatar_insets = GetLayoutInsets(AVATAR_ICON);
+  int avatar_bottom = GetTopInset(false) + browser_view()->GetTabStripHeight() -
+                      avatar_insets.bottom();
+  int avatar_y = avatar_bottom - incognito_icon.height();
+  if (!ui::MaterialDesignController::IsModeMaterial() &&
+      browser_view()->IsTabStripVisible() &&
+      (frame()->IsMaximized() || frame()->IsFullscreen())) {
+    avatar_y = GetTopInset(false) + kContentShadowHeight;
+  }
 
   // Hide the incognito icon in immersive fullscreen when the tab light bar is
   // visible because the header is too short for the icognito icon to be
@@ -567,18 +571,15 @@ void BrowserNonClientFrameViewAsh::LayoutAvatar() {
   bool avatar_visible = !UseImmersiveLightbarHeaderStyle();
   int avatar_height = avatar_visible ? avatar_bottom - avatar_y : 0;
 
-  gfx::Rect avatar_bounds(kAvatarSideSpacing,
-                          avatar_y,
-                          incognito_icon.width(),
-                          avatar_height);
+  gfx::Rect avatar_bounds(avatar_insets.left(), avatar_y,
+                          incognito_icon.width(), avatar_height);
   avatar_button()->SetBoundsRect(avatar_bounds);
   avatar_button()->SetVisible(avatar_visible);
 }
 
+#if defined(FRAME_AVATAR_BUTTON)
 void BrowserNonClientFrameViewAsh::LayoutNewStyleAvatar() {
-  DCHECK(switches::IsNewAvatarMenu());
-  if (!new_avatar_button())
-    return;
+  DCHECK(new_avatar_button());
 
   gfx::Size button_size = new_avatar_button()->GetPreferredSize();
   int button_x = width() -
@@ -591,6 +592,7 @@ void BrowserNonClientFrameViewAsh::LayoutNewStyleAvatar() {
       button_size.width(),
       caption_button_container_->GetPreferredSize().height());
 }
+#endif
 
 bool BrowserNonClientFrameViewAsh::ShouldPaint() const {
   if (!frame()->IsFullscreen())
@@ -626,72 +628,111 @@ void BrowserNonClientFrameViewAsh::PaintToolbarBackground(gfx::Canvas* canvas) {
   int w = toolbar_bounds.width();
   int y = toolbar_bounds.y();
   int h = toolbar_bounds.height();
+  const ui::ThemeProvider* tp = GetThemeProvider();
 
-  // Gross hack: We split the toolbar images into two pieces, since sometimes
-  // (popup mode) the toolbar isn't tall enough to show the whole image.  The
-  // split happens between the top shadow section and the bottom gradient
-  // section so that we never break the gradient.
-  // NOTE(pkotwicz): If the computation for |bottom_y| is changed, Layout() must
-  // be changed as well.
-  int split_point = kFrameShadowThickness * 2;
-  int bottom_y = y + split_point;
-  ui::ThemeProvider* tp = GetThemeProvider();
-  int bottom_edge_height = h - split_point;
+  if (ui::MaterialDesignController::IsModeMaterial()) {
+    // Paint the main toolbar image.  Since this image is also used to draw the
+    // tab background, we must use the tab strip offset to compute the image
+    // source y position.  If you have to debug this code use an image editor
+    // to paint a diagonal line through the toolbar image and ensure it lines up
+    // across the tab and toolbar.
+    gfx::ImageSkia* theme_toolbar = tp->GetImageSkiaNamed(IDR_THEME_TOOLBAR);
+    canvas->TileImageInt(
+        *theme_toolbar,
+        x + GetThemeBackgroundXInset(),
+        y - GetTopInset(false),
+        x, y,
+        w, theme_toolbar->height());
 
-  canvas->FillRect(gfx::Rect(x, bottom_y, w, bottom_edge_height),
-                   tp->GetColor(ThemeProperties::COLOR_TOOLBAR));
+    // Draw the separator line atop the toolbar, on the left and right of the
+    // tabstrip.
+    // TODO(tdanderson): Draw the separator line for non-tabbed windows.
+    if (browser_view()->IsTabStripVisible()) {
+      gfx::Rect separator_rect(x, y, w, 0);
+      gfx::ScopedCanvas scoped_canvas(canvas);
+      gfx::Rect tabstrip_bounds(
+          GetBoundsForTabStrip(browser_view()->tabstrip()));
+      tabstrip_bounds.set_x(GetMirroredXForRect(tabstrip_bounds));
+      canvas->sk_canvas()->clipRect(gfx::RectToSkRect(tabstrip_bounds),
+                                    SkRegion::kDifference_Op);
+      separator_rect.set_y(tabstrip_bounds.bottom());
+      BrowserView::Paint1pxHorizontalLine(
+          canvas, tp->GetColor(ThemeProperties::COLOR_TOOLBAR_TOP_SEPARATOR),
+          separator_rect, true);
+    }
 
-  // Paint the main toolbar image.  Since this image is also used to draw the
-  // tab background, we must use the tab strip offset to compute the image
-  // source y position.  If you have to debug this code use an image editor
-  // to paint a diagonal line through the toolbar image and ensure it lines up
-  // across the tab and toolbar.
-  gfx::ImageSkia* theme_toolbar = tp->GetImageSkiaNamed(IDR_THEME_TOOLBAR);
-  canvas->TileImageInt(
-      *theme_toolbar,
-      x + GetThemeBackgroundXInset(),
-      bottom_y - GetTopInset(),
-      x, bottom_y,
-      w, theme_toolbar->height());
+    // Draw the content/toolbar separator.
+    toolbar_bounds.Inset(kClientEdgeThickness, 0);
+    BrowserView::Paint1pxHorizontalLine(
+        canvas,
+        tp->GetColor(ThemeProperties::COLOR_TOOLBAR_BOTTOM_SEPARATOR),
+        toolbar_bounds, true);
+  } else {
+    // Gross hack: We split the toolbar images into two pieces, since sometimes
+    // (popup mode) the toolbar isn't tall enough to show the whole image.  The
+    // split happens between the top shadow section and the bottom gradient
+    // section so that we never break the gradient.
+    // NOTE(pkotwicz): If the computation for |bottom_y| is changed, Layout()
+    // must be changed as well.
+    int split_point = kFrameShadowThickness * 2;
+    int bottom_y = y + split_point;
+    int bottom_edge_height = h - split_point;
 
-  // The content area line has a shadow that extends a couple of pixels above
-  // the toolbar bounds.
-  const int kContentShadowHeight = 2;
-  gfx::ImageSkia* toolbar_top = tp->GetImageSkiaNamed(IDR_TOOLBAR_SHADE_TOP);
-  canvas->TileImageInt(*toolbar_top,
-                       0, 0,
-                       x, y - kContentShadowHeight,
-                       w, split_point + kContentShadowHeight + 1);
+    canvas->FillRect(gfx::Rect(x, bottom_y, w, bottom_edge_height),
+                     tp->GetColor(ThemeProperties::COLOR_TOOLBAR));
 
-  // Draw the "lightening" shade line around the edges of the toolbar.
-  gfx::ImageSkia* toolbar_left = tp->GetImageSkiaNamed(IDR_TOOLBAR_SHADE_LEFT);
-  canvas->TileImageInt(*toolbar_left,
-                       0, 0,
-                       x + kClientEdgeThickness,
-                       y + kClientEdgeThickness + kContentShadowHeight,
-                       toolbar_left->width(), theme_toolbar->height());
-  gfx::ImageSkia* toolbar_right =
-      tp->GetImageSkiaNamed(IDR_TOOLBAR_SHADE_RIGHT);
-  canvas->TileImageInt(*toolbar_right,
-                       0, 0,
-                       w - toolbar_right->width() - 2 * kClientEdgeThickness,
-                       y + kClientEdgeThickness + kContentShadowHeight,
-                       toolbar_right->width(), theme_toolbar->height());
+    // Paint the main toolbar image.  Since this image is also used to draw the
+    // tab background, we must use the tab strip offset to compute the image
+    // source y position.  If you have to debug this code use an image editor
+    // to paint a diagonal line through the toolbar image and ensure it lines up
+    // across the tab and toolbar.
+    gfx::ImageSkia* theme_toolbar = tp->GetImageSkiaNamed(IDR_THEME_TOOLBAR);
+    canvas->TileImageInt(
+        *theme_toolbar,
+        x + GetThemeBackgroundXInset(),
+        bottom_y - GetTopInset(false),
+        x, bottom_y,
+        w, theme_toolbar->height());
 
-  // Draw the content/toolbar separator.
-  canvas->FillRect(
-      gfx::Rect(x + kClientEdgeThickness,
-                toolbar_bounds.bottom() - kClientEdgeThickness,
-                w - (2 * kClientEdgeThickness),
-                kClientEdgeThickness),
-      ThemeProperties::GetDefaultColor(
-          ThemeProperties::COLOR_TOOLBAR_SEPARATOR));
+    // The pre-material design content area line has a shadow that extends a
+    // couple of pixels above the toolbar bounds.
+    const int kContentShadowHeight = 2;
+    gfx::ImageSkia* toolbar_top = tp->GetImageSkiaNamed(IDR_TOOLBAR_SHADE_TOP);
+    canvas->TileImageInt(*toolbar_top,
+                         0, 0,
+                         x, y - kContentShadowHeight,
+                         w, split_point + kContentShadowHeight + 1);
+
+    // Draw the "lightening" shade line around the edges of the toolbar.
+    gfx::ImageSkia* toolbar_left =
+        tp->GetImageSkiaNamed(IDR_TOOLBAR_SHADE_LEFT);
+    canvas->TileImageInt(*toolbar_left,
+                         0, 0,
+                         x + kClientEdgeThickness,
+                         y + kClientEdgeThickness + kContentShadowHeight,
+                         toolbar_left->width(), theme_toolbar->height());
+    gfx::ImageSkia* toolbar_right =
+        tp->GetImageSkiaNamed(IDR_TOOLBAR_SHADE_RIGHT);
+    canvas->TileImageInt(*toolbar_right,
+                         0, 0,
+                         w - toolbar_right->width() - 2 * kClientEdgeThickness,
+                         y + kClientEdgeThickness + kContentShadowHeight,
+                         toolbar_right->width(), theme_toolbar->height());
+
+    // Draw the content/toolbar separator.
+    canvas->FillRect(
+        gfx::Rect(x + kClientEdgeThickness,
+                  toolbar_bounds.bottom() - kClientEdgeThickness,
+                  w - (2 * kClientEdgeThickness), kClientEdgeThickness),
+        tp->GetColor(ThemeProperties::COLOR_TOOLBAR_BOTTOM_SEPARATOR));
+  }
 }
 
 void BrowserNonClientFrameViewAsh::PaintContentEdge(gfx::Canvas* canvas) {
   DCHECK(!UsePackagedAppHeaderStyle() && !UseWebAppHeaderStyle());
-  canvas->FillRect(gfx::Rect(0, caption_button_container_->bounds().bottom(),
-                             width(), kClientEdgeThickness),
-                   ThemeProperties::GetDefaultColor(
-                       ThemeProperties::COLOR_TOOLBAR_SEPARATOR));
+  canvas->FillRect(
+      gfx::Rect(0, caption_button_container_->bounds().bottom(), width(),
+                kClientEdgeThickness),
+      GetThemeProvider()->GetColor(
+          ThemeProperties::COLOR_TOOLBAR_BOTTOM_SEPARATOR));
 }

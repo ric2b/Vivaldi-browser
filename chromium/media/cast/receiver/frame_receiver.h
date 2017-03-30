@@ -5,21 +5,27 @@
 #ifndef MEDIA_CAST_RECEIVER_FRAME_RECEIVER_H_
 #define MEDIA_CAST_RECEIVER_FRAME_RECEIVER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <list>
+
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
-#include "media/cast/cast_config.h"
 #include "media/cast/cast_receiver.h"
 #include "media/cast/common/clock_drift_smoother.h"
+#include "media/cast/common/rtp_time.h"
 #include "media/cast/common/transport_encryption_handler.h"
 #include "media/cast/logging/logging_defines.h"
 #include "media/cast/net/rtcp/receiver_rtcp_event_subscriber.h"
-#include "media/cast/net/rtcp/rtcp.h"
+#include "media/cast/net/rtcp/receiver_rtcp_session.h"
 #include "media/cast/net/rtp/framer.h"
 #include "media/cast/net/rtp/receiver_stats.h"
+#include "media/cast/net/rtp/rtp_defines.h"
 #include "media/cast/net/rtp/rtp_parser.h"
-#include "media/cast/net/rtp/rtp_receiver_defines.h"
 
 namespace media {
 namespace cast {
@@ -68,7 +74,7 @@ class FrameReceiver : public RtpPayloadFeedback,
   friend class FrameReceiverTest;  // Invokes ProcessParsedPacket().
 
   void ProcessParsedPacket(const RtpCastHeader& rtp_header,
-                           const uint8* payload_data,
+                           const uint8_t* payload_data,
                            size_t payload_size);
 
   // RtpPayloadFeedback implementation.
@@ -155,7 +161,7 @@ class FrameReceiver : public RtpPayloadFeedback,
 
   // Manages sending/receiving of RTCP packets, including sender/receiver
   // reports.
-  Rtcp rtcp_;
+  ReceiverRtcpSession rtcp_;
 
   // Decrypts encrypted frames.
   TransportEncryptionHandler decryptor_;
@@ -169,12 +175,12 @@ class FrameReceiver : public RtpPayloadFeedback,
 
   // This mapping allows us to log FRAME_ACK_SENT as a frame event. In addition
   // it allows the event to be transmitted via RTCP.
-  RtpTimestamp frame_id_to_rtp_timestamp_[256];
+  RtpTimeTicks frame_id_to_rtp_timestamp_[256];
 
   // Lip-sync values used to compute the playout time of each frame from its RTP
   // timestamp.  These are updated each time the first packet of a frame is
   // received.
-  RtpTimestamp lip_sync_rtp_timestamp_;
+  RtpTimeTicks lip_sync_rtp_timestamp_;
   base::TimeTicks lip_sync_reference_time_;
   ClockDriftSmoother lip_sync_drift_;
 

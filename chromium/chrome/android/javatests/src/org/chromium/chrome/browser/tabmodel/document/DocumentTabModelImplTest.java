@@ -4,18 +4,15 @@
 
 package org.chromium.chrome.browser.tabmodel.document;
 
-import android.annotation.TargetApi;
 import android.content.Intent;
 import android.net.Uri;
-import android.os.Build;
 import android.test.suitebuilder.annotation.SmallTest;
-import android.util.ArrayMap;
 
 import org.chromium.base.CommandLine;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.AdvancedMockContext;
-import org.chromium.base.test.util.MinAndroidSdkLevel;
-import org.chromium.chrome.browser.Tab;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.test.util.browser.tabmodel.document.MockActivityDelegate;
@@ -24,13 +21,12 @@ import org.chromium.chrome.test.util.browser.tabmodel.document.MockStorageDelega
 import org.chromium.chrome.test.util.browser.tabmodel.document.TestInitializationObserver;
 import org.chromium.content.browser.test.NativeLibraryTestBase;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
  * Tests the functionality of the DocumentTabModel.
  */
-@MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP)
-@TargetApi(Build.VERSION_CODES.LOLLIPOP)
 public class DocumentTabModelImplTest extends NativeLibraryTestBase {
     private static final String MODEL_STATE_WITH_1010_1011 = "CgUgACjyBwoFIAEo8wc=";
 
@@ -87,6 +83,7 @@ public class DocumentTabModelImplTest extends NativeLibraryTestBase {
     @Override
     protected void setUp() throws Exception {
         super.setUp();
+        RecordHistogram.disableForTests();
         CommandLine.init(null);
         loadNativeLibraryAndInitBrowserProcess();
 
@@ -149,7 +146,9 @@ public class DocumentTabModelImplTest extends NativeLibraryTestBase {
         assertEquals(1011, mTabModel.getTabAt(1).getId());
         assertEquals("http://erfworld.com", mTabModel.getInitialUrlForDocument(1010));
         assertEquals("http://reddit.com/r/android", mTabModel.getInitialUrlForDocument(1011));
-        assertEquals(true, mTabModel.isRetargetable(1010));
+        // Due to using AsyncTask to fetch metadata, at this point both should be non-retargetable
+        // by default until that AsyncTask completes.
+        assertEquals(false, mTabModel.isRetargetable(1010));
         assertEquals(false, mTabModel.isRetargetable(1011));
 
         // State of the tabs.
@@ -162,6 +161,9 @@ public class DocumentTabModelImplTest extends NativeLibraryTestBase {
         TestInitializationObserver.waitUntilState(
                 mTabModel, DocumentTabModelImpl.STATE_LOAD_TAB_STATE_BG_END);
         assertNotNull(mTabModel.getTabStateForDocument(1011));
+        // Startup AsyncTasks must be complete by now since they are both on serial executor.
+        assertEquals(true, mTabModel.isRetargetable(1010));
+        assertEquals(false, mTabModel.isRetargetable(1011));
 
         // Load the native library, wait until the states are deserialized, then check their values.
         initializeNativeTabModel();
@@ -188,7 +190,8 @@ public class DocumentTabModelImplTest extends NativeLibraryTestBase {
         assertEquals(1011, mTabModel.getTabAt(1).getId());
         assertEquals("http://erfworld.com", mTabModel.getInitialUrlForDocument(1010));
         assertEquals("http://reddit.com/r/android", mTabModel.getInitialUrlForDocument(1011));
-        assertEquals(true, mTabModel.isRetargetable(1010));
+        // Same as in testBasic.
+        assertEquals(false, mTabModel.isRetargetable(1010));
         assertEquals(false, mTabModel.isRetargetable(1011));
 
         // State of the tabs.
@@ -201,6 +204,9 @@ public class DocumentTabModelImplTest extends NativeLibraryTestBase {
         TestInitializationObserver.waitUntilState(
                 mTabModel, DocumentTabModelImpl.STATE_LOAD_TAB_STATE_BG_END);
         assertNotNull(mTabModel.getTabStateForDocument(1011));
+        // Same as in testBasic.
+        assertEquals(true, mTabModel.isRetargetable(1010));
+        assertEquals(false, mTabModel.isRetargetable(1011));
 
         // Load the native library, wait until the states are deserialized, then check their values.
         initializeNativeTabModel();
@@ -224,14 +230,17 @@ public class DocumentTabModelImplTest extends NativeLibraryTestBase {
         setupDocumentTabModel();
 
         assertEquals(3, mTabModel.getCount());
-        assertEquals(1010, mTabModel.getTabAt(0).getId());
-        assertEquals(1011, mTabModel.getTabAt(1).getId());
-        assertEquals(1012, mTabModel.getTabAt(2).getId());
+        assertEquals(1012, mTabModel.getTabAt(0).getId());
+        assertEquals(1010, mTabModel.getTabAt(1).getId());
+        assertEquals(1011, mTabModel.getTabAt(2).getId());
 
         assertEquals("http://erfworld.com", mTabModel.getInitialUrlForDocument(1010));
         assertEquals("http://reddit.com/r/android", mTabModel.getInitialUrlForDocument(1011));
         assertEquals("http://digg.com", mTabModel.getInitialUrlForDocument(1012));
 
+        // Wait until the tab states are loaded, by then the AsyncTask to load metadata is done.
+        TestInitializationObserver.waitUntilState(
+                mTabModel, DocumentTabModelImpl.STATE_LOAD_TAB_STATE_BG_END);
         assertEquals(true, mTabModel.isRetargetable(1010));
         assertEquals(false, mTabModel.isRetargetable(1011));
         assertEquals(false, mTabModel.isRetargetable(1012));
@@ -388,7 +397,7 @@ public class DocumentTabModelImplTest extends NativeLibraryTestBase {
         mActivityDelegate.addTask(false, 1012, "http://digg.com");
         mActivityDelegate.addTask(false, 1013, "http://slashdot.org");
 
-        Map<String, Object> data = new ArrayMap<String, Object>();
+        Map<String, Object> data = new HashMap<String, Object>();
         data.put(DocumentTabModelImpl.PREF_LAST_SHOWN_TAB_ID_REGULAR, 1011);
         mContext.addSharedPreferences(DocumentTabModelImpl.PREF_PACKAGE, data);
 
@@ -436,13 +445,13 @@ public class DocumentTabModelImplTest extends NativeLibraryTestBase {
 
         Intent badIntent = new Intent();
         badIntent.setData(Uri.parse("http://toteslegit.com"));
-        Tab badTab = new Tab(false, getInstrumentation().getTargetContext(), null);
+        Tab badTab = new Tab(Tab.INVALID_TAB_ID, false, null);
         mTabModel.addTab(badIntent, badTab);
         assertEquals(0, mTabModel.getCount());
 
         Intent legitIntent = new Intent();
         legitIntent.setData(Uri.parse("document://11684?http://erfworld.com"));
-        Tab legitTab = new Tab(11684, false, getInstrumentation().getTargetContext(), null);
+        Tab legitTab = new Tab(11684, false, null);
         mTabModel.addTab(legitIntent, legitTab);
         assertEquals(1, mTabModel.getCount());
     }

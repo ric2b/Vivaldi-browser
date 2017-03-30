@@ -4,12 +4,16 @@
 
 #include "content/child/npapi/webplugin_ime_win.h"
 
+#include <stddef.h>
+#include <string.h>
+
 #include <cstring>
 #include <string>
 #include <vector>
 
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
 #include "content/child/npapi/plugin_instance.h"
@@ -169,7 +173,7 @@ FARPROC WebPluginIMEWin::GetProcAddress(LPCSTR name) {
         reinterpret_cast<FARPROC>(ImmSetCandidateWindow) },
     { "ImmSetOpenStatus", reinterpret_cast<FARPROC>(ImmSetOpenStatus) },
   };
-  for (int i = 0; i < arraysize(kImm32Functions); ++i) {
+  for (size_t i = 0; i < arraysize(kImm32Functions); ++i) {
     if (!lstrcmpiA(name, kImm32Functions[i].name))
       return kImm32Functions[i].function;
   }
@@ -230,7 +234,7 @@ LONG WINAPI WebPluginIMEWin::ImmGetCompositionStringW(HIMC context,
 
     case GCS_COMPCLAUSE:
       src_data = &instance->composition_clauses_[0];
-      src_size = instance->composition_clauses_.size() * sizeof(uint32);
+      src_size = instance->composition_clauses_.size() * sizeof(uint32_t);
       break;
 
     case GCS_CURSORPOS:

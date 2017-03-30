@@ -4,6 +4,8 @@
 
 #include "ash/wm/maximize_mode/maximize_mode_controller.h"
 
+#include <utility>
+
 #include "ash/accelerators/accelerator_controller.h"
 #include "ash/accelerators/accelerator_table.h"
 #include "ash/ash_switches.h"
@@ -18,6 +20,7 @@
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/gfx/display.h"
 #include "ui/gfx/geometry/vector3d_f.h"
 
 #if defined(USE_X11)
@@ -57,8 +60,7 @@ const float kMaxStableAngle = 340.0f;
 // This is used to prevent entering maximize mode if an erroneous accelerometer
 // reading makes the lid appear to be fully open when the user is opening the
 // lid from a closed position.
-const base::TimeDelta kLidRecentlyOpenedDuration =
-    base::TimeDelta::FromSeconds(2);
+const int kLidRecentlyOpenedDurationSeconds = 2;
 
 #if defined(OS_CHROMEOS)
 // When the device approaches vertical orientation (i.e. portrait orientation)
@@ -108,7 +110,15 @@ MaximizeModeController::MaximizeModeController()
       ash::UMA_MAXIMIZE_MODE_INITIALLY_DISABLED);
 
 #if defined(OS_CHROMEOS)
-  chromeos::AccelerometerReader::GetInstance()->AddObserver(this);
+  // TODO(jonross): Do not create MaximizeModeController if the flag is
+  // unavailable. This will require refactoring
+  // IsMaximizeModeWindowManagerEnabled to check for the existance of the
+  // controller.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kAshEnableTouchView)) {
+    chromeos::AccelerometerReader::GetInstance()->AddObserver(this);
+    shell->window_tree_host_manager()->AddObserver(this);
+  }
   chromeos::DBusThreadManager::Get()->
       GetPowerManagerClient()->AddObserver(this);
 #endif  // OS_CHROMEOS
@@ -117,7 +127,11 @@ MaximizeModeController::MaximizeModeController()
 MaximizeModeController::~MaximizeModeController() {
   Shell::GetInstance()->RemoveShellObserver(this);
 #if defined(OS_CHROMEOS)
-  chromeos::AccelerometerReader::GetInstance()->RemoveObserver(this);
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kAshEnableTouchView)) {
+    chromeos::AccelerometerReader::GetInstance()->RemoveObserver(this);
+    Shell::GetInstance()->window_tree_host_manager()->RemoveObserver(this);
+  }
   chromeos::DBusThreadManager::Get()->
       GetPowerManagerClient()->RemoveObserver(this);
 #endif  // OS_CHROMEOS
@@ -175,6 +189,14 @@ void MaximizeModeController::OnAccelerometerUpdated(
 
   if (!update->has(chromeos::ACCELEROMETER_SOURCE_SCREEN))
     return;
+
+  if (!gfx::Display::HasInternalDisplay())
+    return;
+
+  if (!Shell::GetInstance()->display_manager()->IsActiveDisplayId(
+          gfx::Display::InternalDisplayId())) {
+    return;
+  }
 
   // Whether or not we enter maximize mode affects whether we handle screen
   // rotation, so determine whether to enter maximize mode first.
@@ -268,35 +290,48 @@ void MaximizeModeController::HandleHingeRotation(
   if (lid_open_past_180_ && is_angle_stable &&
       lid_angle <= kExitMaximizeModeAngle) {
     lid_open_past_180_ = false;
-    if (!base::CommandLine::ForCurrentProcess()->
-            HasSwitch(switches::kAshEnableTouchViewTesting)) {
-      LeaveMaximizeMode();
-    }
-    event_blocker_.reset();
+    LeaveMaximizeMode();
   } else if (!lid_open_past_180_ && !lid_is_closed_ &&
              lid_angle >= kEnterMaximizeModeAngle &&
              (is_angle_stable || !WasLidOpenedRecently())) {
     lid_open_past_180_ = true;
-    if (!base::CommandLine::ForCurrentProcess()->
-            HasSwitch(switches::kAshEnableTouchViewTesting)) {
-      EnterMaximizeMode();
-    }
-#if defined(USE_X11)
-    event_blocker_.reset(new ScopedDisableInternalMouseAndKeyboardX11);
-#elif defined(USE_OZONE)
-    event_blocker_.reset(new ScopedDisableInternalMouseAndKeyboardOzone);
-#endif
+    EnterMaximizeMode();
   }
 }
 #endif  // OS_CHROMEOS
 
 void MaximizeModeController::EnterMaximizeMode() {
+  // Always reset first to avoid creation before destruction of a previous
+  // object.
+  event_blocker_.reset();
+#if defined(USE_X11)
+  event_blocker_.reset(new ScopedDisableInternalMouseAndKeyboardX11);
+#elif defined(USE_OZONE)
+  event_blocker_.reset(new ScopedDisableInternalMouseAndKeyboardOzone);
+#endif
+
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kAshEnableTouchViewTesting)) {
+    // We don't let accelerometer updates interfere with the maximize mode
+    // status as set by the touch-view-testing keyboard shortcut.
+    return;
+  }
+
   if (IsMaximizeModeWindowManagerEnabled())
     return;
   EnableMaximizeModeWindowManager(true);
 }
 
 void MaximizeModeController::LeaveMaximizeMode() {
+  event_blocker_.reset();
+
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kAshEnableTouchViewTesting)) {
+    // We don't let accelerometer updates interfere with the maximize mode
+    // status as set by the touch-view-testing keyboard shortcut.
+    return;
+  }
+
   if (!IsMaximizeModeWindowManagerEnabled())
     return;
   EnableMaximizeModeWindowManager(false);
@@ -311,6 +346,14 @@ void MaximizeModeController::OnMaximizeModeStarted() {
 // their original position.
 void MaximizeModeController::OnMaximizeModeEnded() {
   RecordTouchViewUsageInterval(TOUCH_VIEW_INTERVAL_ACTIVE);
+}
+
+void MaximizeModeController::OnDisplayConfigurationChanged() {
+  if (!gfx::Display::HasInternalDisplay() ||
+      !Shell::GetInstance()->display_manager()->IsActiveDisplayId(
+          gfx::Display::InternalDisplayId())) {
+    LeaveMaximizeMode();
+  }
 }
 
 void MaximizeModeController::RecordTouchViewUsageInterval(
@@ -369,13 +412,13 @@ bool MaximizeModeController::WasLidOpenedRecently() const {
   base::TimeTicks now = tick_clock_->NowTicks();
   DCHECK(now >= last_lid_open_time_);
   base::TimeDelta elapsed_time = now - last_lid_open_time_;
-  return elapsed_time <= kLidRecentlyOpenedDuration;
+  return elapsed_time.InSeconds() <= kLidRecentlyOpenedDurationSeconds;
 }
 
 void MaximizeModeController::SetTickClockForTest(
     scoped_ptr<base::TickClock> tick_clock) {
   DCHECK(tick_clock_);
-  tick_clock_ = tick_clock.Pass();
+  tick_clock_ = std::move(tick_clock);
 }
 
 }  // namespace ash

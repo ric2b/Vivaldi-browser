@@ -2,9 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <math.h>
-
 #include "ash/wm/maximize_mode/maximize_mode_controller.h"
+
+#include <math.h>
+#include <utility>
+#include <vector>
 
 #include "ash/ash_switches.h"
 #include "ash/display/display_manager.h"
@@ -69,14 +71,15 @@ class MaximizeModeControllerTest : public test::AshTestBase {
   ~MaximizeModeControllerTest() override {}
 
   void SetUp() override {
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        switches::kAshEnableTouchView);
     test::AshTestBase::SetUp();
     chromeos::AccelerometerReader::GetInstance()->RemoveObserver(
         maximize_mode_controller());
 
     // Set the first display to be the internal display for the accelerometer
     // screen rotation tests.
-    test::DisplayManagerTestApi(Shell::GetInstance()->display_manager()).
-        SetFirstDisplayAsInternalDisplay();
+    test::DisplayManagerTestApi().SetFirstDisplayAsInternalDisplay();
   }
 
   void TearDown() override {
@@ -118,7 +121,7 @@ class MaximizeModeControllerTest : public test::AshTestBase {
     scoped_ptr<base::TickClock> tick_clock(
         test_tick_clock_ = new base::SimpleTestTickClock());
     test_tick_clock_->Advance(base::TimeDelta::FromSeconds(1));
-    maximize_mode_controller()->SetTickClockForTest(tick_clock.Pass());
+    maximize_mode_controller()->SetTickClockForTest(std::move(tick_clock));
   }
 
   void AdvanceTickClock(const base::TimeDelta& delta) {
@@ -150,6 +153,10 @@ class MaximizeModeControllerTest : public test::AshTestBase {
 
   bool WasLidOpenedRecently() {
     return maximize_mode_controller()->WasLidOpenedRecently();
+  }
+
+  bool AreEventsBlocked() {
+    return !!maximize_mode_controller()->event_blocker_.get();
   }
 
   base::UserActionTester* user_action_tester() { return &user_action_tester_; }
@@ -438,6 +445,33 @@ TEST_F(MaximizeModeControllerTest, DisplayDisconnectionDuringOverview) {
   EXPECT_FALSE(
       Shell::GetInstance()->window_selector_controller()->IsSelecting());
   EXPECT_EQ(w1->GetRootWindow(), w2->GetRootWindow());
+}
+
+// Test that the disabling of the internal display exits maximize mode, and that
+// while disabled we do not re-enter maximize mode.
+TEST_F(MaximizeModeControllerTest, NoMaximizeModeWithDisabledInternalDisplay) {
+  DisplayManager* display_manager = Shell::GetInstance()->display_manager();
+  UpdateDisplay("200x200, 200x200");
+  const int64_t internal_display_id =
+      test::DisplayManagerTestApi().SetFirstDisplayAsInternalDisplay();
+  ASSERT_FALSE(IsMaximizeModeStarted());
+
+  OpenLidToAngle(270.0f);
+  EXPECT_TRUE(IsMaximizeModeStarted());
+  EXPECT_TRUE(AreEventsBlocked());
+
+  // Deactivate internal display to simulate Docked Mode.
+  std::vector<DisplayInfo> secondary_only;
+  secondary_only.push_back(
+      display_manager->GetDisplayInfo(display_manager->GetDisplayAt(1).id()));
+  display_manager->OnNativeDisplaysChanged(secondary_only);
+  ASSERT_FALSE(display_manager->IsActiveDisplayId(internal_display_id));
+  EXPECT_FALSE(IsMaximizeModeStarted());
+  EXPECT_FALSE(AreEventsBlocked());
+
+  OpenLidToAngle(270.0f);
+  EXPECT_FALSE(IsMaximizeModeStarted());
+  EXPECT_FALSE(AreEventsBlocked());
 }
 
 class MaximizeModeControllerSwitchesTest : public MaximizeModeControllerTest {

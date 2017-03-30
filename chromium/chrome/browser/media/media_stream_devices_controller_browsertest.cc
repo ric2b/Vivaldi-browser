@@ -5,20 +5,26 @@
 #include <string>
 
 #include "base/bind.h"
+#include "base/metrics/field_trial.h"
 #include "base/prefs/pref_service.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/media/media_capture_devices_dispatcher.h"
 #include "chrome/browser/media/media_stream_capture_indicator.h"
 #include "chrome/browser/media/media_stream_device_permissions.h"
 #include "chrome/browser/media/media_stream_devices_controller.h"
 #include "chrome/browser/media/webrtc_browsertest_base.h"
+#include "chrome/browser/permissions/permission_context_base.h"
+#include "chrome/browser/permissions/permission_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/variations/variations_associated_data.h"
 #include "content/public/common/media_stream_request.h"
+#include "content/public/test/mock_render_process_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -91,8 +97,8 @@ class MediaStreamDevicesControllerTest : public WebRtcTestBase {
   void SetContentSettings(ContentSetting mic_setting,
                           ContentSetting cam_setting) {
     HostContentSettingsMap* content_settings =
-        Profile::FromBrowserContext(GetWebContents()->GetBrowserContext())
-            ->GetHostContentSettingsMap();
+        HostContentSettingsMapFactory::GetForProfile(
+            Profile::FromBrowserContext(GetWebContents()->GetBrowserContext()));
     ContentSettingsPattern pattern =
         ContentSettingsPattern::FromURLNoWildcard(example_url_);
     content_settings->SetContentSetting(pattern, pattern,
@@ -124,24 +130,25 @@ class MediaStreamDevicesControllerTest : public WebRtcTestBase {
 
   // Creates a MediaStreamRequest, asking for those media types, which have a
   // non-empty id string.
-  content::MediaStreamRequest CreateRequest(const std::string& audio_id,
-                                            const std::string& video_id) {
+  content::MediaStreamRequest CreateRequestWithType(
+      const std::string& audio_id,
+      const std::string& video_id,
+      content::MediaStreamRequestType request_type) {
     content::MediaStreamType audio_type =
         audio_id.empty() ? content::MEDIA_NO_SERVICE
                          : content::MEDIA_DEVICE_AUDIO_CAPTURE;
     content::MediaStreamType video_type =
         video_id.empty() ? content::MEDIA_NO_SERVICE
                          : content::MEDIA_DEVICE_VIDEO_CAPTURE;
-    return content::MediaStreamRequest(0,
-                                       0,
-                                       0,
-                                       example_url(),
-                                       false,
-                                       content::MEDIA_DEVICE_ACCESS,
-                                       audio_id,
-                                       video_id,
-                                       audio_type,
-                                       video_type);
+    return content::MediaStreamRequest(0, 0, 0, example_url(), false,
+                                       request_type, audio_id, video_id,
+                                       audio_type, video_type);
+  }
+
+  content::MediaStreamRequest CreateRequest(const std::string& audio_id,
+                                            const std::string& video_id) {
+    return CreateRequestWithType(audio_id, video_id,
+                                 content::MEDIA_DEVICE_ACCESS);
   }
 
   void InitWithUrl(const GURL& url) {
@@ -679,4 +686,66 @@ IN_PROC_BROWSER_TEST_F(MediaStreamDevicesControllerTest,
 
   ASSERT_EQ(content::MEDIA_DEVICE_OK, media_stream_result());
   ASSERT_TRUE(DevicesContains(true, true));
+}
+
+// For Pepper request from insecure origin, even if it's ALLOW, it won't be
+// changed to ASK.
+IN_PROC_BROWSER_TEST_F(MediaStreamDevicesControllerTest,
+                       PepperRequestInsecure) {
+  InitWithUrl(GURL("http://www.example.com"));
+  SetContentSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_ALLOW);
+
+  MediaStreamDevicesController controller(
+      GetWebContents(),
+      CreateRequestWithType(example_audio_id(), std::string(),
+                            content::MEDIA_OPEN_DEVICE_PEPPER_ONLY),
+      base::Bind(&MediaStreamDevicesControllerTest::OnMediaStreamResponse,
+                 this));
+  ASSERT_FALSE(controller.IsAskingForAudio());
+  ASSERT_FALSE(controller.IsAskingForVideo());
+}
+
+// For non-Pepper request from insecure origin, if it's ALLOW, it will be
+// changed to ASK.
+IN_PROC_BROWSER_TEST_F(MediaStreamDevicesControllerTest,
+                       NonPepperRequestInsecure) {
+  InitWithUrl(GURL("http://www.example.com"));
+  SetContentSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_ALLOW);
+
+  MediaStreamDevicesController controller(
+      GetWebContents(), CreateRequest(example_audio_id(), example_video_id()),
+      base::Bind(&MediaStreamDevicesControllerTest::OnMediaStreamResponse,
+                 this));
+  ASSERT_TRUE(controller.IsAskingForAudio());
+  ASSERT_TRUE(controller.IsAskingForVideo());
+}
+
+// Request and block microphone and camera access with kill switch.
+IN_PROC_BROWSER_TEST_F(MediaStreamDevicesControllerTest,
+                       RequestAndKillSwitchMicCam) {
+  std::map<std::string, std::string> params;
+  params[PermissionUtil::GetPermissionString(
+      content::PermissionType::AUDIO_CAPTURE)] =
+      PermissionContextBase::kPermissionsKillSwitchBlockedValue;
+  params[PermissionUtil::GetPermissionString(
+      content::PermissionType::VIDEO_CAPTURE)] =
+      PermissionContextBase::kPermissionsKillSwitchBlockedValue;
+  variations::AssociateVariationParams(
+      PermissionContextBase::kPermissionsKillSwitchFieldStudy,
+      "TestGroup", params);
+  base::FieldTrialList::CreateFieldTrial(
+      PermissionContextBase::kPermissionsKillSwitchFieldStudy,
+      "TestGroup");
+  InitWithUrl(GURL("https://www.example.com"));
+  SetDevicePolicy(DEVICE_TYPE_AUDIO, ACCESS_ALLOWED);
+  SetDevicePolicy(DEVICE_TYPE_VIDEO, ACCESS_ALLOWED);
+  MediaStreamDevicesController controller(
+      GetWebContents(), CreateRequest(example_audio_id(), example_video_id()),
+      base::Bind(&MediaStreamDevicesControllerTest::OnMediaStreamResponse,
+                 this));
+
+  EXPECT_FALSE(controller.IsAllowedForAudio());
+  EXPECT_FALSE(controller.IsAllowedForVideo());
+  EXPECT_FALSE(controller.IsAskingForAudio());
+  EXPECT_FALSE(controller.IsAskingForVideo());
 }

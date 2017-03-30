@@ -10,16 +10,18 @@
 #ifndef CHROME_BROWSER_BROWSER_PROCESS_H_
 #define CHROME_BROWSER_BROWSER_PROCESS_H_
 
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/browser/ui/host_desktop.h"
 
 class BackgroundModeManager;
-class ChromeNetLog;
 class CRLSetFetcher;
 class DownloadRequestLimiter;
 class DownloadStatusUpdater;
@@ -29,21 +31,22 @@ class IconManager;
 class IntranetRedirectDetector;
 class IOThread;
 class MediaFileSystemRegistry;
-class MetricsServicesManager;
 class NotificationUIManager;
 class PrefRegistrySimple;
 class PrefService;
 class Profile;
 class ProfileManager;
-class PromoResourceService;
-class SafeBrowsingService;
 class StatusTray;
 class WatchDogThread;
 #if defined(ENABLE_WEBRTC)
 class WebRtcLogUploader;
 #endif
 
-namespace chrome_variations {
+namespace safe_browsing {
+class SafeBrowsingService;
+}
+
+namespace variations {
 class VariationsService;
 }
 
@@ -62,7 +65,7 @@ class GCMDriver;
 }
 
 namespace memory {
-class OomPriorityManager;
+class TabManager;
 }
 
 namespace message_center {
@@ -73,8 +76,16 @@ namespace metrics {
 class MetricsService;
 }
 
+namespace metrics_services_manager {
+class MetricsServicesManager;
+}
+
 namespace net {
 class URLRequestContextGetter;
+}
+
+namespace net_log {
+class ChromeNetLog;
 }
 
 namespace network_time {
@@ -100,6 +111,10 @@ namespace safe_browsing {
 class ClientSideDetectionService;
 }
 
+namespace web_resource {
+class PromoResourceService;
+}
+
 // NOT THREAD SAFE, call only from the main thread.
 // These functions shouldn't return NULL unless otherwise noted.
 class BrowserProcess {
@@ -118,7 +133,8 @@ class BrowserProcess {
 
   // Gets the manager for the various metrics-related services, constructing it
   // if necessary.
-  virtual MetricsServicesManager* GetMetricsServicesManager() = 0;
+  virtual metrics_services_manager::MetricsServicesManager*
+  GetMetricsServicesManager() = 0;
 
   // Services: any of these getters may return NULL
   virtual metrics::MetricsService* metrics_service() = 0;
@@ -126,8 +142,8 @@ class BrowserProcess {
   virtual ProfileManager* profile_manager() = 0;
   virtual PrefService* local_state() = 0;
   virtual net::URLRequestContextGetter* system_request_context() = 0;
-  virtual chrome_variations::VariationsService* variations_service() = 0;
-  virtual PromoResourceService* promo_resource_service() = 0;
+  virtual variations::VariationsService* variations_service() = 0;
+  virtual web_resource::PromoResourceService* promo_resource_service() = 0;
 
   virtual BrowserProcessPlatformPart* platform_part() = 0;
 
@@ -169,7 +185,7 @@ class BrowserProcess {
   virtual void CreateDevToolsHttpProtocolHandler(
       chrome::HostDesktopType host_desktop_type,
       const std::string& ip,
-      uint16 port) = 0;
+      uint16_t port) = 0;
 
   virtual unsigned int AddRefModule() = 0;
   virtual unsigned int ReleaseModule() = 0;
@@ -202,7 +218,7 @@ class BrowserProcess {
   virtual StatusTray* status_tray() = 0;
 
   // Returns the SafeBrowsing service.
-  virtual SafeBrowsingService* safe_browsing_service() = 0;
+  virtual safe_browsing::SafeBrowsingService* safe_browsing_service() = 0;
 
   // Returns an object which handles communication with the SafeBrowsing
   // client-side detection servers.
@@ -220,7 +236,7 @@ class BrowserProcess {
   virtual void StartAutoupdateTimer() = 0;
 #endif
 
-  virtual ChromeNetLog* net_log() = 0;
+  virtual net_log::ChromeNetLog* net_log() = 0;
 
   virtual component_updater::ComponentUpdateService* component_updater() = 0;
 
@@ -244,8 +260,8 @@ class BrowserProcess {
 
   virtual gcm::GCMDriver* gcm_driver() = 0;
 
-  // Returns the out-of-memory priority manager if it exists, null otherwise.
-  virtual memory::OomPriorityManager* GetOomPriorityManager() = 0;
+  // Returns the tab manager if it exists, null otherwise.
+  virtual memory::TabManager* GetTabManager() = 0;
 
   // Returns the default web client state of Chrome (i.e., was it the user's
   // default browser) at the time a previous check was made sometime between

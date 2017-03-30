@@ -5,10 +5,14 @@
 #ifndef MEDIA_BASE_MEDIA_LOG_H_
 #define MEDIA_BASE_MEDIA_LOG_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <sstream>
 #include <string>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "media/base/media_export.h"
@@ -57,8 +61,9 @@ class MEDIA_EXPORT MediaLog : public base::RefCountedThreadSafe<MediaLog> {
   scoped_ptr<MediaLogEvent> CreatePipelineErrorEvent(PipelineStatus error);
   scoped_ptr<MediaLogEvent> CreateVideoSizeSetEvent(
       size_t width, size_t height);
-  scoped_ptr<MediaLogEvent> CreateBufferedExtentsChangedEvent(
-      int64 start, int64 current, int64 end);
+  scoped_ptr<MediaLogEvent> CreateBufferedExtentsChangedEvent(int64_t start,
+                                                              int64_t current,
+                                                              int64_t end);
 
   // Report a log message at the specified log level.
   void AddLogEvent(MediaLogLevel level, const std::string& message);
@@ -76,20 +81,14 @@ class MEDIA_EXPORT MediaLog : public base::RefCountedThreadSafe<MediaLog> {
 
  private:
   // A unique (to this process) id for this MediaLog.
-  int32 id_;
+  int32_t id_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaLog);
 };
 
-// Indicates a string should be added to the log.
-// First parameter - The log level for the string.
-// Second parameter - The string to add to the log.
-typedef base::Callback<void(MediaLog::MediaLogLevel, const std::string&)> LogCB;
-
-// Helper class to make it easier to use LogCB or MediaLog like DVLOG().
+// Helper class to make it easier to use MediaLog like DVLOG().
 class MEDIA_EXPORT LogHelper {
  public:
-  LogHelper(MediaLog::MediaLogLevel level, const LogCB& log_cb);
   LogHelper(MediaLog::MediaLogLevel level,
             const scoped_refptr<MediaLog>& media_log);
   ~LogHelper();
@@ -98,15 +97,14 @@ class MEDIA_EXPORT LogHelper {
 
  private:
   MediaLog::MediaLogLevel level_;
-  LogCB log_cb_;
   const scoped_refptr<MediaLog> media_log_;
   std::stringstream stream_;
 };
 
 // Provides a stringstream to collect a log entry to pass to the provided
-// logger (LogCB or MediaLog) at the requested level.
-#define MEDIA_LOG(level, logger) \
-  LogHelper((MediaLog::MEDIALOG_##level), (logger)).stream()
+// MediaLog at the requested level.
+#define MEDIA_LOG(level, media_log) \
+  LogHelper((MediaLog::MEDIALOG_##level), (media_log)).stream()
 
 // Logs only while |count| < |max|, increments |count| for each log, and warns
 // in the log if |count| has just reached |max|.
@@ -121,8 +119,8 @@ class MEDIA_EXPORT LogHelper {
 // |count| < |max| and |count|++ is 0.
 // TODO(wolenetz,chcunningham): Consider using a helper class instead of a macro
 // to improve readability.
-#define LIMITED_MEDIA_LOG(level, logger, count, max)                          \
-  LAZY_STREAM(MEDIA_LOG(level, logger),                                       \
+#define LIMITED_MEDIA_LOG(level, media_log, count, max)                       \
+  LAZY_STREAM(MEDIA_LOG(level, media_log),                                    \
               (count) < (max) && ((count)++ || true))                         \
       << (((count) == (max)) ? "(Log limit reached. Further similar entries " \
                                "may be suppressed): "                         \

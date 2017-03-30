@@ -5,10 +5,12 @@
 #ifndef SYNC_INTERNAL_API_JS_MUTATION_EVENT_OBSERVER_H_
 #define SYNC_INTERNAL_API_JS_MUTATION_EVENT_OBSERVER_H_
 
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/non_thread_safe.h"
 #include "sync/base/sync_export.h"
@@ -27,7 +29,7 @@ class JsEventHandler;
 
 // Observes all change- and transaction-related events and routes a
 // summarized version to a JsEventHandler.
-class SYNC_EXPORT_PRIVATE JsMutationEventObserver
+class SYNC_EXPORT JsMutationEventObserver
     : public SyncManager::ChangeObserver,
       public syncable::TransactionObserver,
       public base::NonThreadSafe {
@@ -44,7 +46,7 @@ class SYNC_EXPORT_PRIVATE JsMutationEventObserver
 
   // SyncManager::ChangeObserver implementation.
   void OnChangesApplied(ModelType model_type,
-                        int64 write_transaction_id,
+                        int64_t write_transaction_id,
                         const ImmutableChangeRecordList& changes) override;
   void OnChangesComplete(ModelType model_type) override;
 

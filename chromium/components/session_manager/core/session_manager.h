@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_SESSION_MANAGER_CORE_SESSION_MANAGER_H_
 #define COMPONENTS_SESSION_MANAGER_CORE_SESSION_MANAGER_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "components/session_manager/session_manager_export.h"
 
@@ -55,10 +56,6 @@ class SESSION_EXPORT SessionManager {
   // Let session delegate executed on its plan of actions depending on the
   // current session type / state.
   void Start();
-
-  // Returns true when the browser has crashed and restarted during the current
-  // user's session.
-  static bool HasBrowserRestarted();
 
  protected:
   // Initializes SessionManager with delegate.

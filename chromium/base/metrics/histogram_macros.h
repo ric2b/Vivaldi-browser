@@ -6,7 +6,6 @@
 #define BASE_METRICS_HISTOGRAM_MACROS_H_
 
 #include "base/atomicops.h"
-#include "base/basictypes.h"
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
 #include "base/time/time.h"
@@ -205,6 +204,9 @@
 
 #define UMA_HISTOGRAM_MEMORY_MB(name, sample) UMA_HISTOGRAM_CUSTOM_COUNTS( \
     name, sample, 1, 1000, 50)
+
+#define UMA_HISTOGRAM_MEMORY_LARGE_MB(name, sample) \
+    UMA_HISTOGRAM_CUSTOM_COUNTS(name, sample, 1, 64000, 100)
 
 #define UMA_HISTOGRAM_PERCENTAGE(name, under_one_hundred) \
     UMA_HISTOGRAM_ENUMERATION(name, under_one_hundred, 101)

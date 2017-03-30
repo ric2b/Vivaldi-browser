@@ -55,6 +55,10 @@ class CrOSBrowserBackend(chrome_browser_backend.ChromeBrowserBackend):
       self._cri.RunCmdOnDevice(['cryptohome', '--action=remove', '--force',
                                 '--user=%s' % self._username])
 
+  @property
+  def log_file_path(self):
+    return None
+
   def GetBrowserStartupArgs(self):
     args = super(CrOSBrowserBackend, self).GetBrowserStartupArgs()
     args.extend([
@@ -64,6 +68,8 @@ class CrOSBrowserBackend(chrome_browser_backend.ChromeBrowserBackend):
             '--remote-debugging-port=%i' % self._remote_debugging_port,
             # Open a maximized window.
             '--start-maximized',
+            # Disable system startup sound.
+            '--ash-disable-system-sounds',
             # Skip user image selection screen, and post login screens.
             '--oobe-skip-postlogin',
             # Debug logging.
@@ -135,11 +141,14 @@ class CrOSBrowserBackend(chrome_browser_backend.ChromeBrowserBackend):
         elif self.browser_options.gaia_login:
           self.oobe.NavigateGaiaLogin(self._username, self._password)
         else:
-          self.oobe.NavigateFakeLogin(self._username, self._password)
+          self.oobe.NavigateFakeLogin(self._username, self._password,
+              self._gaia_id)
+
         self._WaitForLogin()
       except exceptions.TimeoutException:
         self._cri.TakeScreenShot('login-screen')
-        raise exceptions.LoginException('Timed out going through login screen')
+        raise exceptions.LoginException('Timed out going through login screen. '
+                                        + self._GetLoginStatus())
 
     logging.info('Browser is up!')
 
@@ -193,16 +202,29 @@ class CrOSBrowserBackend(chrome_browser_backend.ChromeBrowserBackend):
   def _password(self):
     return self.browser_options.password
 
+  @property
+  def _gaia_id(self):
+    return self.browser_options.gaia_id
+
   def _IsCryptohomeMounted(self):
     username = '$guest' if self._is_guest else self._username
     return self._cri.IsCryptohomeMounted(username, self._is_guest)
 
+  def _GetLoginStatus(self):
+    """Returns login status. If logged in, empty string is returned."""
+    status = ''
+    if not self._IsCryptohomeMounted():
+      status += 'Cryptohome not mounted. '
+    if not self.HasBrowserFinishedLaunching():
+      status += 'Browser didn\'t launch. '
+    if self.oobe_exists:
+      status += 'OOBE not dismissed.'
+    return status
+
   def _IsLoggedIn(self):
     """Returns True if cryptohome has mounted, the browser is
     responsive to devtools requests, and the oobe has been dismissed."""
-    return (self._IsCryptohomeMounted() and
-            self.HasBrowserFinishedLaunching() and
-            not self.oobe_exists)
+    return not self._GetLoginStatus()
 
   def _WaitForLogin(self):
     # Wait for cryptohome to mount.

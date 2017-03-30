@@ -5,11 +5,12 @@
 #include "ui/native_theme/native_theme_mac.h"
 
 #import <Cocoa/Cocoa.h>
+#include <stddef.h>
 
-#include "base/basictypes.h"
 #include "base/mac/mac_util.h"
 #include "base/mac/scoped_cftyperef.h"
 #include "base/mac/sdk_forward_declarations.h"
+#include "base/macros.h"
 #import "skia/ext/skia_utils_mac.h"
 #include "third_party/skia/include/effects/SkGradientShader.h"
 #include "ui/gfx/geometry/rect.h"
@@ -38,12 +39,20 @@ const int kScrollerThumbInset = 3;
 // value between 0.0 and 1.0 (i.e. divide by 255.0). Then,
 // alpha = (P2 - P1 + B1 - B2) / (B1 - B2)
 // color = (P1 - B1 + alpha * B1) / alpha.
-const SkColor kMenuPopupBackgroundColor = SkColorSetARGB(251, 255, 255, 255);
+const SkColor kMenuPopupBackgroundColor = SkColorSetARGB(255, 255, 255, 255);
 const SkColor kMenuSeparatorColor = SkColorSetARGB(243, 228, 228, 228);
 const SkColor kMenuBorderColor = SkColorSetARGB(60, 0, 0, 0);
 
+const SkColor kMenuPopupBackgroundColorYosemite =
+    SkColorSetARGB(255, 230, 230, 230);
+
 // Hardcoded color used for some existing dialogs in Chrome's Cocoa UI.
 const SkColor kDialogBackgroundColor = SkColorSetRGB(251, 251, 251);
+
+// Color for the highlighted text in a control when that control doesn't have
+// keyboard focus.
+const SkColor kUnfocusedSelectedTextBackgroundColor =
+    SkColorSetRGB(220, 220, 220);
 
 // On 10.6 and 10.7 there is no way to get components from system colors. Here,
 // system colors are just opaque objects that can paint themselves and otherwise
@@ -88,7 +97,7 @@ SkColor NSSystemColorToSkColor(NSColor* color) {
   NSColor* device_color =
       [color colorUsingColorSpace:[NSColorSpace deviceRGBColorSpace]];
   if (device_color)
-    return gfx::NSDeviceColorToSkColor(device_color);
+    return skia::NSDeviceColorToSkColor(device_color);
 
   // Sometimes the conversion is not possible, but we can get an approximation
   // by going through a CGColorRef. Note that simply using NSColor methods for
@@ -99,7 +108,7 @@ SkColor NSSystemColorToSkColor(NSColor* color) {
   CGColorRef cg_color = [color CGColor];
   const size_t component_count = CGColorGetNumberOfComponents(cg_color);
   if (component_count == 4)
-    return gfx::CGColorRefToSkColor(cg_color);
+    return skia::CGColorRefToSkColor(cg_color);
 
   CHECK(component_count == 1 || component_count == 2);
   // 1-2 components means a grayscale channel and maybe an alpha channel, which
@@ -118,7 +127,7 @@ SkColor NSSystemColorToSkColor(NSColor* color) {
 namespace ui {
 
 // static
-NativeTheme* NativeTheme::instance() {
+NativeTheme* NativeTheme::GetInstanceForWeb() {
   return NativeThemeMac::instance();
 }
 
@@ -136,6 +145,8 @@ SkColor NativeThemeMac::GetSystemColor(ColorId color_id) const {
       return NSSystemColorToSkColor([NSColor windowBackgroundColor]);
     case kColorId_DialogBackground:
       return kDialogBackgroundColor;
+    case kColorId_BubbleBackground:
+      return SK_ColorWHITE;
 
     case kColorId_FocusedBorderColor:
     case kColorId_FocusedMenuButtonBorderColor:
@@ -178,6 +189,14 @@ SkColor NativeThemeMac::GetSystemColor(ColorId color_id) const {
     case kColorId_MenuBorderColor:
       return kMenuBorderColor;
 
+    // Link.
+    case kColorId_LinkDisabled:
+      return SK_ColorBLACK;
+    case kColorId_LinkEnabled:
+      return SK_ColorBLUE;
+    case kColorId_LinkPressed:
+      return SK_ColorRED;
+
     // Text fields.
     case kColorId_TextfieldDefaultColor:
     case kColorId_TextfieldReadOnlyColor:
@@ -190,16 +209,35 @@ SkColor NativeThemeMac::GetSystemColor(ColorId color_id) const {
     case kColorId_TextfieldSelectionBackgroundFocused:
       return NSSystemColorToSkColor([NSColor selectedTextBackgroundColor]);
 
+    // Trees/Tables. For focused text, use the alternate* versions, which
+    // NSColor documents as "the table and list view equivalent to the
+    // selectedControlTextColor".
+    case kColorId_TreeBackground:
+    case kColorId_TableBackground:
+      return NSSystemColorToSkColor([NSColor controlBackgroundColor]);
+    case kColorId_TreeText:
+    case kColorId_TableText:
+    case kColorId_TableSelectedTextUnfocused:
+    case kColorId_TreeSelectedTextUnfocused:
+      return NSSystemColorToSkColor([NSColor textColor]);
+    case kColorId_TreeSelectedText:
+    case kColorId_TableSelectedText:
+      return NSSystemColorToSkColor(
+          [NSColor alternateSelectedControlTextColor]);
+    case kColorId_TreeSelectionBackgroundFocused:
+    case kColorId_TableSelectionBackgroundFocused:
+      return NSSystemColorToSkColor([NSColor alternateSelectedControlColor]);
+    case kColorId_TreeSelectionBackgroundUnfocused:
+    case kColorId_TableSelectionBackgroundUnfocused:
+      return kUnfocusedSelectedTextBackgroundColor;
+    case kColorId_TreeArrow:
+    case kColorId_TableGroupingIndicatorColor:
+      return SkColorSetRGB(140, 140, 140);
+
     default:
-      break;  // TODO(tapted): Handle all values and remove the default case.
+      // TODO(tapted): Handle all values and remove the default case.
+      return GetAuraColor(color_id, this);
   }
-
-  SkColor color;
-  if (CommonThemeGetSystemColor(color_id, &color))
-    return color;
-
-  NOTIMPLEMENTED() << " Invalid color_id: " << color_id;
-  return FallbackTheme::GetSystemColor(color_id);
 }
 
 void NativeThemeMac::PaintScrollbarTrack(
@@ -331,7 +369,15 @@ void NativeThemeMac::PaintMenuPopupBackground(
     SkCanvas* canvas,
     const gfx::Size& size,
     const MenuBackgroundExtraParams& menu_background) const {
-  canvas->drawColor(kMenuPopupBackgroundColor, SkXfermode::kSrc_Mode);
+  SkPaint paint;
+  paint.setAntiAlias(true);
+  if (base::mac::IsOSYosemiteOrLater())
+    paint.setColor(kMenuPopupBackgroundColorYosemite);
+  else
+    paint.setColor(kMenuPopupBackgroundColor);
+  const SkScalar radius = SkIntToScalar(menu_background.corner_radius);
+  SkRect rect = gfx::RectToSkRect(gfx::Rect(size));
+  canvas->drawRoundRect(rect, radius, radius, paint);
 }
 
 void NativeThemeMac::PaintMenuItemBackground(

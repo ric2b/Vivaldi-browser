@@ -5,6 +5,9 @@
 #ifndef NET_SPDY_MOCK_SPDY_FRAMER_VISITOR_H_
 #define NET_SPDY_MOCK_SPDY_FRAMER_VISITOR_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/strings/string_piece.h"
 #include "net/spdy/spdy_framer.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -26,6 +29,9 @@ class MockSpdyFramerVisitor : public SpdyFramerVisitorInterface {
                                        size_t len,
                                        bool fin));
   MOCK_METHOD2(OnStreamPadding, void(SpdyStreamId stream_id, size_t len));
+  MOCK_METHOD1(OnHeaderFrameStart,
+               SpdyHeadersHandlerInterface*(SpdyStreamId stream_id));
+  MOCK_METHOD2(OnHeaderFrameEnd, void(SpdyStreamId stream_id, bool end));
   MOCK_METHOD3(OnControlFrameHeaderData, bool(SpdyStreamId stream_id,
                                               const char* header_data,
                                               size_t len));
@@ -38,7 +44,8 @@ class MockSpdyFramerVisitor : public SpdyFramerVisitorInterface {
   MOCK_METHOD2(OnRstStream, void(SpdyStreamId stream_id,
                                  SpdyRstStreamStatus status));
   MOCK_METHOD1(OnSettings, void(bool clear_persisted));
-  MOCK_METHOD3(OnSetting, void(SpdySettingsIds id, uint8 flags, uint32 value));
+  MOCK_METHOD3(OnSetting,
+               void(SpdySettingsIds id, uint8_t flags, uint32_t value));
   MOCK_METHOD2(OnPing, void(SpdyPingId unique_id, bool is_ack));
   MOCK_METHOD0(OnSettingsEnd, void());
   MOCK_METHOD2(OnGoAway, void(SpdyStreamId last_accepted_stream_id,
@@ -66,7 +73,7 @@ class MockSpdyFramerVisitor : public SpdyFramerVisitorInterface {
   MOCK_METHOD4(OnPriority,
                void(SpdyStreamId stream_id,
                     SpdyStreamId parent_stream_id,
-                    uint8 weight,
+                    uint8_t weight,
                     bool exclusive));
   MOCK_METHOD2(OnUnknownFrame, bool(SpdyStreamId stream_id, int frame_type));
 };

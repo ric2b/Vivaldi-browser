@@ -5,6 +5,8 @@
 #ifndef NET_TOOLS_BALSA_STRING_PIECE_UTILS_H_
 #define NET_TOOLS_BALSA_STRING_PIECE_UTILS_H_
 
+#include <stddef.h>
+
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 
@@ -65,31 +67,10 @@ struct StringPieceCaseHash {
 };
 #endif  // COMPILER_MSVC
 
-struct StringPieceUtils {
-  // ASCII case-insensitive equality.
-  static bool EqualIgnoreCase(const base::StringPiece& piece1,
-                              const base::StringPiece& piece2) {
-    base::StringPiece::const_iterator p1i = piece1.begin();
-    base::StringPiece::const_iterator p2i = piece2.begin();
-    if (piece1.empty() && piece2.empty()) {
-      return true;
-    } else if (piece1.size() != piece2.size()) {
-      return false;
-    }
-    while (p1i != piece1.end() && p2i != piece2.end()) {
-      if (base::ToLowerASCII(*p1i) != base::ToLowerASCII(*p2i))
-        return false;
-      ++p1i;
-      ++p2i;
-    }
-    return true;
-  }
-};
-
 struct StringPieceCaseEqual {
   bool operator()(const base::StringPiece& piece1,
                   const base::StringPiece& piece2) const {
-    return StringPieceUtils::EqualIgnoreCase(piece1, piece2);
+    return base::EqualsCaseInsensitiveASCII(piece1, piece2);
   }
 };
 

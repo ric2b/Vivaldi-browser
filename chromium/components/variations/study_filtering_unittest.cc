@@ -4,8 +4,13 @@
 
 #include "components/variations/study_filtering.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
+
 #include <vector>
 
+#include "base/macros.h"
 #include "base/strings/string_split.h"
 #include "components/variations/processed_study.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -15,7 +20,7 @@ namespace variations {
 namespace {
 
 // Converts |time| to Study proto format.
-int64 TimeToProtoTime(const base::Time& time) {
+int64_t TimeToProtoTime(const base::Time& time) {
   return (time - base::Time::UnixEpoch()).InSeconds();
 }
 
@@ -115,7 +120,7 @@ TEST(VariationsStudyFilteringTest, CheckStudyFormFactor) {
     }
 
     if (i < arraysize(form_factors)) {
-      const int index = arraysize(form_factors) - i - 1;;
+      const int index = arraysize(form_factors) - i - 1;
       filter.add_form_factor(form_factors[index]);
       form_factor_added[index] = true;
     }
@@ -139,11 +144,11 @@ TEST(VariationsStudyFilteringTest, CheckStudyLocale) {
   };
 
   for (size_t i = 0; i < arraysize(test_cases); ++i) {
-    std::vector<std::string> filter_locales;
     Study_Filter filter;
-    base::SplitString(test_cases[i].filter_locales, ',', &filter_locales);
-    for (size_t j = 0; j < filter_locales.size(); ++j)
-      filter.add_locale(filter_locales[j]);
+    for (const std::string& locale : base::SplitString(
+             test_cases[i].filter_locales, ",",
+             base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL))
+      filter.add_locale(locale);
     EXPECT_EQ(test_cases[i].en_us_result,
               internal::CheckStudyLocale(filter, "en-US"));
     EXPECT_EQ(test_cases[i].en_ca_result,
@@ -355,16 +360,15 @@ TEST(VariationsStudyFilteringTest, CheckStudyHardwareClass) {
 
   for (size_t i = 0; i < arraysize(test_cases); ++i) {
     Study_Filter filter;
-    std::vector<std::string> hardware_class;
-    base::SplitString(test_cases[i].hardware_class, ',', &hardware_class);
-    for (size_t j = 0; j < hardware_class.size(); ++j)
-      filter.add_hardware_class(hardware_class[j]);
+    for (const std::string& cur : base::SplitString(
+             test_cases[i].hardware_class, ",",
+             base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL))
+      filter.add_hardware_class(cur);
 
-    std::vector<std::string> exclude_hardware_class;
-    base::SplitString(test_cases[i].exclude_hardware_class, ',',
-                      &exclude_hardware_class);
-    for (size_t j = 0; j < exclude_hardware_class.size(); ++j)
-      filter.add_exclude_hardware_class(exclude_hardware_class[j]);
+    for (const std::string& cur : base::SplitString(
+             test_cases[i].exclude_hardware_class, ",",
+             base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL))
+      filter.add_exclude_hardware_class(cur);
 
     EXPECT_EQ(test_cases[i].expected_result,
               internal::CheckStudyHardwareClass(
@@ -406,14 +410,13 @@ TEST(VariationsStudyFilteringTest, CheckStudyCountry) {
 
   for (const auto& test : test_cases) {
     Study_Filter filter;
-    std::vector<std::string> countries;
-    base::SplitString(test.country, ',', &countries);
-    for (const std::string& country : countries)
+    for (const std::string& country : base::SplitString(
+             test.country, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL))
       filter.add_country(country);
 
-    std::vector<std::string> exclude_countries;
-    base::SplitString(test.exclude_country, ',', &exclude_countries);
-    for (const std::string& exclude_country : exclude_countries)
+    for (const std::string& exclude_country : base::SplitString(
+             test.exclude_country, ",",
+             base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL))
       filter.add_exclude_country(exclude_country);
 
     EXPECT_EQ(test.expected_result,
@@ -447,7 +450,7 @@ TEST(VariationsStudyFilteringTest, FilterAndValidateStudies) {
   std::vector<ProcessedStudy> processed_studies;
   FilterAndValidateStudies(seed, "en-CA", base::Time::Now(),
                            base::Version("20.0.0.0"), Study_Channel_STABLE,
-                           Study_FormFactor_DESKTOP, "", "",
+                           Study_FormFactor_DESKTOP, "", "", "",
                            &processed_studies);
 
   // Check that only the first kTrial1Name study was kept.
@@ -487,7 +490,6 @@ TEST(VariationsStudyFilteringTest, FilterAndValidateStudiesWithCountry) {
 
   for (const auto& test : test_cases) {
     VariationsSeed seed;
-    seed.set_country_code(kSessionCountry);
     Study* study = seed.add_study();
     study->set_name("study");
     study->set_default_experiment_name("Default");
@@ -501,8 +503,8 @@ TEST(VariationsStudyFilteringTest, FilterAndValidateStudiesWithCountry) {
     std::vector<ProcessedStudy> processed_studies;
     FilterAndValidateStudies(seed, "en-CA", base::Time::Now(),
                              base::Version("20.0.0.0"), Study_Channel_STABLE,
-                             Study_FormFactor_DESKTOP, "", kPermanentCountry,
-                             &processed_studies);
+                             Study_FormFactor_DESKTOP, "", kSessionCountry,
+                             kPermanentCountry, &processed_studies);
 
     EXPECT_EQ(test.expect_study_kept, !processed_studies.empty());
   }

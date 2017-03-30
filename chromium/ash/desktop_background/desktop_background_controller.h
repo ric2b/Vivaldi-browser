@@ -6,11 +6,11 @@
 #define ASH_DESKTOP_BACKGROUND_DESKTOP_BACKGROUND_CONTROLLER_H_
 
 #include "ash/ash_export.h"
-#include "ash/display/display_controller.h"
+#include "ash/display/window_tree_host_manager.h"
 #include "ash/shell_observer.h"
-#include "base/basictypes.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -25,6 +25,10 @@ namespace aura {
 class Window;
 }
 
+namespace base {
+class SequencedWorkerPool;
+}
+
 namespace wallpaper {
 class WallpaperResizer;
 }
@@ -37,7 +41,7 @@ class DesktopBackgroundControllerObserver;
 
 // Updates background layer if necessary.
 class ASH_EXPORT DesktopBackgroundController
-    : public DisplayController::Observer,
+    : public WindowTreeHostManager::Observer,
       public ShellObserver {
  public:
   class TestAPI;
@@ -47,7 +51,8 @@ class ASH_EXPORT DesktopBackgroundController
     BACKGROUND_IMAGE,
   };
 
-  DesktopBackgroundController();
+  explicit DesktopBackgroundController(
+      base::SequencedWorkerPool* blocking_pool);
   ~DesktopBackgroundController() override;
 
   BackgroundMode desktop_background_mode() const {
@@ -87,7 +92,7 @@ class ASH_EXPORT DesktopBackgroundController
   // Returns true if the desktop moved.
   bool MoveDesktopToUnlockedContainer();
 
-  // DisplayController::Observer:
+  // WindowTreeHostManager::Observer:
   void OnDisplayConfigurationChanged() override;
 
   // ShellObserver:
@@ -155,9 +160,11 @@ class ASH_EXPORT DesktopBackgroundController
 
   gfx::Size current_max_display_size_;
 
-  base::OneShotTimer<DesktopBackgroundController> timer_;
+  base::OneShotTimer timer_;
 
   int wallpaper_reload_delay_;
+
+  base::SequencedWorkerPool* blocking_pool_;
 
   DISALLOW_COPY_AND_ASSIGN(DesktopBackgroundController);
 };

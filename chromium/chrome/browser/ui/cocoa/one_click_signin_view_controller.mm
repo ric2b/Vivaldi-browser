@@ -42,7 +42,6 @@ void ShiftOriginY(NSView* view, CGFloat amount) {
 
 @implementation OneClickSigninViewController
 
-
 - (id)initWithNibName:(NSString*)nibName
           webContents:(content::WebContents*)webContents
          syncCallback:(const BrowserWindow::StartSyncCallback&)syncCallback
@@ -141,7 +140,7 @@ void ShiftOriginY(NSView* view, CGFloat amount) {
     totalYOffset +=
         [GTMUILocalizerAndLayoutTweaker sizeToFitView:advancedLink_].height;
     [[advancedLink_ cell] setTextColor:
-        gfx::SkColorToCalibratedNSColor(chrome_style::GetLinkColor())];
+        skia::SkColorToCalibratedNSColor(chrome_style::GetLinkColor())];
   } else {
     // Don't display the advanced link for the error bubble.
     // To align the Learn More link with the OK button, we need to offset by
@@ -250,13 +249,13 @@ void ShiftOriginY(NSView* view, CGFloat amount) {
   }
 
   NSColor* linkColor =
-      gfx::SkColorToCalibratedNSColor(chrome_style::GetLinkColor());
+      skia::SkColorToCalibratedNSColor(chrome_style::GetLinkColor());
   [informativeTextView_ setMessage:messageText
                           withFont:font
                       messageColor:[NSColor blackColor]];
   [informativeTextView_ addLinkRange:NSMakeRange(learnMoreOffset,
                                                  [learnMoreText length])
-                            withName:@""
+                             withURL:@(chrome::kChromeSyncLearnMoreURL)
                            linkColor:linkColor];
 
   // Make the "Advanced" link font as large as the "Learn More" link.
@@ -300,6 +299,14 @@ void ShiftOriginY(NSView* view, CGFloat amount) {
 
 - (void)close {
   base::ResetAndReturn(&closeCallback_).Run();
+}
+
+@end
+
+@implementation OneClickSigninViewController (TestingAPI)
+
+- (NSTextView*)linkViewForTesting {
+  return informativeTextView_.get();
 }
 
 @end

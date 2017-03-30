@@ -5,13 +5,16 @@
 #ifndef COMPONENTS_OMNIBOX_BROWSER_OMNIBOX_FIELD_TRIAL_H_
 #define COMPONENTS_OMNIBOX_BROWSER_OMNIBOX_FIELD_TRIAL_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
-#include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "components/metrics/proto/omnibox_event.pb.h"
+#include "components/metrics/proto/omnibox_input_type.pb.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
 
 namespace base {
@@ -22,10 +25,11 @@ class TimeDelta;
 struct HUPScoringParams {
   // A set of parameters describing how to cap a given count score.  First,
   // we apply a half-life based decay of the given count and then find the
-  // maximum relevance score in the corresponding bucket list.
+  // maximum relevance score based on the decay factor or counts specified
+  // in the corresponding bucket list. See comment on |buckets_| for details.
   class ScoreBuckets {
    public:
-    // (decayed_count, max_relevance) pair.
+    // Stores the max relevance at each count/decay factor threshold.
     typedef std::pair<double, int> CountMaxRelevance;
 
     ScoreBuckets();
@@ -44,6 +48,11 @@ struct HUPScoringParams {
       half_life_days_ = half_life_days;
     }
 
+    bool use_decay_factor() const { return use_decay_factor_; }
+    void set_use_decay_factor(bool use_decay_factor) {
+      use_decay_factor_ = use_decay_factor;
+    }
+
     std::vector<CountMaxRelevance>& buckets() { return buckets_; }
     const std::vector<CountMaxRelevance>& buckets() const { return buckets_; }
 
@@ -58,11 +67,11 @@ struct HUPScoringParams {
     // Set to -1 if not used.
     int half_life_days_;
 
-    // The relevance score caps for given decayed count values.
-    // Each pair (decayed_count, max_score) indicates what the maximum relevance
-    // score is of a decayed count equal or greater than decayed_count.
+    // The relevance score caps at successively decreasing threshold values.
+    // The thresholds are either decayed counts or decay factors, depending on
+    // the value of |use_decay_factor_|.
     //
-    // Consider this example:
+    // Consider this example specifying the decayed counts:
     //   [(1, 1000), (0.5, 500), (0, 100)]
     // If decayed count is 2 (which is >= 1), the corresponding match's maximum
     // relevance will be capped at 1000.  In case of 0.5, the score is capped
@@ -70,6 +79,9 @@ struct HUPScoringParams {
     //
     // This list is sorted by the pair's first element in descending order.
     std::vector<CountMaxRelevance> buckets_;
+
+    // True when the bucket thresholds are decay factors rather than counts.
+    bool use_decay_factor_;
   };
 
   HUPScoringParams() : experimental_scoring_enabled(false) {}
@@ -89,6 +101,15 @@ class OmniboxFieldTrial {
   // specified type should have their relevance score multiplied by the
   // given number.  Omitted types are assumed to have multipliers of 1.0.
   typedef std::map<AutocompleteMatchType::Type, float> DemotionMultipliers;
+
+  // Do not change these values as they need to be in sync with values
+  // specified in experiment configs on the variations server.
+  enum EmphasizeTitlesCondition {
+    EMPHASIZE_WHEN_NONEMPTY = 0,
+    EMPHASIZE_WHEN_TITLE_MATCHES = 1,
+    EMPHASIZE_WHEN_ONLY_TITLE_MATCHES = 2,
+    EMPHASIZE_NEVER = 3
+  };
 
   // Activates all dynamic field trials.  The main difference between
   // the autocomplete dynamic and static field trials is that the former
@@ -115,7 +136,7 @@ class OmniboxFieldTrial {
   // Populates |field_trial_hash| with hashes of the active suggest field trial
   // names, if any.
   static void GetActiveSuggestFieldTrialHashes(
-      std::vector<uint32>* field_trial_hash);
+      std::vector<uint32_t>* field_trial_hash);
 
   // ---------------------------------------------------------
   // For the AutocompleteController "stop timer" field trial.
@@ -210,6 +231,7 @@ class OmniboxFieldTrial {
   // Initializes the HUP |scoring_params| based on the active HUP scoring
   // experiment.  If there is no such experiment, this function simply sets
   // |scoring_params|->experimental_scoring_enabled to false.
+  static void GetDefaultHUPScoringParams(HUPScoringParams* scoring_params);
   static void GetExperimentalHUPScoringParams(HUPScoringParams* scoring_params);
 
   // For the HQPBookmarkValue experiment that's part of the
@@ -276,9 +298,13 @@ class OmniboxFieldTrial {
   // For the HQPFixFrequencyScoring experiment that's part of the
   // bundled omnibox field trial.
 
-  // Returns true if HQP should apply the bug fixes to the GetFrequency()
-  // function.
-  static bool HQPFixFrequencyScoringBugs();
+  // Returns true if HQP should apply the bug fix for correctly identifying
+  // typed visits.
+  static bool HQPFixTypedVisitBug();
+
+  // Returns true if HQP should apply the bug fix to discount the visits to
+  // pages visited less than ten times.
+  static bool HQPFixFewVisitsBug();
 
   // ---------------------------------------------------------
   // For the HQPNumTitleWords experiment that's part of the
@@ -290,14 +316,20 @@ class OmniboxFieldTrial {
   static size_t HQPNumTitleWordsToAllow();
 
   // ---------------------------------------------------------
-  // For the HQPAlsoDoHUPLikeScoring experiment that's part of the
-  // bundled omnibox field trial.
+  // For the replace HUP experiment that's part of the bundled omnibox field
+  // trial.
 
   // Returns whether HistoryQuick provider (HQP) should attempt to score
   // suggestions also with a HistoryURL-provider-like (HUP-like) mode, and
   // assign suggestions the max of this score and the normal score.
   // Returns false if the experiment isn't active.
   static bool HQPAlsoDoHUPLikeScoring();
+
+  // Returns whether HistoryURL provider (HUP) should search its database for
+  // URLs and suggest them.  If false, HistoryURL provider merely creates the
+  // URL-what-you-typed match when appropriate.  Return true if the experiment
+  // isn't active.
+  static bool HUPSearchDatabase();
 
   // ---------------------------------------------------------
   // For the PreventUWYTDefaultForNonURLInputs experiment that's part of the
@@ -309,6 +341,49 @@ class OmniboxFieldTrial {
   // gets disabled; this code is unnecessary given the not-allowed-to-be-
   // default constraint.  Returns false if the experiment isn't active.
   static bool PreventUWYTDefaultForNonURLInputs();
+
+  // ---------------------------------------------------------
+  // For the aggressive keyword matching experiment that's part of the bundled
+  // omnibox field trial.
+
+  // Returns whether KeywordProvider should consider the registry portion
+  // (e.g., co.uk) of keywords that look like hostnames as an important part of
+  // the keyword name for matching purposes.  Returns true if the experiment
+  // isn't active.
+  static bool KeywordRequiresRegistry();
+
+  // For keywords that look like hostnames, returns whether KeywordProvider
+  // should require users to type a prefix of the hostname to match against
+  // them, rather than just the domain name portion.  In other words, returns
+  // whether the prefix before the domain name should be considered important
+  // for matching purposes.  Returns true if the experiment isn't active.
+  static bool KeywordRequiresPrefixMatch();
+
+  // Returns the relevance score that KeywordProvider should assign to keywords
+  // with sufficiently-complete matches, i.e., the user has typed all of the
+  // important part of the keyword.  Returns -1 if the experiment isn't active.
+  static int KeywordScoreForSufficientlyCompleteMatch();
+
+  // ---------------------------------------------------------
+  // For the HQPAllowDupMatchesForScoring experiment that's part of the
+  // bundled omnibox field trial.
+
+  // Returns true if HistoryQuick provider should allow overlapping term hits
+  // to count when scoring and only remove overlaps/duplicates later (which
+  // is necessary for highlighting).  Returns false if the experiment isn't
+  // active.
+  static bool HQPAllowDupMatchesForScoring();
+
+  // ---------------------------------------------------------
+  // For the EmphasizeTitles experiment that's part of the bundled omnibox
+  // field trial.
+
+  // Returns the conditions under which the UI code should display the title
+  // of a URL more prominently than the URL for an input of type |input_type|.
+  // Normally the URL is displayed more prominently.  Returns NEVER_EMPHASIZE
+  // if the experiment isn't active.
+  static EmphasizeTitlesCondition GetEmphasizeTitlesConditionForInput(
+      metrics::OmniboxInputType::Type input_type);
 
   // ---------------------------------------------------------
   // Exposed publicly for the sake of unittests.
@@ -324,22 +399,32 @@ class OmniboxFieldTrial {
   static const char kHQPAllowMatchInSchemeRule[];
   static const char kZeroSuggestRule[];
   static const char kZeroSuggestVariantRule[];
+  static const char kSuggestVariantRule[];
   static const char kDisableResultsCachingRule[];
   static const char kMeasureSuggestPollingDelayFromLastKeystrokeRule[];
   static const char kSuggestPollingDelayMsRule[];
-  static const char kHQPFixFrequencyScoringBugsRule[];
+  static const char kHQPFixTypedVisitBugRule[];
+  static const char kHQPFixFewVisitsBugRule[];
   static const char kHQPNumTitleWordsRule[];
   static const char kHQPAlsoDoHUPLikeScoringRule[];
+  static const char kHUPSearchDatabaseRule[];
   static const char kPreventUWYTDefaultForNonURLInputsRule[];
+  static const char kKeywordRequiresRegistryRule[];
+  static const char kKeywordRequiresPrefixMatchRule[];
+  static const char kKeywordScoreForSufficientlyCompleteMatchRule[];
+  static const char kHQPAllowDupMatchesForScoringRule[];
+  static const char kEmphasizeTitlesRule[];
 
   // Parameter names used by the HUP new scoring experiments.
   static const char kHUPNewScoringEnabledParam[];
   static const char kHUPNewScoringTypedCountRelevanceCapParam[];
   static const char kHUPNewScoringTypedCountHalfLifeTimeParam[];
   static const char kHUPNewScoringTypedCountScoreBucketsParam[];
+  static const char kHUPNewScoringTypedCountUseDecayFactorParam[];
   static const char kHUPNewScoringVisitedCountRelevanceCapParam[];
   static const char kHUPNewScoringVisitedCountHalfLifeTimeParam[];
   static const char kHUPNewScoringVisitedCountScoreBucketsParam[];
+  static const char kHUPNewScoringVisitedCountUseDecayFactorParam[];
 
   // Parameter names used by the HQP experimental scoring experiments.
   static const char kHQPExperimentalScoringEnabledParam[];

@@ -6,6 +6,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
@@ -29,9 +30,12 @@ class SoundsManagerImpl : public SoundsManager {
   // SoundsManager implementation:
   bool Initialize(SoundKey key, const base::StringPiece& data) override;
   bool Play(SoundKey key) override;
+  bool Stop(SoundKey key) override;
   base::TimeDelta GetDuration(SoundKey key) override;
 
  private:
+  linked_ptr<AudioStreamHandler> GetHandler(SoundKey key);
+
   base::hash_map<SoundKey, linked_ptr<AudioStreamHandler> > handlers_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
@@ -46,34 +50,45 @@ SoundsManagerImpl::~SoundsManagerImpl() { DCHECK(CalledOnValidThread()); }
 
 bool SoundsManagerImpl::Initialize(SoundKey key,
                                    const base::StringPiece& data) {
-  if (handlers_.find(key) != handlers_.end() && handlers_[key]->IsInitialized())
+  linked_ptr<AudioStreamHandler> current_handler = GetHandler(key);
+  if (current_handler.get() && current_handler->IsInitialized())
     return true;
-  linked_ptr<AudioStreamHandler> handler(new AudioStreamHandler(data));
-  if (!handler->IsInitialized()) {
+  linked_ptr<AudioStreamHandler> new_handler(new AudioStreamHandler(data));
+  if (!new_handler->IsInitialized()) {
     LOG(WARNING) << "Can't initialize AudioStreamHandler for key=" << key;
     return false;
   }
-  handlers_[key] = handler;
+  handlers_[key] = new_handler;
   return true;
 }
 
 bool SoundsManagerImpl::Play(SoundKey key) {
   DCHECK(CalledOnValidThread());
-  if (handlers_.find(key) == handlers_.end() ||
-      !handlers_[key]->IsInitialized()) {
+  linked_ptr<AudioStreamHandler> handler = GetHandler(key);
+  return handler.get() && handler->IsInitialized() && handler->Play();
+}
+
+bool SoundsManagerImpl::Stop(SoundKey key) {
+  DCHECK(CalledOnValidThread());
+  linked_ptr<AudioStreamHandler> handler = GetHandler(key);
+  if (!handler.get() || !handler->IsInitialized())
     return false;
-  }
-  return handlers_[key]->Play();
+  handler->Stop();
+  return true;
 }
 
 base::TimeDelta SoundsManagerImpl::GetDuration(SoundKey key) {
   DCHECK(CalledOnValidThread());
-  if (handlers_.find(key) == handlers_.end() ||
-      !handlers_[key]->IsInitialized()) {
-    return base::TimeDelta();
-  }
-  const WavAudioHandler& wav_audio = handlers_[key]->wav_audio_handler();
-  return wav_audio.GetDuration();
+  linked_ptr<AudioStreamHandler> handler = GetHandler(key);
+  if (!handler.get() || !handler->IsInitialized())
+      return base::TimeDelta();
+  return handler->duration();
+}
+
+linked_ptr<AudioStreamHandler> SoundsManagerImpl::GetHandler(SoundKey key) {
+  auto key_handler_pair_iter = handlers_.find(key);
+  return key_handler_pair_iter == handlers_.end() ?
+      linked_ptr<AudioStreamHandler>() : key_handler_pair_iter->second;
 }
 
 }  // namespace

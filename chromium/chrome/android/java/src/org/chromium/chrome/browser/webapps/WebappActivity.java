@@ -6,32 +6,51 @@ package org.chromium.chrome.browser.webapps;
 
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.graphics.Color;
+import android.graphics.drawable.Drawable;
 import android.net.Uri;
-import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.StrictMode;
+import android.os.SystemClock;
 import android.text.TextUtils;
-import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.TextView;
 
 import org.chromium.base.ActivityState;
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationStatus;
+import org.chromium.base.Log;
+import org.chromium.base.StreamUtil;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.blink_public.platform.WebDisplayMode;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.EmptyTabObserver;
-import org.chromium.chrome.browser.Tab;
-import org.chromium.chrome.browser.TabObserver;
-import org.chromium.chrome.browser.UrlUtilities;
+import org.chromium.chrome.browser.TabState;
 import org.chromium.chrome.browser.document.DocumentUtils;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
-import org.chromium.chrome.browser.ssl.ConnectionSecurityLevel;
-import org.chromium.chrome.browser.util.FeatureUtilities;
+import org.chromium.chrome.browser.metrics.WebappUma;
+import org.chromium.chrome.browser.tab.EmptyTabObserver;
+import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabDelegateFactory;
+import org.chromium.chrome.browser.tab.TabObserver;
+import org.chromium.chrome.browser.tab.TopControlsVisibilityDelegate;
+import org.chromium.chrome.browser.util.ColorUtils;
+import org.chromium.chrome.browser.util.UrlUtilities;
+import org.chromium.components.security_state.ConnectionSecurityLevel;
 import org.chromium.content.browser.ScreenOrientationProvider;
 import org.chromium.content_public.browser.LoadUrlParams;
-import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.net.NetworkChangeNotifier;
 import org.chromium.ui.base.PageTransition;
 
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Displays a webapp in a nearly UI-less Chrome (InfoBars still appear).
@@ -43,14 +62,19 @@ public class WebappActivity extends FullScreenActivity {
     private static final long MS_BEFORE_NAVIGATING_BACK_FROM_INTERSTITIAL = 1000;
 
     private final WebappInfo mWebappInfo;
-    private AsyncTask<Void, Void, Void> mCleanupTask;
+    private final WebappDirectoryManager mDirectoryManager;
 
-    private WebContentsObserver mWebContentsObserver;
+    private boolean mOldWebappCleanupStarted;
 
+    private ViewGroup mSplashScreen;
     private WebappUrlBar mUrlBar;
 
     private boolean mIsInitialized;
     private Integer mBrandColor;
+
+    private WebappUma mWebappUma;
+
+    private Bitmap mLargestFavicon;
 
     /**
      * Construct all the variables that shouldn't change.  We do it here both to clarify when the
@@ -59,6 +83,8 @@ public class WebappActivity extends FullScreenActivity {
      */
     public WebappActivity() {
         mWebappInfo = WebappInfo.createEmpty();
+        mDirectoryManager = new WebappDirectoryManager();
+        mWebappUma = new WebappUma();
     }
 
     @Override
@@ -88,18 +114,15 @@ public class WebappActivity extends FullScreenActivity {
             if (NetworkChangeNotifier.isOnline()) getActivityTab().reloadIgnoringCache();
         }
 
-        mWebContentsObserver = createWebContentsObserver();
         getActivityTab().addObserver(createTabObserver());
-        updateTaskDescription();
-        removeWindowBackground();
+        getActivityTab().getTabWebContentsDelegateAndroid().setDisplayMode(
+                WebDisplayMode.Standalone);
     }
 
     @Override
     public void preInflationStartup() {
         WebappInfo info = WebappInfo.create(getIntent());
         if (info != null) mWebappInfo.copy(info);
-        mCleanupTask = new WebappDirectoryManager(getActivityDirectory(),
-                WEBAPP_SCHEME, FeatureUtilities.isDocumentModeEligible(this));
 
         ScreenOrientationProvider.lockOrientation((byte) mWebappInfo.orientation(), this);
         super.preInflationStartup();
@@ -116,34 +139,79 @@ public class WebappActivity extends FullScreenActivity {
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
-        mWebappInfo.writeToBundle(outState);
-        if (getActivityTab() != null) getActivityTab().saveInstanceState(outState);
+        if (getActivityTab() != null) {
+            outState.putInt(BUNDLE_TAB_ID, getActivityTab().getId());
+            outState.putString(BUNDLE_TAB_URL, getActivityTab().getUrl());
+        }
     }
 
     @Override
     public void onStartWithNative() {
         super.onStartWithNative();
-        if (mCleanupTask.getStatus() == AsyncTask.Status.PENDING) mCleanupTask.execute();
+        mDirectoryManager.cleanUpDirectories(this, getId());
     }
 
     @Override
     public void onStopWithNative() {
         super.onStopWithNative();
-        mCleanupTask.cancel(true);
-        if (getActivityTab() != null) getActivityTab().saveState(getActivityDirectory());
+        mDirectoryManager.cancelCleanup();
+        if (getActivityTab() != null) saveState(getActivityDirectory());
         if (getFullscreenManager() != null) {
             getFullscreenManager().setPersistentFullscreenMode(false);
         }
     }
 
+    /**
+     * Saves the tab data out to a file.
+     */
+    void saveState(File activityDirectory) {
+        File tabFile = getTabFile(activityDirectory, getActivityTab().getId());
+
+        FileOutputStream foutput = null;
+        // Temporarily allowing disk access while fixing. TODO: http://crbug.com/525781
+        StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
+        StrictMode.allowThreadDiskWrites();
+        try {
+            long time = SystemClock.elapsedRealtime();
+            foutput = new FileOutputStream(tabFile);
+            TabState.saveState(foutput, getActivityTab().getState(), false);
+            RecordHistogram.recordTimesHistogram("Android.StrictMode.WebappSaveState",
+                    SystemClock.elapsedRealtime() - time, TimeUnit.MILLISECONDS);
+        } catch (FileNotFoundException exception) {
+            Log.e(TAG, "Failed to save out tab state.", exception);
+        } catch (IOException exception) {
+            Log.e(TAG, "Failed to save out tab state.", exception);
+        } finally {
+            StreamUtil.closeQuietly(foutput);
+            StrictMode.setThreadPolicy(oldPolicy);
+        }
+    }
+
     @Override
     public void onResume() {
-        if (!isFinishing() && getIntent() != null) {
-            // Avoid situations where Android starts two Activities with the same data.
-            DocumentUtils.finishOtherTasksWithData(getIntent().getData(), getTaskId());
+        if (!isFinishing()) {
+            if (getIntent() != null) {
+                // Avoid situations where Android starts two Activities with the same data.
+                DocumentUtils.finishOtherTasksWithData(getIntent().getData(), getTaskId());
+            }
+            updateTaskDescription();
         }
         super.onResume();
+
+        // Kick off the old web app cleanup (if we haven't already) now that we have queued the
+        // current web app's storage to be opened.
+        if (!mOldWebappCleanupStarted) {
+            WebappRegistry.unregisterOldWebapps(this, System.currentTimeMillis());
+            mOldWebappCleanupStarted = true;
+        }
     }
+
+    @Override
+    public void onResumeWithNative() {
+        super.onResumeWithNative();
+        mWebappUma.commitMetrics();
+    }
+
     @Override
     protected int getControlContainerLayoutId() {
         return R.layout.webapp_control_container;
@@ -151,6 +219,8 @@ public class WebappActivity extends FullScreenActivity {
 
     @Override
     public void postInflationStartup() {
+        initializeSplashScreen();
+
         super.postInflationStartup();
         WebappControlContainer controlContainer =
                 (WebappControlContainer) findViewById(R.id.control_container);
@@ -164,24 +234,149 @@ public class WebappActivity extends FullScreenActivity {
         return mWebappInfo;
     }
 
+    private void initializeSplashScreen() {
+        final int backgroundColor = ColorUtils.getOpaqueColor(mWebappInfo.backgroundColor(
+                ApiCompatibilityUtils.getColor(getResources(), R.color.webapp_default_bg)));
+
+        mSplashScreen = new FrameLayout(this);
+        mSplashScreen.setBackgroundColor(backgroundColor);
+
+        ViewGroup contentView = (ViewGroup) findViewById(android.R.id.content);
+        contentView.addView(mSplashScreen);
+
+        mWebappUma.splashscreenVisible();
+        mWebappUma.recordSplashscreenBackgroundColor(mWebappInfo.hasValidBackgroundColor()
+                ? WebappUma.SPLASHSCREEN_COLOR_STATUS_CUSTOM
+                : WebappUma.SPLASHSCREEN_COLOR_STATUS_DEFAULT);
+        mWebappUma.recordSplashscreenThemeColor(mWebappInfo.hasValidThemeColor()
+                ? WebappUma.SPLASHSCREEN_COLOR_STATUS_CUSTOM
+                : WebappUma.SPLASHSCREEN_COLOR_STATUS_DEFAULT);
+
+        WebappDataStorage.open(this, mWebappInfo.id()).getSplashScreenImage(
+                new WebappDataStorage.FetchCallback<Bitmap>() {
+                    @Override
+                    public void onDataRetrieved(Bitmap splashImage) {
+                        initializeSplashScreenWidgets(backgroundColor, splashImage);
+                    }
+                });
+    }
+
+    private void initializeSplashScreenWidgets(int backgroundColor, Bitmap splashImage) {
+        Bitmap displayIcon = splashImage == null ? mWebappInfo.icon() : splashImage;
+        int minimiumSizeThreshold = getResources().getDimensionPixelSize(
+                R.dimen.webapp_splash_image_size_minimum);
+        int bigThreshold = getResources().getDimensionPixelSize(
+                R.dimen.webapp_splash_image_size_threshold);
+
+        // Inflate the correct layout for the image.
+        int layoutId;
+        if (displayIcon == null || displayIcon.getWidth() < minimiumSizeThreshold
+                || (displayIcon == mWebappInfo.icon() && mWebappInfo.isIconGenerated())) {
+            mWebappUma.recordSplashscreenIconType(WebappUma.SPLASHSCREEN_ICON_TYPE_NONE);
+            layoutId = R.layout.webapp_splash_screen_no_icon;
+        } else {
+            // The size of the splash screen image determines which layout to use.
+            boolean isUsingSmallSplashImage = displayIcon.getWidth() <= bigThreshold
+                    || displayIcon.getHeight() <= bigThreshold;
+            if (isUsingSmallSplashImage) {
+                layoutId = R.layout.webapp_splash_screen_small;
+            } else {
+                layoutId = R.layout.webapp_splash_screen_large;
+            }
+
+            // Record stats about the splash screen.
+            int splashScreenIconType;
+            if (splashImage == null) {
+                splashScreenIconType = WebappUma.SPLASHSCREEN_ICON_TYPE_FALLBACK;
+            } else if (isUsingSmallSplashImage) {
+                splashScreenIconType = WebappUma.SPLASHSCREEN_ICON_TYPE_CUSTOM_SMALL;
+            } else {
+                splashScreenIconType = WebappUma.SPLASHSCREEN_ICON_TYPE_CUSTOM;
+            }
+            mWebappUma.recordSplashscreenIconType(splashScreenIconType);
+            mWebappUma.recordSplashscreenIconSize(
+                    Math.round(displayIcon.getWidth()
+                            / getResources().getDisplayMetrics().density));
+        }
+
+        ViewGroup subLayout = (ViewGroup) LayoutInflater.from(WebappActivity.this)
+                .inflate(layoutId, mSplashScreen, true);
+
+        // Set up the elements of the splash screen.
+        TextView appNameView = (TextView) subLayout.findViewById(
+                R.id.webapp_splash_screen_name);
+        ImageView splashIconView = (ImageView) subLayout.findViewById(
+                R.id.webapp_splash_screen_icon);
+        appNameView.setText(mWebappInfo.name());
+        if (splashIconView != null) splashIconView.setImageBitmap(displayIcon);
+
+        if (ColorUtils.shoudUseLightForegroundOnBackground(backgroundColor)) {
+            appNameView.setTextColor(ApiCompatibilityUtils.getColor(getResources(),
+                    R.color.webapp_splash_title_light));
+        }
+    }
+
     private void updateUrlBar() {
         Tab tab = getActivityTab();
         if (tab == null || mUrlBar == null) return;
         mUrlBar.update(tab.getUrl(), tab.getSecurityLevel());
     }
 
-    private WebContentsObserver createWebContentsObserver() {
-        // TODO: Move to TabObserver eventually.
-        return new WebContentsObserver(getActivityTab().getWebContents()) {
+    private boolean isWebappDomain() {
+        return UrlUtilities.sameDomainOrHost(
+                getActivityTab().getUrl(), getWebappInfo().uri().toString(), true);
+    }
+
+    protected TabObserver createTabObserver() {
+        return new EmptyTabObserver() {
+
             @Override
-            public void didNavigateMainFrame(String url, String baseUrl,
+            public void onSSLStateUpdated(Tab tab) {
+                updateUrlBar();
+            }
+
+            @Override
+            public void onDidStartProvisionalLoadForFrame(
+                    Tab tab, long frameId, long parentFrameId, boolean isMainFrame,
+                    String validatedUrl, boolean isErrorPage, boolean isIframeSrcdoc) {
+                if (isMainFrame) updateUrlBar();
+            }
+
+            @Override
+            public void onDidChangeThemeColor(Tab tab, int color) {
+                if (!isWebappDomain()) return;
+                mBrandColor = color;
+                updateTaskDescription();
+            }
+
+            @Override
+            public void onTitleUpdated(Tab tab) {
+                if (!isWebappDomain()) return;
+                updateTaskDescription();
+            }
+
+            @Override
+            public void onFaviconUpdated(Tab tab, Bitmap icon) {
+                if (!isWebappDomain()) return;
+                // No need to cache the favicon if there is an icon declared in app manifest.
+                if (mWebappInfo.icon() != null) return;
+                if (icon == null) return;
+                if (mLargestFavicon == null || icon.getWidth() > mLargestFavicon.getWidth()
+                        || icon.getHeight() > mLargestFavicon.getHeight()) {
+                    mLargestFavicon = icon;
+                    updateTaskDescription();
+                }
+            }
+
+            @Override
+            public void onDidNavigateMainFrame(Tab tab, String url, String baseUrl,
                     boolean isNavigationToDifferentPage, boolean isNavigationInPage,
                     int statusCode) {
                 updateUrlBar();
             }
 
             @Override
-            public void didAttachInterstitialPage() {
+            public void onDidAttachInterstitialPage(Tab tab) {
                 updateUrlBar();
 
                 int state = ApplicationStatus.getStateForActivity(WebappActivity.this);
@@ -208,61 +403,72 @@ public class WebappActivity extends FullScreenActivity {
             }
 
             @Override
-            public void didDetachInterstitialPage() {
-                updateUrlBar();
-            }
-        };
-    }
-
-    private boolean isWebappDomain() {
-        return UrlUtilities.sameDomainOrHost(
-                getActivityTab().getUrl(), getWebappInfo().uri().toString(), true);
-    }
-
-    protected TabObserver createTabObserver() {
-        return new EmptyTabObserver() {
-            @Override
-            public void onSSLStateUpdated(Tab tab) {
+            public void onDidDetachInterstitialPage(Tab tab) {
                 updateUrlBar();
             }
 
             @Override
-            public void onDidStartProvisionalLoadForFrame(
-                    Tab tab, long frameId, long parentFrameId, boolean isMainFrame,
-                    String validatedUrl, boolean isErrorPage, boolean isIframeSrcdoc) {
-                if (isMainFrame) updateUrlBar();
+            public void didFirstVisuallyNonEmptyPaint(Tab tab) {
+                hideSplashScreen(WebappUma.SPLASHSCREEN_HIDES_REASON_PAINT);
             }
 
             @Override
-            public void onDidChangeThemeColor(int color) {
-                if (!isWebappDomain()) return;
-                mBrandColor = color;
-                updateTaskDescription();
+            public void onPageLoadFinished(Tab tab) {
+                hideSplashScreen(WebappUma.SPLASHSCREEN_HIDES_REASON_LOAD_FINISHED);
             }
 
             @Override
-            public void onTitleUpdated(Tab tab) {
-                if (!isWebappDomain()) return;
-                updateTaskDescription();
+            public void onPageLoadFailed(Tab tab, int errorCode) {
+                hideSplashScreen(WebappUma.SPLASHSCREEN_HIDES_REASON_LOAD_FAILED);
             }
 
             @Override
-            public void onFaviconUpdated(Tab tab) {
-                if (!isWebappDomain()) return;
-                updateTaskDescription();
+            public void onCrash(Tab tab, boolean sadTabShown) {
+                hideSplashScreen(WebappUma.SPLASHSCREEN_HIDES_REASON_CRASH);
             }
         };
     }
 
     private void updateTaskDescription() {
-        String title = mWebappInfo.title() == null
-                ? getActivityTab().getTitle() : mWebappInfo.title();
-        Bitmap icon = mWebappInfo.icon() == null
-                ? getActivityTab().getFavicon() : mWebappInfo.icon();
-        int color = mBrandColor == null
-                ? getResources().getColor(R.color.default_primary_color) : mBrandColor;
+        String title = null;
+        if (!TextUtils.isEmpty(mWebappInfo.shortName())) {
+            title = mWebappInfo.shortName();
+        } else if (getActivityTab() != null) {
+            title = getActivityTab().getTitle();
+        }
 
-        DocumentUtils.updateTaskDescription(this, title, icon, color, mBrandColor == null);
+        Bitmap icon = null;
+        if (mWebappInfo.icon() != null) {
+            icon = mWebappInfo.icon();
+        } else if (getActivityTab() != null) {
+            icon = mLargestFavicon;
+        }
+
+        if (mBrandColor == null && mWebappInfo.hasValidThemeColor()) {
+            mBrandColor = (int) mWebappInfo.themeColor();
+        }
+
+        int taskDescriptionColor =
+                ApiCompatibilityUtils.getColor(getResources(), R.color.default_primary_color);
+        int statusBarColor = Color.BLACK;
+        if (mBrandColor != null) {
+            taskDescriptionColor = mBrandColor;
+            statusBarColor = ColorUtils.getDarkenedColorForStatusBar(mBrandColor);
+        }
+
+        ApiCompatibilityUtils.setTaskDescription(this, title, icon,
+                ColorUtils.getOpaqueColor(taskDescriptionColor));
+        ApiCompatibilityUtils.setStatusBarColor(getWindow(), statusBarColor);
+    }
+
+    @Override
+    protected void setStatusBarColor(Tab tab, int color) {
+        // Intentionally do nothing as WebappActivity explicitly sets status bar color.
+    }
+
+    /** Returns a unique identifier for this WebappActivity. */
+    protected String getId() {
+        return mWebappInfo.id();
     }
 
     /**
@@ -271,8 +477,36 @@ public class WebappActivity extends FullScreenActivity {
      * @return The directory used for the current web app.
      */
     @Override
-    protected File getActivityDirectory() {
-        return WebappDirectoryManager.getWebappDirectory(mWebappInfo.id());
+    protected final File getActivityDirectory() {
+        return mDirectoryManager.getWebappDirectory(this, getId());
+    }
+
+    private void hideSplashScreen(final int reason) {
+        if (mSplashScreen == null) return;
+
+        mSplashScreen.animate()
+                .alpha(0f)
+                .withEndAction(new Runnable() {
+                    @Override
+                    public void run() {
+                        ViewGroup contentView =
+                                (ViewGroup) findViewById(android.R.id.content);
+                        if (mSplashScreen == null) return;
+                        contentView.removeView(mSplashScreen);
+                        mSplashScreen = null;
+                        mWebappUma.splashscreenHidden(reason);
+                    }
+                });
+    }
+
+    @VisibleForTesting
+    boolean isSplashScreenVisibleForTests() {
+        return mSplashScreen != null;
+    }
+
+    @VisibleForTesting
+    ViewGroup getSplashScreenForTests() {
+        return mSplashScreen;
     }
 
     @VisibleForTesting
@@ -292,21 +526,46 @@ public class WebappActivity extends FullScreenActivity {
     }
 
     @Override
-    protected int getControlContainerHeightResource() {
+    public int getControlContainerHeightResource() {
         return R.dimen.webapp_control_container_height;
     }
 
-    // Implements {@link FullScreenActivityTab.TopControlsVisibilityDelegate}.
     @Override
-    public boolean shouldShowTopControls(String url, int securityLevel) {
-        boolean visible = false;  // do not show top controls when URL is not ready yet.
-        if (!TextUtils.isEmpty(url)) {
-            boolean isSameWebsite =
-                    UrlUtilities.sameDomainOrHost(mWebappInfo.uri().toString(), url, true);
-            visible = !isSameWebsite || securityLevel == ConnectionSecurityLevel.SECURITY_ERROR
-                    || securityLevel == ConnectionSecurityLevel.SECURITY_WARNING;
-        }
+    protected Drawable getBackgroundDrawable() {
+        return null;
+    }
 
+    @Override
+    protected TabDelegateFactory createTabDelegateFactory() {
+        return new FullScreenDelegateFactory() {
+            @Override
+            public TopControlsVisibilityDelegate createTopControlsVisibilityDelegate(Tab tab) {
+                return new TopControlsVisibilityDelegate(tab) {
+                    @Override
+                    public boolean isShowingTopControlsEnabled() {
+                        if (!super.isShowingTopControlsEnabled()) return false;
+                        return shouldShowTopControls(mTab.getUrl(), mTab.getSecurityLevel());
+                    }
+
+                    @Override
+                    public boolean isHidingTopControlsEnabled() {
+                        return !isShowingTopControlsEnabled();
+                    }
+                };
+            }
+        };
+    }
+
+    public boolean shouldShowTopControls(String url, int securityLevel) {
+        // Do not show top controls when URL is not ready yet.
+        boolean visible = false;
+        if (TextUtils.isEmpty(url)) return false;
+
+        boolean isSameWebsite = UrlUtilities.sameDomainOrHost(
+                mWebappInfo.uri().toString(), url, true);
+        visible = !isSameWebsite
+                || securityLevel == ConnectionSecurityLevel.SECURITY_ERROR
+                || securityLevel == ConnectionSecurityLevel.SECURITY_WARNING;
         return visible;
     }
 

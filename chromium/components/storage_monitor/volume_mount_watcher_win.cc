@@ -5,6 +5,8 @@
 #include "components/storage_monitor/volume_mount_watcher_win.h"
 
 #include <windows.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <dbt.h>
 #include <fileapi.h>
@@ -70,7 +72,7 @@ DeviceType GetDeviceType(const base::string16& mount_point) {
   // Check device strings of the form "X:" and "\\.\X:"
   // For floppy drives, these will return strings like "/Device/Floppy0"
   base::string16 device = mount_point;
-  if (base::EndsWith(mount_point, L"\\", false))
+  if (base::EndsWith(mount_point, L"\\", base::CompareCase::INSENSITIVE_ASCII))
     device = mount_point.substr(0, mount_point.length() - 1);
   base::string16 device_path;
   base::string16 device_path_slash;
@@ -93,7 +95,7 @@ DeviceType GetDeviceType(const base::string16& mount_point) {
 }
 
 // Returns 0 if the devicetype is not volume.
-uint32 GetVolumeBitMaskFromBroadcastHeader(LPARAM data) {
+uint32_t GetVolumeBitMaskFromBroadcastHeader(LPARAM data) {
   DEV_BROADCAST_VOLUME* dev_broadcast_volume =
       reinterpret_cast<DEV_BROADCAST_VOLUME*>(data);
   if (dev_broadcast_volume->dbcv_devicetype == DBT_DEVTYP_VOLUME)
@@ -110,7 +112,7 @@ bool IsLogicalVolumeStructure(LPARAM data) {
 }
 
 // Gets the total volume of the |mount_point| in bytes.
-uint64 GetVolumeSize(const base::string16& mount_point) {
+uint64_t GetVolumeSize(const base::string16& mount_point) {
   ULARGE_INTEGER total;
   if (!GetDiskFreeSpaceExW(mount_point.c_str(), NULL, &total, NULL))
     return 0;
@@ -172,7 +174,7 @@ bool GetDeviceDetails(const base::FilePath& device_path, StorageInfo* info) {
                         base::WriteInto(&volume_label, kMaxPathBufLen),
                         kMaxPathBufLen, NULL, NULL, NULL, NULL, 0);
 
-  uint64 total_size_in_bytes = GetVolumeSize(mount_point);
+  uint64_t total_size_in_bytes = GetVolumeSize(mount_point);
   std::string device_id =
       StorageInfo::MakeDeviceId(type, base::UTF16ToUTF8(guid));
 

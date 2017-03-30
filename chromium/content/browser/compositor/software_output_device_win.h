@@ -5,12 +5,14 @@
 #ifndef CONTENT_BROWSER_COMPOSITOR_SOFTWARE_OUTPUT_DEVICE_WIN_H_
 #define CONTENT_BROWSER_COMPOSITOR_SOFTWARE_OUTPUT_DEVICE_WIN_H_
 
+#include <windows.h>
+#include <stddef.h>
+
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "cc/output/software_output_device.h"
-
-#include <windows.h>
 
 namespace base {
 class SharedMemory;
@@ -31,7 +33,7 @@ class OutputDeviceBacking {
   void Resized();
   void RegisterOutputDevice(SoftwareOutputDeviceWin* device);
   void UnregisterOutputDevice(SoftwareOutputDeviceWin* device);
-  base::SharedMemory* GetSharedMemory();
+  base::SharedMemory* GetSharedMemory(const gfx::Size& size);
 
  private:
   size_t GetMaxByteSize();
@@ -52,7 +54,7 @@ class SoftwareOutputDeviceWin : public cc::SoftwareOutputDevice {
   void Resize(const gfx::Size& viewport_pixel_size,
               float scale_factor) override;
   SkCanvas* BeginPaint(const gfx::Rect& damage_rect) override;
-  void EndPaint(cc::SoftwareFrameData* frame_data) override;
+  void EndPaint() override;
 
   gfx::Size viewport_pixel_size() const { return viewport_pixel_size_; }
   void ReleaseContents();

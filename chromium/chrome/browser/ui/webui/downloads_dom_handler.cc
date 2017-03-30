@@ -4,10 +4,11 @@
 
 #include "chrome/browser/ui/webui/downloads_dom_handler.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <functional>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/i18n/rtl.h"
@@ -39,6 +40,7 @@
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/fileicon_source.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "content/public/browser/browser_thread.h"
@@ -49,6 +51,7 @@
 #include "content/public/browser/web_ui.h"
 #include "extensions/browser/extension_system.h"
 #include "net/base/filename_util.h"
+#include "third_party/icu/source/i18n/unicode/datefmt.h"
 #include "ui/base/l10n/time_format.h"
 #include "ui/gfx/image/image.h"
 
@@ -60,7 +63,7 @@ namespace {
 
 // Maximum number of downloads to show. TODO(glen): Remove this and instead
 // stuff the downloads down the pipe slowly.
-static const size_t kMaxDownloads = 150;
+size_t kMaxNumberOfDownloads = 150;
 
 enum DownloadsDOMEvent {
   DOWNLOADS_DOM_EVENT_GET_DOWNLOADS = 0,
@@ -132,8 +135,11 @@ base::DictionaryValue* CreateDownloadItemValue(
   file_value->SetString(
       "since_string", ui::TimeFormat::RelativeDate(
           download_item->GetStartTime(), NULL));
-  file_value->SetString(
-      "date_string", base::TimeFormatShortDate(download_item->GetStartTime()));
+
+  base::Time start_time = download_item->GetStartTime();
+  base::string16 date_string = base::TimeFormatShortDate(start_time);
+  file_value->SetString("date_string", date_string);
+
   file_value->SetString("id", base::Uint64ToString(download_item->GetId()));
 
   base::FilePath download_path(download_item->GetTargetFilePath());
@@ -143,9 +149,13 @@ base::DictionaryValue* CreateDownloadItemValue(
 
   extensions::DownloadedByExtension* by_ext =
       extensions::DownloadedByExtension::Get(download_item);
+  std::string by_ext_id;
+  std::string by_ext_name;
   if (by_ext) {
-    file_value->SetString("by_ext_id", by_ext->id());
-    file_value->SetString("by_ext_name", by_ext->name());
+    by_ext_id = by_ext->id();
+    // TODO(dbeam): why doesn't DownloadsByExtension::name() return a string16?
+    by_ext_name = by_ext->name();
+
     // Lookup the extension's current name() in case the user changed their
     // language. This won't work if the extension was uninstalled, so the name
     // might be the wrong language.
@@ -156,6 +166,8 @@ base::DictionaryValue* CreateDownloadItemValue(
     if (extension)
       file_value->SetString("by_ext_name", extension->name());
   }
+  file_value->SetString("by_ext_id", by_ext_id);
+  file_value->SetString("by_ext_name", by_ext_name);
 
   // Keep file names as LTR.
   base::string16 file_name =
@@ -168,13 +180,20 @@ base::DictionaryValue* CreateDownloadItemValue(
       download_item->GetTotalBytes()));
   file_value->SetBoolean("file_externally_removed",
                          download_item->GetFileExternallyRemoved());
-  file_value->SetBoolean("retry", false); // Overridden below if needed.
   file_value->SetBoolean("resume", download_item->CanResume());
 
+  const char* danger_type = "";
+  base::string16 last_reason_text;
+  // -2 is invalid, -1 means indeterminate, and 0-100 are in-progress.
+  int percent = -2;
+  base::string16 progress_status_text;
+  bool retry = false;
+  const char* state = nullptr;
+
   switch (download_item->GetState()) {
-    case content::DownloadItem::IN_PROGRESS:
+    case content::DownloadItem::IN_PROGRESS: {
       if (download_item->IsDangerous()) {
-        file_value->SetString("state", "DANGEROUS");
+        state = "DANGEROUS";
         // These are the only danger states that the UI is equipped to handle.
         DCHECK(download_item->GetDangerType() ==
                    content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE ||
@@ -188,53 +207,53 @@ base::DictionaryValue* CreateDownloadItemValue(
                    content::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST ||
                download_item->GetDangerType() ==
                    content::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED);
-        const char* danger_type_value =
-            GetDangerTypeString(download_item->GetDangerType());
-        file_value->SetString("danger_type", danger_type_value);
+        danger_type = GetDangerTypeString(download_item->GetDangerType());
       } else if (download_item->IsPaused()) {
-        file_value->SetString("state", "PAUSED");
+        state = "PAUSED";
       } else {
-        file_value->SetString("state", "IN_PROGRESS");
+        state = "IN_PROGRESS";
       }
-      file_value->SetString("progress_status_text",
-                            download_model.GetTabProgressStatusText());
-
-      file_value->SetInteger("percent",
-          std::max(0, static_cast<int>(download_item->PercentComplete())));
-      file_value->SetInteger("received",
-          static_cast<int>(download_item->GetReceivedBytes()));
+      progress_status_text = download_model.GetTabProgressStatusText();
+      percent = std::max(0, download_item->PercentComplete());
       break;
+    }
 
     case content::DownloadItem::INTERRUPTED:
-      file_value->SetString("state", "INTERRUPTED");
+      state = "INTERRUPTED";
+      progress_status_text = download_model.GetTabProgressStatusText();
 
-      file_value->SetString("progress_status_text",
-                            download_model.GetTabProgressStatusText());
+      if (download_item->CanResume())
+        percent = download_item->PercentComplete();
 
-      file_value->SetInteger("percent",
-          static_cast<int>(download_item->PercentComplete()));
-      file_value->SetInteger("received",
-          static_cast<int>(download_item->GetReceivedBytes()));
-      file_value->SetString("last_reason_text",
-                            download_model.GetInterruptReasonText());
+      last_reason_text = download_model.GetInterruptReasonText();
       if (content::DOWNLOAD_INTERRUPT_REASON_CRASH ==
-          download_item->GetLastReason() && !download_item->CanResume())
-        file_value->SetBoolean("retry", true);
+          download_item->GetLastReason() && !download_item->CanResume()) {
+        retry = true;
+      }
       break;
 
     case content::DownloadItem::CANCELLED:
-      file_value->SetString("state", "CANCELLED");
-      file_value->SetBoolean("retry", true);
+      state = "CANCELLED";
+      retry = true;
       break;
 
     case content::DownloadItem::COMPLETE:
       DCHECK(!download_item->IsDangerous());
-      file_value->SetString("state", "COMPLETE");
+      state = "COMPLETE";
       break;
 
     case content::DownloadItem::MAX_DOWNLOAD_STATE:
       NOTREACHED();
   }
+
+  DCHECK(state);
+
+  file_value->SetString("danger_type", danger_type);
+  file_value->SetString("last_reason_text", last_reason_text);
+  file_value->SetInteger("percent", percent);
+  file_value->SetString("progress_status_text", progress_status_text);
+  file_value->SetBoolean("retry", retry);
+  file_value->SetString("state", state);
 
   return file_value;
 }
@@ -251,19 +270,15 @@ bool IsDownloadDisplayable(const content::DownloadItem& item) {
 
 }  // namespace
 
-DownloadsDOMHandler::DownloadsDOMHandler(content::DownloadManager* dlm)
-    : main_notifier_(dlm, this),
+DownloadsDOMHandler::DownloadsDOMHandler(
+    content::DownloadManager* download_manager)
+    : download_manager_(download_manager),
       update_scheduled_(false),
       weak_ptr_factory_(this) {
   // Create our fileicon data source.
-  Profile* profile = Profile::FromBrowserContext(dlm->GetBrowserContext());
+  Profile* profile = Profile::FromBrowserContext(
+      download_manager->GetBrowserContext());
   content::URLDataSource::Add(profile, new FileIconSource());
-
-  if (profile->IsOffTheRecord()) {
-    original_notifier_.reset(new AllDownloadItemNotifier(
-        BrowserContext::GetDownloadManager(profile->GetOriginalProfile()),
-        this));
-  }
 }
 
 DownloadsDOMHandler::~DownloadsDOMHandler() {
@@ -361,9 +376,10 @@ void DownloadsDOMHandler::OnDownloadUpdated(
       return;
   }
 
+  DCHECK(manager);
   scoped_ptr<base::DictionaryValue> item(CreateDownloadItemValue(
       download_item,
-      original_notifier_ && manager == main_notifier_.GetManager()));
+      original_notifier_ && manager == GetMainNotifierManager()));
   CallUpdateItem(*item);
 }
 
@@ -390,6 +406,18 @@ void DownloadsDOMHandler::HandleGetDownloads(const base::ListValue* args) {
   CountDownloadsDOMEvents(DOWNLOADS_DOM_EVENT_GET_DOWNLOADS);
   search_terms_.reset(args && !args->empty() ? args->DeepCopy() : NULL);
   ScheduleSendCurrentDownloads();
+
+  if (!main_notifier_) {
+    main_notifier_.reset(new AllDownloadItemNotifier(download_manager_, this));
+
+    Profile* profile = Profile::FromBrowserContext(
+        download_manager_->GetBrowserContext());
+    if (profile->IsOffTheRecord()) {
+      original_notifier_.reset(new AllDownloadItemNotifier(
+          BrowserContext::GetDownloadManager(profile->GetOriginalProfile()),
+          this));
+    }
+  }
 }
 
 void DownloadsDOMHandler::HandleOpenFile(const base::ListValue* args) {
@@ -478,7 +506,7 @@ void DownloadsDOMHandler::HandleUndo(const base::ListValue* args) {
   if (removals_.empty())
     return;
 
-  const std::set<uint32> last_removed_ids = removals_.back();
+  const std::set<uint32_t> last_removed_ids = removals_.back();
   removals_.pop_back();
 
   for (auto id : last_removed_ids) {
@@ -514,14 +542,14 @@ void DownloadsDOMHandler::HandleClearAll(const base::ListValue* args) {
   std::vector<content::DownloadItem*> downloads;
   if (GetMainNotifierManager())
     GetMainNotifierManager()->GetAllDownloads(&downloads);
-  if (original_notifier_ && original_notifier_->GetManager())
-    original_notifier_->GetManager()->GetAllDownloads(&downloads);
+  if (GetOriginalNotifierManager())
+    GetOriginalNotifierManager()->GetAllDownloads(&downloads);
   RemoveDownloads(downloads);
 }
 
 void DownloadsDOMHandler::RemoveDownloads(
     const std::vector<content::DownloadItem*>& to_remove) {
-  std::set<uint32> ids;
+  std::set<uint32_t> ids;
 
   for (auto* download : to_remove) {
     DownloadItemModel item_model(download);
@@ -542,7 +570,7 @@ void DownloadsDOMHandler::RemoveDownloads(
 void DownloadsDOMHandler::HandleOpenDownloadsFolder(
     const base::ListValue* args) {
   CountDownloadsDOMEvents(DOWNLOADS_DOM_EVENT_OPEN_FOLDER);
-  content::DownloadManager* manager = main_notifier_.GetManager();
+  content::DownloadManager* manager = GetMainNotifierManager();
   if (manager) {
     platform_util::OpenItem(
         Profile::FromBrowserContext(manager->GetBrowserContext()),
@@ -568,13 +596,18 @@ void DownloadsDOMHandler::ScheduleSendCurrentDownloads() {
                  weak_ptr_factory_.GetWeakPtr()));
 }
 
-content::DownloadManager* DownloadsDOMHandler::GetMainNotifierManager() {
-  return main_notifier_.GetManager();
+content::DownloadManager* DownloadsDOMHandler::GetMainNotifierManager() const {
+  return main_notifier_ ? main_notifier_->GetManager() : nullptr;
+}
+
+content::DownloadManager* DownloadsDOMHandler::GetOriginalNotifierManager()
+    const {
+  return original_notifier_ ? original_notifier_->GetManager() : nullptr;
 }
 
 void DownloadsDOMHandler::FinalizeRemovals() {
   while (!removals_.empty()) {
-    const std::set<uint32> remove = removals_.back();
+    const std::set<uint32_t> remove = removals_.back();
     removals_.pop_back();
 
     for (const auto id : remove) {
@@ -589,13 +622,13 @@ void DownloadsDOMHandler::SendCurrentDownloads() {
   update_scheduled_ = false;
 
   content::DownloadManager::DownloadVector all_items, filtered_items;
-  if (main_notifier_.GetManager()) {
-    main_notifier_.GetManager()->GetAllDownloads(&all_items);
-    main_notifier_.GetManager()->CheckForHistoryFilesRemoval();
+  if (GetMainNotifierManager()) {
+    GetMainNotifierManager()->GetAllDownloads(&all_items);
+    GetMainNotifierManager()->CheckForHistoryFilesRemoval();
   }
-  if (original_notifier_ && original_notifier_->GetManager()) {
-    original_notifier_->GetManager()->GetAllDownloads(&all_items);
-    original_notifier_->GetManager()->CheckForHistoryFilesRemoval();
+  if (GetOriginalNotifierManager()) {
+    GetOriginalNotifierManager()->GetAllDownloads(&all_items);
+    GetOriginalNotifierManager()->CheckForHistoryFilesRemoval();
   }
 
   DownloadQuery query;
@@ -603,15 +636,15 @@ void DownloadsDOMHandler::SendCurrentDownloads() {
     query.AddFilter(DownloadQuery::FILTER_QUERY, *search_terms_);
   query.AddFilter(base::Bind(&IsDownloadDisplayable));
   query.AddSorter(DownloadQuery::SORT_START_TIME, DownloadQuery::DESCENDING);
-  query.Limit(kMaxDownloads);
+  query.Limit(kMaxNumberOfDownloads);
   query.Search(all_items.begin(), all_items.end(), &filtered_items);
 
   base::ListValue results_value;
   for (auto* item : filtered_items) {
     results_value.Append(CreateDownloadItemValue(
         item,
-        original_notifier_ && main_notifier_.GetManager() &&
-            main_notifier_.GetManager()->GetDownload(item->GetId()) == item));
+        original_notifier_ && GetMainNotifierManager() &&
+            GetMainNotifierManager()->GetDownload(item->GetId()) == item));
   }
   CallUpdateAll(results_value);
 }
@@ -633,10 +666,10 @@ void DownloadsDOMHandler::DangerPromptDone(
   if (action != DownloadDangerPrompt::ACCEPT)
     return;
   content::DownloadItem* item = NULL;
-  if (main_notifier_.GetManager())
-    item = main_notifier_.GetManager()->GetDownload(download_id);
-  if (!item && original_notifier_.get() && original_notifier_->GetManager())
-    item = original_notifier_->GetManager()->GetDownload(download_id);
+  if (GetMainNotifierManager())
+    item = GetMainNotifierManager()->GetDownload(download_id);
+  if (!item && GetOriginalNotifierManager())
+    item = GetOriginalNotifierManager()->GetDownload(download_id);
   if (!item || item->IsDone())
     return;
   CountDownloadsDOMEvents(DOWNLOADS_DOM_EVENT_SAVE_DANGEROUS);
@@ -644,7 +677,7 @@ void DownloadsDOMHandler::DangerPromptDone(
 }
 
 bool DownloadsDOMHandler::IsDeletingHistoryAllowed() {
-  content::DownloadManager* manager = main_notifier_.GetManager();
+  content::DownloadManager* manager = GetMainNotifierManager();
   return manager &&
          Profile::FromBrowserContext(manager->GetBrowserContext())->
              GetPrefs()->GetBoolean(prefs::kAllowDeletingBrowserHistory);
@@ -658,21 +691,21 @@ content::DownloadItem* DownloadsDOMHandler::GetDownloadByValue(
     return nullptr;
   }
 
-  uint64 id;
+  uint64_t id;
   if (!base::StringToUint64(download_id, &id)) {
     NOTREACHED();
     return nullptr;
   }
 
-  return GetDownloadById(static_cast<uint32>(id));
+  return GetDownloadById(static_cast<uint32_t>(id));
 }
 
-content::DownloadItem* DownloadsDOMHandler::GetDownloadById(uint32 id) {
+content::DownloadItem* DownloadsDOMHandler::GetDownloadById(uint32_t id) {
   content::DownloadItem* item = NULL;
   if (GetMainNotifierManager())
     item = GetMainNotifierManager()->GetDownload(id);
-  if (!item && original_notifier_ && original_notifier_->GetManager())
-    item = original_notifier_->GetManager()->GetDownload(id);
+  if (!item && GetOriginalNotifierManager())
+    item = GetOriginalNotifierManager()->GetDownload(id);
   return item;
 }
 

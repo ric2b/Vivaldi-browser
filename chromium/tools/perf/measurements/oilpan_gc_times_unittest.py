@@ -4,8 +4,6 @@
 
 from measurements import oilpan_gc_times
 
-from telemetry import decorators
-from telemetry.core import util
 from telemetry.internal.results import page_test_results
 from telemetry.page import page as page_module
 from telemetry.testing import options_for_unittests
@@ -13,7 +11,6 @@ from telemetry.testing import page_test_test_case
 from telemetry.timeline import model
 from telemetry.timeline import slice as slice_data
 
-util.AddDirToPythonPath(util.GetTelemetryDir(), 'third_party', 'mock')
 import mock  # pylint: disable=import-error
 
 
@@ -86,8 +83,6 @@ class OilpanGCTimesTest(page_test_test_case.PageTestTestCase):
   def setUp(self):
     self._options = options_for_unittests.GetCopy()
 
-  #disabled in vivaldi: Uses Google storage
-  @decorators.Disabled
   # Disable for accessing private API of _OilpanGCTimesBase.
   # pylint: disable=protected-access
   def testForParsingOldFormat(self):
@@ -122,8 +117,6 @@ class OilpanGCTimesTest(page_test_test_case.PageTestTestCase):
     self.assertEquals(2, len(getMetric(results,
                                        'oilpan_forced_complete_sweep')))
 
-  #disabled in vivaldi: Uses Google storage
-  @decorators.Disabled
   # Disable for accessing private API of _OilpanGCTimesBase.
   # pylint: disable=protected-access
   def testForParsing(self):
@@ -162,8 +155,6 @@ class OilpanGCTimesTest(page_test_test_case.PageTestTestCase):
     self.assertEquals(2, len(getMetric(results,
                                        'oilpan_idle_complete_sweep')))
 
-  #disabled in vivaldi: Uses Google storage
-  @decorators.Disabled
   def testForSmoothness(self):
     ps = self.CreateStorySetFromFileInUnittestDataDir(
         'create_many_objects.html')
@@ -177,8 +168,6 @@ class OilpanGCTimesTest(page_test_test_case.PageTestTestCase):
       gc_events.extend(results.FindAllPageSpecificValuesNamed(label))
     self.assertLess(0, len(gc_events))
 
-  #disabled in vivaldi: Uses Google storage
-  @decorators.Disabled
   def testForBlinkPerf(self):
     ps = self.CreateStorySetFromFileInUnittestDataDir(
         'create_many_objects.html')

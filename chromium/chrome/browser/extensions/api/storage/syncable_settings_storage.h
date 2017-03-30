@@ -5,7 +5,13 @@
 #ifndef CHROME_BROWSER_EXTENSIONS_API_STORAGE_SYNCABLE_SETTINGS_STORAGE_H_
 #define CHROME_BROWSER_EXTENSIONS_API_STORAGE_SYNCABLE_SETTINGS_STORAGE_H_
 
+#include <stddef.h>
+
+#include <string>
+#include <vector>
+
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list_threadsafe.h"
@@ -48,8 +54,6 @@ class SyncableSettingsStorage : public ValueStore {
   WriteResult Remove(const std::string& key) override;
   WriteResult Remove(const std::vector<std::string>& keys) override;
   WriteResult Clear() override;
-  bool Restore() override;
-  bool RestoreKey(const std::string& key) override;
 
   // Sync-related methods, analogous to those on SyncableService (handled by
   // ExtensionSettings), but with looser guarantees about when the methods
@@ -76,6 +80,11 @@ class SyncableSettingsStorage : public ValueStore {
  private:
   // Sends the changes from |result| to sync if it's enabled.
   void SyncResultIfEnabled(const ValueStore::WriteResult& result);
+
+  // Analyze the result returned by a call to the delegate, and take appropriate
+  // measures.
+  template <class T>
+  T HandleResult(T result);
 
   // Sends all local settings to sync. This assumes that there are no settings
   // in sync yet.

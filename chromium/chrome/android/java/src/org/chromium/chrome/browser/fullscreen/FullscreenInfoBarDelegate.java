@@ -4,17 +4,17 @@
 
 package org.chromium.chrome.browser.fullscreen;
 
-import org.chromium.base.CalledByNative;
-import org.chromium.chrome.browser.Tab;
+import org.chromium.base.annotations.CalledByNative;
 import org.chromium.chrome.browser.preferences.website.ContentSetting;
 import org.chromium.chrome.browser.preferences.website.FullscreenInfo;
+import org.chromium.chrome.browser.tab.Tab;
 
 /**
  * Class for managing the fullscreen infobar.
  */
 public class FullscreenInfoBarDelegate {
     private final FullscreenHtmlApiHandler mHandler;
-    private final Tab mTab;
+    private final boolean mIsForIncognitoTab;
     private long mNativeFullscreenInfoBarDelegate = 0;
 
     /**
@@ -31,7 +31,7 @@ public class FullscreenInfoBarDelegate {
             FullscreenHtmlApiHandler handler, Tab tab) {
         assert tab != null;
         mHandler = handler;
-        mTab = tab;
+        mIsForIncognitoTab = tab.isIncognito();
         mNativeFullscreenInfoBarDelegate = nativeLaunchFullscreenInfoBar(tab);
     }
 
@@ -40,7 +40,7 @@ public class FullscreenInfoBarDelegate {
      */
     protected void closeFullscreenInfoBar() {
         if (mNativeFullscreenInfoBarDelegate != 0) {
-            nativeCloseFullscreenInfoBar(mNativeFullscreenInfoBarDelegate, mTab);
+            nativeCloseFullscreenInfoBar(mNativeFullscreenInfoBarDelegate);
         }
     }
 
@@ -51,7 +51,7 @@ public class FullscreenInfoBarDelegate {
      */
     @CalledByNative
     private void onFullscreenAllowed(String origin) {
-        FullscreenInfo fullscreenInfo = new FullscreenInfo(origin, null);
+        FullscreenInfo fullscreenInfo = new FullscreenInfo(origin, null, mIsForIncognitoTab);
         fullscreenInfo.setContentSetting(ContentSetting.ALLOW);
     }
 
@@ -72,5 +72,5 @@ public class FullscreenInfoBarDelegate {
     }
 
     private native long nativeLaunchFullscreenInfoBar(Tab tab);
-    private native void nativeCloseFullscreenInfoBar(long nativeFullscreenInfoBarDelegate, Tab tab);
+    private native void nativeCloseFullscreenInfoBar(long nativeFullscreenInfoBarDelegate);
 }

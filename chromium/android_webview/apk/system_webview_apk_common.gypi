@@ -8,14 +8,10 @@
   'type': 'none',
   'dependencies': [
     '<(DEPTH)/android_webview/android_webview.gyp:libwebviewchromium',
-    '<(DEPTH)/android_webview/android_webview.gyp:android_webview_java',
-    '<(DEPTH)/android_webview/android_webview.gyp:android_webview_pak',
   ],
   'variables': {
     'native_lib_target': 'libwebviewchromium',
-    'never_lint': 1,
-    'R_package': 'com.android.webview.chromium',
-    'R_package_relpath': 'com/android/webview/chromium',
+    'native_lib_version_name': '<(version_full)',
     'shared_resources': 1,
     'extensions_to_not_compress': '.lpak,.pak,.bin,.dat',
     'asset_location': '<(INTERMEDIATE_DIR)/assets/',
@@ -26,8 +22,7 @@
     'android_manifest_template_vars': [ ],
     'android_manifest_template_path': '<(DEPTH)/android_webview/apk/java/AndroidManifest.xml',
     'android_manifest_path': '<(jinja_output)',
-    # TODO: crbug.com/442348 Update proguard.flags and re-enable.
-    'proguard_enabled': 'false',
+    'proguard_enabled': 'true',
     'proguard_flags_paths': ['<(DEPTH)/android_webview/apk/java/proguard.flags'],
     # TODO: crbug.com/405035 Find a better solution for WebView .pak files.
     'additional_input_paths': [
@@ -36,6 +31,7 @@
       '<@(snapshot_additional_input_paths)',
     ],
     'includes': [
+      '../../build/util/version.gypi',
       '../snapshot_copying.gypi',
     ],
     'conditions': [
@@ -50,7 +46,8 @@
     {
       'destination': '<(asset_location)',
       'files': [
-        '<(PRODUCT_DIR)/android_webview_assets/webviewchromium.pak',
+        '<(webview_licenses_path)',
+        '<(webview_chromium_pak_path)',
         '<@(snapshot_copy_files)',
       ],
       'conditions': [
@@ -62,27 +59,8 @@
       ],
     },
   ],
-  'actions': [
-    {
-      'action_name': 'generate_webview_license_notice',
-      'inputs': [
-        '<!@(python <(DEPTH)/android_webview/tools/webview_licenses.py notice_deps)',
-        '<(DEPTH)/android_webview/tools/licenses_notice.tmpl',
-        '<(DEPTH)/android_webview/tools/webview_licenses.py',
-      ],
-      'outputs': [
-        '<(asset_location)/webview_licenses.notice',
-      ],
-      'action': [
-        'python',
-        '<(DEPTH)/android_webview/tools/webview_licenses.py',
-        'notice',
-        '<(asset_location)/webview_licenses.notice',
-      ],
-      'message': 'Generating WebView license notice',
-    },
-  ],
   'includes': [
+    'system_webview_paks.gypi',
     '../../build/java_apk.gypi',
     '../../build/android/jinja_template.gypi',
   ],

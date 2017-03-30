@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "chrome/browser/extensions/webstore_standalone_installer.h"
 
@@ -40,7 +41,7 @@ class AppInstaller : public extensions::WebstoreStandaloneInstaller {
   bool ShouldShowPostInstallUI() const override;
   bool ShouldShowAppInstalledBubble() const override;
   content::WebContents* GetWebContents() const override;
-  scoped_refptr<ExtensionInstallPrompt::Prompt> CreateInstallPrompt()
+  scoped_ptr<ExtensionInstallPrompt::Prompt> CreateInstallPrompt()
       const override;
   bool CheckInlineInstallPermitted(const base::DictionaryValue& webstore_data,
                                    std::string* error) const override;

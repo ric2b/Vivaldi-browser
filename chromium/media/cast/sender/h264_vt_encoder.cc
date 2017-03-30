@@ -4,6 +4,8 @@
 
 #include "media/cast/sender/h264_vt_encoder.h"
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
@@ -15,8 +17,11 @@
 #include "base/macros.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/synchronization/lock.h"
+#include "build/build_config.h"
 #include "media/base/mac/corevideo_glue.h"
 #include "media/base/mac/video_frame_mac.h"
+#include "media/cast/common/rtp_time.h"
+#include "media/cast/constants.h"
 #include "media/cast/sender/video_frame_factory.h"
 
 namespace media {
@@ -26,11 +31,11 @@ namespace {
 
 // Container for the associated data of a video frame being processed.
 struct InProgressFrameEncode {
-  const RtpTimestamp rtp_timestamp;
+  const RtpTimeTicks rtp_timestamp;
   const base::TimeTicks reference_time;
   const VideoEncoder::FrameEncodedCallback frame_encoded_callback;
 
-  InProgressFrameEncode(RtpTimestamp rtp,
+  InProgressFrameEncode(RtpTimeTicks rtp,
                         base::TimeTicks r_time,
                         VideoEncoder::FrameEncodedCallback callback)
       : rtp_timestamp(rtp),
@@ -320,7 +325,7 @@ H264VideoToolboxEncoder::H264VideoToolboxEncoder(
       videotoolbox_glue_(VideoToolboxGlue::Get()),
       video_config_(video_config),
       status_change_cb_(status_change_cb),
-      last_frame_id_(kStartFrameId),
+      last_frame_id_(kFirstFrameId - 1),
       encode_next_frame_as_keyframe_(false),
       power_suspended_(false),
       weak_factory_(this) {
@@ -566,7 +571,7 @@ bool H264VideoToolboxEncoder::EncodeVideoFrame(
   // Wrap information we'll need after the frame is encoded in a heap object.
   // We'll get the pointer back from the VideoToolbox completion callback.
   scoped_ptr<InProgressFrameEncode> request(new InProgressFrameEncode(
-      TimeDeltaToRtpDelta(video_frame->timestamp(), kVideoFrequency),
+      RtpTimeTicks::FromTimeDelta(video_frame->timestamp(), kVideoFrequency),
       reference_time, frame_encoded_callback));
 
   // Build a suitable frame properties dictionary for keyframes.
@@ -626,10 +631,6 @@ void H264VideoToolboxEncoder::SetBitRate(int /*new_bit_rate*/) {
 void H264VideoToolboxEncoder::GenerateKeyFrame() {
   DCHECK(thread_checker_.CalledOnValidThread());
   encode_next_frame_as_keyframe_ = true;
-}
-
-void H264VideoToolboxEncoder::LatestFrameIdToReference(uint32 /*frame_id*/) {
-  // Not supported by VideoToolbox in any meaningful manner.
 }
 
 scoped_ptr<VideoFrameFactory>
@@ -727,7 +728,7 @@ void H264VideoToolboxEncoder::CompressionCallback(void* encoder_opaque,
 
   // Increment the encoder-scoped frame id and assign the new value to this
   // frame. VideoToolbox calls the output callback serially, so this is safe.
-  const uint32 frame_id = ++encoder->last_frame_id_;
+  const uint32_t frame_id = ++encoder->last_frame_id_;
 
   scoped_ptr<SenderEncodedFrame> encoded_frame(new SenderEncodedFrame());
   encoded_frame->frame_id = frame_id;
@@ -756,6 +757,8 @@ void H264VideoToolboxEncoder::CompressionCallback(void* encoder_opaque,
   // TODO(miu): Compute and populate the |deadline_utilization| and
   // |lossy_utilization| performance metrics in |encoded_frame|.
 
+  encoded_frame->encode_completion_time =
+      encoder->cast_environment_->Clock()->NowTicks();
   encoder->cast_environment_->PostTask(
       CastEnvironment::MAIN, FROM_HERE,
       base::Bind(request->frame_encoded_callback,

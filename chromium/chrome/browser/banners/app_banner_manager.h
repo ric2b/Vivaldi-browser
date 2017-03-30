@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_BANNERS_APP_BANNER_MANAGER_H_
 #define CHROME_BROWSER_BANNERS_APP_BANNER_MANAGER_H_
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -32,50 +33,48 @@ class AppBannerManager : public content::WebContentsObserver,
  public:
   static void DisableSecureSchemeCheckForTesting();
 
+  static void SetEngagementWeights(double direct_engagement,
+                                   double indirect_engagement);
+
   // Returns whether or not the URLs match for everything except for the ref.
   static bool URLsAreForTheSamePage(const GURL& first, const GURL& second);
 
-  explicit AppBannerManager(int icon_size);
+  AppBannerManager();
   ~AppBannerManager() override;
 
-  // WebContentsObserver overrides.
-  void DidFinishLoad(content::RenderFrameHost* render_frame_host,
-                     const GURL& validated_url) override;
-
  protected:
-  AppBannerManager(content::WebContents* web_contents, int icon_size);
+  explicit AppBannerManager(content::WebContents* web_contents);
 
   void ReplaceWebContents(content::WebContents* web_contents);
 
   // Creates an AppBannerDataFetcher, which constructs an app banner.
   virtual AppBannerDataFetcher* CreateAppBannerDataFetcher(
-      base::WeakPtr<AppBannerDataFetcher::Delegate> weak_delegate,
-      const int ideal_icon_size) = 0;
+      base::WeakPtr<AppBannerDataFetcher::Delegate> weak_delegate) = 0;
 
   // Return whether the AppBannerDataFetcher is active.
   bool IsFetcherActive();
 
   scoped_refptr<AppBannerDataFetcher> data_fetcher() { return data_fetcher_; }
-  int ideal_icon_size() { return ideal_icon_size_; }
 
  private:
+  // WebContentsObserver overrides.
+  void DidNavigateMainFrame(
+      const content::LoadCommittedDetails& details,
+      const content::FrameNavigateParams& params) override;
+
+  void DidFinishLoad(content::RenderFrameHost* render_frame_host,
+                     const GURL& validated_url) override;
+
   // AppBannerDataFetcher::Delegate overrides.
   bool HandleNonWebApp(const std::string& platform,
                        const GURL& url,
                        const std::string& id) override;
 
-  // Called after the manager sends a message to the renderer regarding its
-  // intention to show a prompt. The renderer will send a message back with the
-  // opportunity to cancel.
-  void OnBannerPromptReply(content::RenderFrameHost* render_frame_host,
-                           int request_id,
-                           blink::WebAppBannerPromptReply reply);
-
   // Cancels an active DataFetcher, stopping its banners from appearing.
   void CancelActiveFetcher();
 
-  // Ideal icon size to use.
-  const int ideal_icon_size_;
+  // The type of navigation made to the page
+  ui::PageTransition last_transition_type_;
 
   // Fetches the data required to display a banner for the current page.
   scoped_refptr<AppBannerDataFetcher> data_fetcher_;

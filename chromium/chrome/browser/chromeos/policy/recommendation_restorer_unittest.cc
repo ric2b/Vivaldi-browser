@@ -4,6 +4,9 @@
 
 #include "chrome/browser/chromeos/policy/recommendation_restorer.h"
 
+#include <utility>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_notifier_impl.h"
 #include "base/prefs/testing_pref_store.h"
@@ -15,14 +18,14 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/policy/recommendation_restorer_factory.h"
 #include "chrome/browser/prefs/browser_prefs.h"
-#include "chrome/browser/prefs/pref_service_syncable.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
-#include "chrome/test/base/testing_pref_service_syncable.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/syncable_prefs/pref_service_syncable.h"
+#include "components/syncable_prefs/testing_pref_service_syncable.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
@@ -67,14 +70,14 @@ class RecommendationRestorerTest : public testing::Test {
   void VerifyTimerIsRunning() const;
 
   TestingPrefStore* recommended_prefs_;  // Not owned.
-  TestingPrefServiceSyncable* prefs_;    // Not owned.
+  syncable_prefs::TestingPrefServiceSyncable* prefs_;  // Not owned.
   RecommendationRestorer* restorer_;     // Not owned.
 
   scoped_refptr<base::TestSimpleTaskRunner> runner_;
   base::ThreadTaskRunnerHandle runner_handler_;
 
  private:
-  scoped_ptr<PrefServiceSyncable> prefs_owner_;
+  scoped_ptr<syncable_prefs::PrefServiceSyncable> prefs_owner_;
 
   TestingProfileManager profile_manager_;
 
@@ -83,7 +86,7 @@ class RecommendationRestorerTest : public testing::Test {
 
 RecommendationRestorerTest::RecommendationRestorerTest()
     : recommended_prefs_(new TestingPrefStore),
-      prefs_(new TestingPrefServiceSyncable(
+      prefs_(new syncable_prefs::TestingPrefServiceSyncable(
           new TestingPrefStore,
           new TestingPrefStore,
           recommended_prefs_,
@@ -93,8 +96,7 @@ RecommendationRestorerTest::RecommendationRestorerTest()
       runner_(new base::TestSimpleTaskRunner),
       runner_handler_(runner_),
       prefs_owner_(prefs_),
-      profile_manager_(TestingBrowserProcess::GetGlobal()) {
-}
+      profile_manager_(TestingBrowserProcess::GetGlobal()) {}
 
 void RecommendationRestorerTest::SetUp() {
   testing::Test::SetUp();
@@ -136,7 +138,7 @@ void RecommendationRestorerTest::SetUserSettings() {
 void RecommendationRestorerTest::CreateLoginProfile() {
   ASSERT_FALSE(restorer_);
   TestingProfile* profile = profile_manager_.CreateTestingProfile(
-      chrome::kInitialProfile, prefs_owner_.Pass(),
+      chrome::kInitialProfile, std::move(prefs_owner_),
       base::UTF8ToUTF16(chrome::kInitialProfile), 0, std::string(),
       TestingProfile::TestingFactories());
   restorer_ = RecommendationRestorerFactory::GetForProfile(profile);
@@ -146,8 +148,8 @@ void RecommendationRestorerTest::CreateLoginProfile() {
 void RecommendationRestorerTest::CreateUserProfile() {
   ASSERT_FALSE(restorer_);
   TestingProfile* profile = profile_manager_.CreateTestingProfile(
-      "user", prefs_owner_.Pass(), base::UTF8ToUTF16("user"), 0, std::string(),
-      TestingProfile::TestingFactories());
+      "user", std::move(prefs_owner_), base::UTF8ToUTF16("user"), 0,
+      std::string(), TestingProfile::TestingFactories());
   restorer_ = RecommendationRestorerFactory::GetForProfile(profile);
   EXPECT_TRUE(restorer_);
 }
@@ -167,7 +169,7 @@ void RecommendationRestorerTest::NotifyOfUserActivity() {
 void RecommendationRestorerTest::VerifyPrefFollowsUser(
     const char* pref_name,
     const base::Value& expected_value) const {
-  const PrefServiceSyncable::Preference* pref =
+  const syncable_prefs::PrefServiceSyncable::Preference* pref =
       prefs_->FindPreference(pref_name);
   ASSERT_TRUE(pref);
   EXPECT_TRUE(pref->HasUserSetting());
@@ -194,7 +196,7 @@ void RecommendationRestorerTest::VerifyPrefsFollowUser() const {
 void RecommendationRestorerTest::VerifyPrefFollowsRecommendation(
     const char* pref_name,
     const base::Value& expected_value) const {
-  const PrefServiceSyncable::Preference* pref =
+  const syncable_prefs::PrefServiceSyncable::Preference* pref =
       prefs_->FindPreference(pref_name);
   ASSERT_TRUE(pref);
   EXPECT_TRUE(pref->IsRecommended());

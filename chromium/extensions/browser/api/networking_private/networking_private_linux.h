@@ -5,16 +5,19 @@
 #ifndef EXTENSIONS_BROWSER_API_NETWORKING_PRIVATE_NETWORKING_PRIVATE_LINUX_H_
 #define EXTENSIONS_BROWSER_API_NETWORKING_PRIVATE_NETWORKING_PRIVATE_LINUX_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/threading/thread.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "extensions/browser/api/networking_private/networking_private_delegate.h"
 
-namespace context {
+namespace content {
 class BrowserContext;
 }
 
@@ -82,6 +85,18 @@ class NetworkingPrivateLinux : public NetworkingPrivateDelegate {
   void GetCaptivePortalStatus(const std::string& guid,
                               const StringCallback& success_callback,
                               const FailureCallback& failure_callback) override;
+  void UnlockCellularSim(const std::string& guid,
+                         const std::string& pin,
+                         const std::string& puk,
+                         const VoidCallback& success_callback,
+                         const FailureCallback& failure_callback) override;
+  void SetCellularSimState(const std::string& guid,
+                           bool require_pin,
+                           const std::string& current_pin,
+                           const std::string& new_pin,
+                           const VoidCallback& success_callback,
+                           const FailureCallback& failure_callback) override;
+
   scoped_ptr<base::ListValue> GetEnabledNetworkTypes() override;
   scoped_ptr<DeviceStateList> GetDeviceStateList() override;
   bool EnableNetworkType(const std::string& type) override;
@@ -200,7 +215,7 @@ class NetworkingPrivateLinux : public NetworkingPrivateDelegate {
                               scoped_ptr<base::DictionaryValue>& access_point);
 
   // Maps the WPA security flags to a human readable string.
-  void MapSecurityFlagsToString(uint32 securityFlags, std::string* security);
+  void MapSecurityFlagsToString(uint32_t securityFlags, std::string* security);
 
   // Gets the connected access point path on the given device. Internally gets
   // all active connections then checks if the device matches the requested

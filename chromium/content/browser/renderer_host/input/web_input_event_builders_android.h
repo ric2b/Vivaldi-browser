@@ -9,9 +9,11 @@
 
 #include "third_party/WebKit/public/web/WebInputEvent.h"
 
-namespace content {
-
+namespace ui {
 class MotionEventAndroid;
+}
+
+namespace content {
 
 class WebMouseEventBuilder {
  public:
@@ -26,14 +28,9 @@ class WebMouseEventBuilder {
 
 class WebMouseWheelEventBuilder {
  public:
-  enum Direction {
-    DIRECTION_UP,
-    DIRECTION_DOWN,
-    DIRECTION_LEFT,
-    DIRECTION_RIGHT,
-  };
-
-  static blink::WebMouseWheelEvent Build(Direction direction,
+  static blink::WebMouseWheelEvent Build(float ticks_x,
+                                         float ticks_y,
+                                         float tick_multiplier,
                                          double time_sec,
                                          int window_x,
                                          int window_y);
@@ -45,6 +42,7 @@ class WebKeyboardEventBuilder {
                                        int modifiers,
                                        double time_sec,
                                        int keycode,
+                                       int scancode,
                                        int unicode_character,
                                        bool is_system_key);
 };

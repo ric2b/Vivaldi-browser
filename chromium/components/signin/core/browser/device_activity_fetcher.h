@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -65,7 +66,7 @@ class DeviceActivityFetcher : public GaiaAuthConsumer,
 
   // If either fetcher fails, retry with exponential backoff.
   net::BackoffEntry fetcher_backoff_;
-  base::OneShotTimer<DeviceActivityFetcher> fetcher_timer_;
+  base::OneShotTimer fetcher_timer_;
   int fetcher_retries_;
 
   std::string access_token_;

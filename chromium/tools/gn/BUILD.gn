@@ -60,6 +60,7 @@ static_library("gn_lib") {
     "filesystem_utils.h",
     "function_exec_script.cc",
     "function_foreach.cc",
+    "function_forward_variables_from.cc",
     "function_get_label_info.cc",
     "function_get_path_info.cc",
     "function_get_target_outputs.cc",
@@ -95,6 +96,8 @@ static_library("gn_lib") {
     "label_pattern.cc",
     "label_pattern.h",
     "label_ptr.h",
+    "lib_file.cc",
+    "lib_file.h",
     "loader.cc",
     "loader.h",
     "location.cc",
@@ -214,6 +217,11 @@ action("last_commit_position") {
   ]
 }
 
+# Note for Windows debugging: GN is super-multithreaded and uses a lot of STL.
+# Iterator debugging on Windows does locking for every access, which ends up
+# slowing down debug runtime from 0:36 to 9:40. If you want to run debug builds
+# of GN over the large Chrome build, you will want to set the arg:
+#   enable_iterator_debugging = false
 executable("gn") {
   sources = [
     "gn_main.cc",
@@ -223,6 +231,16 @@ executable("gn") {
     ":gn_lib",
     ":last_commit_position",
     "//base",
+    "//build/config/sanitizers:deps",
+  ]
+}
+
+# TODO(GYP): Delete this after we've converted everything to GN.
+# The _run targets exist only for compatibility w/ GYP.
+group("gn_unittests_run") {
+  testonly = true
+  deps = [
+    ":gn_unittests",
   ]
 }
 
@@ -233,11 +251,13 @@ test("gn_unittests") {
     "builder_unittest.cc",
     "c_include_iterator_unittest.cc",
     "command_format_unittest.cc",
+    "config_unittest.cc",
     "config_values_extractors_unittest.cc",
     "escape_unittest.cc",
     "exec_process_unittest.cc",
     "filesystem_utils_unittest.cc",
     "function_foreach_unittest.cc",
+    "function_forward_variables_from_unittest.cc",
     "function_get_label_info_unittest.cc",
     "function_get_path_info_unittest.cc",
     "function_get_target_outputs_unittest.cc",
@@ -271,7 +291,6 @@ test("gn_unittests") {
     "string_utils_unittest.cc",
     "substitution_pattern_unittest.cc",
     "substitution_writer_unittest.cc",
-    "target_generator_unittest.cc",
     "target_unittest.cc",
     "template_unittest.cc",
     "test_with_scope.cc",
@@ -281,19 +300,15 @@ test("gn_unittests") {
     "value_unittest.cc",
     "visibility_unittest.cc",
   ]
+
+  data = [
+    "format_test_data/",
+  ]
+
   deps = [
     ":gn_lib",
     "//base/test:run_all_unittests",
     "//base/test:test_support",
     "//testing/gtest",
-  ]
-}
-
-executable("generate_test_gn_data") {
-  sources = [
-    "generate_test_gn_data.cc",
-  ]
-  deps = [
-    "//base",
   ]
 }

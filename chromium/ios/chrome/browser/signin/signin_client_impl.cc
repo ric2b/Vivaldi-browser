@@ -4,6 +4,10 @@
 
 #include "ios/chrome/browser/signin/signin_client_impl.h"
 
+#include <stddef.h>
+
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/guid.h"
 #include "base/logging.h"
@@ -14,26 +18,22 @@
 #include "components/metrics/metrics_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_cookie_changed_subscription.h"
-#include "components/signin/core/common/profile_management_switches.h"
-#include "components/signin/core/common/signin_pref_names.h"
-#include "components/signin/core/common/signin_switches.h"
+#include "components/signin/core/browser/signin_header_helper.h"
+#include "components/signin/ios/browser/profile_oauth2_token_service_ios_provider.h"
 #include "google_apis/gaia/gaia_constants.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "ios/chrome/browser/application_context.h"
+#include "ios/chrome/browser/browser_state/browser_state_info_cache.h"
 #include "ios/chrome/browser/content_settings/cookie_settings_factory.h"
+#include "ios/chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "ios/chrome/browser/signin/gaia_auth_fetcher_ios.h"
 #include "ios/chrome/browser/web_data_service_factory.h"
-#include "ios/public/provider/chrome/browser/browser_state/browser_state_info_cache.h"
+#include "ios/chrome/common/channel_info.h"
 #include "ios/public/provider/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/public/provider/chrome/browser/browser_state/chrome_browser_state_manager.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
-#include "ios/public/provider/components/signin/browser/profile_oauth2_token_service_ios_provider.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "url/gurl.h"
-
-namespace {
-const char kEphemeralUserDeviceIDPrefix[] = "t_";
-}
 
 SigninClientImpl::SigninClientImpl(
     ios::ChromeBrowserState* browser_state,
@@ -61,23 +61,7 @@ bool SigninClientImpl::AllowsSigninCookies(
     ios::ChromeBrowserState* browser_state) {
   scoped_refptr<content_settings::CookieSettings> cookie_settings =
       ios::CookieSettingsFactory::GetForBrowserState(browser_state);
-  return SettingsAllowSigninCookies(cookie_settings.get());
-}
-
-// static
-bool SigninClientImpl::SettingsAllowSigninCookies(
-    content_settings::CookieSettings* cookie_settings) {
-  GURL gaia_url = GaiaUrls::GetInstance()->gaia_url();
-  GURL google_url = GaiaUrls::GetInstance()->google_url();
-  return cookie_settings &&
-         cookie_settings->IsSettingCookieAllowed(gaia_url, gaia_url) &&
-         cookie_settings->IsSettingCookieAllowed(google_url, google_url);
-}
-
-// static
-std::string SigninClientImpl::GenerateSigninScopedDeviceID(bool for_ephemeral) {
-  std::string guid = base::GenerateGUID();
-  return for_ephemeral ? kEphemeralUserDeviceIDPrefix + guid : guid;
+  return signin::SettingsAllowSigninCookies(cookie_settings.get());
 }
 
 PrefService* SigninClientImpl::GetPrefs() {
@@ -94,23 +78,13 @@ bool SigninClientImpl::CanRevokeCredentials() {
 }
 
 std::string SigninClientImpl::GetSigninScopedDeviceId() {
-  std::string signin_scoped_device_id =
-      GetPrefs()->GetString(prefs::kGoogleServicesSigninScopedDeviceId);
-  if (signin_scoped_device_id.empty()) {
-    // If device_id doesn't exist then generate new and save in prefs.
-    signin_scoped_device_id = GenerateSigninScopedDeviceID(false);
-    DCHECK(!signin_scoped_device_id.empty());
-    GetPrefs()->SetString(prefs::kGoogleServicesSigninScopedDeviceId,
-                          signin_scoped_device_id);
-  }
-  return signin_scoped_device_id;
+  return GetOrCreateScopedDeviceIdPref(GetPrefs());
 }
 
 void SigninClientImpl::OnSignedOut() {
-  GetPrefs()->ClearPref(prefs::kGoogleServicesSigninScopedDeviceId);
-  ios::BrowserStateInfoCache* cache = GetApplicationContext()
-                                          ->GetChromeBrowserStateManager()
-                                          ->GetBrowserStateInfoCache();
+  BrowserStateInfoCache* cache = GetApplicationContext()
+                                     ->GetChromeBrowserStateManager()
+                                     ->GetBrowserStateInfoCache();
   size_t index = cache->GetIndexOfBrowserStateWithPath(
       browser_state_->GetOriginalChromeBrowserState()->GetStatePath());
 
@@ -119,10 +93,8 @@ void SigninClientImpl::OnSignedOut() {
   if (index == std::string::npos)
     return;
 
-  cache->SetLocalAuthCredentialsOfBrowserStateAtIndex(index, std::string());
   cache->SetAuthInfoOfBrowserStateAtIndex(index, std::string(),
                                           base::string16());
-  cache->SetBrowserStateSigninRequiredAtIndex(index, false);
 }
 
 net::URLRequestContextGetter* SigninClientImpl::GetURLRequestContext() {
@@ -134,7 +106,7 @@ bool SigninClientImpl::ShouldMergeSigninCredentialsIntoCookieJar() {
 }
 
 std::string SigninClientImpl::GetProductVersion() {
-  return ios::GetChromeBrowserProvider()->GetVersionString();
+  return GetVersionString();
 }
 
 bool SigninClientImpl::IsFirstRun() const {
@@ -152,12 +124,14 @@ bool SigninClientImpl::AreSigninCookiesAllowed() {
 
 void SigninClientImpl::AddContentSettingsObserver(
     content_settings::Observer* observer) {
-  browser_state_->GetHostContentSettingsMap()->AddObserver(observer);
+  ios::HostContentSettingsMapFactory::GetForBrowserState(browser_state_)
+      ->AddObserver(observer);
 }
 
 void SigninClientImpl::RemoveContentSettingsObserver(
     content_settings::Observer* observer) {
-  browser_state_->GetHostContentSettingsMap()->RemoveObserver(observer);
+  ios::HostContentSettingsMapFactory::GetForBrowserState(browser_state_)
+      ->RemoveObserver(observer);
 }
 
 scoped_ptr<SigninClient::CookieChangedSubscription>
@@ -170,7 +144,7 @@ SigninClientImpl::AddCookieChangedCallback(
   DCHECK(context_getter.get());
   scoped_ptr<SigninCookieChangedSubscription> subscription(
       new SigninCookieChangedSubscription(context_getter, url, name, callback));
-  return subscription.Pass();
+  return std::move(subscription);
 }
 
 void SigninClientImpl::OnSignedIn(const std::string& account_id,
@@ -179,7 +153,7 @@ void SigninClientImpl::OnSignedIn(const std::string& account_id,
                                   const std::string& password) {
   ios::ChromeBrowserStateManager* browser_state_manager =
       GetApplicationContext()->GetChromeBrowserStateManager();
-  ios::BrowserStateInfoCache* cache =
+  BrowserStateInfoCache* cache =
       browser_state_manager->GetBrowserStateInfoCache();
   size_t index = cache->GetIndexOfBrowserStateWithPath(
       browser_state_->GetOriginalChromeBrowserState()->GetStatePath());
@@ -189,44 +163,10 @@ void SigninClientImpl::OnSignedIn(const std::string& account_id,
   }
 }
 
-bool SigninClientImpl::UpdateAccountInfo(
-    AccountTrackerService::AccountInfo* out_account_info) {
-  DCHECK(!out_account_info->account_id.empty());
-  ios::AccountInfo account_info =
-      GetIOSProvider()->GetAccountInfo(out_account_info->account_id);
-  if (account_info.gaia.empty()) {
-    // There is no account information for this account, so there is nothing
-    // to be updated here.
-    return false;
-  }
-
-  bool updated = false;
-  if (out_account_info->gaia.empty()) {
-    out_account_info->gaia = account_info.gaia;
-    updated = true;
-  } else if (out_account_info->gaia != account_info.gaia) {
-    // The GAIA id of an account never changes. Avoid updating the wrong
-    // account if this occurs somehow.
-    NOTREACHED() << "out_account_info->gaia = '" << out_account_info->gaia
-                 << "' ; account_info.gaia = '" << account_info.gaia << "'";
-    return false;
-  }
-  if (out_account_info->email != account_info.email) {
-    out_account_info->email = account_info.email;
-    updated = true;
-  }
-  return updated;
-}
-
-ios::ProfileOAuth2TokenServiceIOSProvider* SigninClientImpl::GetIOSProvider() {
-  return ios::GetChromeBrowserProvider()
-      ->GetProfileOAuth2TokenServiceIOSProvider();
-}
-
 void SigninClientImpl::OnErrorChanged() {
-  ios::BrowserStateInfoCache* cache = GetApplicationContext()
-                                          ->GetChromeBrowserStateManager()
-                                          ->GetBrowserStateInfoCache();
+  BrowserStateInfoCache* cache = GetApplicationContext()
+                                     ->GetChromeBrowserStateManager()
+                                     ->GetBrowserStateInfoCache();
   size_t index = cache->GetIndexOfBrowserStateWithPath(
       browser_state_->GetOriginalChromeBrowserState()->GetStatePath());
   if (index == std::string::npos)
@@ -238,19 +178,6 @@ void SigninClientImpl::OnErrorChanged() {
 
 void SigninClientImpl::OnGetTokenInfoResponse(
     scoped_ptr<base::DictionaryValue> token_info) {
-  if (!token_info->HasKey("error")) {
-    std::string handle;
-    if (token_info->GetString("token_handle", &handle)) {
-      ios::BrowserStateInfoCache* cache = GetApplicationContext()
-                                              ->GetChromeBrowserStateManager()
-                                              ->GetBrowserStateInfoCache();
-      size_t index = cache->GetIndexOfBrowserStateWithPath(
-          browser_state_->GetOriginalChromeBrowserState()->GetStatePath());
-      cache->SetPasswordChangeDetectionTokenAtIndex(index, handle);
-    } else {
-      NOTREACHED();
-    }
-  }
   oauth_request_.reset();
 }
 

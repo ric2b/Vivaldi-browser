@@ -54,13 +54,16 @@ class Connection {
   // Disconnects from the remote device.
   virtual void Disconnect() = 0;
 
+  // The bluetooth address of the connected device.
+  virtual std::string GetDeviceAddress();
+
+  Status status() const { return status_; }
+
  protected:
   // Sets the connection's status to |status|. If this is different from the
   // previous status, notifies observers of the change in status.
   // Virtual for testing.
   virtual void SetStatus(Status status);
-
-  Status status() const { return status_; }
 
   // Called after attempting to send bytes over the connection, whether the
   // message was successfully sent or not.
@@ -73,7 +76,8 @@ class Connection {
   virtual void OnBytesReceived(const std::string& bytes);
 
   // Sends bytes over the connection. The implementing class should call
-  // OnSendCompleted() once the send succeeds or fails. At most one send will be
+  // OnDidSendMessage() once the send succeeds or fails. At most one send will
+  // be
   // in progress.
   virtual void SendMessageImpl(scoped_ptr<WireMessage> message) = 0;
 
@@ -84,12 +88,6 @@ class Connection {
   // the |serialized_message|. Exposed for testing.
   virtual scoped_ptr<WireMessage> DeserializeWireMessage(
       bool* is_incomplete_message);
-
-  // Exposed so it is possible to override DeserializeWireMessage in
-  // BluetoothLowEnergyConnection class, while mantaining the same
-  // functionality.
-  // TODO(sacomoto): remove this when FakeWireMessage is not needed anymore.
-  const std::string& received_bytes() { return received_bytes_; }
 
  private:
   // The remote device corresponding to this connection.

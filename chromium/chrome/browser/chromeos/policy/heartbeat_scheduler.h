@@ -5,9 +5,10 @@
 #ifndef CHROME_BROWSER_CHROMEOS_POLICY_HEARTBEAT_SCHEDULER_H_
 #define CHROME_BROWSER_CHROMEOS_POLICY_HEARTBEAT_SCHEDULER_H_
 
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/cancelable_callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -16,6 +17,8 @@
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "components/gcm_driver/gcm_app_handler.h"
 #include "components/gcm_driver/gcm_client.h"
+#include "components/gcm_driver/gcm_connection_observer.h"
+#include "components/policy/core/common/cloud/cloud_policy_client.h"
 
 namespace base {
 class SequencedTaskRunner;
@@ -32,14 +35,17 @@ class HeartbeatRegistrationHelper;
 
 // Class responsible for periodically sending heartbeats to the policy service
 // for monitoring device connectivity.
-class HeartbeatScheduler : public gcm::GCMAppHandler {
+class HeartbeatScheduler : public gcm::GCMAppHandler,
+                           gcm::GCMConnectionObserver {
  public:
   // Default interval for how often we send up a heartbeat.
-  static const int64 kDefaultHeartbeatIntervalMs;
+  static const int64_t kDefaultHeartbeatIntervalMs;
 
-  // Constructor. |driver| can be null for tests.
+  // Constructor. |cloud_policy_client| will be used to send registered GCM id
+  // to DM server, and can be null. |driver| can be null for tests.
   HeartbeatScheduler(
       gcm::GCMDriver* driver,
+      policy::CloudPolicyClient* cloud_policy_client,
       const std::string& enrollment_domain,
       const std::string& device_id,
       const scoped_refptr<base::SequencedTaskRunner>& task_runner);
@@ -53,12 +59,15 @@ class HeartbeatScheduler : public gcm::GCMAppHandler {
   // GCMAppHandler overrides.
   void ShutdownHandler() override;
   void OnMessage(const std::string& app_id,
-                 const gcm::GCMClient::IncomingMessage& message) override;
+                 const gcm::IncomingMessage& message) override;
   void OnMessagesDeleted(const std::string& app_id) override;
   void OnSendError(const std::string& app_id,
                    const gcm::GCMClient::SendErrorDetails& details) override;
   void OnSendAcknowledged(const std::string& app_id,
                           const std::string& message_id) override;
+
+  // GCMConnectionObserver overrides.
+  void OnConnected(const net::IPEndPoint&) override;
 
  private:
   // Callback invoked periodically to send a heartbeat to the policy service.
@@ -70,6 +79,10 @@ class HeartbeatScheduler : public gcm::GCMAppHandler {
   // Invoked after a heartbeat has been sent to the server.
   void OnHeartbeatSent(const std::string& message_id,
                        gcm::GCMClient::Result result);
+
+  // Invoked after a upstream notification sign up message has been sent.
+  void OnUpstreamNotificationSent(const std::string& message_id,
+                                  gcm::GCMClient::Result result);
 
   // Helper method that figures out when the next heartbeat should
   // be scheduled.
@@ -85,6 +98,12 @@ class HeartbeatScheduler : public gcm::GCMAppHandler {
 
   // Shuts down our GCM connection (called when heartbeats are disabled).
   void ShutdownGCM();
+
+  // Callback for the GCM id update request.
+  void OnGcmIdUpdateRequestSent(bool status);
+
+  // Helper function to signup for upstream notification.
+  void SignUpUpstreamNotification();
 
   // TaskRunner used for scheduling heartbeats.
   const scoped_refptr<base::SequencedTaskRunner> task_runner_;
@@ -115,6 +134,8 @@ class HeartbeatScheduler : public gcm::GCMAppHandler {
 
   // Callback invoked via a delay to send a heartbeat.
   base::CancelableClosure heartbeat_callback_;
+
+  policy::CloudPolicyClient* cloud_policy_client_;
 
   // The GCMDriver used to send heartbeat messages.
   gcm::GCMDriver* const gcm_driver_;

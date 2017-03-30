@@ -7,6 +7,7 @@ package org.chromium.net;
 import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.base.test.util.Feature;
+import org.chromium.net.test.util.NetworkChangeNotifierTestUtil;
 
 /**
  * Tests that NetworkChangeNotifier is initialized.
@@ -20,8 +21,11 @@ public class NetworkChangeNotifierTest extends CronetTestBase {
     @SmallTest
     @Feature({"Cronet"})
     public void testNetworkChangeNotifierIsInitialized() throws Exception {
-        CronetTestActivity activity = launchCronetTestApp();
-        assertNotNull(activity);
+        CronetTestFramework testFramework = startCronetTestFramework();
+        assertNotNull(testFramework);
+        // Let Cronet UI thread initialization complete so
+        // NetworkChangeNotifier is initialized for the test.
+        NetworkChangeNotifierTestUtil.flushUiThreadTaskQueue();
         assertTrue(NetworkChangeNotifierUtil.isTestIPAddressObserverCalled());
     }
 }

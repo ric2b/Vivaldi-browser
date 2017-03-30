@@ -10,6 +10,7 @@
 #include "ash/system/tray/system_tray_item.h"
 #include "ash/system/user/user_observer.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 
 namespace gfx {
 class Rect;
@@ -31,11 +32,11 @@ class UserView;
 class ASH_EXPORT TrayUser : public SystemTrayItem,
                             public UserObserver {
  public:
-  // The given |multiprofile_index| is the user number in a multi profile
-  // scenario. Index #0 is the running user, the other indices are other logged
-  // in users (if there are any). Depending on the multi user mode, there will
-  // be either one (index #0) or all users be visible in the system tray.
-  TrayUser(SystemTray* system_tray, MultiProfileIndex index);
+  // The given |index| is the user index in a multi profile scenario. Index #0
+  // is the active user, the other indices are other logged in users (if there
+  // are any). Depending on the multi user mode, there will be either one (index
+  // #0) or all users be visible in the system tray.
+  TrayUser(SystemTray* system_tray, UserIndex index);
   ~TrayUser() override;
 
   // Allows unit tests to see if the item was created.
@@ -65,10 +66,8 @@ class ASH_EXPORT TrayUser : public SystemTrayItem,
   // Overridden from SystemTrayItem.
   views::View* CreateTrayView(user::LoginStatus status) override;
   views::View* CreateDefaultView(user::LoginStatus status) override;
-  views::View* CreateDetailedView(user::LoginStatus status) override;
   void DestroyTrayView() override;
   void DestroyDefaultView() override;
-  void DestroyDetailedView() override;
   void UpdateAfterLoginStatusChange(user::LoginStatus status) override;
   void UpdateAfterShelfAlignmentChange(ShelfAlignment alignment) override;
 
@@ -82,7 +81,7 @@ class ASH_EXPORT TrayUser : public SystemTrayItem,
   void UpdateLayoutOfItem();
 
   // The user index to use.
-  MultiProfileIndex multiprofile_index_;
+  UserIndex user_index_;
 
   tray::UserView* user_;
 

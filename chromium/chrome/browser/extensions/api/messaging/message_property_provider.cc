@@ -4,6 +4,8 @@
 
 #include "chrome/browser/extensions/api/messaging/message_property_provider.h"
 
+#include <stdint.h>
+
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/strings/string_piece.h"
@@ -85,12 +87,12 @@ void MessagePropertyProvider::GotChannelID(
     original_task_runner->PostTask(FROM_HERE, no_tls_channel_id_closure);
     return;
   }
-  std::vector<uint8> spki_vector;
+  std::vector<uint8_t> spki_vector;
   if (!output->channel_id_key->ExportPublicKey(&spki_vector)) {
     original_task_runner->PostTask(FROM_HERE, no_tls_channel_id_closure);
     return;
   }
-  base::StringPiece spki(reinterpret_cast<char*>(vector_as_array(&spki_vector)),
+  base::StringPiece spki(reinterpret_cast<char*>(spki_vector.data()),
                          spki_vector.size());
   base::DictionaryValue jwk_value;
   if (!net::JwkSerializer::ConvertSpkiFromDerToJwk(spki, &jwk_value)) {

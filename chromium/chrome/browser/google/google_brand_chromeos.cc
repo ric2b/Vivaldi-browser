@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -31,7 +30,7 @@ std::string ReadBrandFromFile() {
   base::FilePath brand_file_path(kRLZBrandFilePath);
   if (!base::ReadFileToString(brand_file_path, &brand))
     LOG(WARNING) << "Brand code file missing: " << brand_file_path.value();
-  base::TrimWhitespace(brand, base::TRIM_ALL, &brand);
+  base::TrimWhitespaceASCII(brand, base::TRIM_ALL, &brand);
   return brand;
 }
 

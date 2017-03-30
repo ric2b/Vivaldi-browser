@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
@@ -17,10 +18,10 @@
 #include "chrome/browser/notifications/notification_delegate.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
 #include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/common/url_constants.h"
 #include "grit/generated_resources.h"
 #include "grit/theme_resources.h"
-#include "third_party/WebKit/public/web/WebTextDirection.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -165,7 +166,7 @@ void ConsumerManagementNotifier::ShowDesktopNotification(
       l10n_util::GetStringUTF16(button_label_message_id)));
 
   Notification notification(
-      message_center::NOTIFICATION_TYPE_SIMPLE, GURL(notification_url),
+      message_center::NOTIFICATION_TYPE_SIMPLE,
       l10n_util::GetStringUTF16(title_message_id),
       l10n_util::GetStringUTF16(body_message_id),
       ui::ResourceBundle::GetSharedInstance().GetImageNamed(
@@ -173,7 +174,7 @@ void ConsumerManagementNotifier::ShowDesktopNotification(
       message_center::NotifierId(message_center::NotifierId::SYSTEM_COMPONENT,
                                  notification_id),
       base::string16(),  // display_source
-      notification_id, optional_field,
+      GURL(notification_url), notification_id, optional_field,
       new DesktopNotificationDelegate(notification_id, button_click_callback));
 
   notification.SetSystemPriority();

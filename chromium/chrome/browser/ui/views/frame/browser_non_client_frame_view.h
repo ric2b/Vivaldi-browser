@@ -5,8 +5,12 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_FRAME_BROWSER_NON_CLIENT_FRAME_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_FRAME_BROWSER_NON_CLIENT_FRAME_VIEW_H_
 
-#include "chrome/browser/ui/views/profiles/new_avatar_button.h"
+#include "chrome/browser/profiles/profile_info_cache_observer.h"
 #include "ui/views/window/non_client_view.h"
+
+#if defined(FRAME_AVATAR_BUTTON)
+#include "chrome/browser/ui/views/profiles/new_avatar_button.h"
+#endif
 
 #if defined(ENABLE_SUPERVISED_USERS)
 class SupervisedUserAvatarLabel;
@@ -14,7 +18,6 @@ class SupervisedUserAvatarLabel;
 class AvatarMenuButton;
 class BrowserFrame;
 class BrowserView;
-class NewAvatarButton;
 
 // A specialization of the NonClientFrameView object that provides additional
 // Browser-specific methods.
@@ -26,7 +29,9 @@ class BrowserNonClientFrameView : public views::NonClientFrameView,
 
   AvatarMenuButton* avatar_button() const { return avatar_button_; }
 
+#if defined(FRAME_AVATAR_BUTTON)
   NewAvatarButton* new_avatar_button() const { return new_avatar_button_; }
+#endif
 
 #if defined(ENABLE_SUPERVISED_USERS)
   SupervisedUserAvatarLabel* supervised_user_avatar_label() const {
@@ -36,6 +41,9 @@ class BrowserNonClientFrameView : public views::NonClientFrameView,
   void OnThemeChanged() override;
 #endif
 
+  // Called when BrowserView creates all it's child views.
+  virtual void OnBrowserViewInitViewsComplete();
+
   // Retrieves the bounds, in non-client view coordinates within which the
   // TabStrip should be laid out.
   virtual gfx::Rect GetBoundsForTabStrip(views::View* tabstrip) const = 0;
@@ -44,7 +52,9 @@ class BrowserNonClientFrameView : public views::NonClientFrameView,
   // the non-client view. The topmost view depends on the window type. The
   // topmost view is the tab strip for tabbed browser windows, the toolbar for
   // popups, the web contents for app windows and varies for fullscreen windows.
-  virtual int GetTopInset() const = 0;
+  // If |restored| is true, this is calculated as if the window was restored,
+  // regardless of its current state.
+  virtual int GetTopInset(bool restored) const = 0;
 
   // Returns the amount that the theme background should be inset.
   virtual int GetThemeBackgroundXInset() const = 0;
@@ -91,11 +101,13 @@ class BrowserNonClientFrameView : public views::NonClientFrameView,
   // and button |style|.
   virtual void UpdateNewAvatarButtonImpl() = 0;
 
+#if defined(FRAME_AVATAR_BUTTON)
   // Updates the title of the avatar button displayed in the caption area.
   // The button uses |style| to match the browser window style and notifies
   // |listener| when it is clicked.
   void UpdateNewAvatarButton(views::ButtonListener* listener,
                              const NewAvatarButton::AvatarButtonStyle style);
+#endif
 
  private:
   // Overriden from ProfileInfoCacheObserver.
@@ -113,17 +125,19 @@ class BrowserNonClientFrameView : public views::NonClientFrameView,
   // The BrowserView hosted within this View.
   BrowserView* browser_view_;
 
-  // Menu button that displays that either the incognito icon or the profile
-  // icon.  May be null for some frame styles.
-  AvatarMenuButton* avatar_button_;
-
 #if defined(ENABLE_SUPERVISED_USERS)
   SupervisedUserAvatarLabel* supervised_user_avatar_label_;
 #endif
 
+#if defined(FRAME_AVATAR_BUTTON)
   // Menu button that displays the name of the active or guest profile.
   // May be null and will not be displayed for off the record profiles.
   NewAvatarButton* new_avatar_button_;
+#endif
+
+  // Menu button that displays the incognito icon. May be null for some frame
+  // styles. TODO(anthonyvd): simplify/rename.
+  AvatarMenuButton* avatar_button_;
 };
 
 namespace chrome {

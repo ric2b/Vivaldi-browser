@@ -4,6 +4,9 @@
 
 #include "ppapi/proxy/websocket_resource.h"
 
+#include <stddef.h>
+
+#include <limits>
 #include <set>
 #include <string>
 #include <vector>
@@ -26,8 +29,8 @@ const size_t kMinimumPayloadSizeWithTwoByteExtendedPayloadLength = 126;
 const size_t kMinimumPayloadSizeWithEightByteExtendedPayloadLength = 0x10000;
 
 uint64_t SaturateAdd(uint64_t a, uint64_t b) {
-  if (kuint64max - a < b)
-    return kuint64max;
+  if (std::numeric_limits<uint64_t>::max() - a < b)
+    return std::numeric_limits<uint64_t>::max();
   return a + b;
 }
 
@@ -272,7 +275,7 @@ int32_t WebSocketResource::SendMessage(const PP_Var& message) {
     if (!message_arraybuffer.get())
       return PP_ERROR_BADARGUMENT;
     uint8_t* message_data = static_cast<uint8_t*>(message_arraybuffer->Map());
-    uint32 message_length = message_arraybuffer->ByteLength();
+    uint32_t message_length = message_arraybuffer->ByteLength();
     std::vector<uint8_t> message_vector(message_data,
                                         message_data + message_length);
     Post(RENDERER, PpapiHostMsg_WebSocket_SendBinary(message_vector));

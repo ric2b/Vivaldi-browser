@@ -5,6 +5,8 @@
 #ifndef NET_SOCKET_WEBSOCKET_ENDPOINT_LOCK_MANAGER_H_
 #define NET_SOCKET_WEBSOCKET_ENDPOINT_LOCK_MANAGER_H_
 
+#include <stddef.h>
+
 #include <map>
 
 #include "base/containers/linked_list.h"
@@ -146,7 +148,7 @@ class NET_EXPORT_PRIVATE WebSocketEndpointLockManager {
   // object.
   base::WeakPtrFactory<WebSocketEndpointLockManager> weak_factory_;
 
-  friend struct DefaultSingletonTraits<WebSocketEndpointLockManager>;
+  friend struct base::DefaultSingletonTraits<WebSocketEndpointLockManager>;
 
   DISALLOW_COPY_AND_ASSIGN(WebSocketEndpointLockManager);
 };

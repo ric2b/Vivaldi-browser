@@ -6,10 +6,12 @@
 #define MEDIA_FILTERS_DECODER_SELECTOR_H_
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
-#include "media/base/decryptor.h"
+#include "build/build_config.h"
+#include "media/base/cdm_context.h"
 #include "media/base/demuxer_stream.h"
 #include "media/base/pipeline_status.h"
 #include "media/filters/decoder_stream_traits.h"
@@ -22,7 +24,6 @@ namespace media {
 
 class DecoderBuffer;
 class DecryptingDemuxerStream;
-class Decryptor;
 class MediaLog;
 
 // DecoderSelector (creates if necessary and) initializes the proper
@@ -67,16 +68,20 @@ class MEDIA_EXPORT DecoderSelector {
   // 1. This must not be called again before |select_decoder_cb| is run.
   // 2. Decoders that fail to initialize will be deleted. Future calls will
   //    select from the decoders following the decoder that was last returned.
-  // 3. |set_decryptor_ready_cb| is optional. If |set_decryptor_ready_cb| is
-  //    null, no decryptor will be available to perform decryption.
+  // 3. |set_cdm_ready_cb| is optional. If |set_cdm_ready_cb| is
+  //    null, no CDM will be available to perform decryption.
   void SelectDecoder(DemuxerStream* stream,
-                     const SetDecryptorReadyCB& set_decryptor_ready_cb,
+                     const SetCdmReadyCB& set_cdm_ready_cb,
                      const SelectDecoderCB& select_decoder_cb,
                      const typename Decoder::OutputCB& output_cb,
                      const base::Closure& waiting_for_decryption_key_cb);
 
  private:
+#if !defined(OS_ANDROID)
+  void InitializeDecryptingDecoder();
   void DecryptingDecoderInitDone(bool success);
+#endif
+  void InitializeDecryptingDemuxerStream();
   void DecryptingDemuxerStreamInitDone(PipelineStatus status);
   void InitializeDecoder();
   void DecoderInitDone(bool success);
@@ -87,7 +92,7 @@ class MEDIA_EXPORT DecoderSelector {
   scoped_refptr<MediaLog> media_log_;
 
   DemuxerStream* input_stream_;
-  SetDecryptorReadyCB set_decryptor_ready_cb_;
+  SetCdmReadyCB set_cdm_ready_cb_;
   SelectDecoderCB select_decoder_cb_;
   typename Decoder::OutputCB output_cb_;
   base::Closure waiting_for_decryption_key_cb_;

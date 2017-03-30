@@ -4,33 +4,36 @@
 
 #include "chrome/browser/invalidation/profile_invalidation_provider_factory.h"
 
+#include <utility>
+
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_registry.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/invalidation/ticl_profile_settings_provider.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/services/gcm/gcm_profile_service.h"
 #include "chrome/browser/services/gcm/gcm_profile_service_factory.h"
-#include "chrome/browser/signin/profile_identity_provider.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/common/chrome_content_client.h"
-#include "chrome/common/pref_names.h"
+#include "components/gcm_driver/gcm_profile_service.h"
+#include "components/invalidation/impl/invalidation_prefs.h"
 #include "components/invalidation/impl/invalidation_state_tracker.h"
 #include "components/invalidation/impl/invalidator_storage.h"
 #include "components/invalidation/impl/profile_invalidation_provider.h"
 #include "components/invalidation/impl/ticl_invalidation_service.h"
+#include "components/invalidation/impl/ticl_profile_settings_provider.h"
 #include "components/invalidation/impl/ticl_settings_provider.h"
 #include "components/invalidation/public/invalidation_service.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/signin/core/browser/profile_identity_provider.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "net/url_request/url_request_context_getter.h"
 
 #if defined(OS_ANDROID)
-#include "base/android/jni_android.h"
+#include "base/android/context_utils.h"
 #include "components/invalidation/impl/invalidation_service_android.h"
 #endif  // defined(OS_ANDROID)
 
@@ -68,7 +71,7 @@ ProfileInvalidationProvider* ProfileInvalidationProviderFactory::GetForProfile(
 // static
 ProfileInvalidationProviderFactory*
 ProfileInvalidationProviderFactory::GetInstance() {
-  return Singleton<ProfileInvalidationProviderFactory>::get();
+  return base::Singleton<ProfileInvalidationProviderFactory>::get();
 }
 
 ProfileInvalidationProviderFactory::ProfileInvalidationProviderFactory()
@@ -120,28 +123,25 @@ KeyedService* ProfileInvalidationProviderFactory::BuildServiceInstanceFor(
     identity_provider.reset(new ProfileIdentityProvider(
         SigninManagerFactory::GetForProfile(profile),
         ProfileOAuth2TokenServiceFactory::GetForProfile(profile),
-        LoginUIServiceFactory::GetForProfile(profile)));
+        LoginUIServiceFactory::GetShowLoginPopupCallbackForProfile(profile)));
   }
 
   scoped_ptr<TiclInvalidationService> service(new TiclInvalidationService(
-      GetUserAgent(),
-      identity_provider.Pass(),
+      GetUserAgent(), std::move(identity_provider),
       scoped_ptr<TiclSettingsProvider>(
-          new TiclProfileSettingsProvider(profile)),
+          new TiclProfileSettingsProvider(profile->GetPrefs())),
       gcm::GCMProfileServiceFactory::GetForProfile(profile)->driver(),
       profile->GetRequestContext()));
   service->Init(scoped_ptr<syncer::InvalidationStateTracker>(
       new InvalidatorStorage(profile->GetPrefs())));
 
-  return new ProfileInvalidationProvider(service.Pass());
+  return new ProfileInvalidationProvider(std::move(service));
 #endif
 }
 
 void ProfileInvalidationProviderFactory::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
-  registry->RegisterBooleanPref(
-      prefs::kInvalidationServiceUseGCMChannel,
-      true);  // if no value in prefs, use GCM channel.
+  ProfileInvalidationProvider::RegisterProfilePrefs(registry);
   InvalidatorStorage::RegisterProfilePrefs(registry);
 }
 

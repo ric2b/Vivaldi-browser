@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "ui/views/animation/scroll_animator.h"
 #include "ui/views/controls/menu/menu_delegate.h"
 #include "ui/views/controls/prefix_delegate.h"
@@ -68,7 +69,7 @@ class VIEWS_EXPORT SubmenuView : public PrefixDelegate,
   // Drag and drop methods. These are forwarded to the MenuController.
   bool GetDropFormats(
       int* formats,
-      std::set<OSExchangeData::CustomFormat>* custom_formats) override;
+      std::set<ui::Clipboard::FormatType>* format_types) override;
   bool AreDropTypesRequired() override;
   bool CanDrop(const OSExchangeData& data) override;
   void OnDragEntered(const ui::DropTargetEvent& event) override;
@@ -90,7 +91,7 @@ class VIEWS_EXPORT SubmenuView : public PrefixDelegate,
   base::string16 GetTextForRow(int row) override;
 
   // Returns true if the menu is showing.
-  bool IsShowing();
+  virtual bool IsShowing();
 
   // Shows the menu at the specified location. Coordinates are in screen
   // coordinates. max_width gives the max width the view should be.

@@ -8,6 +8,7 @@
 #include "content/common/android/surface_texture_manager.h"
 
 #include "base/containers/scoped_ptr_hash_map.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/synchronization/lock.h"
@@ -39,7 +40,7 @@ class CONTENT_EXPORT InProcessSurfaceTextureManager
       int player_id) override;
 
  private:
-  friend struct DefaultSingletonTraits<InProcessSurfaceTextureManager>;
+  friend struct base::DefaultSingletonTraits<InProcessSurfaceTextureManager>;
 
   InProcessSurfaceTextureManager();
   ~InProcessSurfaceTextureManager() override;

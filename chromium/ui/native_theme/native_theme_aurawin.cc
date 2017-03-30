@@ -26,14 +26,15 @@ bool IsScrollbarPart(NativeTheme::Part part) {
     case NativeTheme::kScrollbarVerticalGripper:
     case NativeTheme::kScrollbarCorner:
       return true;
+    default:
+      return false;
   }
-  return false;
 }
 
 }  // namespace
 
 // static
-NativeTheme* NativeTheme::instance() {
+NativeTheme* NativeTheme::GetInstanceForWeb() {
   return NativeThemeAuraWin::instance();
 }
 

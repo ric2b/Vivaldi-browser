@@ -6,7 +6,6 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/process/process.h"
 #include "cc/surfaces/surface.h"
 #include "content/common/content_export.h"
@@ -37,7 +36,6 @@
 
 
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebDragStatus, blink::WebDragStatusLast)
-IPC_ENUM_TRAITS_MAX_VALUE(blink::WebFocusType, blink::WebFocusTypeLast)
 
 IPC_STRUCT_BEGIN(BrowserPluginHostMsg_Attach_Params)
   IPC_STRUCT_MEMBER(bool, focused)
@@ -181,11 +179,6 @@ IPC_MESSAGE_CONTROL2(BrowserPluginMsg_AdvanceFocus,
 IPC_MESSAGE_CONTROL2(BrowserPluginMsg_ShouldAcceptTouchEvents,
                      int /* browser_plugin_instance_id */,
                      bool /* accept */)
-
-// Tells the guest to change its background opacity.
-IPC_MESSAGE_CONTROL2(BrowserPluginMsg_SetContentsOpaque,
-                     int /* browser_plugin_instance_id */,
-                     bool /* opaque */)
 
 // Inform the embedder of the cursor the guest wishes to display.
 IPC_MESSAGE_CONTROL2(BrowserPluginMsg_SetCursor,

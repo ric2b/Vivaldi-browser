@@ -5,6 +5,8 @@
 #ifndef CC_DEBUG_RASTERIZE_AND_RECORD_BENCHMARK_H_
 #define CC_DEBUG_RASTERIZE_AND_RECORD_BENCHMARK_H_
 
+#include <stddef.h>
+
 #include <map>
 #include <utility>
 #include <vector>
@@ -13,7 +15,8 @@
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "cc/debug/micro_benchmark_controller.h"
-#include "cc/playback/picture.h"
+#include "cc/playback/display_list_recording_source.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace base {
 class DictionaryValue;
@@ -38,11 +41,6 @@ class RasterizeAndRecordBenchmark : public MicroBenchmark {
       scoped_refptr<base::SingleThreadTaskRunner> origin_task_runner) override;
 
  private:
-  void RunOnDisplayListLayer(PictureLayer* layer,
-                             const gfx::Rect& visible_layer_rect);
-  void RunOnPictureLayer(PictureLayer* layer,
-                         const gfx::Rect& visible_layer_rect);
-
   void RecordRasterResults(scoped_ptr<base::Value> results);
 
   struct RecordResults {
@@ -51,7 +49,8 @@ class RasterizeAndRecordBenchmark : public MicroBenchmark {
 
     int pixels_recorded;
     size_t bytes_used;
-    base::TimeDelta total_best_time[RecordingSource::RECORDING_MODE_COUNT];
+    base::TimeDelta
+        total_best_time[DisplayListRecordingSource::RECORDING_MODE_COUNT];
   };
 
   RecordResults record_results_;

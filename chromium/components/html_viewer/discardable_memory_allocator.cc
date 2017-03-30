@@ -4,8 +4,15 @@
 
 #include "components/html_viewer/discardable_memory_allocator.h"
 
+#include <stdint.h>
+#include <utility>
+
+#include "base/macros.h"
 #include "base/memory/discardable_memory.h"
 #include "base/stl_util.h"
+#include "base/trace_event/memory_allocator_dump.h"
+#include "base/trace_event/memory_dump_manager.h"
+#include "base/trace_event/process_memory_dump.h"
 
 namespace html_viewer {
 
@@ -21,6 +28,7 @@ class DiscardableMemoryAllocator::DiscardableMemoryChunkImpl
         allocator_(allocator) {}
 
   ~DiscardableMemoryChunkImpl() override {
+    base::AutoLock lock(allocator_->lock_);
     // Either the memory is discarded or the memory chunk is unlocked.
     DCHECK(data_ || !is_locked_);
     if (!is_locked_ && data_)
@@ -29,6 +37,7 @@ class DiscardableMemoryAllocator::DiscardableMemoryChunkImpl
 
   // Overridden from DiscardableMemoryChunk:
   bool Lock() override {
+    base::AutoLock lock(allocator_->lock_);
     DCHECK(!is_locked_);
     if (!data_)
       return false;
@@ -39,6 +48,7 @@ class DiscardableMemoryAllocator::DiscardableMemoryChunkImpl
   }
 
   void Unlock() override {
+    base::AutoLock lock(allocator_->lock_);
     DCHECK(is_locked_);
     DCHECK(data_);
     is_locked_ = false;
@@ -53,9 +63,25 @@ class DiscardableMemoryAllocator::DiscardableMemoryChunkImpl
     return nullptr;
   }
 
+  base::trace_event::MemoryAllocatorDump* CreateMemoryAllocatorDump(
+      const char* name,
+      base::trace_event::ProcessMemoryDump* pmd) const override {
+    base::trace_event::MemoryAllocatorDump* dump =
+        pmd->CreateAllocatorDump(name);
+    dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
+                    base::trace_event::MemoryAllocatorDump::kUnitsBytes, size_);
+
+    // Memory is allocated from system allocator (malloc).
+    pmd->AddSuballocation(dump->guid(),
+                          base::trace_event::MemoryDumpManager::GetInstance()
+                              ->system_allocator_pool_name());
+    return dump;
+  }
+
   size_t size() const { return size_; }
 
   void Discard() {
+    allocator_->lock_.AssertAcquired();
     DCHECK(!is_locked_);
     data_.reset();
   }
@@ -102,26 +128,26 @@ DiscardableMemoryAllocator::AllocateLockedDiscardableMemory(size_t size) {
     it = live_unlocked_chunks_.erase(it);
   }
 
-  return chunk.Pass();
+  return std::move(chunk);
 }
 
 std::list<DiscardableMemoryAllocator::DiscardableMemoryChunkImpl*>::iterator
 DiscardableMemoryAllocator::NotifyUnlocked(DiscardableMemoryChunkImpl* chunk) {
-  base::AutoLock lock(lock_);
+  lock_.AssertAcquired();
   locked_chunks_--;
   return live_unlocked_chunks_.insert(live_unlocked_chunks_.end(), chunk);
 }
 
 void DiscardableMemoryAllocator::NotifyLocked(
     std::list<DiscardableMemoryChunkImpl*>::iterator it) {
-  base::AutoLock lock(lock_);
+  lock_.AssertAcquired();
   locked_chunks_++;
   live_unlocked_chunks_.erase(it);
 }
 
 void DiscardableMemoryAllocator::NotifyDestructed(
     std::list<DiscardableMemoryChunkImpl*>::iterator it) {
-  base::AutoLock lock(lock_);
+  lock_.AssertAcquired();
   live_unlocked_chunks_.erase(it);
 }
 

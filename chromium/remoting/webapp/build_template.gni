@@ -5,6 +5,8 @@
 # Keep in sync with 'remoting_webapp' target in remoting/remoting_client.gypi.
 
 import("//build/config/chrome_build.gni")
+import("//build/config/features.gni")
+import("//build/util/version.gni")
 import("//remoting/remoting_locales.gni")
 import("//remoting/remoting_options.gni")
 import("//remoting/remoting_version.gni")
@@ -56,8 +58,10 @@ template("build_webapp_html") {
     action(target_jscompile) {
       js_files = remoting_webapp_js_proto_files + invoker.js_files
       externs =
-          remoting_webapp_js_externs_files +
-          [ "../../third_party/closure_compiler/externs/chrome_extensions.js" ]
+          remoting_webapp_js_externs_files + [
+            "../../third_party/closure_compiler/externs/chrome_extensions.js",
+            "../../third_party/closure_compiler/externs/metrics_private.js",
+          ]
 
       script = "../../third_party/closure_compiler/compile.py"
       inputs = js_files
@@ -164,6 +168,17 @@ template("desktop_remoting_webapp") {
     html_output = main_html_output
   }
 
+  public_session_html = target_name + "_public_session_html"
+  public_session_html_output =
+      "$target_gen_dir/html/$target_name/public_session.html"
+
+  build_webapp_html(public_session_html) {
+    html_template_file = remoting_webapp_template_public_session
+    html_template_include_files = remoting_webapp_public_session_template_files
+    js_files = remoting_webapp_public_session_html_all_js_files
+    html_output = public_session_html_output
+  }
+
   action(target_name) {
     script = "//remoting/webapp/build-webapp.py"
 
@@ -177,8 +192,20 @@ template("desktop_remoting_webapp") {
       message_window_html_output,
       wcs_sandbox_html_output,
       main_html_output,
+      public_session_html_output,
       "$target_gen_dir/credits.html",
     ]
+
+    if (enable_pnacl) {
+      pnacl_tc = "//build/toolchain/nacl:newlib_pnacl"
+      pexe_label = "//remoting/client/plugin:remoting_client_plugin_newlib"
+      pexe_dir = get_label_info("${pexe_label}($pnacl_tc)", "root_out_dir")
+
+      extra_files += [ "$pexe_dir/remoting_client_plugin_newlib.pexe" ]
+      if (is_debug) {
+        extra_files += [ "$pexe_dir/remoting_client_plugin_newlib.pexe.debug" ]
+      }
+    }
 
     inputs = [ rebase_path("crd/manifest.json.jinja2", root_build_dir) ] +
              remoting_version_files +
@@ -186,18 +213,26 @@ template("desktop_remoting_webapp") {
              extra_files + dr_generated_html_files
 
     outputs = [
-      "$target_gen_dir/$zip_path",
+      zip_path,
     ]
 
     deps = [
-      ":$locales_listfile",
       ":$background_html",
-      ":$message_window_html",
-      ":$wcs_sandbox_html",
+      ":$locales_listfile",
       ":$main_html",
+      ":$message_window_html",
+      ":$public_session_html",
+      ":$wcs_sandbox_html",
       "//remoting/resources",
       "//remoting/webapp:credits",
     ]
+
+    if (enable_pnacl) {
+      deps += [ "${pexe_label}($pnacl_tc)" ]
+      if (is_debug) {
+        deps += [ "${pexe_label}_debug($pnacl_tc)" ]
+      }
+    }
 
     # Create a file that contains a list of all the resource files needed
     # to build the webapp. This is needed to avoid problems on platforms that
@@ -211,9 +246,9 @@ template("desktop_remoting_webapp") {
 
     args = [
       buildtype,
-      version_full,
-      output_dir,
-      zip_path,
+      chrome_version_full,
+      rebase_path(output_dir, root_build_dir),
+      rebase_path(zip_path, root_build_dir),
       rebase_path("crd/manifest.json.jinja2", root_build_dir),
       webapp_type,
     ]
@@ -269,8 +304,10 @@ template("app_remoting_webapp") {
     ar_app_manifest = "$ar_app_path/manifest.json.jinja2"
     ar_app_manifest_common = "$ar_base_path/manifest_common.json.jinja2"
 
-    output_dir = "remoting/app_remoting/$ar_service_environment/$target_name"
-    zip_path = "remoting/app_remoting/$ar_service_environment/$target_name.zip"
+    output_dir = "$root_build_dir/remoting/app_remoting/" +
+                 "$ar_service_environment/$target_name"
+    zip_path = "$root_build_dir/remoting/app_remoting/" +
+               "$ar_service_environment/$target_name.zip"
 
     # TODO(garykac) Move this list of files into files.gni.
     ar_app_specific_files = [
@@ -289,7 +326,7 @@ template("app_remoting_webapp") {
              ] + remoting_version_files + ar_webapp_files
 
     outputs = [
-      "$target_gen_dir/$zip_path",
+      zip_path,
     ]
 
     deps = [
@@ -307,9 +344,9 @@ template("app_remoting_webapp") {
 
     args = [
       buildtype,
-      version_full,
-      output_dir,
-      zip_path,
+      chrome_version_full,
+      rebase_path(output_dir, root_build_dir),
+      rebase_path(zip_path, root_build_dir),
       rebase_path(ar_app_manifest, root_build_dir),
       "app_remoting",  # Web app type
     ]
@@ -365,6 +402,9 @@ template("app_remoting_webapp") {
 }
 
 template("app_remoting_shared_module") {
+  # TODO(garykac): Include the PNaCl plugin in the shared module once we have
+  # a GN toolchain (crbug.com/471924).
+
   locales_listfile = target_name + "_locales"
   locales_listfile_output = "$target_gen_dir/${target_name}_locales.txt"
 
@@ -447,8 +487,8 @@ template("app_remoting_shared_module") {
     ar_path = "app_remoting/$app_name"
     ar_manifest = "$ar_path/manifest.json"
 
-    output_dir = "remoting/app_remoting/$target_name"
-    zip_path = "remoting/app_remoting/$target_name.zip"
+    output_dir = "$root_build_dir/remoting/app_remoting/$target_name"
+    zip_path = "$root_build_dir/remoting/app_remoting/$target_name.zip"
 
     ar_generated_html_files = [
       background_html_output,
@@ -467,17 +507,17 @@ template("app_remoting_shared_module") {
              remoting_version_files + ar_webapp_files
 
     outputs = [
-      "$target_gen_dir/$zip_path",
+      zip_path,
     ]
 
     deps = [
-      ":$locales_listfile",
       ":$background_html",
       ":$feedback_consent_html",
       ":$loading_window_html",
+      ":$locales_listfile",
+      ":$main_html",
       ":$message_window_html",
       ":$wcs_sandbox_html",
-      ":$main_html",
       "//remoting/resources",
       "//remoting/webapp:credits",
     ]
@@ -492,9 +532,9 @@ template("app_remoting_shared_module") {
 
     args = [
       buildtype,
-      version_full,
-      output_dir,
-      zip_path,
+      chrome_version_full,
+      rebase_path(output_dir, root_build_dir),
+      rebase_path(zip_path, root_build_dir),
       rebase_path(ar_manifest, root_build_dir),
       "shared_module",  # Web app type
     ]

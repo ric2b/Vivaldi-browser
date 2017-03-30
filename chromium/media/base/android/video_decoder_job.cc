@@ -4,11 +4,13 @@
 
 #include "media/base/android/video_decoder_job.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/threading/thread.h"
-#include "media/base/android/media_codec_bridge.h"
 #include "media/base/android/media_drm_bridge.h"
+#include "media/base/android/sdk_media_codec_bridge.h"
 
 namespace media {
 
@@ -27,7 +29,6 @@ base::LazyInstance<VideoDecoderThread>::Leaky
 
 VideoDecoderJob::VideoDecoderJob(
     const base::Closure& request_data_cb,
-    const base::Closure& request_resources_cb,
     const base::Closure& on_demuxer_config_changed_cb)
     : MediaDecoderJob(g_video_decoder_thread.Pointer()->task_runner(),
                       request_data_cb,
@@ -36,8 +37,7 @@ VideoDecoderJob::VideoDecoderJob(
       config_width_(0),
       config_height_(0),
       output_width_(0),
-      output_height_(0),
-      request_resources_cb_(request_resources_cb) {
+      output_height_(0) {
 }
 
 VideoDecoderJob::~VideoDecoderJob() {}
@@ -51,7 +51,7 @@ bool VideoDecoderJob::SetVideoSurface(gfx::ScopedJavaSurface surface) {
     return false;
   }
 
-  surface_ =  surface.Pass();
+  surface_ = std::move(surface);
   need_to_reconfig_decoder_job_ = true;
   return true;
 }
@@ -78,12 +78,15 @@ void VideoDecoderJob::SetDemuxerConfigs(const DemuxerConfigs& configs) {
 
 void VideoDecoderJob::ReleaseOutputBuffer(
     int output_buffer_index,
+    size_t offset,
     size_t size,
     bool render_output,
+    bool is_late_frame,
     base::TimeDelta current_presentation_timestamp,
     const ReleaseOutputCompletionCallback& callback) {
   media_codec_bridge_->ReleaseOutputBuffer(output_buffer_index, render_output);
-  callback.Run(current_presentation_timestamp, current_presentation_timestamp);
+  callback.Run(is_late_frame, current_presentation_timestamp,
+               current_presentation_timestamp);
 }
 
 bool VideoDecoderJob::ComputeTimeToRender() const {
@@ -135,12 +138,11 @@ MediaDecoderJob::MediaDecoderJobStatus
 
   media_codec_bridge_.reset(VideoCodecBridge::CreateDecoder(
       video_codec_, is_secure, gfx::Size(config_width_, config_height_),
-      surface_.j_surface().obj(), GetMediaCrypto().obj()));
+      surface_.j_surface().obj(), GetMediaCrypto()));
 
   if (!media_codec_bridge_)
     return STATUS_FAILURE;
 
-  request_resources_cb_.Run();
   return STATUS_SUCCESS;
 }
 

@@ -7,11 +7,10 @@
 #include "base/trace_event/trace_event.h"
 #include "ui/gl/android/surface_texture.h"
 
-namespace gfx {
+namespace gl {
 
 GLImageSurfaceTexture::GLImageSurfaceTexture(const gfx::Size& size)
-    : size_(size), texture_id_(0) {
-}
+    : size_(size), texture_id_(0) {}
 
 GLImageSurfaceTexture::~GLImageSurfaceTexture() {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -19,7 +18,7 @@ GLImageSurfaceTexture::~GLImageSurfaceTexture() {
   DCHECK_EQ(0, texture_id_);
 }
 
-bool GLImageSurfaceTexture::Initialize(SurfaceTexture* surface_texture) {
+bool GLImageSurfaceTexture::Initialize(gfx::SurfaceTexture* surface_texture) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!surface_texture_.get());
   surface_texture_ = surface_texture;
@@ -32,7 +31,9 @@ void GLImageSurfaceTexture::Destroy(bool have_context) {
   texture_id_ = 0;
 }
 
-gfx::Size GLImageSurfaceTexture::GetSize() { return size_; }
+gfx::Size GLImageSurfaceTexture::GetSize() {
+  return size_;
+}
 
 unsigned GLImageSurfaceTexture::GetInternalFormat() { return GL_RGBA; }
 
@@ -78,18 +79,30 @@ bool GLImageSurfaceTexture::BindTexImage(unsigned target) {
   return true;
 }
 
+bool GLImageSurfaceTexture::CopyTexImage(unsigned target) {
+  return false;
+}
+
 bool GLImageSurfaceTexture::CopyTexSubImage(unsigned target,
-                                            const Point& offset,
-                                            const Rect& rect) {
+                                            const gfx::Point& offset,
+                                            const gfx::Rect& rect) {
   return false;
 }
 
-bool GLImageSurfaceTexture::ScheduleOverlayPlane(gfx::AcceleratedWidget widget,
-                                                 int z_order,
-                                                 OverlayTransform transform,
-                                                 const Rect& bounds_rect,
-                                                 const RectF& crop_rect) {
+bool GLImageSurfaceTexture::ScheduleOverlayPlane(
+    gfx::AcceleratedWidget widget,
+    int z_order,
+    gfx::OverlayTransform transform,
+    const gfx::Rect& bounds_rect,
+    const gfx::RectF& crop_rect) {
   return false;
 }
 
-}  // namespace gfx
+void GLImageSurfaceTexture::OnMemoryDump(
+    base::trace_event::ProcessMemoryDump* pmd,
+    uint64_t process_tracing_id,
+    const std::string& dump_name) {
+  // TODO(ericrk): Add OnMemoryDump for GLImages. crbug.com/514914
+}
+
+}  // namespace gl

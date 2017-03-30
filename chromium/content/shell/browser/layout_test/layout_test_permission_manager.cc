@@ -61,10 +61,9 @@ LayoutTestPermissionManager::LayoutTestPermissionManager()
 LayoutTestPermissionManager::~LayoutTestPermissionManager() {
 }
 
-void LayoutTestPermissionManager::RequestPermission(
+int LayoutTestPermissionManager::RequestPermission(
     PermissionType permission,
     RenderFrameHost* render_frame_host,
-    int request_id,
     const GURL& requesting_origin,
     bool user_gesture,
     const base::Callback<void(PermissionStatus)>& callback) {
@@ -74,13 +73,32 @@ void LayoutTestPermissionManager::RequestPermission(
       permission, requesting_origin,
       WebContents::FromRenderFrameHost(render_frame_host)
           ->GetLastCommittedURL().GetOrigin()));
+  return kNoPendingOperation;
 }
 
-void LayoutTestPermissionManager::CancelPermissionRequest(
-    PermissionType permission,
-    RenderFrameHost* render_frame_host,
-    int request_id,
-    const GURL& requesting_origin) {
+int LayoutTestPermissionManager::RequestPermissions(
+    const std::vector<PermissionType>& permissions,
+    content::RenderFrameHost* render_frame_host,
+    const GURL& requesting_origin,
+    bool user_gesture,
+    const base::Callback<void(
+        const std::vector<PermissionStatus>&)>& callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  std::vector<PermissionStatus> result(permissions.size());
+  const GURL& embedding_origin =
+      WebContents::FromRenderFrameHost(render_frame_host)
+          ->GetLastCommittedURL().GetOrigin();
+  for (const auto& permission : permissions) {
+    result.push_back(GetPermissionStatus(
+        permission, requesting_origin, embedding_origin));
+  }
+
+  callback.Run(result);
+  return kNoPendingOperation;
+}
+
+void LayoutTestPermissionManager::CancelPermissionRequest(int request_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 }
 
@@ -96,7 +114,7 @@ void LayoutTestPermissionManager::ResetPermission(
       PermissionDescription(permission, requesting_origin, embedding_origin));
   if (it == permissions_.end())
     return;
-  permissions_.erase(it);;
+  permissions_.erase(it);
 }
 
 PermissionStatus LayoutTestPermissionManager::GetPermissionStatus(

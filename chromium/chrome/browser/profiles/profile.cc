@@ -11,9 +11,10 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/sync/profile_sync_service.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_prefs.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/sync_driver/sync_prefs.h"
@@ -60,7 +61,7 @@ TestingProfile* Profile::AsTestingProfile() {
   return NULL;
 }
 
-chrome::ChromeZoomLevelPrefs* Profile::GetZoomLevelPrefs() {
+ChromeZoomLevelPrefs* Profile::GetZoomLevelPrefs() {
   return NULL;
 }
 
@@ -78,7 +79,7 @@ void Profile::RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
       prefs::kSearchSuggestEnabled,
       true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-#if defined(OS_ANDROID)
+#if BUILDFLAG(ANDROID_JAVA_UI)
   registry->RegisterStringPref(
       prefs::kContextualSearchEnabled,
       std::string(),
@@ -98,7 +99,7 @@ void Profile::RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterDictionaryPref(prefs::kSafeBrowsingIncidentsSent);
   registry->RegisterBooleanPref(
       prefs::kSafeBrowsingExtendedReportingOptInAllowed, true);
-#if defined(ENABLE_GOOGLE_NOW)
+#if BUILDFLAG(ENABLE_GOOGLE_NOW)
   registry->RegisterBooleanPref(prefs::kGoogleGeolocationAccessEnabled, false);
 #endif
   // This pref is intentionally outside the above #if. That flag corresponds
@@ -111,17 +112,13 @@ void Profile::RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
                                 false);
 #endif
   registry->RegisterStringPref(prefs::kSelectFileLastDirectory, std::string());
-  // TODO(wjmaclean): remove the following two prefs once migration to per-
-  // partition zoom is complete.
-  registry->RegisterDoublePref(prefs::kDefaultZoomLevelDeprecated, 0.0);
-  registry->RegisterDictionaryPref(prefs::kPerHostZoomLevelsDeprecated);
-
   registry->RegisterDictionaryPref(prefs::kPartitionDefaultZoomLevel);
   registry->RegisterDictionaryPref(prefs::kPartitionPerHostZoomLevels);
   registry->RegisterStringPref(prefs::kDefaultApps, "install");
   registry->RegisterBooleanPref(prefs::kSpeechRecognitionFilterProfanities,
                                 true);
   registry->RegisterIntegerPref(prefs::kProfileIconVersion, 0);
+  registry->RegisterBooleanPref(prefs::kAllowDinosaurEasterEgg, true);
 #if defined(OS_CHROMEOS)
   // TODO(dilmah): For OS_CHROMEOS we maintain kApplicationLocale in both
   // local state and user's profile.  For other platforms we maintain
@@ -142,11 +139,23 @@ void Profile::RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(prefs::kDevToolsRemoteEnabled, false);
 #endif
 
+  registry->RegisterBooleanPref(prefs::kDataSaverEnabled, false);
   data_reduction_proxy::RegisterSyncableProfilePrefs(registry);
 
 #if !defined(OS_ANDROID) && !defined(OS_CHROMEOS) && !defined(OS_IOS)
   // Preferences related to the avatar bubble and user manager tutorials.
   registry->RegisterIntegerPref(prefs::kProfileAvatarTutorialShown, 0);
+#endif
+
+#if defined(OS_ANDROID)
+  registry->RegisterBooleanPref(prefs::kClickedUpdateMenuItem, false);
+#endif
+
+#if defined(ENABLE_MEDIA_ROUTER)
+  registry->RegisterBooleanPref(
+      prefs::kMediaRouterFirstRunFlowAcknowledged,
+      false,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 #endif
 }
 

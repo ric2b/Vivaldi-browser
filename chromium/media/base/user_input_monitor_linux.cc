@@ -4,17 +4,18 @@
 
 #include "media/base/user_input_monitor.h"
 
+#include <stddef.h>
 #include <sys/select.h>
 #include <unistd.h>
 #define XK_MISCELLANY
 #include <X11/keysymdef.h>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/message_loop/message_pump_libevent.h"
 #include "base/single_thread_task_runner.h"

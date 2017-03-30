@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/app_list/app_context_menu.h"
 
 #include "base/bind.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/context_menu_matcher.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/menu_manager.h"
@@ -99,7 +100,8 @@ ui::MenuModel* AppContextMenu::GetMenuModel() {
       menu_model_->AddItem(LAUNCH_NEW, base::string16());
 
     // Show Pin/Unpin option if shelf is available.
-    if (controller_->GetPinnable() != AppListControllerDelegate::NO_PIN) {
+    if (controller_->GetPinnable(app_id_) !=
+        AppListControllerDelegate::NO_PIN) {
       menu_model_->AddSeparator(ui::NORMAL_SEPARATOR);
       menu_model_->AddItemWithStringId(
           TOGGLE_PIN,
@@ -117,25 +119,33 @@ ui::MenuModel* AppContextMenu::GetMenuModel() {
     if (!is_platform_app_) {
       // When bookmark apps are enabled, hosted apps can only toggle between
       // USE_LAUNCH_TYPE_WINDOW and USE_LAUNCH_TYPE_REGULAR.
-      if (extensions::util::IsNewBookmarkAppsEnabled()) {
-        menu_model_->AddCheckItemWithStringId(USE_LAUNCH_TYPE_WINDOW,
-                                              IDS_APP_CONTEXT_MENU_OPEN_WINDOW);
-      } else {
+      if (extensions::util::CanHostedAppsOpenInWindows() &&
+          extensions::util::IsNewBookmarkAppsEnabled()) {
+        // When both flags are enabled, only allow toggling between
+        // USE_LAUNCH_TYPE_WINDOW and USE_LAUNCH_TYPE_REGULAR
+        menu_model_->AddCheckItemWithStringId(
+            USE_LAUNCH_TYPE_WINDOW, IDS_APP_CONTEXT_MENU_OPEN_WINDOW);
+      } else if (!extensions::util::IsNewBookmarkAppsEnabled()) {
+        // When new bookmark apps are disabled, add pinned and full screen
+        // options as well. Add open as window if CanHostedAppsOpenInWindows
+        // is enabled.
         menu_model_->AddCheckItemWithStringId(
             USE_LAUNCH_TYPE_REGULAR,
             IDS_APP_CONTEXT_MENU_OPEN_REGULAR);
         menu_model_->AddCheckItemWithStringId(
             USE_LAUNCH_TYPE_PINNED,
             IDS_APP_CONTEXT_MENU_OPEN_PINNED);
+        if (extensions::util::CanHostedAppsOpenInWindows()) {
+          menu_model_->AddCheckItemWithStringId(
+              USE_LAUNCH_TYPE_WINDOW,
+              IDS_APP_CONTEXT_MENU_OPEN_WINDOW);
+        }
 #if defined(OS_MACOSX)
         // Mac does not support standalone web app browser windows or maximize.
         menu_model_->AddCheckItemWithStringId(
             USE_LAUNCH_TYPE_FULLSCREEN,
             IDS_APP_CONTEXT_MENU_OPEN_FULLSCREEN);
 #else
-        menu_model_->AddCheckItemWithStringId(
-            USE_LAUNCH_TYPE_WINDOW,
-            IDS_APP_CONTEXT_MENU_OPEN_WINDOW);
         // Even though the launch type is Full Screen it is more accurately
         // described as Maximized in Ash.
         menu_model_->AddCheckItemWithStringId(
@@ -181,8 +191,13 @@ bool AppContextMenu::IsItemForCommandIdDynamic(int command_id) const {
 
 base::string16 AppContextMenu::GetLabelForCommandId(int command_id) const {
   if (command_id == TOGGLE_PIN) {
-    // Return "{Pin to, Unpin from} shelf". Note this only exists on Ash
-    // desktops.
+    // Return "{Pin to, Unpin from} shelf" or "Pinned by administrator".
+    // Note this only exists on Ash desktops.
+    if (controller_->GetPinnable(app_id_) ==
+        AppListControllerDelegate::PIN_FIXED) {
+      return l10n_util::GetStringUTF16(
+          IDS_APP_LIST_CONTEXT_MENU_PIN_ENFORCED_BY_POLICY);
+    }
     return controller_->IsAppPinned(app_id_) ?
         l10n_util::GetStringUTF16(IDS_APP_LIST_CONTEXT_MENU_UNPIN) :
         l10n_util::GetStringUTF16(IDS_APP_LIST_CONTEXT_MENU_PIN);
@@ -190,25 +205,24 @@ base::string16 AppContextMenu::GetLabelForCommandId(int command_id) const {
 
   DCHECK_EQ(LAUNCH_NEW, command_id);
 
-  // If --enable-new-bookmark-apps is enabled, then only check if
-  // USE_LAUNCH_TYPE_REGULAR is checked, as USE_LAUNCH_TYPE_PINNED (i.e. open
-  // as pinned tab) and fullscreen-by-default windows do not exist.
-  if (extensions::util::IsNewBookmarkAppsEnabled()) {
-    return IsCommandIdChecked(USE_LAUNCH_TYPE_WINDOW)
-               ? l10n_util::GetStringUTF16(IDS_APP_LIST_CONTEXT_MENU_NEW_WINDOW)
-               : l10n_util::GetStringUTF16(IDS_APP_LIST_CONTEXT_MENU_NEW_TAB);
-  }
-
 #if defined(OS_MACOSX)
-  // Even fullscreen windows launch in a browser tab on Mac.
-  const bool launches_in_tab = true;
+  // Full screen on Mac launches in a tab.
+  bool launches_in_window = extensions::util::CanHostedAppsOpenInWindows() &&
+                            IsCommandIdChecked(USE_LAUNCH_TYPE_WINDOW);
 #else
-  const bool launches_in_tab = IsCommandIdChecked(USE_LAUNCH_TYPE_PINNED) ||
-                               IsCommandIdChecked(USE_LAUNCH_TYPE_REGULAR);
+  // If --enable-new-bookmark-apps is enabled, then only check if
+  // USE_LAUNCH_TYPE_WINDOW is checked, as USE_LAUNCH_TYPE_PINNED (i.e. open
+  // as pinned tab) and fullscreen-by-default windows do not exist.
+  bool launches_in_window =
+      (extensions::util::IsNewBookmarkAppsEnabled()
+           ? IsCommandIdChecked(USE_LAUNCH_TYPE_WINDOW)
+           : !(IsCommandIdChecked(USE_LAUNCH_TYPE_PINNED) ||
+               IsCommandIdChecked(USE_LAUNCH_TYPE_REGULAR)));
 #endif
-  return launches_in_tab ?
-      l10n_util::GetStringUTF16(IDS_APP_LIST_CONTEXT_MENU_NEW_TAB) :
-      l10n_util::GetStringUTF16(IDS_APP_LIST_CONTEXT_MENU_NEW_WINDOW);
+
+  return launches_in_window ?
+      l10n_util::GetStringUTF16(IDS_APP_LIST_CONTEXT_MENU_NEW_WINDOW) :
+      l10n_util::GetStringUTF16(IDS_APP_LIST_CONTEXT_MENU_NEW_TAB);
 }
 
 bool AppContextMenu::IsCommandIdChecked(int command_id) const {
@@ -225,8 +239,8 @@ bool AppContextMenu::IsCommandIdChecked(int command_id) const {
 
 bool AppContextMenu::IsCommandIdEnabled(int command_id) const {
   if (command_id == TOGGLE_PIN) {
-    return controller_->GetPinnable() ==
-        AppListControllerDelegate::PIN_EDITABLE;
+    return controller_->GetPinnable(app_id_) ==
+           AppListControllerDelegate::PIN_EDITABLE;
   } else if (command_id == OPTIONS) {
     return controller_->HasOptionsPage(profile_, app_id_);
   } else if (command_id == UNINSTALL) {
@@ -248,15 +262,16 @@ bool AppContextMenu::IsCommandIdEnabled(int command_id) const {
 
 bool AppContextMenu::GetAcceleratorForCommandId(
     int command_id,
-    ui::Accelerator* acclelrator) {
+    ui::Accelerator* accelerator) {
   return false;
 }
 
 void AppContextMenu::ExecuteCommand(int command_id, int event_flags) {
   if (command_id == LAUNCH_NEW) {
     delegate_->ExecuteLaunchCommand(event_flags);
-  } else if (command_id == TOGGLE_PIN && controller_->GetPinnable() ==
-      AppListControllerDelegate::PIN_EDITABLE) {
+  } else if (command_id == TOGGLE_PIN &&
+             controller_->GetPinnable(app_id_) ==
+                 AppListControllerDelegate::PIN_EDITABLE) {
     if (controller_->IsAppPinned(app_id_))
       controller_->UnpinApp(app_id_);
     else

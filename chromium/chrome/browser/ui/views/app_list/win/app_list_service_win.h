@@ -6,12 +6,15 @@
 #define CHROME_BROWSER_UI_VIEWS_APP_LIST_WIN_APP_LIST_SERVICE_WIN_H_
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/ui/app_list/app_list_service_views.h"
 
 class ActivationTrackerWin;
 
+namespace base {
 template <typename T> struct DefaultSingletonTraits;
+}
 
 class AppListServiceWin : public AppListServiceViews {
  public:
@@ -26,7 +29,7 @@ class AppListServiceWin : public AppListServiceViews {
   void CreateShortcut() override;
 
  private:
-  friend struct DefaultSingletonTraits<AppListServiceWin>;
+  friend struct base::DefaultSingletonTraits<AppListServiceWin>;
 
   // AppListServiceViews overrides:
   void OnViewBeingDestroyed() override;

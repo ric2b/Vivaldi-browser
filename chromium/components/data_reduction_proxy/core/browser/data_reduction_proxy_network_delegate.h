@@ -5,15 +5,22 @@
 #ifndef COMPONENTS_DATA_REDUCTION_PROXY_CORE_BROWSER_DATA_REDUCTION_PROXY_NETWORK_DELEGATE_H_
 #define COMPONENTS_DATA_REDUCTION_PROXY_CORE_BROWSER_DATA_REDUCTION_PROXY_NETWORK_DELEGATE_H_
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
+#include <string>
+
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/values.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_metrics.h"
 #include "net/base/layered_network_delegate.h"
 #include "net/proxy/proxy_retry_info.h"
 
 class GURL;
+
+namespace base {
+class Value;
+}
 
 namespace net {
 class HttpResponseHeaders;
@@ -36,6 +43,16 @@ class DataReductionProxyEventCreator;
 class DataReductionProxyExperimentsStats;
 class DataReductionProxyIOData;
 class DataReductionProxyRequestOptions;
+
+// Values of the UMA DataReductionProxy.LoFi.TransformationType histogram.
+// This enum must remain synchronized with
+// DataReductionProxyLoFiTransformationType in
+// metrics/histograms/histograms.xml.
+enum LoFiTransformationType {
+  PREVIEW = 0,
+  NO_TRANSFORMATION_PREVIEW_REQUESTED,
+  LO_FI_TRANSFORMATION_TYPES_INDEX_BOUNDARY,
+};
 
 // DataReductionProxyNetworkDelegate is a LayeredNetworkDelegate that wraps a
 // NetworkDelegate and adds Data Reduction Proxy specific logic.
@@ -73,8 +90,6 @@ class DataReductionProxyNetworkDelegate : public net::LayeredNetworkDelegate {
   base::Value* SessionNetworkStatsInfoToValue() const;
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(DataReductionProxyNetworkDelegateTest, TotalLengths);
-
   // Called as the proxy is being resolved for |url|. Allows the delegate to
   // override the proxy resolution decision made by ProxyService. The delegate
   // may override the decision by modifying the ProxyInfo |result|.
@@ -104,19 +119,40 @@ class DataReductionProxyNetworkDelegate : public net::LayeredNetworkDelegate {
   void OnCompletedInternal(net::URLRequest* request,
                            bool started) override;
 
+  // Calculates actual data usage that went over the network at the HTTP layer
+  // (e.g. not including network layer overhead) and estimates original data
+  // usage for |request|. Passing in -1 for |original_content_length| indicates
+  // that the original content length of the response could not be determined.
+  void CalculateAndRecordDataUsage(const net::URLRequest& request,
+                                   DataReductionProxyRequestType request_type,
+                                   int64_t original_content_length);
+
   // Posts to the UI thread to UpdateContentLengthPrefs in the data reduction
   // proxy metrics and updates |received_content_length_| and
   // |original_content_length_|.
-  void AccumulateContentLength(int64 received_content_length,
-                               int64 original_content_length,
-                               DataReductionProxyRequestType request_type);
+  void AccumulateDataUsage(int64_t data_used,
+                           int64_t original_size,
+                           DataReductionProxyRequestType request_type,
+                           const std::string& data_usage_host,
+                           const std::string& mime_type);
 
-  // Total size of all content (excluding headers) that has been received
-  // over the network.
-  int64 received_content_length_;
+  // Record information such as histograms related to the Content-Length of
+  // |request|. |original_content_length| is the length of the resource if
+  // fetched over a direct connection without the Data Reduction Proxy, or -1 if
+  // no original content length is available.
+  void RecordContentLength(const net::URLRequest& request,
+                           DataReductionProxyRequestType request_type,
+                           int64_t original_content_length);
+
+  // Records UMA that counts how many pages were transformed by various Lo-Fi
+  // transformations.
+  void RecordLoFiTransformationType(LoFiTransformationType type);
+
+  // Total size of all content that has been received over the network.
+  int64_t total_received_bytes_;
 
   // Total original size of all content before it was transferred.
-  int64 original_content_length_;
+  int64_t total_original_received_bytes_;
 
   // All raw Data Reduction Proxy pointers must outlive |this|.
   DataReductionProxyConfig* data_reduction_proxy_config_;

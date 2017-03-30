@@ -6,9 +6,6 @@ assert(is_android)
 
 import("//build/config/android/config.gni")
 import("//build/config/android/rules.gni")
-import("//mojo/generate_mojo_shell_assets_list.gni")
-
-mandoline_assets_dir = "$root_build_dir/mandoline_assets"
 
 group("android") {
   deps = [
@@ -19,14 +16,20 @@ group("android") {
 executable("mandoline_runner") {
   deps = [
     ":jni_headers",
-    "//mandoline/ui/browser/public/interfaces",
+    "//base",
+    "//build/config/sanitizers:deps",
+    "//mandoline/ui/desktop_ui/public/interfaces",
     "//mojo/common",
     "//mojo/environment:chromium",
+    "//mojo/runner:lib",
     "//mojo/runner:mojo_runner_lib",
+    "//mojo/runner:register_local_aliases_fwd",
+    "//mojo/shell",
+    "//mojo/shell/package_manager",
   ]
 
   sources = [
-    "../core_services_initialization.cc",
+    "../register_local_aliases.cc",
     "mandoline_activity.cc",
     "mandoline_context_init.cc",
   ]
@@ -41,65 +44,37 @@ copy("copy_mandoline_runner") {
     ":mandoline_runner",
   ]
   sources = [
-    "$root_out_dir/exe.stripped/mandoline_runner",
+    "$root_out_dir/mandoline_runner",
   ]
   outputs = [
-    "$root_out_dir/lib.stripped/libmandoline_runner.so",
+    "$root_shlib_dir/${shlib_prefix}mandoline_runner$shlib_extension",
   ]
 }
 
-copy_ex("copy_mandoline_assets") {
-  clear_dir = true
-  dest = mandoline_assets_dir
+android_assets("mandoline_assets") {
   deps = [
-    "//components/devtools_service",
-    "//components/html_viewer",
-    "//mandoline/services/core_services",
-    "//mojo/services/network",
-    "//components/resource_provider",
-    "//mojo/runner:bootstrap",
-    "//mojo/runner:bootstrap_java",
-  ]
-  sources = [
-    "$root_out_dir/lib.stripped/libbootstrap.so",
-    "$root_out_dir/obj/mojo/runner/bootstrap_java.dex.jar",
-  ]
-
-  # Directories can't be specified as sources so pass manually to the script.
-  args = [
-    "--files=" + rebase_path("$root_out_dir/core_services", root_build_dir),
-    "--files=" + rebase_path("$root_out_dir/network_service", root_build_dir),
-    "--files=" + rebase_path("$root_out_dir/resource_provider", root_build_dir),
-    "--files=" + rebase_path("$root_out_dir/devtools_service", root_build_dir),
-    "--files=" + rebase_path("$root_out_dir/html_viewer", root_build_dir),
+    "//components/devtools_service:devtools_service_assets",
+    "//components/html_viewer:html_viewer_assets",
+    "//components/resource_provider:resource_provider_assets",
+    "//mandoline/services/core_services:core_services_assets",
+    "//mojo/runner:android_assets",
+    "//mojo/services/network:network_assets",
   ]
 
   if (use_aura) {
     deps += [
-      "//mandoline/ui/browser",
-      "//mandoline/ui/omnibox",
-    ]
-
-    args += [
-      "--files=" + rebase_path("$root_out_dir/browser", root_build_dir),
-      "--files=" + rebase_path("$root_out_dir/omnibox", root_build_dir),
+      "//mandoline/ui/desktop_ui:desktop_ui_assets",
+      "//mandoline/ui/omnibox:omnibox_assets",
     ]
   }
-}
-
-generate_mojo_shell_assets_list("build_mandoline_assets") {
-  deps = [
-    ":copy_mandoline_assets",
-  ]
-  dir = mandoline_assets_dir
 }
 
 android_library("java") {
   java_files = [ "apk/src/org/chromium/mandoline/MandolineActivity.java" ]
 
   deps = [
-    "//mojo/runner:java",
     "//base:base_java",
+    "//mojo/runner:java",
   ]
 }
 
@@ -119,20 +94,18 @@ android_apk("mandoline_apk") {
   apk_name = "Mandoline"
 
   android_manifest = "apk/AndroidManifest.xml"
-
-  native_libs = [ "libmandoline_runner.so" ]
-
-  asset_location = mandoline_assets_dir
+  native_libs = [ "${shlib_prefix}mandoline_runner$shlib_extension" ]
+  write_asset_list = true
 
   deps = [
-    ":build_mandoline_assets",
     ":copy_mandoline_runner",
     ":java",
     ":mandoline_apk_resources",
+    ":mandoline_assets",
+    "//base:base_java",
     "//mojo/runner:java",
     "//mojo/runner:resources",
-    "//base:base_java",
-    "//third_party/android_tools:google_play_services_default_resources",
     "//ui/platform_window/android:platform_window_java",
+    google_play_services_resources,
   ]
 }

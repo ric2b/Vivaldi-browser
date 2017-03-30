@@ -5,10 +5,12 @@
 #ifndef MEDIA_BASE_AUDIO_DECODER_CONFIG_H_
 #define MEDIA_BASE_AUDIO_DECODER_CONFIG_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/time/time.h"
 #include "media/base/channel_layout.h"
 #include "media/base/media_export.h"
@@ -34,17 +36,20 @@ enum AudioCodec {
   kCodecPCM_S16BE = 10,
   kCodecPCM_S24BE = 11,
   kCodecOpus = 12,
-  // kCodecEAC3 = 13,
+  kCodecEAC3 = 13,
   kCodecPCM_ALAW = 14,
   kCodecALAC = 15,
+  kCodecAC3 = 16,
   // DO NOT ADD RANDOM AUDIO CODECS!
   //
   // The only acceptable time to add a new codec is if there is production code
   // that uses said codec in the same CL.
 
   // Must always be equal to the largest entry ever logged.
-  kAudioCodecMax = kCodecALAC,
+  kAudioCodecMax = kCodecAC3,
 };
+
+std::string MEDIA_EXPORT GetCodecName(AudioCodec codec);
 
 // TODO(dalecurtis): FFmpeg API uses |bytes_per_channel| instead of
 // |bits_per_channel|, we should switch over since bits are generally confusing
@@ -55,20 +60,23 @@ class MEDIA_EXPORT AudioDecoderConfig {
   // appropriate values before using.
   AudioDecoderConfig();
 
-  // Constructs an initialized object. It is acceptable to pass in NULL for
-  // |extra_data|, otherwise the memory is copied.
-  AudioDecoderConfig(AudioCodec codec, SampleFormat sample_format,
-                     ChannelLayout channel_layout, int samples_per_second,
-                     const uint8* extra_data, size_t extra_data_size,
+  // Constructs an initialized object.
+  AudioDecoderConfig(AudioCodec codec,
+                     SampleFormat sample_format,
+                     ChannelLayout channel_layout,
+                     int samples_per_second,
+                     const std::vector<uint8_t>& extra_data,
                      bool is_encrypted);
 
   ~AudioDecoderConfig();
 
-  // Resets the internal state of this object.  |codec_delay| is in frames.
-  void Initialize(AudioCodec codec, SampleFormat sample_format,
-                  ChannelLayout channel_layout, int samples_per_second,
-                  const uint8* extra_data, size_t extra_data_size,
-                  bool is_encrypted, bool record_stats,
+  // Resets the internal state of this object. |codec_delay| is in frames.
+  void Initialize(AudioCodec codec,
+                  SampleFormat sample_format,
+                  ChannelLayout channel_layout,
+                  int samples_per_second,
+                  const std::vector<uint8_t>& extra_data,
+                  bool is_encrypted,
                   base::TimeDelta seek_preroll,
                   int codec_delay);
 
@@ -84,8 +92,6 @@ class MEDIA_EXPORT AudioDecoderConfig {
   // output only.
   std::string AsHumanReadableString() const;
 
-  std::string GetHumanReadableCodecName() const;
-
   AudioCodec codec() const { return codec_; }
   int bits_per_channel() const { return bytes_per_channel_ * 8; }
   int bytes_per_channel() const { return bytes_per_channel_; }
@@ -98,15 +104,24 @@ class MEDIA_EXPORT AudioDecoderConfig {
 
   // Optional byte data required to initialize audio decoders such as Vorbis
   // codebooks.
-  const uint8* extra_data() const {
-    return extra_data_.empty() ? NULL : &extra_data_[0];
-  }
-  size_t extra_data_size() const { return extra_data_.size(); }
+  const std::vector<uint8_t>& extra_data() const { return extra_data_; }
 
   // Whether the audio stream is potentially encrypted.
   // Note that in a potentially encrypted audio stream, individual buffers
   // can be encrypted or not encrypted.
   bool is_encrypted() const { return is_encrypted_; }
+
+  // The sampling rate on decoder input.  Note that |samples_per_second| refers
+  // to the output sampling rate.
+  // TODO(wdzierzanowski): This should become unnecessary when DNA-35764 is
+  // fixed.
+  int input_samples_per_second() const {
+    return input_samples_per_second_ > 0 ? input_samples_per_second_
+                                         : samples_per_second_;
+  }
+  void set_input_samples_per_second(int input_samples_per_second) {
+    input_samples_per_second_ = input_samples_per_second;
+  }
 
  private:
   AudioCodec codec_;
@@ -114,8 +129,9 @@ class MEDIA_EXPORT AudioDecoderConfig {
   int bytes_per_channel_;
   ChannelLayout channel_layout_;
   int samples_per_second_;
+  int input_samples_per_second_;
   int bytes_per_frame_;
-  std::vector<uint8> extra_data_;
+  std::vector<uint8_t> extra_data_;
   bool is_encrypted_;
 
   // |seek_preroll_| is the duration of the data that the decoder must decode

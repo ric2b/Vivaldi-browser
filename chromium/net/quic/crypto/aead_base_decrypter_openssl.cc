@@ -17,7 +17,8 @@ namespace {
 
 // Clear OpenSSL error stack.
 void ClearOpenSslErrors() {
-  while (ERR_get_error()) {}
+  while (ERR_get_error()) {
+  }
 }
 
 // In debug builds only, log OpenSSL error stack. Then clear OpenSSL error
@@ -58,8 +59,8 @@ bool AeadBaseDecrypter::SetKey(StringPiece key) {
   memcpy(key_, key.data(), key.size());
 
   EVP_AEAD_CTX_cleanup(ctx_.get());
-  if (!EVP_AEAD_CTX_init(ctx_.get(), aead_alg_, key_, key_size_,
-                         auth_tag_size_, nullptr)) {
+  if (!EVP_AEAD_CTX_init(ctx_.get(), aead_alg_, key_, key_size_, auth_tag_size_,
+                         nullptr)) {
     DLogOpenSslErrors();
     return false;
   }
@@ -76,7 +77,7 @@ bool AeadBaseDecrypter::SetNoncePrefix(StringPiece nonce_prefix) {
   return true;
 }
 
-bool AeadBaseDecrypter::DecryptPacket(QuicPacketSequenceNumber sequence_number,
+bool AeadBaseDecrypter::DecryptPacket(QuicPacketNumber packet_number,
                                       const StringPiece& associated_data,
                                       const StringPiece& ciphertext,
                                       char* output,
@@ -86,10 +87,10 @@ bool AeadBaseDecrypter::DecryptPacket(QuicPacketSequenceNumber sequence_number,
     return false;
   }
 
-  uint8 nonce[sizeof(nonce_prefix_) + sizeof(sequence_number)];
-  const size_t nonce_size = nonce_prefix_size_ + sizeof(sequence_number);
+  uint8_t nonce[sizeof(nonce_prefix_) + sizeof(packet_number)];
+  const size_t nonce_size = nonce_prefix_size_ + sizeof(packet_number);
   memcpy(nonce, nonce_prefix_, nonce_prefix_size_);
-  memcpy(nonce + nonce_prefix_size_, &sequence_number, sizeof(sequence_number));
+  memcpy(nonce + nonce_prefix_size_, &packet_number, sizeof(packet_number));
   if (!EVP_AEAD_CTX_open(
           ctx_.get(), reinterpret_cast<uint8_t*>(output), output_length,
           max_output_length, reinterpret_cast<const uint8_t*>(nonce),

@@ -4,9 +4,12 @@
 
 #include "ppapi/proxy/interface_list.h"
 
+#include <stdint.h>
+
 #include "base/hash.h"
 #include "base/lazy_instance.h"
 #include "base/memory/singleton.h"
+#include "build/build_config.h"
 #include "ppapi/c/dev/ppb_audio_input_dev.h"
 #include "ppapi/c/dev/ppb_buffer_dev.h"
 #include "ppapi/c/dev/ppb_char_set_dev.h"
@@ -26,9 +29,11 @@
 #include "ppapi/c/dev/ppb_var_deprecated.h"
 #include "ppapi/c/dev/ppb_video_capture_dev.h"
 #include "ppapi/c/dev/ppb_view_dev.h"
+#include "ppapi/c/pp_errors.h"
 #include "ppapi/c/ppb_audio.h"
 #include "ppapi/c/ppb_audio_buffer.h"
 #include "ppapi/c/ppb_audio_config.h"
+#include "ppapi/c/ppb_audio_encoder.h"
 #include "ppapi/c/ppb_compositor.h"
 #include "ppapi/c/ppb_compositor_layer.h"
 #include "ppapi/c/ppb_console.h"
@@ -66,7 +71,6 @@
 #include "ppapi/c/ppb_video_encoder.h"
 #include "ppapi/c/ppb_video_frame.h"
 #include "ppapi/c/ppb_view.h"
-#include "ppapi/c/pp_errors.h"
 #include "ppapi/c/ppp_instance.h"
 #include "ppapi/c/private/ppb_camera_capabilities_private.h"
 #include "ppapi/c/private/ppb_camera_device_private.h"
@@ -75,18 +79,17 @@
 #include "ppapi/c/private/ppb_file_io_private.h"
 #include "ppapi/c/private/ppb_file_ref_private.h"
 #include "ppapi/c/private/ppb_find_private.h"
+#include "ppapi/c/private/ppb_flash.h"
 #include "ppapi/c/private/ppb_flash_clipboard.h"
+#include "ppapi/c/private/ppb_flash_device_id.h"
+#include "ppapi/c/private/ppb_flash_drm.h"
 #include "ppapi/c/private/ppb_flash_file.h"
 #include "ppapi/c/private/ppb_flash_font_file.h"
 #include "ppapi/c/private/ppb_flash_fullscreen.h"
-#include "ppapi/c/private/ppb_flash.h"
-#include "ppapi/c/private/ppb_flash_device_id.h"
-#include "ppapi/c/private/ppb_flash_drm.h"
 #include "ppapi/c/private/ppb_flash_menu.h"
 #include "ppapi/c/private/ppb_flash_message_loop.h"
 #include "ppapi/c/private/ppb_flash_print.h"
 #include "ppapi/c/private/ppb_host_resolver_private.h"
-#include "ppapi/c/private/ppb_input_event_private.h"
 #include "ppapi/c/private/ppb_isolated_file_system_private.h"
 #include "ppapi/c/private/ppb_net_address_private.h"
 #include "ppapi/c/private/ppb_output_protection_private.h"
@@ -319,7 +322,7 @@ InterfaceList::~InterfaceList() {
 InterfaceList* InterfaceList::GetInstance() {
   // CAUTION: This function is called without the ProxyLock to avoid excessive
   // excessive locking from C++ wrappers. (See also GetBrowserInterface.)
-  return Singleton<InterfaceList>::get();
+  return base::Singleton<InterfaceList>::get();
 }
 
 // static
@@ -408,7 +411,7 @@ void InterfaceList::AddPPP(const char* name,
 }
 
 int InterfaceList::HashInterfaceName(const std::string& name) {
-  uint32 data = base::Hash(name.c_str(), name.size());
+  uint32_t data = base::Hash(name.c_str(), name.size());
   // Strip off the signed bit because UMA doesn't support negative values,
   // but takes a signed int as input.
   return static_cast<int>(data & 0x7fffffff);

@@ -4,10 +4,18 @@
 
 #include "chrome/common/chrome_content_client.h"
 
+#include <string.h>
+
 #include "base/command_line.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_split.h"
+#include "build/build_config.h"
 #include "content/public/common/content_switches.h"
+#include "extensions/common/constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
+#include "url/origin.h"
+#include "url/url_util.h"
 
 namespace {
 
@@ -85,6 +93,92 @@ TEST(ChromeContentClientTest, Basic) {
   ASSERT_TRUE(command_line->HasSwitch(switches::kUseMobileUserAgent));
   CheckUserAgentStringOrdering(true);
 #endif
+}
+
+#if defined(ENABLE_PLUGINS)
+TEST(ChromeContentClientTest, FindMostRecent) {
+  std::vector<content::PepperPluginInfo*> version_vector;
+  // Test an empty vector.
+  EXPECT_EQ(nullptr, ChromeContentClient::FindMostRecentPlugin(version_vector));
+
+  // Now test the vector with one element.
+  content::PepperPluginInfo info1;
+  info1.version = "1.0.0.0";
+  version_vector.push_back(&info1);
+
+  content::PepperPluginInfo* most_recent =
+      ChromeContentClient::FindMostRecentPlugin(version_vector);
+  EXPECT_EQ("1.0.0.0", most_recent->version);
+
+  // Now do the generic test of a complex vector.
+  content::PepperPluginInfo info2;
+  info2.version = "2.0.0.1";
+  content::PepperPluginInfo info3;
+  info3.version = "3.5.6.7";
+  content::PepperPluginInfo info4;
+  info4.version = "4.0.0.153";
+  content::PepperPluginInfo info5;
+  info5.version = "5.0.12.1";
+  content::PepperPluginInfo info6_12;
+  info6_12.version = "6.0.0.12";
+  content::PepperPluginInfo info6_13;
+  info6_13.version = "6.0.0.13";
+  content::PepperPluginInfo info6_13_d;
+  info6_13_d.version = "6.0.0.13";
+  info6_13_d.is_debug = true;
+
+  version_vector.clear();
+  version_vector.push_back(&info4);
+  version_vector.push_back(&info2);
+  version_vector.push_back(&info6_13);
+  version_vector.push_back(&info3);
+  version_vector.push_back(&info5);
+  version_vector.push_back(&info6_12);
+  version_vector.push_back(&info6_13_d);
+
+  most_recent = ChromeContentClient::FindMostRecentPlugin(version_vector);
+  EXPECT_EQ("6.0.0.13", most_recent->version);
+  EXPECT_EQ(true, most_recent->is_debug);
+
+  // Check vector order doesn't matter.
+  version_vector.clear();
+  version_vector.push_back(&info6_13_d);
+  version_vector.push_back(&info6_12);
+  version_vector.push_back(&info5);
+  version_vector.push_back(&info3);
+  version_vector.push_back(&info6_13);
+  version_vector.push_back(&info2);
+  version_vector.push_back(&info4);
+
+  most_recent = ChromeContentClient::FindMostRecentPlugin(version_vector);
+  EXPECT_EQ("6.0.0.13", most_recent->version);
+  EXPECT_EQ(true, most_recent->is_debug);
+
+  // Check higher versions still trump debugger.
+  content::PepperPluginInfo info5_d;
+  info5_d.version = "5.0.12.1";
+  info5_d.is_debug = true;
+
+  version_vector.clear();
+  version_vector.push_back(&info5_d);
+  version_vector.push_back(&info6_12);
+
+  most_recent = ChromeContentClient::FindMostRecentPlugin(version_vector);
+  EXPECT_EQ("6.0.0.12", most_recent->version);
+  EXPECT_EQ(false, most_recent->is_debug);
+}
+#endif  // defined(ENABLE_PLUGINS)
+
+TEST(ChromeContentClientTest, AdditionalSchemes) {
+  EXPECT_TRUE(url::IsStandard(
+      extensions::kExtensionScheme,
+      url::Component(0, strlen(extensions::kExtensionScheme))));
+
+  GURL extension_url(
+      "chrome-extension://abcdefghijklmnopqrstuvwxyzabcdef/foo.html");
+  url::Origin origin(extension_url);
+  EXPECT_EQ("chrome-extension://abcdefghijklmnopqrstuvwxyzabcdef",
+            origin.Serialize());
 }
 
 }  // namespace chrome_common

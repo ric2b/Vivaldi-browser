@@ -95,8 +95,7 @@ WebContents* WebContentsDelegateAndroid::OpenURLFromTab(
         params.browser_initiated_post_data.get() &&
         params.browser_initiated_post_data.get()->size()) {
       post_data = base::android::ToJavaByteArray(
-          env,
-          params.browser_initiated_post_data.get()->front_as<uint8>(),
+          env, params.browser_initiated_post_data.get()->front_as<uint8_t>(),
           params.browser_initiated_post_data.get()->size());
     }
     Java_WebContentsDelegateAndroid_openNewTab(env,
@@ -119,11 +118,6 @@ WebContents* WebContentsDelegateAndroid::OpenURLFromTab(
   load_params.should_replace_current_entry =
       params.should_replace_current_entry;
   load_params.is_renderer_initiated = params.is_renderer_initiated;
-
-  if (params.transferred_global_request_id != content::GlobalRequestID()) {
-    load_params.transferred_global_request_id =
-        params.transferred_global_request_id;
-  }
 
   // Only allows the browser-initiated navigation to use POST.
   if (params.uses_post && !params.is_renderer_initiated) {
@@ -169,11 +163,6 @@ void WebContentsDelegateAndroid::ActivateContents(WebContents* contents) {
   Java_WebContentsDelegateAndroid_activateContents(env, obj.obj());
 }
 
-void WebContentsDelegateAndroid::DeactivateContents(WebContents* contents) {
-  // On desktop the current window is deactivated here, bringing the next window
-  // to focus. Not implemented on Android.
-}
-
 void WebContentsDelegateAndroid::LoadingStateChanged(WebContents* source,
     bool to_different_document) {
   JNIEnv* env = AttachCurrentThread();
@@ -182,10 +171,14 @@ void WebContentsDelegateAndroid::LoadingStateChanged(WebContents* source,
     return;
   bool has_stopped = source == NULL || !source->IsLoading();
 
-  if (has_stopped)
+  if (has_stopped) {
     Java_WebContentsDelegateAndroid_onLoadStopped(env, obj.obj());
-  else
-    Java_WebContentsDelegateAndroid_onLoadStarted(env, obj.obj());
+  } else {
+    Java_WebContentsDelegateAndroid_onLoadStarted(
+        env,
+        obj.obj(),
+        to_different_document);
+  }
 }
 
 void WebContentsDelegateAndroid::LoadProgressChanged(WebContents* source,
@@ -218,8 +211,9 @@ void WebContentsDelegateAndroid::RendererResponsive(WebContents* source) {
 
 bool WebContentsDelegateAndroid::ShouldCreateWebContents(
     WebContents* web_contents,
-    int route_id,
-    int main_frame_route_id,
+    int32_t route_id,
+    int32_t main_frame_route_id,
+    int32_t main_frame_widget_route_id,
     WindowContainerType window_container_type,
     const std::string& frame_name,
     const GURL& target_url,
@@ -261,12 +255,9 @@ void WebContentsDelegateAndroid::WebContentsCreated(
     jnew_contents = new_contents->GetJavaWebContents();
 
   Java_WebContentsDelegateAndroid_webContentsCreated(
-      env,
-      obj.obj(),
-      jsource_contents.obj(),
-      opener_render_frame_id,
-      base::android::ConvertUTF8ToJavaString(env, frame_name).Release(),
-      base::android::ConvertUTF8ToJavaString(env, target_url.spec()).Release(),
+      env, obj.obj(), jsource_contents.obj(), opener_render_frame_id,
+      base::android::ConvertUTF8ToJavaString(env, frame_name).obj(),
+      base::android::ConvertUTF8ToJavaString(env, target_url.spec()).obj(),
       jnew_contents.obj());
 }
 
@@ -285,9 +276,9 @@ void WebContentsDelegateAndroid::MoveContents(WebContents* source,
 
 bool WebContentsDelegateAndroid::AddMessageToConsole(
     WebContents* source,
-    int32 level,
+    int32_t level,
     const base::string16& message,
-    int32 line_no,
+    int32_t line_no,
     const base::string16& source_id) {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = GetJavaDelegate(env);

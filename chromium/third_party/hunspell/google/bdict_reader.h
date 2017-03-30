@@ -2,13 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef CHROME_THIRD_PARTY_HUNSPELL_GOOGLE_DIC_READER_H__
-#define CHROME_THIRD_PARTY_HUNSPELL_GOOGLE_DIC_READER_H__
+#ifndef THIRD_PARTY_HUNSPELL_GOOGLE_BDICT_READER_H_
+#define THIRD_PARTY_HUNSPELL_GOOGLE_BDICT_READER_H_
+
+#include <stddef.h>
 
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "third_party/hunspell/google/bdict.h"
 
 namespace hunspell {
@@ -145,9 +147,9 @@ class BDictReader {
 
   const BDict::AffHeader* aff_header_;
 
-  DISALLOW_EVIL_CONSTRUCTORS(BDictReader);
+  DISALLOW_COPY_AND_ASSIGN(BDictReader);
 };
 
 }  // namespace hunspell
 
-#endif  // CHROME_THIRD_PARTY_HUNSPELL_GOOGLE_DIC_READER_H__
+#endif  // THIRD_PARTY_HUNSPELL_GOOGLE_BDICT_READER_H_

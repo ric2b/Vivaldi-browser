@@ -4,6 +4,9 @@
 
 #include "chrome/browser/supervised_user/supervised_user_settings_service.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/callback.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
@@ -50,8 +53,9 @@ bool SettingShouldApplyToPrefs(const std::string& name) {
 
 }  // namespace
 
-SupervisedUserSettingsService::SupervisedUserSettingsService()
-    : active_(false),
+SupervisedUserSettingsService::SupervisedUserSettingsService(Profile* profile)
+    : profile_(profile),
+      active_(false),
       initialization_failed_(false),
       local_settings_(new base::DictionaryValue) {
 }
@@ -85,14 +89,19 @@ void SupervisedUserSettingsService::Init(
   store_->AddObserver(this);
 }
 
-void SupervisedUserSettingsService::Subscribe(
+scoped_ptr<SupervisedUserSettingsService::SettingsCallbackList::Subscription>
+    SupervisedUserSettingsService::Subscribe(
     const SettingsCallback& callback) {
   if (IsReady()) {
     scoped_ptr<base::DictionaryValue> settings = GetSettings();
     callback.Run(settings.get());
   }
 
-  subscribers_.push_back(callback);
+  return callback_list_.Add(callback);
+}
+
+Profile* SupervisedUserSettingsService::GetProfile(){
+  return profile_;
 }
 
 void SupervisedUserSettingsService::SetActive(bool active) {
@@ -181,8 +190,8 @@ SyncMergeResult SupervisedUserSettingsService::MergeDataAndStartSyncing(
     scoped_ptr<SyncChangeProcessor> sync_processor,
     scoped_ptr<SyncErrorFactory> error_handler) {
   DCHECK_EQ(SUPERVISED_USER_SETTINGS, type);
-  sync_processor_ = sync_processor.Pass();
-  error_handler_ = error_handler.Pass();
+  sync_processor_ = std::move(sync_processor);
+  error_handler_ = std::move(error_handler);
 
   // Clear all atomic and split settings, then recreate them from Sync data.
   Clear();
@@ -190,8 +199,8 @@ SyncMergeResult SupervisedUserSettingsService::MergeDataAndStartSyncing(
     DCHECK_EQ(SUPERVISED_USER_SETTINGS, sync_data.GetDataType());
     const ::sync_pb::ManagedUserSettingSpecifics& supervised_user_setting =
         sync_data.GetSpecifics().managed_user_setting();
-    scoped_ptr<base::Value> value(
-        JSONReader::DeprecatedRead(supervised_user_setting.value()));
+    scoped_ptr<base::Value> value =
+        JSONReader::Read(supervised_user_setting.value());
     std::string name_suffix = supervised_user_setting.name();
     base::DictionaryValue* dict = GetDictionaryAndSplitKey(&name_suffix);
     dict->SetWithoutPathExpansion(name_suffix, value.release());
@@ -274,8 +283,8 @@ SyncError SupervisedUserSettingsService::ProcessSyncChanges(
     switch (change_type) {
       case SyncChange::ACTION_ADD:
       case SyncChange::ACTION_UPDATE: {
-        scoped_ptr<base::Value> value(
-            JSONReader::DeprecatedRead(supervised_user_setting.value()));
+        scoped_ptr<base::Value> value =
+            JSONReader::Read(supervised_user_setting.value());
         if (dict->HasKey(key)) {
           DLOG_IF(WARNING, change_type == SyncChange::ACTION_ADD)
               << "Value for key " << key << " already exists";
@@ -398,7 +407,7 @@ scoped_ptr<base::DictionaryValue> SupervisedUserSettingsService::GetSettings() {
     settings->Set(it.key(), it.value().DeepCopy());
   }
 
-  return settings.Pass();
+  return settings;
 }
 
 void SupervisedUserSettingsService::InformSubscribers() {
@@ -406,6 +415,5 @@ void SupervisedUserSettingsService::InformSubscribers() {
     return;
 
   scoped_ptr<base::DictionaryValue> settings = GetSettings();
-  for (const auto& callback : subscribers_)
-    callback.Run(settings.get());
+  callback_list_.Notify(settings.get());
 }

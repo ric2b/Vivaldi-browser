@@ -44,7 +44,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, SystemIndicator) {
   }
 }
 
-// TODO reenable test for Vivaldi
 // Failing on 10.6, flaky elsewhere http://crbug.com/497643
 IN_PROC_BROWSER_TEST_F(SystemIndicatorApiTest, DISABLED_SystemIndicator) {
   // Only run this test on supported platforms.  SystemIndicatorManagerFactory

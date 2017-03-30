@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -241,16 +240,6 @@ TEST_F(BookmarkBarFolderControllerTest, InitCreateAndDelete) {
     EXPECT_TRUE(NSContainsRect(bigger, r));
     EXPECT_TRUE([[button cell] isKindOfClass:cellClass]);
   }
-
-  // Confirm folder buttons have no tooltip.  The important thing
-  // really is that we insure folders and non-folders are treated
-  // differently; not sure of any other generic way to do this.
-  for (BookmarkButton* button in buttons) {
-    if ([button isFolder])
-      EXPECT_FALSE([button toolTip]);
-    else
-      EXPECT_TRUE([button toolTip]);
-  }
 }
 
 // Make sure closing of the window releases the controller.
@@ -482,6 +471,41 @@ TEST_F(BookmarkBarFolderControllerTest, ChildFolderWidth) {
 
   // Make sure window size changed as expected.
   EXPECT_GT(wideWidth, thinWidth);
+}
+
+// Scrolling (in this case using keyboard up/down buttons) should
+// not be a cause of item hovering change where the mouse is pointing to.
+// Here we are simulating scrolling by calling -performOneScroll: which
+// indirectly is called by keyboard up/down buttons.
+TEST_F(BookmarkBarFolderControllerTest, ScrollingBehaviorAndMouseMovement){
+  base::scoped_nsobject<BookmarkBarFolderController> bbfc;
+  AddLotsOfNodes();
+  bbfc.reset(SimpleBookmarkBarFolderController());
+  [bbfc showWindow:bbfc.get()];
+  // We should be able to scroll-up otherwise the rest of the test is pointless.
+  ASSERT_TRUE([bbfc canScrollUp]);
+  NSArray* buttons = [bbfc buttons];
+  BookmarkButton* currentButton = [bbfc buttonThatMouseIsIn];
+  // Mouse cursor is not pointing to any button.
+  EXPECT_FALSE(currentButton);
+  BookmarkButton* firstButton = [buttons objectAtIndex:0];
+  [bbfc mouseEnteredButton:firstButton event:nil];
+  // Mouse cursor should be over the first button.
+  EXPECT_EQ(firstButton, [bbfc buttonThatMouseIsIn]);
+  while ([bbfc canScrollUp]) {
+    [bbfc performOneScroll:200 updateMouseSelection:NO];
+    [bbfc mouseEnteredButton:[buttons objectAtIndex:2] event:nil];
+    // -buttonThatMouseIsIn: must return firstButton because we
+    // are still scrolling. i.e. should not be changed when
+    // -mouseEnteredButton: is called.
+    EXPECT_EQ(firstButton,[bbfc buttonThatMouseIsIn]);
+    // We are scrolling unless mouse movement happens.
+    EXPECT_TRUE([bbfc isScrolling]);
+  }
+  [bbfc mouseExitedButton:firstButton event:nil];
+  // If mouse exit from a button scrolling should be stopped.
+  EXPECT_FALSE([bbfc isScrolling]);
+  [bbfc mouseEnteredButton:nil event:nil];
 }
 
 // Simple scrolling tests.

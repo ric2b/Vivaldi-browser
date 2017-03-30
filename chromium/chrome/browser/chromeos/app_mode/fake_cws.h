@@ -5,6 +5,11 @@
 #ifndef CHROME_BROWSER_CHROMEOS_APP_MODE_FAKE_CWS_H_
 #define CHROME_BROWSER_CHROMEOS_APP_MODE_FAKE_CWS_H_
 
+#include <map>
+#include <string>
+#include <vector>
+
+#include "base/macros.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
@@ -22,15 +27,14 @@ class FakeCWS {
 
   // Initializes as CWS request handler and overrides app gallery command line
   // switches.
-  void Init(net::test_server::EmbeddedTestServer* embedded_test_server);
+  void Init(net::EmbeddedTestServer* embedded_test_server);
 
   // Initializes as a private store handler using the given server and URL end
   // point. Private store does not override app gallery command lines and use a
   // slightly different template (as documented on
   // https://developer.chrome.com/extensions/autoupdate).
-  void InitAsPrivateStore(
-      net::test_server::EmbeddedTestServer* embedded_test_server,
-      const std::string& update_check_end_point);
+  void InitAsPrivateStore(net::EmbeddedTestServer* embedded_test_server,
+                          const std::string& update_check_end_point);
 
   // Sets up the update check response with has_update template.
   void SetUpdateCrx(const std::string& app_id,
@@ -47,14 +51,7 @@ class FakeCWS {
   void SetupWebStoreURL(const GURL& test_server_url);
   void OverrideGalleryCommandlineSwitches();
 
-  // Sets up |update_check_content_| used in update request response later by
-  // kiosk app update server request handler |HandleRequest|.
-  void SetUpdateCheckContent(const std::string& update_check_file,
-                             const GURL& crx_download_url,
-                             const std::string& app_id,
-                             const std::string& crx_fp,
-                             const std::string& crx_size,
-                             const std::string& version,
+  bool GetUpdateCheckContent(const std::vector<std::string>& ids,
                              std::string* update_check_content);
 
   // Request handler for kiosk app update server.
@@ -67,7 +64,8 @@ class FakeCWS {
   std::string no_update_template_;
   std::string update_check_end_point_;
 
-  std::string update_check_content_;
+  // Map keyed by app_id to app_update_content.
+  std::map<std::string, std::string> id_to_update_check_content_map_;
   int update_check_count_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeCWS);

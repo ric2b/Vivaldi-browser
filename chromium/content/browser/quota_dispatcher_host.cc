@@ -4,9 +4,12 @@
 
 #include "content/browser/quota_dispatcher_host.h"
 
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/memory/weak_ptr.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/trace_event/trace_event.h"
 #include "content/common/quota_messages.h"
 #include "content/public/browser/quota_permission_context.h"
 #include "net/base/net_util.h"
@@ -71,6 +74,11 @@ class QuotaDispatcherHost::QueryUsageAndQuotaDispatcher
   ~QueryUsageAndQuotaDispatcher() override {}
 
   void QueryStorageUsageAndQuota(const GURL& origin, StorageType type) {
+    // crbug.com/349708
+    TRACE_EVENT0("io",
+                 "QuotaDispatcherHost::QueryUsageAndQuotaDispatcher"
+                 "::QueryStorageUsageAndQuota");
+
     quota_manager()->GetUsageAndQuotaForWebApps(
         origin, type,
         base::Bind(&QueryUsageAndQuotaDispatcher::DidQueryStorageUsageAndQuota,
@@ -78,10 +86,15 @@ class QuotaDispatcherHost::QueryUsageAndQuotaDispatcher
   }
 
  private:
-  void DidQueryStorageUsageAndQuota(
-      QuotaStatusCode status, int64 usage, int64 quota) {
+  void DidQueryStorageUsageAndQuota(QuotaStatusCode status,
+                                    int64_t usage,
+                                    int64_t quota) {
     if (!dispatcher_host())
       return;
+    // crbug.com/349708
+    TRACE_EVENT0("io", "QuotaDispatcherHost::RequestQuotaDispatcher"
+                 "::DidQueryStorageUsageAndQuota");
+
     if (status != storage::kQuotaStatusOk) {
       dispatcher_host()->Send(new QuotaMsg_DidFail(request_id(), status));
     } else {
@@ -107,15 +120,18 @@ class QuotaDispatcherHost::RequestQuotaDispatcher
         current_quota_(0),
         requested_quota_(0),
         weak_factory_(this) {
-    // Convert the requested size from uint64 to int64 since the quota backend
-    // requires int64 values.
-    // TODO(nhiroki): The backend should accept uint64 values.
-    requested_quota_ = base::saturated_cast<int64>(params_.requested_size);
+    // Convert the requested size from uint64_t to int64_t since the quota
+    // backend
+    // requires int64_t values.
+    // TODO(nhiroki): The backend should accept uint64_t values.
+    requested_quota_ = base::saturated_cast<int64_t>(params_.requested_size);
   }
   ~RequestQuotaDispatcher() override {}
 
   void Start() {
     DCHECK(dispatcher_host());
+    // crbug.com/349708
+    TRACE_EVENT0("io", "QuotaDispatcherHost::RequestQuotaDispatcher::Start");
 
     DCHECK(params_.storage_type == storage::kStorageTypeTemporary ||
            params_.storage_type == storage::kStorageTypePersistent);
@@ -134,8 +150,8 @@ class QuotaDispatcherHost::RequestQuotaDispatcher
 
  private:
   void DidGetPersistentUsageAndQuota(QuotaStatusCode status,
-                                     int64 usage,
-                                     int64 quota) {
+                                     int64_t usage,
+                                     int64_t quota) {
     if (!dispatcher_host())
       return;
     if (status != storage::kQuotaStatusOk) {
@@ -162,8 +178,8 @@ class QuotaDispatcherHost::RequestQuotaDispatcher
   }
 
   void DidGetTemporaryUsageAndQuota(QuotaStatusCode status,
-                                    int64 usage,
-                                    int64 quota) {
+                                    int64_t usage,
+                                    int64_t quota) {
     DidFinish(status, usage, std::min(requested_quota_, quota));
   }
 
@@ -182,13 +198,11 @@ class QuotaDispatcherHost::RequestQuotaDispatcher
         base::Bind(&self_type::DidSetHostQuota, weak_factory_.GetWeakPtr()));
   }
 
-  void DidSetHostQuota(QuotaStatusCode status, int64 new_quota) {
+  void DidSetHostQuota(QuotaStatusCode status, int64_t new_quota) {
     DidFinish(status, current_usage_, new_quota);
   }
 
-  void DidFinish(QuotaStatusCode status,
-                 int64 usage,
-                 int64 granted_quota) {
+  void DidFinish(QuotaStatusCode status, int64_t usage, int64_t granted_quota) {
     if (!dispatcher_host())
       return;
     DCHECK(dispatcher_host());
@@ -202,9 +216,9 @@ class QuotaDispatcherHost::RequestQuotaDispatcher
   }
 
   StorageQuotaParams params_;
-  int64 current_usage_;
-  int64 current_quota_;
-  int64 requested_quota_;
+  int64_t current_usage_;
+  int64_t current_quota_;
+  int64_t requested_quota_;
   base::WeakPtrFactory<self_type> weak_factory_;
 };
 

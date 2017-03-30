@@ -4,10 +4,12 @@
 
 #include "ui/gfx/platform_font_win.h"
 
-#include <dwrite.h>
-#include <math.h>
-#include <wchar.h>
 #include <windows.h>
+#include <dwrite.h>
+#include <limits.h>
+#include <math.h>
+#include <stdint.h>
+#include <wchar.h>
 
 #include <algorithm>
 
@@ -130,7 +132,7 @@ HRESULT FindDirectWriteFontForLOGFONT(IDWriteFactory* factory,
   // If this succeeds we return the matched font.
   base::win::ScopedGDIObject<HFONT> font(::CreateFontIndirect(font_info));
   base::win::ScopedGetDC screen_dc(NULL);
-  base::win::ScopedSelectObject scoped_font(screen_dc, font);
+  base::win::ScopedSelectObject scoped_font(screen_dc, font.get());
 
   base::win::ScopedComPtr<IDWriteFontFace> font_face;
   hr = gdi_interop->CreateFontFaceFromHdc(screen_dc, font_face.Receive());
@@ -189,7 +191,7 @@ HRESULT GetMatchingDirectWriteFont(LOGFONT* font_info,
   //    use that.
   base::win::ScopedComPtr<IDWriteFontFamily> font_family;
   BOOL exists = FALSE;
-  uint32 index = 0;
+  uint32_t index = 0;
   hr = font_collection->FindFamilyName(font_info->lfFaceName, &index, &exists);
   // If we fail to find a match then try fallback to the default font on the
   // system. This is what skia does as well.
@@ -259,7 +261,7 @@ HRESULT GetMatchingDirectWriteFont(LOGFONT* font_info,
   base::win::ScopedComPtr<IDWriteFontList> matching_font_list;
   hr = font_family->GetMatchingFonts(weight, stretch, italic,
                                      matching_font_list.Receive());
-  uint32 matching_font_count = 0;
+  uint32_t matching_font_count = 0;
   if (SUCCEEDED(hr))
     matching_font_count = matching_font_list->GetFontCount();
 
@@ -366,19 +368,19 @@ Font PlatformFontWin::DeriveFont(int size_delta, int style) const {
   return Font(new PlatformFontWin(CreateHFontRef(hfont)));
 }
 
-int PlatformFontWin::GetHeight() const {
+int PlatformFontWin::GetHeight() {
   return font_ref_->height();
 }
 
-int PlatformFontWin::GetBaseline() const {
+int PlatformFontWin::GetBaseline() {
   return font_ref_->baseline();
 }
 
-int PlatformFontWin::GetCapHeight() const {
+int PlatformFontWin::GetCapHeight() {
   return font_ref_->cap_height();
 }
 
-int PlatformFontWin::GetExpectedTextWidth(int length) const {
+int PlatformFontWin::GetExpectedTextWidth(int length) {
   return length * std::min(font_ref_->GetDluBaseX(),
                            font_ref_->ave_char_width());
 }
@@ -387,7 +389,7 @@ int PlatformFontWin::GetStyle() const {
   return font_ref_->style();
 }
 
-std::string PlatformFontWin::GetFontName() const {
+const std::string& PlatformFontWin::GetFontName() const {
   return font_ref_->font_name();
 }
 
@@ -453,7 +455,7 @@ int PlatformFontWin::GetFontSize(const LOGFONT& font_info) {
   base::win::ScopedGDIObject<HFONT> font(CreateFontIndirect(&font_info));
 
   TEXTMETRIC font_metrics = {0};
-  PlatformFontWin::GetTextMetricsForFont(screen_dc, font, &font_metrics);
+  PlatformFontWin::GetTextMetricsForFont(screen_dc, font.get(), &font_metrics);
   return font_metrics.tmAscent;
 }
 

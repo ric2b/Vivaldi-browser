@@ -4,12 +4,14 @@
 
 #include "chrome/browser/safe_browsing/incident_reporting/preference_validation_delegate.h"
 
+#include <stddef.h>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/compiler_specific.h"
-#include "base/memory/scoped_vector.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/values.h"
 #include "chrome/browser/safe_browsing/incident_reporting/incident.h"
 #include "chrome/browser/safe_browsing/incident_reporting/mock_incident_receiver.h"
@@ -27,7 +29,7 @@ using ::testing::WithArg;
 // instance was provided with the expected data.
 class PreferenceValidationDelegateTest : public testing::Test {
  protected:
-  typedef ScopedVector<safe_browsing::Incident> IncidentVector;
+  typedef std::vector<scoped_ptr<safe_browsing::Incident>> IncidentVector;
 
   PreferenceValidationDelegateTest()
       : kPrefPath_("atomic.pref"),
@@ -42,7 +44,7 @@ class PreferenceValidationDelegateTest : public testing::Test {
     ON_CALL(*receiver, DoAddIncidentForProfile(IsNull(), _))
         .WillByDefault(WithArg<1>(TakeIncidentToVector(&incidents_)));
     instance_.reset(new safe_browsing::PreferenceValidationDelegate(
-        nullptr, receiver.Pass()));
+        nullptr, std::move(receiver)));
   }
 
   static void ExpectValueStatesEquate(
@@ -131,13 +133,13 @@ class PreferenceValidationDelegateValues
         scoped_ptr<base::DictionaryValue> value(new base::DictionaryValue());
         value->SetInteger("twenty-two", 22);
         value->SetInteger("forty-seven", 47);
-        return value.Pass();
+        return std::move(value);
       }
       case Value::TYPE_LIST: {
         scoped_ptr<base::ListValue> value(new base::ListValue());
         value->AppendInteger(22);
         value->AppendInteger(47);
-        return value.Pass();
+        return std::move(value);
       }
       default:
         ADD_FAILURE() << "unsupported value type " << value_type;

@@ -5,7 +5,10 @@
 #ifndef CC_QUADS_RENDER_PASS_ID_H_
 #define CC_QUADS_RENDER_PASS_ID_H_
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
+#include <tuple>
+
 #include "base/containers/hash_tables.h"
 #include "cc/base/cc_export.h"
 
@@ -20,13 +23,14 @@ class CC_EXPORT RenderPassId {
   RenderPassId(int layer_id, size_t index) : layer_id(layer_id), index(index) {}
   void* AsTracingId() const;
 
+  bool IsValid() const { return layer_id >= 0; }
+
   bool operator==(const RenderPassId& other) const {
     return layer_id == other.layer_id && index == other.index;
   }
   bool operator!=(const RenderPassId& other) const { return !(*this == other); }
   bool operator<(const RenderPassId& other) const {
-    return layer_id < other.layer_id ||
-           (layer_id == other.layer_id && index < other.index);
+    return std::tie(layer_id, index) < std::tie(other.layer_id, other.index);
   }
 };
 

@@ -4,8 +4,8 @@
 
 #include "ui/views/widget/native_widget_aura.h"
 
-#include "base/basictypes.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -97,6 +97,21 @@ TEST_F(NativeWidgetAuraTest, CenterWindowSmallParentNotAtOrigin) {
 
   // |window| should be no bigger than |parent|.
   EXPECT_EQ("20,40 480x320", window->GetNativeWindow()->bounds().ToString());
+  widget->CloseNow();
+}
+
+TEST_F(NativeWidgetAuraTest, CreateMinimized) {
+  Widget::InitParams params(Widget::InitParams::TYPE_WINDOW);
+  params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  params.parent = NULL;
+  params.context = root_window();
+  params.show_state = ui::SHOW_STATE_MINIMIZED;
+  params.bounds.SetRect(0, 0, 1024, 800);
+  scoped_ptr<Widget> widget(new Widget());
+  widget->Init(params);
+  widget->Show();
+
+  EXPECT_TRUE(widget->IsMinimized());
   widget->CloseNow();
 }
 

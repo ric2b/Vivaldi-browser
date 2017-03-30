@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -34,6 +36,7 @@
 #include "net/url_request/url_request_test_job.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/origin.h"
 
 namespace content {
 
@@ -109,7 +112,7 @@ class TestNavigationURLLoaderDelegate : public NavigationURLLoaderDelegate {
   void OnResponseStarted(const scoped_refptr<ResourceResponse>& response,
                          scoped_ptr<StreamHandle> body) override {
     response_ = response;
-    body_ = body.Pass();
+    body_ = std::move(body);
     ASSERT_TRUE(response_started_);
     response_started_->Quit();
   }
@@ -165,8 +168,9 @@ class NavigationURLLoaderTest : public testing::Test {
     job_factory_.SetProtocolHandler(
         "test", net::URLRequestTestJob::CreateProtocolHandler());
     job_factory_.SetProtocolHandler(
-        "blob", new StreamProtocolHandler(
-            StreamContext::GetFor(browser_context_.get())->registry()));
+        "blob",
+        make_scoped_ptr(new StreamProtocolHandler(
+            StreamContext::GetFor(browser_context_.get())->registry())));
     request_context->set_job_factory(&job_factory_);
 
     // NavigationURLLoader is only used for browser-side navigations.
@@ -177,16 +181,17 @@ class NavigationURLLoaderTest : public testing::Test {
   scoped_ptr<NavigationURLLoader> MakeTestLoader(
       const GURL& url,
       NavigationURLLoaderDelegate* delegate) {
-    BeginNavigationParams begin_params(
-        "GET", std::string(), net::LOAD_NORMAL, false);
+    BeginNavigationParams begin_params("GET", std::string(), net::LOAD_NORMAL,
+                                       false, false,
+                                       REQUEST_CONTEXT_TYPE_LOCATION);
     CommonNavigationParams common_params;
     common_params.url = url;
-    scoped_ptr<NavigationRequestInfo> request_info(
-        new NavigationRequestInfo(common_params, begin_params, url, true, false,
-                                  -1, scoped_refptr<ResourceRequestBody>()));
+    scoped_ptr<NavigationRequestInfo> request_info(new NavigationRequestInfo(
+        common_params, begin_params, url, url::Origin(url), true, false, -1,
+        scoped_refptr<ResourceRequestBody>()));
 
     return NavigationURLLoader::Create(
-        browser_context_.get(), 0, request_info.Pass(), delegate);
+        browser_context_.get(), std::move(request_info), nullptr, delegate);
   }
 
   // Helper function for fetching the body of a URL to a string.

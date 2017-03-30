@@ -4,6 +4,7 @@
 
 #include "chrome/browser/profiles/profile_destroyer.h"
 
+#include "base/macros.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/testing_profile.h"
 #include "content/public/browser/render_process_host.h"
@@ -15,7 +16,7 @@ class TestingOffTheRecordDestructionProfile : public TestingProfile {
       : TestingProfile(base::FilePath(),
                        NULL,
                        scoped_refptr<ExtensionSpecialStoragePolicy>()
-                       scoped_ptr<PrefServiceSyncable>(),
+                       scoped_ptr<syncable_prefs::PrefServiceSyncable>(),
                        true,
                        TestingFactories()),
         destroyed_otr_profile_(false) {

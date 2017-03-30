@@ -4,6 +4,8 @@
 
 #include "chrome/browser/extensions/api/messaging/native_messaging_host_manifest.h"
 
+#include <stddef.h>
+
 #include "base/json/json_file_value_serializer.h"
 #include "base/logging.h"
 #include "base/values.h"
@@ -44,7 +46,8 @@ scoped_ptr<NativeMessagingHostManifest> NativeMessagingHostManifest::Load(
   DCHECK(error_message);
 
   JSONFileValueDeserializer deserializer(file_path);
-  scoped_ptr<base::Value> parsed(deserializer.Deserialize(NULL, error_message));
+  scoped_ptr<base::Value> parsed =
+      deserializer.Deserialize(NULL, error_message);
   if (!parsed) {
     return scoped_ptr<NativeMessagingHostManifest>();
   }
@@ -61,7 +64,7 @@ scoped_ptr<NativeMessagingHostManifest> NativeMessagingHostManifest::Load(
     return scoped_ptr<NativeMessagingHostManifest>();
   }
 
-  return result.Pass();
+  return result;
 }
 
 NativeMessagingHostManifest::NativeMessagingHostManifest() {

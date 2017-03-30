@@ -6,10 +6,11 @@
 
 #include <limits.h>
 #include <string.h>
+#include <utility>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
 #include "base/task_runner_util.h"
@@ -47,7 +48,7 @@ BufferSizeStatus GetBufferStatus(const char* data, size_t len) {
 
   const NaClIPCAdapter::NaClMessageHeader* header =
       reinterpret_cast<const NaClIPCAdapter::NaClMessageHeader*>(data);
-  uint32 message_size =
+  uint32_t message_size =
       sizeof(NaClIPCAdapter::NaClMessageHeader) + header->payload_size;
 
   if (len == message_size)
@@ -227,6 +228,26 @@ class NaClDescWrapper {
   DISALLOW_COPY_AND_ASSIGN(NaClDescWrapper);
 };
 
+scoped_ptr<NaClDescWrapper> MakeShmNaClDesc(
+    const base::SharedMemoryHandle& handle,
+    size_t size) {
+#if defined(OS_MACOSX)
+  if (handle.GetType() == base::SharedMemoryHandle::MACH) {
+    return scoped_ptr<NaClDescWrapper>(new NaClDescWrapper(
+        NaClDescImcShmMachMake(handle.GetMemoryObject(), size)));
+  }
+  CHECK_EQ(base::SharedMemoryHandle::POSIX, handle.GetType());
+#endif
+
+  return scoped_ptr<NaClDescWrapper>(new NaClDescWrapper(NaClDescImcShmMake(
+#if defined(OS_WIN)
+      handle.GetHandle(),
+#else
+      base::SharedMemory::GetFdFromSharedMemoryHandle(handle),
+#endif
+      size)));
+}
+
 }  // namespace
 
 class NaClIPCAdapter::RewrittenMessage
@@ -345,7 +366,7 @@ NaClIPCAdapter::NaClIPCAdapter(scoped_ptr<IPC::Channel> channel,
       cond_var_(&lock_),
       task_runner_(runner),
       locked_data_() {
-  io_thread_data_.channel_ = channel.Pass();
+  io_thread_data_.channel_ = std::move(channel);
 }
 
 void NaClIPCAdapter::ConnectChannel() {
@@ -541,15 +562,8 @@ bool NaClIPCAdapter::RewriteMessage(const IPC::Message& msg, uint32_t type) {
       scoped_ptr<NaClDescWrapper> nacl_desc;
       switch (iter->type()) {
         case ppapi::proxy::SerializedHandle::SHARED_MEMORY: {
-          const base::SharedMemoryHandle& shm_handle = iter->shmem();
-          uint32_t size = iter->size();
-          nacl_desc.reset(new NaClDescWrapper(NaClDescImcShmMake(
-#if defined(OS_WIN)
-              shm_handle,
-#else
-              base::SharedMemory::GetFdFromSharedMemoryHandle(shm_handle),
-#endif
-              static_cast<size_t>(size))));
+          nacl_desc =
+              MakeShmNaClDesc(iter->shmem(), static_cast<size_t>(iter->size()));
           break;
         }
         case ppapi::proxy::SerializedHandle::SOCKET: {
@@ -615,6 +629,7 @@ scoped_ptr<IPC::Message> CreateOpenResourceReply(
   ppapi::proxy::SerializedHandle::WriteHeader(sh.header(),
                                               new_msg.get());
   new_msg->WriteBool(true);  // valid == true
+  new_msg->WriteBool(false);  // brokerable == false
   // The file descriptor is at index 0. There's only ever one file
   // descriptor provided for this message type, so this will be correct.
   new_msg->WriteInt(0);
@@ -622,7 +637,7 @@ scoped_ptr<IPC::Message> CreateOpenResourceReply(
   // Write empty file tokens.
   new_msg->WriteUInt64(0);  // token_lo
   new_msg->WriteUInt64(0);  // token_hi
-  return new_msg.Pass();
+  return new_msg;
 }
 
 void NaClIPCAdapter::SaveOpenResourceMessage(
@@ -662,7 +677,7 @@ void NaClIPCAdapter::SaveOpenResourceMessage(
     return;
   }
 
-  // The file token was sucessfully resolved.
+  // The file token was successfully resolved.
   std::string file_path_str = file_path.AsUTF8Unsafe();
   base::PlatformFile handle =
       IPC::PlatformFileForTransitToPlatformFile(ipc_fd);
@@ -682,8 +697,7 @@ void NaClIPCAdapter::SaveOpenResourceMessage(
   }
 }
 
-void NaClIPCAdapter::OnChannelConnected(int32 peer_pid) {
-}
+void NaClIPCAdapter::OnChannelConnected(int32_t peer_pid) {}
 
 void NaClIPCAdapter::OnChannelError() {
   CloseChannel();
@@ -820,11 +834,11 @@ void NaClIPCAdapter::SaveMessage(const IPC::Message& msg,
   NaClMessageHeader header;
   memset(&header, 0, sizeof(NaClMessageHeader));
 
-  header.payload_size = static_cast<uint32>(msg.payload_size());
+  header.payload_size = static_cast<uint32_t>(msg.payload_size());
   header.routing = msg.routing_id();
   header.type = msg.type();
   header.flags = msg.flags();
-  header.num_fds = static_cast<uint16>(rewritten_msg->desc_count());
+  header.num_fds = static_cast<uint16_t>(rewritten_msg->desc_count());
 
   rewritten_msg->SetData(header, msg.payload(), msg.payload_size());
   locked_data_.to_be_received_.push(rewritten_msg);

@@ -5,15 +5,18 @@
 #ifndef CONTENT_BROWSER_FRAME_HOST_INTERSTITIAL_PAGE_IMPL_H_
 #define CONTENT_BROWSER_FRAME_HOST_INTERSTITIAL_PAGE_IMPL_H_
 
+#include <stdint.h>
+
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "build/build_config.h"
 #include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/frame_host/navigator_delegate.h"
 #include "content/browser/frame_host/render_frame_host_delegate.h"
 #include "content/browser/renderer_host/render_view_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
-#include "content/public/browser/dom_operation_notification_details.h"
 #include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -61,6 +64,7 @@ class CONTENT_EXPORT InterstitialPageImpl
   void Hide() override;
   void DontProceed() override;
   void Proceed() override;
+  WebContents* GetWebContents() const override;
   RenderFrameHost* GetMainFrame() const override;
   InterstitialPageDelegate* GetDelegateForTesting() override;
   void DontCreateViewForTesting() override;
@@ -101,9 +105,10 @@ class CONTENT_EXPORT InterstitialPageImpl
                          const IPC::Message& message) override;
   void RenderFrameCreated(RenderFrameHost* render_frame_host) override;
   void UpdateTitle(RenderFrameHost* render_frame_host,
-                   int32 page_id,
+                   int32_t page_id,
                    const base::string16& title,
                    base::i18n::TextDirection title_direction) override;
+  InterstitialPage* GetAsInterstitialPage() override;
   AccessibilityMode GetAccessibilityMode() const override;
   void Cut() override;
   void Copy() override;
@@ -120,17 +125,18 @@ class CONTENT_EXPORT InterstitialPageImpl
                             int error_code) override;
   RendererPreferences GetRendererPrefs(
       BrowserContext* browser_context) const override;
-  gfx::Rect GetRootWindowResizerRect() const override;
   void CreateNewWindow(
-      int render_process_id,
-      int route_id,
-      int main_frame_route_id,
+      SiteInstance* source_site_instance,
+      int32_t route_id,
+      int32_t main_frame_route_id,
+      int32_t main_frame_widget_route_id,
       const ViewHostMsg_CreateWindow_Params& params,
       SessionStorageNamespace* session_storage_namespace) override;
-  void CreateNewWidget(int render_process_id,
-                       int route_id,
+  void CreateNewWidget(int32_t render_process_id,
+                       int32_t route_id,
                        blink::WebPopupType popup_type) override;
-  void CreateNewFullscreenWidget(int render_process_id, int route_id) override;
+  void CreateNewFullscreenWidget(int32_t render_process_id,
+                                 int32_t route_id) override;
   void ShowCreatedWindow(int route_id,
                          WindowOpenDisposition disposition,
                          const gfx::Rect& initial_rect,
@@ -203,8 +209,7 @@ class CONTENT_EXPORT InterstitialPageImpl
   void TakeActionOnResourceDispatcher(ResourceRequestAction action);
 
   // IPC message handlers.
-  void OnDomOperationResponse(const std::string& json_string,
-                              int automation_id);
+  void OnDomOperationResponse(const std::string& json_string);
 
   // Creates the RenderViewHost containing the interstitial content.
   RenderViewHostImpl* CreateRenderViewHost();

@@ -7,7 +7,6 @@
 
 #include <vector>
 
-#include "base/basictypes.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/ozone/ozone_base_export.h"
 #include "ui/ozone/public/surface_factory_ozone.h"
@@ -26,7 +25,7 @@ class OZONE_BASE_EXPORT OverlayCandidatesOzone {
     // Transformation to apply to layer during composition.
     gfx::OverlayTransform transform = gfx::OVERLAY_TRANSFORM_NONE;
     // Format of the buffer to composite.
-    SurfaceFactoryOzone::BufferFormat format = SurfaceFactoryOzone::UNKNOWN;
+    gfx::BufferFormat format = gfx::BufferFormat::BGRA_8888;
     // Size of the buffer, in pixels.
     gfx::Size buffer_size;
     // Rect on the display to position the overlay to. Input rectangle may
@@ -35,6 +34,12 @@ class OZONE_BASE_EXPORT OverlayCandidatesOzone {
     gfx::RectF display_rect;
     // Crop within the buffer to be placed inside |display_rect|.
     gfx::RectF crop_rect;
+    // Quad geometry rect after applying the quad_transform().
+    gfx::Rect quad_rect_in_target_space;
+    // Clip rect in the target content space after composition.
+    gfx::Rect clip_rect;
+    // If the quad is clipped after composition.
+    bool is_clipped;
     // Stacking order of the overlay plane relative to the main surface,
     // which is 0. Signed to allow for "underlays".
     int plane_z_order = 0;

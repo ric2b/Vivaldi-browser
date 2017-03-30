@@ -4,14 +4,17 @@
 
 #include "chrome/browser/ui/views/create_application_shortcut_view.h"
 
+#include <stddef.h>
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/windows_version.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -50,6 +53,10 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/dialog_client_view.h"
 #include "url/gurl.h"
+
+#if defined(OS_WIN)
+#include "base/win/shortcut.h"
+#endif  // defined(OS_WIN)
 
 namespace {
 
@@ -91,9 +98,9 @@ class AppInfoView : public views::View {
 AppInfoView::AppInfoView(const base::string16& title,
                          const base::string16& description,
                          const gfx::ImageFamily& icon)
-    : icon_(NULL),
-      title_(NULL),
-      description_(NULL) {
+    : icon_(nullptr),
+      title_(nullptr),
+      description_(nullptr) {
   Init(title, description, icon);
 }
 
@@ -172,24 +179,11 @@ void AppInfoView::UpdateText(const base::string16& title,
 }
 
 void AppInfoView::UpdateIcon(const gfx::ImageFamily& image) {
-  // Get the icon closest to the desired preview size.
-  const gfx::Image* icon = image.GetBest(kIconPreviewSizePixels,
-                                         kIconPreviewSizePixels);
-  if (!icon || icon->IsEmpty())
-    // The family has no icons. Leave the image blank.
-    return;
-  const SkBitmap& bitmap = *icon->ToSkBitmap();
-  if (bitmap.width() == kIconPreviewSizePixels &&
-      bitmap.height() == kIconPreviewSizePixels) {
-    icon_->SetImage(gfx::ImageSkia::CreateFrom1xBitmap(bitmap));
-  } else {
-    // Resize the image to the desired size.
-    SkBitmap resized_bitmap = skia::ImageOperations::Resize(
-        bitmap, skia::ImageOperations::RESIZE_LANCZOS3,
-        kIconPreviewSizePixels, kIconPreviewSizePixels);
-
-    icon_->SetImage(gfx::ImageSkia::CreateFrom1xBitmap(resized_bitmap));
-  }
+  // Get an icon at the desired preview size (scaling from a larger image if
+  // none is available at that exact size).
+  gfx::Image icon =
+      image.CreateExact(kIconPreviewSizePixels, kIconPreviewSizePixels);
+  icon_->SetImage(icon.ToImageSkia());
 }
 
 void AppInfoView::OnPaint(gfx::Canvas* canvas) {
@@ -248,11 +242,11 @@ void ShowCreateChromeAppShortcutsDialog(
 
 CreateApplicationShortcutView::CreateApplicationShortcutView(Profile* profile)
     : profile_(profile),
-      app_info_(NULL),
-      create_shortcuts_label_(NULL),
-      desktop_check_box_(NULL),
-      menu_check_box_(NULL),
-      quick_launch_check_box_(NULL) {
+      app_info_(nullptr),
+      create_shortcuts_label_(nullptr),
+      desktop_check_box_(nullptr),
+      menu_check_box_(nullptr),
+      quick_launch_check_box_(nullptr) {
 }
 
 CreateApplicationShortcutView::~CreateApplicationShortcutView() {}
@@ -271,8 +265,8 @@ void CreateApplicationShortcutView::InitControls(DialogLayout dialog_layout) {
       l10n_util::GetStringUTF16(IDS_CREATE_SHORTCUTS_DESKTOP_CHKBOX),
       profile_->GetPrefs()->GetBoolean(prefs::kWebAppCreateOnDesktop));
 
-  menu_check_box_ = NULL;
-  quick_launch_check_box_ = NULL;
+  menu_check_box_ = nullptr;
+  quick_launch_check_box_ = nullptr;
 
 #if defined(OS_WIN)
   // Do not allow creating shortcuts on the Start Screen for Windows 8.
@@ -282,12 +276,16 @@ void CreateApplicationShortcutView::InitControls(DialogLayout dialog_layout) {
         profile_->GetPrefs()->GetBoolean(prefs::kWebAppCreateInAppsMenu));
   }
 
-  quick_launch_check_box_ = AddCheckbox(
-      (base::win::GetVersion() >= base::win::VERSION_WIN7) ?
-        l10n_util::GetStringUTF16(IDS_PIN_TO_TASKBAR_CHKBOX) :
-        l10n_util::GetStringUTF16(
-            IDS_CREATE_SHORTCUTS_QUICK_LAUNCH_BAR_CHKBOX),
-      profile_->GetPrefs()->GetBoolean(prefs::kWebAppCreateInQuickLaunchBar));
+  // Win10 actively prevents creating shortcuts on the taskbar so we eliminate
+  // that option from the dialog.
+  if (base::win::CanPinShortcutToTaskbar()) {
+    quick_launch_check_box_ = AddCheckbox(
+        (base::win::GetVersion() >= base::win::VERSION_WIN7) ?
+          l10n_util::GetStringUTF16(IDS_PIN_TO_TASKBAR_CHKBOX) :
+          l10n_util::GetStringUTF16(
+              IDS_CREATE_SHORTCUTS_QUICK_LAUNCH_BAR_CHKBOX),
+        profile_->GetPrefs()->GetBoolean(prefs::kWebAppCreateInQuickLaunchBar));
+  }
 #elif defined(OS_POSIX)
   menu_check_box_ = AddCheckbox(
       l10n_util::GetStringUTF16(IDS_CREATE_SHORTCUTS_MENU_CHKBOX),
@@ -322,13 +320,13 @@ void CreateApplicationShortcutView::InitControls(DialogLayout dialog_layout) {
   layout->StartRow(0, kTableColumnSetId);
   layout->AddView(desktop_check_box_);
 
-  if (menu_check_box_ != NULL) {
+  if (menu_check_box_ != nullptr) {
     layout->AddPaddingRow(0, views::kRelatedControlSmallVerticalSpacing);
     layout->StartRow(0, kTableColumnSetId);
     layout->AddView(menu_check_box_);
   }
 
-  if (quick_launch_check_box_ != NULL) {
+  if (quick_launch_check_box_ != nullptr) {
     layout->AddPaddingRow(0, views::kRelatedControlSmallVerticalSpacing);
     layout->StartRow(0, kTableColumnSetId);
     layout->AddView(quick_launch_check_box_);
@@ -354,9 +352,9 @@ bool CreateApplicationShortcutView::IsDialogButtonEnabled(
     ui::DialogButton button) const {
   if (button == ui::DIALOG_BUTTON_OK)
     return desktop_check_box_->checked() ||
-           ((menu_check_box_ != NULL) &&
+           ((menu_check_box_ != nullptr) &&
             menu_check_box_->checked()) ||
-           ((quick_launch_check_box_ != NULL) &&
+           ((quick_launch_check_box_ != nullptr) &&
             quick_launch_check_box_->checked());
 
   return true;
@@ -382,7 +380,7 @@ bool CreateApplicationShortcutView::Accept() {
 
   web_app::ShortcutLocations creation_locations;
   creation_locations.on_desktop = desktop_check_box_->checked();
-  if (menu_check_box_ != NULL && menu_check_box_->checked()) {
+  if (menu_check_box_ != nullptr && menu_check_box_->checked()) {
     creation_locations.applications_menu_location =
         create_in_chrome_apps_subdir_ ?
             web_app::APP_MENU_LOCATION_SUBDIR_CHROMEAPPS :
@@ -390,17 +388,17 @@ bool CreateApplicationShortcutView::Accept() {
   }
 
 #if defined(OS_WIN)
-  creation_locations.in_quick_launch_bar = quick_launch_check_box_ == NULL ?
-      NULL : quick_launch_check_box_->checked();
+  creation_locations.in_quick_launch_bar = quick_launch_check_box_ == nullptr ?
+      false : quick_launch_check_box_->checked();
 #elif defined(OS_POSIX)
   // Create shortcut in Mac dock or as Linux (gnome/kde) application launcher
   // are not implemented yet.
   creation_locations.in_quick_launch_bar = false;
 #endif
 
-  web_app::CreateShortcutsWithInfo(web_app::SHORTCUT_CREATION_BY_USER,
-                                   creation_locations, shortcut_info_.Pass(),
-                                   file_handlers_info_);
+  web_app::CreateShortcutsWithInfo(
+      web_app::SHORTCUT_CREATION_BY_USER, creation_locations,
+      std::move(shortcut_info_), file_handlers_info_);
   return true;
 }
 
@@ -510,7 +508,7 @@ void CreateUrlApplicationShortcutView::DidDownloadFavicon(
       bitmaps,
       original_bitmap_sizes,
       requested_size,
-      NULL);
+      nullptr);
   if (!image_skia.isNull()) {
     // As |shortcut_info_| will be passed to the FILE thread upon accepting the
     // dialog, this image must be made read-only and thread-safe.
@@ -560,6 +558,6 @@ bool CreateChromeApplicationShortcutView::Cancel() {
 void CreateChromeApplicationShortcutView::OnAppInfoLoaded(
     scoped_ptr<web_app::ShortcutInfo> shortcut_info,
     const extensions::FileHandlersInfo& file_handlers_info) {
-  shortcut_info_ = shortcut_info.Pass();
+  shortcut_info_ = std::move(shortcut_info);
   file_handlers_info_ = file_handlers_info;
 }

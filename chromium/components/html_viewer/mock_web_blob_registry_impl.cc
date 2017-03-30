@@ -4,6 +4,8 @@
 
 #include "components/html_viewer/mock_web_blob_registry_impl.h"
 
+#include <utility>
+
 #include "third_party/WebKit/public/platform/WebBlobData.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
@@ -34,7 +36,7 @@ void MockWebBlobRegistryImpl::registerBlobData(const WebString& uuid,
     data.itemAt(i, *item);
     items->push_back(item.release());
   }
-  blob_data_items_map_.set(uuid_str, items.Pass());
+  blob_data_items_map_.set(uuid_str, std::move(items));
 }
 
 void MockWebBlobRegistryImpl::addBlobDataRef(const WebString& uuid) {
@@ -52,12 +54,12 @@ void MockWebBlobRegistryImpl::removeBlobDataRef(const WebString& uuid) {
 
 void MockWebBlobRegistryImpl::registerPublicBlobURL(const WebURL& url,
                                                     const WebString& uuid) {
-  public_url_to_uuid_[url.spec()] = uuid;
+  public_url_to_uuid_[url.string().utf8()] = uuid;
   addBlobDataRef(uuid);
 }
 
 void MockWebBlobRegistryImpl::revokePublicBlobURL(const WebURL& url) {
-  auto it = public_url_to_uuid_.find(url.spec());
+  auto it = public_url_to_uuid_.find(url.string().utf8());
   if (it != public_url_to_uuid_.end()) {
     removeBlobDataRef(it->second);
     public_url_to_uuid_.erase(it);
@@ -98,7 +100,7 @@ void MockWebBlobRegistryImpl::unregisterStreamURL(const WebURL& url) {
 
 bool MockWebBlobRegistryImpl::GetUUIDForURL(const blink::WebURL& url,
                                             blink::WebString* uuid) const {
-  auto it = public_url_to_uuid_.find(url.spec());
+  auto it = public_url_to_uuid_.find(url.string().utf8());
   if (it != public_url_to_uuid_.end()) {
     *uuid = it->second;
     return true;

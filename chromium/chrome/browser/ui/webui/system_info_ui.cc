@@ -4,8 +4,11 @@
 
 #include "chrome/browser/ui/webui/system_info_ui.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -116,7 +119,7 @@ void SystemInfoUIHTMLSource::StartDataRequest(
 
 void SystemInfoUIHTMLSource::SysInfoComplete(
     scoped_ptr<SystemLogsResponse> sys_info) {
-  response_ = sys_info.Pass();
+  response_ = std::move(sys_info);
   RequestComplete();
 }
 

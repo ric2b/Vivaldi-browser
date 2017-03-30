@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include <set>
 #include <string>
 
@@ -9,7 +11,7 @@
 #include "base/trace_event/trace_event_argument.h"
 #include "base/values.h"
 #include "cc/debug/frame_timing_tracker.h"
-#include "cc/test/fake_impl_proxy.h"
+#include "cc/test/fake_impl_task_runner_provider.h"
 #include "cc/test/fake_layer_tree_host_impl.h"
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/test/test_task_graph_runner.h"
@@ -74,10 +76,10 @@ std::string MainFrameToString(
 }
 
 TEST(FrameTimingTrackerTest, DefaultTrackerIsEmpty) {
-  FakeImplProxy proxy;
+  FakeImplTaskRunnerProvider task_runner_provider;
   TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  FakeLayerTreeHostImpl host_impl(&proxy, &shared_bitmap_manager,
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
                                   &task_graph_runner);
 
   scoped_ptr<FrameTimingTracker> tracker(
@@ -89,10 +91,10 @@ TEST(FrameTimingTrackerTest, DefaultTrackerIsEmpty) {
 }
 
 TEST(FrameTimingTrackerTest, NoFrameIdsIsEmpty) {
-  FakeImplProxy proxy;
+  FakeImplTaskRunnerProvider task_runner_provider;
   TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  FakeLayerTreeHostImpl host_impl(&proxy, &shared_bitmap_manager,
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
                                   &task_graph_runner);
 
   scoped_ptr<FrameTimingTracker> tracker(
@@ -104,10 +106,10 @@ TEST(FrameTimingTrackerTest, NoFrameIdsIsEmpty) {
 }
 
 TEST(FrameTimingTrackerTest, NoRectIdsYieldsNoMainFrameEvents) {
-  FakeImplProxy proxy;
+  FakeImplTaskRunnerProvider task_runner_provider;
   TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  FakeLayerTreeHostImpl host_impl(&proxy, &shared_bitmap_manager,
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
                                   &task_graph_runner);
 
   scoped_ptr<FrameTimingTracker> tracker(
@@ -120,10 +122,10 @@ TEST(FrameTimingTrackerTest, NoRectIdsYieldsNoMainFrameEvents) {
 }
 
 TEST(FrameTimingTrackerTest, OneFrameId) {
-  FakeImplProxy proxy;
+  FakeImplTaskRunnerProvider task_runner_provider;
   TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  FakeLayerTreeHostImpl host_impl(&proxy, &shared_bitmap_manager,
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
                                   &task_graph_runner);
 
   scoped_ptr<FrameTimingTracker> tracker(
@@ -138,10 +140,10 @@ TEST(FrameTimingTrackerTest, OneFrameId) {
 }
 
 TEST(FrameTimingTrackerTest, OneMainFrameRect) {
-  FakeImplProxy proxy;
+  FakeImplTaskRunnerProvider task_runner_provider;
   TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  FakeLayerTreeHostImpl host_impl(&proxy, &shared_bitmap_manager,
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
                                   &task_graph_runner);
 
   scoped_ptr<FrameTimingTracker> tracker(
@@ -158,10 +160,10 @@ TEST(FrameTimingTrackerTest, OneMainFrameRect) {
 }
 
 TEST(FrameTimingTrackerTest, UnsortedTimestampsIds) {
-  FakeImplProxy proxy;
+  FakeImplTaskRunnerProvider task_runner_provider;
   TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  FakeLayerTreeHostImpl host_impl(&proxy, &shared_bitmap_manager,
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
                                   &task_graph_runner);
 
   scoped_ptr<FrameTimingTracker> tracker(
@@ -180,10 +182,10 @@ TEST(FrameTimingTrackerTest, UnsortedTimestampsIds) {
 }
 
 TEST(FrameTimingTrackerTest, MainFrameUnsortedTimestamps) {
-  FakeImplProxy proxy;
+  FakeImplTaskRunnerProvider task_runner_provider;
   TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  FakeLayerTreeHostImpl host_impl(&proxy, &shared_bitmap_manager,
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
                                   &task_graph_runner);
 
   scoped_ptr<FrameTimingTracker> tracker(
@@ -208,10 +210,10 @@ TEST(FrameTimingTrackerTest, MainFrameUnsortedTimestamps) {
 }
 
 TEST(FrameTimingTrackerTest, MultipleFrameIds) {
-  FakeImplProxy proxy;
+  FakeImplTaskRunnerProvider task_runner_provider;
   TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  FakeLayerTreeHostImpl host_impl(&proxy, &shared_bitmap_manager,
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
                                   &task_graph_runner);
 
   scoped_ptr<FrameTimingTracker> tracker(
@@ -247,10 +249,10 @@ TEST(FrameTimingTrackerTest, MultipleFrameIds) {
 }
 
 TEST(FrameTimingTrackerTest, MultipleMainFrameEvents) {
-  FakeImplProxy proxy;
+  FakeImplTaskRunnerProvider task_runner_provider;
   TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  FakeLayerTreeHostImpl host_impl(&proxy, &shared_bitmap_manager,
+  FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
                                   &task_graph_runner);
 
   scoped_ptr<FrameTimingTracker> tracker(

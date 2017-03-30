@@ -101,8 +101,14 @@ void ControllerPairingScreen::PairingStageChanged(Stage new_stage) {
       break;
     }
     case ControllerPairingController::STAGE_PAIRING_DONE: {
-      if (delegate_)
+      if (delegate_) {
         delegate_->SetHostConfiguration();
+        delegate_->SetHostNetwork();
+      }
+      break;
+    }
+    case ControllerPairingController::STAGE_HOST_NETWORK_ERROR: {
+      desired_page = kPageHostNetworkError;
       break;
     }
     case ControllerPairingController::STAGE_HOST_UPDATE_IN_PROGRESS: {

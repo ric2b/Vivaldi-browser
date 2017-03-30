@@ -37,7 +37,7 @@ void SpellCheckMessageFilter::OverrideThreadForMessage(
       message.type() == SpellCheckHostMsg_NotifyChecked::ID ||
       message.type() == SpellCheckHostMsg_RespondDocumentMarkers::ID)
     *thread = BrowserThread::UI;
-#if !defined(USE_PLATFORM_SPELLCHECKER)
+#if !defined(USE_BROWSER_SPELLCHECKER)
   if (message.type() == SpellCheckHostMsg_CallSpellingService::ID)
     *thread = BrowserThread::UI;
 #endif
@@ -52,7 +52,7 @@ bool SpellCheckMessageFilter::OnMessageReceived(const IPC::Message& message) {
                         OnNotifyChecked)
     IPC_MESSAGE_HANDLER(SpellCheckHostMsg_RespondDocumentMarkers,
                         OnRespondDocumentMarkers)
-#if !defined(USE_PLATFORM_SPELLCHECKER)
+#if !defined(USE_BROWSER_SPELLCHECKER)
     IPC_MESSAGE_HANDLER(SpellCheckHostMsg_CallSpellingService,
                         OnCallSpellingService)
 #endif
@@ -96,7 +96,7 @@ void SpellCheckMessageFilter::OnNotifyChecked(const base::string16& word,
 }
 
 void SpellCheckMessageFilter::OnRespondDocumentMarkers(
-    const std::vector<uint32>& markers) {
+    const std::vector<uint32_t>& markers) {
   SpellcheckService* spellcheck = GetSpellcheckService();
   // Spellcheck service may not be available for a renderer process that is
   // shutting down.
@@ -106,7 +106,7 @@ void SpellCheckMessageFilter::OnRespondDocumentMarkers(
       render_process_id_, markers);
 }
 
-#if !defined(USE_PLATFORM_SPELLCHECKER)
+#if !defined(USE_BROWSER_SPELLCHECKER)
 void SpellCheckMessageFilter::OnCallSpellingService(
     int route_id,
     int identifier,

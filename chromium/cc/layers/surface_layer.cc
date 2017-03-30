@@ -4,6 +4,10 @@
 
 #include "cc/layers/surface_layer.h"
 
+#include <stdint.h>
+
+#include "base/macros.h"
+#include "base/trace_event/trace_event.h"
 #include "cc/layers/surface_layer_impl.h"
 #include "cc/output/swap_promise.h"
 #include "cc/trees/layer_tree_host.h"
@@ -27,7 +31,7 @@ class SatisfySwapPromise : public SwapPromise {
   void DidNotSwap(DidNotSwapReason reason) override {
     satisfy_callback_.Run(sequence_);
   }
-  int64 TraceId() const override { return 0; }
+  int64_t TraceId() const override { return 0; }
 
   SurfaceSequence sequence_;
   SurfaceLayer::SatisfyCallback satisfy_callback_;
@@ -91,6 +95,7 @@ void SurfaceLayer::SetLayerTreeHost(LayerTreeHost* host) {
 
 void SurfaceLayer::PushPropertiesTo(LayerImpl* layer) {
   Layer::PushPropertiesTo(layer);
+  TRACE_EVENT0("cc", "SurfaceLayer::PushPropertiesTo");
   SurfaceLayerImpl* layer_impl = static_cast<SurfaceLayerImpl*>(layer);
 
   layer_impl->SetSurfaceId(surface_id_);
@@ -112,7 +117,7 @@ void SurfaceLayer::SatisfyDestroySequence() {
   DCHECK(!destroy_sequence_.is_null());
   scoped_ptr<SatisfySwapPromise> satisfy(
       new SatisfySwapPromise(destroy_sequence_, satisfy_callback_));
-  layer_tree_host()->QueueSwapPromise(satisfy.Pass());
+  layer_tree_host()->QueueSwapPromise(std::move(satisfy));
   destroy_sequence_ = SurfaceSequence();
 }
 

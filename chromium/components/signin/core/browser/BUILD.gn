@@ -2,39 +2,62 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-static_library("browser") {
+source_set("browser") {
   sources = [
     "about_signin_internals.cc",
     "about_signin_internals.h",
     "account_fetcher_service.cc",
     "account_fetcher_service.h",
+    "account_info.cc",
+    "account_info.h",
+    "account_info_fetcher.cc",
+    "account_info_fetcher.h",
     "account_reconcilor.cc",
     "account_reconcilor.h",
     "account_tracker_service.cc",
     "account_tracker_service.h",
+    "android/component_jni_registrar.cc",
+    "android/component_jni_registrar.h",
+    "child_account_info_fetcher.cc",
+    "child_account_info_fetcher.h",
+    "child_account_info_fetcher_android.cc",
+    "child_account_info_fetcher_android.h",
+    "child_account_info_fetcher_impl.cc",
+    "child_account_info_fetcher_impl.h",
     "device_activity_fetcher.cc",
     "device_activity_fetcher.h",
     "gaia_cookie_manager_service.cc",
     "gaia_cookie_manager_service.h",
+    "profile_identity_provider.cc",
+    "profile_identity_provider.h",
     "profile_oauth2_token_service.cc",
     "profile_oauth2_token_service.h",
     "refresh_token_annotation_request.cc",
     "refresh_token_annotation_request.h",
+    "signin_client.cc",
     "signin_client.h",
     "signin_cookie_changed_subscription.cc",
     "signin_cookie_changed_subscription.h",
     "signin_error_controller.cc",
     "signin_error_controller.h",
+    "signin_header_helper.cc",
+    "signin_header_helper.h",
     "signin_internals_util.cc",
     "signin_internals_util.h",
+    "signin_investigator.cc",
+    "signin_investigator.h",
     "signin_manager.cc",
     "signin_manager.h",
     "signin_manager_base.cc",
     "signin_manager_base.h",
-    "signin_manager_cookie_helper.cc",
-    "signin_manager_cookie_helper.h",
     "signin_metrics.cc",
     "signin_metrics.h",
+    "signin_status_metrics_provider.cc",
+    "signin_status_metrics_provider.h",
+    "signin_status_metrics_provider_base.cc",
+    "signin_status_metrics_provider_base.h",
+    "signin_status_metrics_provider_delegate.cc",
+    "signin_status_metrics_provider_delegate.h",
     "signin_tracker.cc",
     "signin_tracker.h",
     "webdata/token_service_table.cc",
@@ -47,34 +70,90 @@ static_library("browser") {
 
   deps = [
     "//base",
+    "//base:i18n",
+    "//base:prefs",
+    "//components/content_settings/core/browser",
+    "//components/content_settings/core/common",
+    "//components/google/core/browser",
+    "//components/invalidation/public",
+    "//components/keyed_service/core",
+    "//components/metrics",
+    "//components/os_crypt",
+    "//components/pref_registry",
+    "//components/signin/core/account_id",
+    "//components/signin/core/common",
+    "//components/webdata/common",
     "//crypto",
     "//google_apis",
     "//net",
     "//sql",
     "//third_party/icu",
-    "//components/content_settings/core/browser",
-    "//components/content_settings/core/common",
-    "//components/keyed_service/core",
-    "//components/os_crypt",
-    "//components/webdata/common",
   ]
 
   if (is_chromeos) {
-    sources -= [ "signin_manager.cc" ]
+    sources -= [
+      "signin_manager.cc",
+      "signin_status_metrics_provider.cc",
+      "signin_status_metrics_provider_delegate.cc",
+    ]
+  }
+
+  if (is_android) {
+    sources -= [
+      "child_account_info_fetcher_impl.cc",
+      "child_account_info_fetcher_impl.h",
+    ]
+    deps += [ "android:jni_headers" ]
   }
 }
 
-static_library("test_support") {
+source_set("test_support") {
   testonly = true
   sources = [
+    "fake_account_fetcher_service.cc",
+    "fake_account_fetcher_service.h",
     "fake_auth_status_provider.cc",
     "fake_auth_status_provider.h",
+    "fake_profile_oauth2_token_service.cc",
+    "fake_profile_oauth2_token_service.h",
+    "fake_signin_manager.cc",
+    "fake_signin_manager.h",
     "test_signin_client.cc",
     "test_signin_client.h",
   ]
 
-  deps = [
+  public_deps = [
     ":browser",
+    "//base",
+    "//base:prefs_test_support",
+    "//components/webdata/common",
+    "//google_apis:test_support",
+    "//net:test_support",
     "//testing/gtest",
   ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "account_info_unittest.cc",
+    "account_tracker_service_unittest.cc",
+    "gaia_cookie_manager_service_unittest.cc",
+    "refresh_token_annotation_request_unittest.cc",
+    "signin_error_controller_unittest.cc",
+    "signin_investigator_unittest.cc",
+    "signin_status_metrics_provider_unittest.cc",
+    "webdata/token_service_table_unittest.cc",
+  ]
+
+  deps = [
+    ":test_support",
+    "//components/os_crypt:os_crypt",
+    "//components/signin/core/common",
+    "//testing/gmock",
+  ]
+
+  if (is_chromeos) {
+    sources -= [ "signin_status_metrics_provider_unittest.cc" ]
+  }
 }

@@ -5,6 +5,10 @@
 #ifndef MEDIA_BASE_ANDROID_MEDIA_CODEC_AUDIO_DECODER_H_
 #define MEDIA_BASE_ANDROID_MEDIA_CODEC_AUDIO_DECODER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "media/base/android/media_codec_decoder.h"
 
 namespace media {
@@ -19,9 +23,12 @@ class MediaCodecAudioDecoder : public MediaCodecDecoder {
   //                         Called for each rendered frame.
   MediaCodecAudioDecoder(
       const scoped_refptr<base::SingleThreadTaskRunner>& media_runner,
+      FrameStatistics* frame_statistics,
       const base::Closure& request_data_cb,
       const base::Closure& starvation_cb,
+      const base::Closure& decoder_drained_cb,
       const base::Closure& stop_done_cb,
+      const base::Closure& waiting_for_decryption_key_cb,
       const base::Closure& error_cb,
       const SetTimeCallback& update_current_time_cb);
   ~MediaCodecAudioDecoder() override;
@@ -30,6 +37,8 @@ class MediaCodecAudioDecoder : public MediaCodecDecoder {
 
   bool HasStream() const override;
   void SetDemuxerConfigs(const DemuxerConfigs& configs) override;
+  bool IsContentEncrypted() const override;
+  void ReleaseDecoderResources() override;
   void Flush() override;
 
   // Sets the volume of the audio output.
@@ -39,13 +48,13 @@ class MediaCodecAudioDecoder : public MediaCodecDecoder {
   void SetBaseTimestamp(base::TimeDelta base_timestamp);
 
  protected:
-  bool IsCodecReconfigureNeeded(const DemuxerConfigs& curr,
-                                const DemuxerConfigs& next) const override;
-  ConfigStatus ConfigureInternal() override;
+  bool IsCodecReconfigureNeeded(const DemuxerConfigs& next) const override;
+  ConfigStatus ConfigureInternal(jobject media_crypto) override;
   void OnOutputFormatChanged() override;
   void Render(int buffer_index,
+              size_t offset,
               size_t size,
-              bool render_output,
+              RenderMode render_mode,
               base::TimeDelta pts,
               bool eos_encountered) override;
 
@@ -72,7 +81,7 @@ class MediaCodecAudioDecoder : public MediaCodecDecoder {
   int output_sampling_rate_;
 
   // Frame count to sync with audio codec output.
-  int64 frame_count_;
+  int64_t frame_count_;
 
   // Base timestamp for the |audio_timestamp_helper_|.
   base::TimeDelta base_timestamp_;
@@ -82,6 +91,9 @@ class MediaCodecAudioDecoder : public MediaCodecDecoder {
 
   // Reports current playback time to the callee.
   SetTimeCallback update_current_time_cb_;
+
+  // The time limit for the next frame to avoid underrun.
+  base::TimeTicks next_frame_time_limit_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaCodecAudioDecoder);
 };

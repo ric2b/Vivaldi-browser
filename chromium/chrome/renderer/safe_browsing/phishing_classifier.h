@@ -20,14 +20,16 @@
 
 #include <set>
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 
 namespace content {
-class RenderView;
+class RenderFrame;
 }
 
 namespace safe_browsing {
@@ -56,7 +58,7 @@ class PhishingClassifier {
   // |render_view|.  |clock| is used to time feature extractor operations, and
   // the PhishingClassifier takes ownership of this object.  Note that the
   // classifier will not be 'ready' until set_phishing_scorer() is called.
-  PhishingClassifier(content::RenderView* render_view,
+  PhishingClassifier(content::RenderFrame* render_frame,
                      FeatureExtractorClock* clock);
   virtual ~PhishingClassifier();
 
@@ -128,7 +130,7 @@ class PhishingClassifier {
   // Clears the current state of the PhishingClassifier.
   void Clear();
 
-  content::RenderView* render_view_;  // owns us
+  content::RenderFrame* render_frame_;  // owns us
   const Scorer* scorer_;  // owned by the caller
   scoped_ptr<FeatureExtractorClock> clock_;
   scoped_ptr<PhishingUrlFeatureExtractor> url_extractor_;
@@ -137,7 +139,7 @@ class PhishingClassifier {
 
   // State for any in-progress extraction.
   scoped_ptr<FeatureMap> features_;
-  scoped_ptr<std::set<uint32> > shingle_hashes_;
+  scoped_ptr<std::set<uint32_t>> shingle_hashes_;
   const base::string16* page_text_;  // owned by the caller
   DoneCallback done_callback_;
 

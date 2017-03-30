@@ -4,6 +4,9 @@
 
 #include "device/test/usb_test_gadget.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
@@ -23,9 +26,11 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "device/core/device_client.h"
 #include "device/usb/usb_device.h"
 #include "device/usb/usb_device_handle.h"
 #include "device/usb/usb_service.h"
+#include "net/base/escape.h"
 #include "net/proxy/proxy_service.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_fetcher_delegate.h"
@@ -67,7 +72,7 @@ static const int kReenumeratePeriod = 100;  // 0.1 seconds
 struct UsbTestGadgetConfiguration {
   UsbTestGadget::Type type;
   const char* http_resource;
-  uint16 product_id;
+  uint16_t product_id;
 };
 
 static const struct UsbTestGadgetConfiguration kConfigurations[] = {
@@ -142,8 +147,12 @@ class URLRequestContextGetter : public net::URLRequestContextGetter {
 
   // net::URLRequestContextGetter implementation
   net::URLRequestContext* GetURLRequestContext() override {
-    context_builder_.set_proxy_service(net::ProxyService::CreateDirect());
-    return context_builder_.Build();
+    if (!context_) {
+      net::URLRequestContextBuilder context_builder;
+      context_builder.set_proxy_service(net::ProxyService::CreateDirect());
+      context_ = context_builder.Build();
+    }
+    return context_.get();
   }
 
   scoped_refptr<base::SingleThreadTaskRunner> GetNetworkTaskRunner()
@@ -151,7 +160,7 @@ class URLRequestContextGetter : public net::URLRequestContextGetter {
     return network_task_runner_;
   }
 
-  net::URLRequestContextBuilder context_builder_;
+  scoped_ptr<net::URLRequestContext> context_;
   scoped_refptr<base::SingleThreadTaskRunner> network_task_runner_;
 };
 
@@ -192,10 +201,10 @@ class UsbGadgetFactory : public UsbService::Observer,
  public:
   UsbGadgetFactory(scoped_refptr<base::SingleThreadTaskRunner> io_task_runner)
       : observer_(this), weak_factory_(this) {
-    usb_service_ = UsbService::GetInstance(io_task_runner);
+    usb_service_ = DeviceClient::Get()->GetUsbService();
     request_context_getter_ = new URLRequestContextGetter(io_task_runner);
 
-    static uint32 next_session_id;
+    static uint32_t next_session_id;
     base::ProcessId process_id = base::GetCurrentProcId();
     session_id_ = base::StringPrintf("%d-%d", process_id, next_session_id++);
 
@@ -399,7 +408,7 @@ class DeviceAddListener : public UsbService::Observer {
         weak_factory_(this) {
     observer_.Add(usb_service_);
   }
-  virtual ~DeviceAddListener() {}
+  ~DeviceAddListener() override {}
 
   scoped_refptr<UsbDevice> WaitForAdd() {
     usb_service_->GetDevices(base::Bind(&DeviceAddListener::OnDevicesEnumerated,
@@ -418,7 +427,7 @@ class DeviceAddListener : public UsbService::Observer {
 
   void OnDeviceAdded(scoped_refptr<UsbDevice> device) override {
     if (device->vendor_id() == 0x18D1 && !device->serial_number().empty()) {
-      const uint16 product_id = device->product_id();
+      const uint16_t product_id = device->product_id();
       if (product_id_ == -1) {
         bool found = false;
         for (size_t i = 0; i < arraysize(kConfigurations); ++i) {
@@ -465,7 +474,7 @@ class DeviceRemoveListener : public UsbService::Observer {
         weak_factory_(this) {
     observer_.Add(usb_service_);
   }
-  virtual ~DeviceRemoveListener() {}
+  ~DeviceRemoveListener() override {}
 
   void WaitForRemove() {
     usb_service_->GetDevices(
@@ -513,7 +522,7 @@ bool UsbTestGadget::IsTestEnabled() {
 scoped_ptr<UsbTestGadget> UsbTestGadget::Claim(
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner) {
   UsbGadgetFactory gadget_factory(io_task_runner);
-  return gadget_factory.WaitForDevice().Pass();
+  return gadget_factory.WaitForDevice();
 }
 
 UsbTestGadgetImpl::UsbTestGadgetImpl(

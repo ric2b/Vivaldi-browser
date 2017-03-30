@@ -22,7 +22,7 @@ namespace net {
 // It will respond to several URLs, which you can retrieve using the test_url*
 // getters, which will in turn respond with the corresponding responses returned
 // by test_data*. Any other URLs that begin with "test:" will return an error,
-// which might also be useful, you can use test_url_error() to retreive a
+// which might also be useful, you can use test_url_error() to retrieve a
 // standard one.
 //
 // You can override the known URLs or the response data by overriding Start().
@@ -50,13 +50,15 @@ class NET_EXPORT_PRIVATE URLRequestTestJob : public URLRequestJob {
                     bool auto_advance);
 
   // Constructs a job to return the given response regardless of the request
-  // url. The headers should include the HTTP status line and be formatted as
-  // expected by HttpResponseHeaders.
+  // url. The headers should include the HTTP status line and use CRLF/LF as the
+  // line separator.
   URLRequestTestJob(URLRequest* request,
                     NetworkDelegate* network_delegate,
                     const std::string& response_headers,
                     const std::string& response_data,
                     bool auto_advance);
+
+  ~URLRequestTestJob() override;
 
   // The canned URLs this handler will respond to without having been
   // explicitly initialized with response headers and data.
@@ -105,12 +107,13 @@ class NET_EXPORT_PRIVATE URLRequestTestJob : public URLRequestJob {
   RequestPriority priority() const { return priority_; }
 
   // Create a protocol handler for callers that don't subclass.
-  static URLRequestJobFactory::ProtocolHandler* CreateProtocolHandler();
+  static scoped_ptr<URLRequestJobFactory::ProtocolHandler>
+  CreateProtocolHandler();
 
   // Job functions
   void SetPriority(RequestPriority priority) override;
   void Start() override;
-  bool ReadRawData(IOBuffer* buf, int buf_size, int* bytes_read) override;
+  int ReadRawData(IOBuffer* buf, int buf_size) override;
   void Kill() override;
   bool GetMimeType(std::string* mime_type) const override;
   void GetResponseInfo(HttpResponseInfo* info) override;
@@ -128,8 +131,6 @@ class NET_EXPORT_PRIVATE URLRequestTestJob : public URLRequestJob {
   // This is what operation we are going to do next when this job is handled.
   // When the stage is DONE, this job will not be put on the queue.
   enum Stage { WAITING, DATA_AVAILABLE, ALL_DATA, DONE };
-
-  ~URLRequestTestJob() override;
 
   // Call to process the next opeation, usually sending a notification, and
   // advancing the stage if necessary. THIS MAY DELETE THE OBJECT.

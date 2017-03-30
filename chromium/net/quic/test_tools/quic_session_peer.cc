@@ -14,13 +14,19 @@ namespace net {
 namespace test {
 
 // static
-void QuicSessionPeer::SetNextStreamId(QuicSession* session, QuicStreamId id) {
-  session->next_stream_id_ = id;
+QuicStreamId QuicSessionPeer::GetNextOutgoingStreamId(QuicSession* session) {
+  return session->GetNextOutgoingStreamId();
+}
+
+// static
+void QuicSessionPeer::SetNextOutgoingStreamId(QuicSession* session,
+                                              QuicStreamId id) {
+  session->next_outgoing_stream_id_ = id;
 }
 
 // static
 void QuicSessionPeer::SetMaxOpenStreams(QuicSession* session,
-                                        uint32 max_streams) {
+                                        uint32_t max_streams) {
   session->max_open_streams_ = max_streams;
 }
 
@@ -36,16 +42,26 @@ QuicWriteBlockedList* QuicSessionPeer::GetWriteBlockedStreams(
 }
 
 // static
-ReliableQuicStream* QuicSessionPeer::GetIncomingDynamicStream(
+ReliableQuicStream* QuicSessionPeer::GetOrCreateDynamicStream(
     QuicSession* session,
     QuicStreamId stream_id) {
-  return session->GetIncomingDynamicStream(stream_id);
+  return session->GetOrCreateDynamicStream(stream_id);
 }
 
 // static
 map<QuicStreamId, QuicStreamOffset>&
 QuicSessionPeer::GetLocallyClosedStreamsHighestOffset(QuicSession* session) {
   return session->locally_closed_streams_highest_offset_;
+}
+
+// static
+QuicSession::StreamMap& QuicSessionPeer::static_streams(QuicSession* session) {
+  return session->static_streams();
+}
+
+// static
+QuicSession::StreamMap& QuicSessionPeer::dynamic_streams(QuicSession* session) {
+  return session->dynamic_streams();
 }
 
 // static
@@ -67,18 +83,17 @@ bool QuicSessionPeer::IsStreamCreated(QuicSession* session, QuicStreamId id) {
 }
 
 // static
-bool QuicSessionPeer::IsStreamImplicitlyCreated(QuicSession* session,
-                                                QuicStreamId id) {
+bool QuicSessionPeer::IsStreamAvailable(QuicSession* session, QuicStreamId id) {
   DCHECK_NE(0u, id);
-  return ContainsKey(session->implicitly_created_streams_, id);
+  return ContainsKey(session->available_streams_, id);
 }
 
 // static
 bool QuicSessionPeer::IsStreamUncreated(QuicSession* session, QuicStreamId id) {
   DCHECK_NE(0u, id);
-  if (id % 2 == session->next_stream_id_ % 2) {
+  if (id % 2 == session->next_outgoing_stream_id_ % 2) {
     // locally-created stream.
-    return id >= session->next_stream_id_;
+    return id >= session->next_outgoing_stream_id_;
   } else {
     // peer-created stream.
     return id > session->largest_peer_created_stream_id_;

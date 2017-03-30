@@ -4,6 +4,8 @@
 
 #include "chromeos/login/auth/extended_authenticator_impl.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -17,6 +19,7 @@
 #include "chromeos/login/auth/key.h"
 #include "chromeos/login/auth/user_context.h"
 #include "chromeos/login_event_recorder.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "crypto/sha2.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 
@@ -91,7 +94,7 @@ void ExtendedAuthenticatorImpl::CreateMount(
   for (size_t i = 0; i < keys.size(); i++) {
     mount.create_keys.push_back(keys[i]);
   }
-  UserContext context(user_id);
+  UserContext context(AccountId::FromUserEmail(user_id));
   Key key(keys.front().secret);
   key.SetLabel(keys.front().label);
   context.SetKey(key);
@@ -186,7 +189,8 @@ void ExtendedAuthenticatorImpl::DoAuthenticateToMount(
     const UserContext& user_context) {
   RecordStartMarker("MountEx");
 
-  std::string canonicalized = gaia::CanonicalizeEmail(user_context.GetUserID());
+  const std::string canonicalized =
+      gaia::CanonicalizeEmail(user_context.GetAccountId().GetUserEmail());
   cryptohome::Identification id(canonicalized);
   const Key* const key = user_context.GetKey();
   cryptohome::Authorization auth(key->GetSecret(), key->GetLabel());
@@ -208,7 +212,8 @@ void ExtendedAuthenticatorImpl::DoAuthenticateToCheck(
     const UserContext& user_context) {
   RecordStartMarker("CheckKeyEx");
 
-  std::string canonicalized = gaia::CanonicalizeEmail(user_context.GetUserID());
+  const std::string canonicalized =
+      gaia::CanonicalizeEmail(user_context.GetAccountId().GetUserEmail());
   cryptohome::Identification id(canonicalized);
   const Key* const key = user_context.GetKey();
   cryptohome::Authorization auth(key->GetSecret(), key->GetLabel());
@@ -229,7 +234,8 @@ void ExtendedAuthenticatorImpl::DoAddKey(const cryptohome::KeyDefinition& key,
                                      const UserContext& user_context) {
   RecordStartMarker("AddKeyEx");
 
-  std::string canonicalized = gaia::CanonicalizeEmail(user_context.GetUserID());
+  const std::string canonicalized =
+      gaia::CanonicalizeEmail(user_context.GetAccountId().GetUserEmail());
   cryptohome::Identification id(canonicalized);
   const Key* const auth_key = user_context.GetKey();
   cryptohome::Authorization auth(auth_key->GetSecret(), auth_key->GetLabel());
@@ -253,7 +259,8 @@ void ExtendedAuthenticatorImpl::DoUpdateKeyAuthorized(
     const UserContext& user_context) {
   RecordStartMarker("UpdateKeyAuthorized");
 
-  std::string canonicalized = gaia::CanonicalizeEmail(user_context.GetUserID());
+  const std::string canonicalized =
+      gaia::CanonicalizeEmail(user_context.GetAccountId().GetUserEmail());
   cryptohome::Identification id(canonicalized);
   const Key* const auth_key = user_context.GetKey();
   cryptohome::Authorization auth(auth_key->GetSecret(), auth_key->GetLabel());
@@ -275,7 +282,8 @@ void ExtendedAuthenticatorImpl::DoRemoveKey(const std::string& key_to_remove,
                                         const UserContext& user_context) {
   RecordStartMarker("RemoveKeyEx");
 
-  std::string canonicalized = gaia::CanonicalizeEmail(user_context.GetUserID());
+  const std::string canonicalized =
+      gaia::CanonicalizeEmail(user_context.GetAccountId().GetUserEmail());
   cryptohome::Identification id(canonicalized);
   const Key* const auth_key = user_context.GetKey();
   cryptohome::Authorization auth(auth_key->GetSecret(), auth_key->GetLabel());

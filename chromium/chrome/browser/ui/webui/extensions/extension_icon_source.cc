@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/webui/extensions/extension_icon_source.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/memory/ref_counted_memory.h"
@@ -277,10 +279,9 @@ bool ExtensionIconSource::ParseData(
     int request_id,
     const content::URLDataSource::GotDataCallback& callback) {
   // Extract the parameters from the path by lower casing and splitting.
-  std::string path_lower = base::StringToLowerASCII(path);
-  std::vector<std::string> path_parts;
-
-  base::SplitString(path_lower, '/', &path_parts);
+  std::string path_lower = base::ToLowerASCII(path);
+  std::vector<std::string> path_parts = base::SplitString(
+      path_lower, "/", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   if (path_lower.empty() || path_parts.size() < 3)
     return false;
 

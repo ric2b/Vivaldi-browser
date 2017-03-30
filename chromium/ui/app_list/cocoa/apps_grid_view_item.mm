@@ -7,6 +7,7 @@
 #include "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
 #include "base/mac/scoped_nsobject.h"
+#include "base/macros.h"
 #include "base/strings/sys_string_conversions.h"
 #include "skia/ext/skia_utils_mac.h"
 #include "ui/app_list/app_list_constants.h"
@@ -173,7 +174,7 @@ void ItemModelObserverBridge::ItemPercentDownloadedChanged() {
   if (!selected_)
     return;
 
-  [gfx::SkColorToSRGBNSColor(app_list::kSelectedColor) set];
+  [skia::SkColorToSRGBNSColor(app_list::kSelectedColor) set];
   NSRectFillUsingOperation(dirtyRect, NSCompositeSourceOver);
 }
 
@@ -243,7 +244,7 @@ void ItemModelObserverBridge::ItemPercentDownloadedChanged() {
                               .GetPrimaryFont()
                               .GetNativeFont(),
     NSForegroundColorAttributeName :
-        gfx::SkColorToSRGBNSColor(app_list::kGridTitleColor)
+        skia::SkColorToSRGBNSColor(app_list::kGridTitleColor)
   };
   NSString* buttonTitle =
       base::SysUTF8ToNSString([self model]->GetDisplayName());

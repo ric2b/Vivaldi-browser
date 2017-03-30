@@ -5,6 +5,8 @@
 #ifndef BASE_TEST_TEST_MOCK_TIME_TASK_RUNNER_H_
 #define BASE_TEST_TEST_MOCK_TIME_TASK_RUNNER_H_
 
+#include <stddef.h>
+
 #include <queue>
 #include <vector>
 
@@ -47,6 +49,9 @@ class TestMockTimeTaskRunner : public SingleThreadTaskRunner {
   // Constructs an instance whose virtual time will start at the Unix epoch, and
   // whose time ticks will start at zero.
   TestMockTimeTaskRunner();
+
+  // Constructs an instance starting at the given virtual time and time ticks.
+  TestMockTimeTaskRunner(Time start_time, TimeTicks start_ticks);
 
   // Fast-forwards virtual time by |delta|, causing all tasks with a remaining
   // delay less than or equal to |delta| to be executed. |delta| must be

@@ -141,7 +141,7 @@ SetEnvironmentVariables() {
 SanityCheck() {
   Banner "Sanity Checks"
 
-  local chrome_dir=$(cd "${SCRIPT_DIR}/../../../.." && pwd)
+  local chrome_dir=$(cd "${SCRIPT_DIR}/../../.." && pwd)
   BUILD_DIR="${chrome_dir}/out/sysroot-build/${DIST}"
   mkdir -p ${BUILD_DIR}
   echo "Using build directory: ${BUILD_DIR}"
@@ -215,7 +215,8 @@ GeneratePackageListARM() {
   DownloadOrCopy "${PACKAGE_LIST_ARM}" "${package_list}"
   VerifyPackageListing "${PACKAGE_FILE_ARM}" "${package_list}"
   ExtractPackageBz2 "$package_list" "$tmp_package_list"
-  GeneratePackageList "$tmp_package_list" "$output_file" "${DEBIAN_PACKAGES}"
+  GeneratePackageList "$tmp_package_list" "$output_file" "${DEBIAN_PACKAGES}
+    ${DEBIAN_PACKAGES_ARM}"
 }
 
 GeneratePackageListMips() {
@@ -260,10 +261,9 @@ HacksAndPatchesAmd64() {
   sed -i -e 's|/lib/x86_64-linux-gnu/||g' ${lscripts}
 
   # This is for chrome's ./build/linux/pkg-config-wrapper
-  # which overwrites PKG_CONFIG_PATH internally
-  SubBanner "Package Configs Symlink"
-  mkdir -p ${INSTALL_ROOT}/usr/share
-  ln -s ../lib/x86_64-linux-gnu/pkgconfig ${INSTALL_ROOT}/usr/share/pkgconfig
+  # which overwrites PKG_CONFIG_LIBDIR internally
+  SubBanner "Move pkgconfig scripts"
+  mv ${INSTALL_ROOT}/usr/lib/x86_64-linux-gnu/pkgconfig ${INSTALL_ROOT}/usr/lib/
 
   SubBanner "Adding an additional ld.conf include"
   LD_SO_HACK_CONF="${INSTALL_ROOT}/etc/ld.so.conf.d/zz_hack.conf"
@@ -284,10 +284,9 @@ HacksAndPatchesI386() {
   sed -i -e 's|/lib/i386-linux-gnu/||g' ${lscripts}
 
   # This is for chrome's ./build/linux/pkg-config-wrapper
-  # which overwrites PKG_CONFIG_PATH internally
-  SubBanner "Package Configs Symlink"
-  mkdir -p ${INSTALL_ROOT}/usr/share
-  ln -s ../lib/i386-linux-gnu/pkgconfig ${INSTALL_ROOT}/usr/share/pkgconfig
+  # which overwrites PKG_CONFIG_LIBDIR internally
+  SubBanner "Move pkgconfig scripts"
+  mv ${INSTALL_ROOT}/usr/lib/i386-linux-gnu/pkgconfig ${INSTALL_ROOT}/usr/lib/
 
   SubBanner "Adding an additional ld.conf include"
   LD_SO_HACK_CONF="${INSTALL_ROOT}/etc/ld.so.conf.d/zz_hack.conf"
@@ -308,10 +307,10 @@ HacksAndPatchesARM() {
   sed -i -e 's|/lib/arm-linux-gnueabihf/||g' ${lscripts}
 
   # This is for chrome's ./build/linux/pkg-config-wrapper
-  # which overwrites PKG_CONFIG_PATH internally
-  SubBanner "Package Configs Symlink"
-  mkdir -p ${INSTALL_ROOT}/usr/share
-  ln -s ../lib/arm-linux-gnueabihf/pkgconfig ${INSTALL_ROOT}/usr/share/pkgconfig
+  # which overwrites PKG_CONFIG_LIBDIR internally
+  SubBanner "Move pkgconfig files"
+  mv ${INSTALL_ROOT}/usr/lib/arm-linux-gnueabihf/pkgconfig \
+      ${INSTALL_ROOT}/usr/lib/
 }
 
 
@@ -327,10 +326,10 @@ HacksAndPatchesMips() {
   sed -i -e 's|/lib/mipsel-linux-gnu/||g' ${lscripts}
 
   # This is for chrome's ./build/linux/pkg-config-wrapper
-  # which overwrites PKG_CONFIG_PATH internally
-  SubBanner "Package Configs Symlink"
-  mkdir -p ${INSTALL_ROOT}/usr/share
-  ln -s ../lib/mipsel-linux-gnu/pkgconfig ${INSTALL_ROOT}/usr/share/pkgconfig
+  # which overwrites PKG_CONFIG_LIBDIR internally
+  SubBanner "Move pkgconfig files"
+  mv ${INSTALL_ROOT}/usr/lib/mipsel-linux-gnu/pkgconfig \
+      ${INSTALL_ROOT}/usr/lib/
 }
 
 
@@ -361,7 +360,15 @@ InstallIntoSysroot() {
 
     SubBanner "Extracting to ${INSTALL_ROOT}"
     dpkg --fsys-tarfile ${package}\
-      | tar -xf - --exclude=./usr/share -C ${INSTALL_ROOT}
+      | tar -xf - -C ${INSTALL_ROOT}
+
+  done
+
+  # Prune /usr/share, leaving only pkg-config
+  for name in ${INSTALL_ROOT}/usr/share/*; do
+    if [ "${name}" != "${INSTALL_ROOT}/usr/share/pkgconfig" ]; then
+      rm -r ${name}
+    fi
   done
 }
 
@@ -567,16 +574,21 @@ VerifyPackageListing() {
   local output_file=$2
   local release_file="${BUILD_DIR}/${RELEASE_FILE}"
   local release_file_gpg="${BUILD_DIR}/${RELEASE_FILE_GPG}"
-  local tmp_keyring_file="${BUILD_DIR}/keyring.gpg"
+  local local_keyring_file="${BUILD_DIR}/keyring.gpg"
 
   CheckForDebianGPGKeyring
 
   DownloadOrCopy ${RELEASE_LIST} ${release_file}
   DownloadOrCopy ${RELEASE_LIST_GPG} ${release_file_gpg}
+  if [ ! -f "${local_keyring_file}" ]; then
+    echo "Generating keyring: ${local_keyring_file}"
+    set -x
+    cp "${KEYRING_FILE}" "${local_keyring_file}"
+    gpg --primary-keyring "${local_keyring_file}" --recv-keys 2B90D010
+    set +x
+  fi
   echo "Verifying: ${release_file} with ${release_file_gpg}"
-  cp "${KEYRING_FILE}" "${tmp_keyring_file}"
-  gpg --primary-keyring "${tmp_keyring_file}" --recv-keys 2B90D010
-  gpgv --keyring "${tmp_keyring_file}" "${release_file_gpg}" "${release_file}"
+  gpgv --keyring "${local_keyring_file}" "${release_file_gpg}" "${release_file}"
 
   echo "Verifying: ${output_file}"
   local checksums=$(grep ${file_path} ${release_file} | cut -d " " -f 2)

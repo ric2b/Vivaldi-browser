@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_TABS_MEDIA_INDICATOR_BUTTON_H_
 #define CHROME_BROWSER_UI_VIEWS_TABS_MEDIA_INDICATOR_BUTTON_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "ui/views/controls/button/image_button.h"
@@ -40,8 +41,8 @@ class MediaIndicatorButton : public views::ImageButton,
     return showing_media_state_;
   }
 
-  // Updates ImageButton images, starts fade animations, and
-  // activates/deactivates button functionality as appropriate.
+  // Calls ResetImages(), starts fade animations, and activates/deactivates
+  // button functionality as appropriate.
   void TransitionToMediaState(TabMediaState next_state);
 
   // Determines whether the MediaIndicatorButton will be clickable for toggling
@@ -49,6 +50,10 @@ class MediaIndicatorButton : public views::ImageButton,
   // has changed.  Internally, TransitionToMediaState() and OnBoundsChanged()
   // calls this when the TabMediaState or the bounds have changed.
   void UpdateEnabledForMuteToggle();
+
+  // Called when the parent tab's button color changes.  Determines whether
+  // ResetImages() needs to be called.
+  void OnParentTabButtonColorChanged();
 
  protected:
   // views::View:
@@ -76,6 +81,10 @@ class MediaIndicatorButton : public views::ImageButton,
 
   // Returns the tab (parent view) of this MediaIndicatorButton.
   Tab* GetTab() const;
+
+  // Resets the images to display on the button to reflect |state| and the
+  // parent tab's button color.  Should be called when either of these changes.
+  void ResetImages(TabMediaState state);
 
   Tab* const parent_tab_;
 

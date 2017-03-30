@@ -4,10 +4,13 @@
 
 #include "content/browser/speech/speech_recognition_manager_impl.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/browser/renderer_host/media/media_stream_ui_proxy.h"
@@ -133,8 +136,7 @@ int SpeechRecognitionManagerImpl::CreateSession(
   remote_engine_config.interim_results = config.interim_results;
   remote_engine_config.max_hypotheses = config.max_hypotheses;
   remote_engine_config.hardware_info = hardware_info;
-  remote_engine_config.origin_url =
-      can_report_metrics ? config.origin_url : std::string();
+  remote_engine_config.origin_url = config.origin_url;
   remote_engine_config.auth_token = config.auth_token;
   remote_engine_config.auth_scope = config.auth_scope;
   remote_engine_config.preamble = config.preamble;
@@ -201,11 +203,8 @@ void SpeechRecognitionManagerImpl::RecognitionAllowedCallback(int session_id,
   if (ask_user) {
     SpeechRecognitionSessionContext& context = session->context;
     context.label = media_stream_manager_->MakeMediaAccessRequest(
-        context.render_process_id,
-        context.render_frame_id,
-        context.request_id,
-        StreamOptions(true, false),
-        GURL(context.context_name),
+        context.render_process_id, context.render_frame_id, context.request_id,
+        StreamControls(true, false), GURL(context.context_name),
         base::Bind(
             &SpeechRecognitionManagerImpl::MediaRequestPermissionCallback,
             weak_factory_.GetWeakPtr(), session_id));
@@ -243,7 +242,7 @@ void SpeechRecognitionManagerImpl::MediaRequestPermissionCallback(
     iter->second->context.devices = devices;
 
     // Save the UI object.
-    iter->second->ui = stream_ui.Pass();
+    iter->second->ui = std::move(stream_ui);
   }
 
   // Clear the label to indicate the request has been done.

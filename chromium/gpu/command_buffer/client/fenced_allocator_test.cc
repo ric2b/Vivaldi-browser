@@ -4,6 +4,8 @@
 
 // This file contains the tests for the FencedAllocator class.
 
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/memory/aligned_memory.h"
@@ -44,7 +46,7 @@ class BaseFencedAllocatorTest : public testing::Test {
                               Return(error::kNoError)));
 
     {
-      TransferBufferManager* manager = new TransferBufferManager();
+      TransferBufferManager* manager = new TransferBufferManager(nullptr);
       transfer_buffer_manager_ = manager;
       EXPECT_TRUE(manager->Initialize());
     }
@@ -65,25 +67,19 @@ class BaseFencedAllocatorTest : public testing::Test {
     helper_->Initialize(kBufferSize);
   }
 
-  int32 GetToken() {
-    return command_buffer_->GetLastState().token;
-  }
+  int32_t GetToken() { return command_buffer_->GetLastState().token; }
 
   scoped_ptr<AsyncAPIMock> api_mock_;
   scoped_refptr<TransferBufferManagerInterface> transfer_buffer_manager_;
   scoped_ptr<CommandBufferService> command_buffer_;
   scoped_ptr<GpuScheduler> gpu_scheduler_;
   scoped_ptr<CommandBufferHelper> helper_;
+  base::MessageLoop message_loop_;
 };
 
 #ifndef _MSC_VER
 const unsigned int BaseFencedAllocatorTest::kBufferSize;
 #endif
-
-namespace {
-void EmptyPoll() {
-}
-}
 
 // Test fixture for FencedAllocator test - Creates a FencedAllocator, using a
 // CommandBufferHelper with a mock AsyncAPIInterface for its interface (calling
@@ -93,9 +89,7 @@ class FencedAllocatorTest : public BaseFencedAllocatorTest {
  protected:
   void SetUp() override {
     BaseFencedAllocatorTest::SetUp();
-    allocator_.reset(new FencedAllocator(kBufferSize,
-                                         helper_.get(),
-                                         base::Bind(&EmptyPoll)));
+    allocator_.reset(new FencedAllocator(kBufferSize, helper_.get()));
   }
 
   void TearDown() override {
@@ -200,7 +194,7 @@ TEST_F(FencedAllocatorTest, TestFreePendingToken) {
   EXPECT_TRUE(allocator_->CheckConsistency());
 
   // Free one successful allocation, pending fence.
-  int32 token = helper_.get()->InsertToken();
+  int32_t token = helper_.get()->InsertToken();
   allocator_->FreePendingToken(offsets[0], token);
   EXPECT_TRUE(allocator_->CheckConsistency());
 
@@ -247,7 +241,7 @@ TEST_F(FencedAllocatorTest, FreeUnused) {
   EXPECT_EQ(0u, allocator_->GetLargestFreeSize());
 
   // Free one successful allocation, pending fence.
-  int32 token = helper_.get()->InsertToken();
+  int32_t token = helper_.get()->InsertToken();
   allocator_->FreePendingToken(offsets[0], token);
   EXPECT_TRUE(allocator_->CheckConsistency());
 
@@ -363,7 +357,7 @@ TEST_F(FencedAllocatorTest, TestGetLargestFreeOrPendingSize) {
             allocator_->GetLargestFreeOrPendingSize());
 
   // Free the last one, pending a token.
-  int32 token = helper_.get()->InsertToken();
+  int32_t token = helper_.get()->InsertToken();
   allocator_->FreePendingToken(offset2, token);
 
   // Now all the buffers have been freed...
@@ -390,63 +384,6 @@ TEST_F(FencedAllocatorTest, TestGetLargestFreeOrPendingSize) {
   EXPECT_EQ(kBufferSize, allocator_->GetLargestFreeSize());
 }
 
-class FencedAllocatorPollTest : public BaseFencedAllocatorTest {
- public:
-  static const unsigned int kAllocSize = 128;
-
-  MOCK_METHOD0(MockedPoll, void());
-
- protected:
-  virtual void TearDown() {
-    // If the GpuScheduler posts any tasks, this forces them to run.
-    base::MessageLoop::current()->RunUntilIdle();
-
-    BaseFencedAllocatorTest::TearDown();
-  }
-};
-
-TEST_F(FencedAllocatorPollTest, TestPoll) {
-  scoped_ptr<FencedAllocator> allocator(
-      new FencedAllocator(kBufferSize,
-                          helper_.get(),
-                          base::Bind(&FencedAllocatorPollTest::MockedPoll,
-                                     base::Unretained(this))));
-
-  FencedAllocator::Offset mem1 = allocator->Alloc(kAllocSize);
-  FencedAllocator::Offset mem2 = allocator->Alloc(kAllocSize);
-  EXPECT_NE(mem1, FencedAllocator::kInvalidOffset);
-  EXPECT_NE(mem2, FencedAllocator::kInvalidOffset);
-  EXPECT_TRUE(allocator->CheckConsistency());
-  EXPECT_EQ(allocator->bytes_in_use(), kAllocSize * 2);
-
-  // Check that no-op Poll doesn't affect the state.
-  EXPECT_CALL(*this, MockedPoll()).RetiresOnSaturation();
-  allocator->FreeUnused();
-  EXPECT_TRUE(allocator->CheckConsistency());
-  EXPECT_EQ(allocator->bytes_in_use(), kAllocSize * 2);
-
-  // Check that freeing in Poll works.
-  base::Closure free_mem1_closure =
-      base::Bind(&FencedAllocator::Free,
-                 base::Unretained(allocator.get()),
-                 mem1);
-  EXPECT_CALL(*this, MockedPoll())
-      .WillOnce(InvokeWithoutArgs(&free_mem1_closure, &base::Closure::Run))
-      .RetiresOnSaturation();
-  allocator->FreeUnused();
-  EXPECT_TRUE(allocator->CheckConsistency());
-  EXPECT_EQ(allocator->bytes_in_use(), kAllocSize * 1);
-
-  // Check that freeing still works.
-  EXPECT_CALL(*this, MockedPoll()).RetiresOnSaturation();
-  allocator->Free(mem2);
-  allocator->FreeUnused();
-  EXPECT_TRUE(allocator->CheckConsistency());
-  EXPECT_EQ(allocator->bytes_in_use(), 0u);
-
-  allocator.reset();
-}
-
 // Test fixture for FencedAllocatorWrapper test - Creates a
 // FencedAllocatorWrapper, using a CommandBufferHelper with a mock
 // AsyncAPIInterface for its interface (calling it directly, not through the
@@ -464,7 +401,6 @@ class FencedAllocatorWrapperTest : public BaseFencedAllocatorTest {
         kBufferSize, kAllocAlignment)));
     allocator_.reset(new FencedAllocatorWrapper(kBufferSize,
                                                 helper_.get(),
-                                                base::Bind(&EmptyPoll),
                                                 buffer_.get()));
   }
 
@@ -609,7 +545,7 @@ TEST_F(FencedAllocatorWrapperTest, TestFreePendingToken) {
   EXPECT_TRUE(allocator_->CheckConsistency());
 
   // Free one successful allocation, pending fence.
-  int32 token = helper_.get()->InsertToken();
+  int32_t token = helper_.get()->InsertToken();
   allocator_->FreePendingToken(pointers[0], token);
   EXPECT_TRUE(allocator_->CheckConsistency());
 

@@ -113,7 +113,17 @@ class GenerateWebappHtml:
 def parseArgs():
   parser = argparse.ArgumentParser()
   parser.add_argument(
-    '--js', nargs='+', help='The Javascript files to include in HTML <head>')
+    '--js',
+    nargs='+',
+    default={},
+    help='The Javascript files to include in HTML <head>')
+  parser.add_argument(
+    '--js-list-file',
+    help='The name of a file containing a list of files, one per line, '
+         'identifying the Javascript to include in HTML <head>. This is an '
+         'alternate to specifying the files directly via the "--js" option. '
+         'The files listed in this file are appended to the files passed via '
+         'the "--js" option, if any.')
   parser.add_argument(
     '--templates',
     nargs='*',
@@ -142,7 +152,15 @@ def main():
   args = parseArgs()
 
   out_file = args.output_file
-  js_files = set(args.js) - set(args.exclude_js)
+  js_files = set(args.js)
+
+  # Load the files from the --js-list-file.
+  js_list_file = args.js_list_file
+  if js_list_file:
+    js_files = js_files.union(set(line.rstrip() for line in open(js_list_file)))
+
+  js_files = js_files - set(args.exclude_js)
+  instrumented_js_files = set(args.instrument_js) - set(args.exclude_js)
 
   # Create the output directory if it does not exist.
   out_directory = os.path.dirname(out_file)
@@ -151,7 +169,7 @@ def main():
 
   # Generate the main HTML file from the templates.
   with open(out_file, 'w') as output:
-    gen = GenerateWebappHtml(args.templates, js_files, args.instrument_js,
+    gen = GenerateWebappHtml(args.templates, js_files, instrumented_js_files,
                              args.template_dir)
     gen.processTemplate(output, args.input_template, 0)
 

@@ -5,6 +5,7 @@
 #include "components/cronet/android/chromium_url_request_context.h"
 
 #include <string>
+#include <utility>
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
@@ -61,28 +62,16 @@ bool ChromiumUrlRequestContextRegisterJni(JNIEnv* env) {
 }
 
 // Sets global user-agent to be used for all subsequent requests.
-static jlong CreateRequestContextAdapter(JNIEnv* env,
-                                         jobject jcaller,
-                                         jstring juser_agent,
-                                         jint jlog_level,
-                                         jstring jconfig) {
+static jlong CreateRequestContextAdapter(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& jcaller,
+    const JavaParamRef<jstring>& juser_agent,
+    jint jlog_level,
+    jlong jconfig) {
   std::string user_agent = ConvertJavaStringToUTF8(env, juser_agent);
 
-  std::string config = ConvertJavaStringToUTF8(env, jconfig);
-
-  scoped_ptr<base::Value> config_value = base::JSONReader::Read(config);
-  if (!config_value || !config_value->IsType(base::Value::TYPE_DICTIONARY)) {
-    DLOG(ERROR) << "Bad JSON: " << config;
-    return 0;
-  }
-
   scoped_ptr<URLRequestContextConfig> context_config(
-      new URLRequestContextConfig());
-  base::JSONValueConverter<URLRequestContextConfig> converter;
-  if (!converter.Convert(*config_value, context_config.get())) {
-    DLOG(ERROR) << "Bad Config: " << config_value;
-    return 0;
-  }
+      reinterpret_cast<URLRequestContextConfig*>(jconfig));
 
   // TODO(mef): MinLogLevel is global, shared by all URLRequestContexts.
   // Revisit this if each URLRequestContext would need an individual log level.
@@ -92,13 +81,13 @@ static jlong CreateRequestContextAdapter(JNIEnv* env,
   URLRequestContextAdapter* context_adapter = new URLRequestContextAdapter(
       new JniURLRequestContextAdapterDelegate(env, jcaller), user_agent);
   context_adapter->AddRef();  // Hold onto this ref-counted object.
-  context_adapter->Initialize(context_config.Pass());
+  context_adapter->Initialize(std::move(context_config));
   return reinterpret_cast<jlong>(context_adapter);
 }
 
 // Releases native objects.
 static void ReleaseRequestContextAdapter(JNIEnv* env,
-                                         jobject jcaller,
+                                         const JavaParamRef<jobject>& jcaller,
                                          jlong jurl_request_context_adapter) {
   URLRequestContextAdapter* context_adapter =
       reinterpret_cast<URLRequestContextAdapter*>(jurl_request_context_adapter);
@@ -111,25 +100,27 @@ static void ReleaseRequestContextAdapter(JNIEnv* env,
 }
 
 // Starts recording statistics.
-static void InitializeStatistics(JNIEnv* env, jobject jcaller) {
+static void InitializeStatistics(JNIEnv* env,
+                                 const JavaParamRef<jobject>& jcaller) {
   base::StatisticsRecorder::Initialize();
 }
 
 // Gets current statistics with |jfilter| as a substring as JSON text (an empty
 // |jfilter| will include all registered histograms).
-static jstring GetStatisticsJSON(JNIEnv* env,
-                                 jobject jcaller,
-                                 jstring jfilter) {
+static ScopedJavaLocalRef<jstring> GetStatisticsJSON(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& jcaller,
+    const JavaParamRef<jstring>& jfilter) {
   std::string query = ConvertJavaStringToUTF8(env, jfilter);
   std::string json = base::StatisticsRecorder::ToJSON(query);
-  return ConvertUTF8ToJavaString(env, json).Release();
+  return ConvertUTF8ToJavaString(env, json);
 }
 
 // Starts recording NetLog into file with |jfilename|.
 static void StartNetLogToFile(JNIEnv* env,
-                              jobject jcaller,
+                              const JavaParamRef<jobject>& jcaller,
                               jlong jurl_request_context_adapter,
-                              jstring jfilename,
+                              const JavaParamRef<jstring>& jfilename,
                               jboolean jlog_all) {
   URLRequestContextAdapter* context_adapter =
       reinterpret_cast<URLRequestContextAdapter*>(jurl_request_context_adapter);
@@ -139,7 +130,7 @@ static void StartNetLogToFile(JNIEnv* env,
 
 // Stops recording NetLog.
 static void StopNetLog(JNIEnv* env,
-                       jobject jcaller,
+                       const JavaParamRef<jobject>& jcaller,
                        jlong jurl_request_context_adapter) {
   URLRequestContextAdapter* context_adapter =
       reinterpret_cast<URLRequestContextAdapter*>(jurl_request_context_adapter);
@@ -148,7 +139,7 @@ static void StopNetLog(JNIEnv* env,
 
 // Called on application's main Java thread.
 static void InitRequestContextOnMainThread(JNIEnv* env,
-                                           jobject jcaller,
+                                           const JavaParamRef<jobject>& jcaller,
                                            jlong jurl_request_context_adapter) {
   URLRequestContextAdapter* context_adapter =
       reinterpret_cast<URLRequestContextAdapter*>(jurl_request_context_adapter);

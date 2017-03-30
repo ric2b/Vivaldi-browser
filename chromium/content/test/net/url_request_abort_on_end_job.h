@@ -8,8 +8,8 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "net/url_request/url_request_job.h"
 
@@ -29,7 +29,7 @@ class URLRequestAbortOnEndJob : public net::URLRequestJob {
   void Start() override;
   bool GetMimeType(std::string* mime_type) const override;
   void GetResponseInfo(net::HttpResponseInfo* info) override;
-  bool ReadRawData(net::IOBuffer* buf, int buf_size, int* bytes_read) override;
+  int ReadRawData(net::IOBuffer* buf, int buf_size) override;
 
   static void AddUrlHandler();
 

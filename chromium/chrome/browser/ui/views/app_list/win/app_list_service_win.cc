@@ -5,10 +5,13 @@
 #include "chrome/browser/ui/views/app_list/win/app_list_service_win.h"
 
 #include <dwmapi.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <sstream>
 
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
@@ -32,12 +35,14 @@
 #include "chrome/browser/ui/views/app_list/win/app_list_controller_delegate_win.h"
 #include "chrome/browser/ui/views/app_list/win/app_list_win.h"
 #include "chrome/browser/web_applications/web_app.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/chrome_version_info.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/installer/util/browser_distribution.h"
+#include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/common/content_switches.h"
 #include "ui/app_list/views/app_list_view.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/base/win/shell.h"
@@ -173,7 +178,7 @@ void CreateAppListShortcuts(
       web_app::internals::GetShortcutPaths(creation_locations);
 
   bool pin_to_taskbar = creation_locations.in_quick_launch_bar &&
-                        (base::win::GetVersion() >= base::win::VERSION_WIN7);
+                        base::win::CanPinShortcutToTaskbar();
 
   // Create a shortcut in the |user_data_dir| for taskbar pinning.
   if (pin_to_taskbar)
@@ -216,7 +221,7 @@ void CreateAppListShortcuts(
     base::FilePath shortcut_to_pin =
         user_data_dir.Append(app_list_shortcut_name).
             AddExtension(installer::kLnkExt);
-    success = base::win::TaskbarPinShortcutLink(shortcut_to_pin) && success;
+    success = base::win::PinShortcutToTaskbar(shortcut_to_pin) && success;
   }
 }
 
@@ -248,8 +253,8 @@ void SetWindowAttributes(HWND hwnd) {
 
 // static
 AppListServiceWin* AppListServiceWin::GetInstance() {
-  return Singleton<AppListServiceWin,
-                   LeakySingletonTraits<AppListServiceWin> >::get();
+  return base::Singleton<AppListServiceWin,
+                         base::LeakySingletonTraits<AppListServiceWin>>::get();
 }
 
 AppListServiceWin::AppListServiceWin()
@@ -270,11 +275,9 @@ void AppListServiceWin::ShowForProfile(Profile* requested_profile) {
 }
 
 void AppListServiceWin::OnLoadProfileForWarmup(Profile* initial_profile) {
-  // App list profiles should not be off-the-record. It is currently possible to
-  // get here in an off-the-record profile via the Web Store
-  // (http://crbug.com/416380).
-  // TODO(mgiuca): DCHECK that requested_profile->IsOffTheRecord() and
-  // requested_profile->IsGuestSession() are false, once that is resolved.
+  // App list profiles should not be off-the-record.
+  DCHECK(!initial_profile->IsOffTheRecord());
+  DCHECK(!initial_profile->IsGuestSession());
 
   if (!IsWarmupNeeded())
     return;
@@ -306,7 +309,7 @@ void AppListServiceWin::CreateShortcut() {
   shortcut_locations.on_desktop = true;
   shortcut_locations.in_quick_launch_bar = true;
   shortcut_locations.applications_menu_location =
-      web_app::APP_MENU_LOCATION_SUBDIR_CHROME;
+      web_app::APP_MENU_LOCATION_SUBDIR_CHROME_DEPRECATED;
   base::FilePath user_data_dir(
       g_browser_process->profile_manager()->user_data_dir());
 
@@ -329,15 +332,15 @@ void AppListServiceWin::ScheduleWarmup() {
   // To make all invocations of AppListServiceWin::LoadProfileForWarmup visible
   // to the server-side analysis tool, reducing this period to 10 sec in Dev
   // builds and Canary, where profiler instrumentations are enabled.
-  switch (chrome::VersionInfo::GetChannel()) {
-    case chrome::VersionInfo::CHANNEL_UNKNOWN:
-    case chrome::VersionInfo::CHANNEL_CANARY:
+  switch (chrome::GetChannel()) {
+    case version_info::Channel::UNKNOWN:
+    case version_info::Channel::CANARY:
       kInitWindowDelay = 10;
       break;
 
-    case chrome::VersionInfo::CHANNEL_DEV:
-    case chrome::VersionInfo::CHANNEL_BETA:
-    case chrome::VersionInfo::CHANNEL_STABLE:
+    case version_info::Channel::DEV:
+    case version_info::Channel::BETA:
+    case version_info::Channel::STABLE:
       // Except on Canary, don't bother scheduling an app launcher warmup when
       // it's not already enabled. Always schedule on Canary while collecting
       // profiler data (see comment above).
@@ -366,7 +369,7 @@ bool AppListServiceWin::IsWarmupNeeded() {
   // Don't warm up the app list if it hasn't been used for a while. If the last
   // launch is unknown, record it as "used" on the first warmup.
   PrefService* local_state = g_browser_process->local_state();
-  int64 last_launch_time_pref =
+  int64_t last_launch_time_pref =
       local_state->GetInt64(prefs::kAppListLastLaunchTime);
   if (last_launch_time_pref == 0)
     RecordAppListLastLaunch();

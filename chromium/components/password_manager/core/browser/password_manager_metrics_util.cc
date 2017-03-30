@@ -4,7 +4,7 @@
 
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/prefs/pref_service.h"
@@ -110,7 +110,7 @@ void LogUMAHistogramBoolean(const std::string& name, bool sample) {
 std::string GroupIdToString(size_t group_id) {
   DCHECK_LE(group_id, kNumGroups);
   if (group_id > 0)
-    return "group_" + base::IntToString(group_id);
+    return "group_" + base::SizeTToString(group_id);
   return std::string();
 }
 
@@ -127,7 +127,7 @@ void LogUIDismissalReason(ResponseType type) {
       reason = CLICKED_NEVER;
       break;
     case INFOBAR_DISMISSED:
-      reason = CLICKED_NOPE;
+      reason = CLICKED_CANCEL;
       break;
     case NUM_RESPONSE_TYPES:
       NOTREACHED();
@@ -167,6 +167,25 @@ void LogPasswordSyncState(PasswordSyncState state) {
 void LogPasswordGenerationSubmissionEvent(PasswordSubmissionEvent event) {
   UMA_HISTOGRAM_ENUMERATION("PasswordGeneration.SubmissionEvent", event,
                             SUBMISSION_EVENT_ENUM_COUNT);
+}
+
+void LogPasswordGenerationAvailableSubmissionEvent(
+    PasswordSubmissionEvent event) {
+  UMA_HISTOGRAM_ENUMERATION("PasswordGeneration.SubmissionAvailableEvent",
+                            event, SUBMISSION_EVENT_ENUM_COUNT);
+}
+
+void LogUpdatePasswordSubmissionEvent(UpdatePasswordSubmissionEvent event) {
+  DCHECK_LT(event, UPDATE_PASSWORD_EVENT_COUNT);
+  UMA_HISTOGRAM_ENUMERATION("PasswordManager.UpdatePasswordSubmissionEvent",
+                            event, UPDATE_PASSWORD_EVENT_COUNT);
+}
+
+void LogMultiAccountUpdateBubbleUserAction(
+    MultiAccountUpdateBubbleUserAction action) {
+  UMA_HISTOGRAM_ENUMERATION("PasswordManager.MultiAccountPasswordUpdateAction",
+                            action,
+                            MULTI_ACCOUNT_UPDATE_BUBBLE_USER_ACTION_COUNT);
 }
 
 }  // namespace metrics_util

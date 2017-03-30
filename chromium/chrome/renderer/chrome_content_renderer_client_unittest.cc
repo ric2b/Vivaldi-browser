@@ -4,9 +4,12 @@
 
 #include "chrome/renderer/chrome_content_renderer_client.h"
 
+#include <stddef.h>
+
 #include <vector>
 
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/renderer/searchbox/search_bouncer.h"
 #include "content/public/common/webplugininfo.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -68,7 +71,7 @@ const char kChatAppURL3[] = "https://foo.plus.sandbox.google.com/hangouts/foo";
 #if !defined(DISABLE_NACL)
 bool AllowsDevInterfaces(const WebPluginParams& params) {
   for (size_t i = 0; i < params.attributeNames.size(); ++i) {
-    if (params.attributeNames[i] == WebString::fromUTF8("@dev"))
+    if (params.attributeNames[i] == "@dev")
       return true;
   }
   return false;
@@ -443,11 +446,12 @@ TEST_F(ChromeContentRendererClientTest, AllowPepperMediaStreamAPI) {
 
 TEST_F(ChromeContentRendererClientTest, ShouldSuppressErrorPage) {
   ChromeContentRendererClient client;
-  client.search_bouncer_.reset(new SearchBouncer);
-  client.search_bouncer_->OnSetSearchURLs(
+  SearchBouncer::GetInstance()->OnSetSearchURLs(
       std::vector<GURL>(), GURL("http://example.com/n"));
   EXPECT_FALSE(client.ShouldSuppressErrorPage(nullptr,
                                               GURL("http://example.com")));
   EXPECT_TRUE(client.ShouldSuppressErrorPage(nullptr,
                                              GURL("http://example.com/n")));
+  SearchBouncer::GetInstance()->OnSetSearchURLs(
+      std::vector<GURL>(), GURL::EmptyGURL());
 }

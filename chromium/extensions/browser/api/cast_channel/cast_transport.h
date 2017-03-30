@@ -8,6 +8,7 @@
 #include <queue>
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/threading/non_thread_safe.h"
 #include "base/threading/thread_checker.h"
@@ -26,7 +27,7 @@ class Socket;
 }  // namespace net
 
 namespace extensions {
-namespace core_api {
+namespace api {
 namespace cast_channel {
 class CastMessage;
 struct LastErrors;
@@ -99,19 +100,22 @@ class CastTransportImpl : public CastTransport, public base::NonThreadSafe {
  private:
   // Internal write states.
   enum WriteState {
-    WRITE_STATE_NONE,
+    WRITE_STATE_UNKNOWN,
     WRITE_STATE_WRITE,
     WRITE_STATE_WRITE_COMPLETE,
     WRITE_STATE_DO_CALLBACK,
+    WRITE_STATE_HANDLE_ERROR,
     WRITE_STATE_ERROR,
+    WRITE_STATE_IDLE,
   };
 
   // Internal read states.
   enum ReadState {
-    READ_STATE_NONE,
+    READ_STATE_UNKNOWN,
     READ_STATE_READ,
     READ_STATE_READ_COMPLETE,
     READ_STATE_DO_CALLBACK,
+    READ_STATE_HANDLE_ERROR,
     READ_STATE_ERROR,
   };
 
@@ -136,6 +140,8 @@ class CastTransportImpl : public CastTransport, public base::NonThreadSafe {
   static proto::WriteState WriteStateToProto(
       CastTransportImpl::WriteState state);
   static proto::ErrorState ErrorStateToProto(ChannelError state);
+  static bool IsTerminalReadState(ReadState read_state);
+  static bool IsTerminalWriteState(WriteState write_state);
 
   void SetReadState(ReadState read_state);
   void SetWriteState(WriteState write_state);
@@ -153,7 +159,7 @@ class CastTransportImpl : public CastTransport, public base::NonThreadSafe {
   int DoWrite();
   int DoWriteComplete(int result);
   int DoWriteCallback();
-  int DoWriteError(int result);
+  int DoWriteHandleError(int result);
 
   // Main method that performs write flow state transitions.
   void OnReadResult(int result);
@@ -164,7 +170,7 @@ class CastTransportImpl : public CastTransport, public base::NonThreadSafe {
   int DoRead();
   int DoReadComplete(int result);
   int DoReadCallback();
-  int DoReadError(int result);
+  int DoReadHandleError(int result);
 
   // Indicates that the transport object is started and may receive and send
   // messages.
@@ -214,7 +220,7 @@ class CastTransportImpl : public CastTransport, public base::NonThreadSafe {
   DISALLOW_COPY_AND_ASSIGN(CastTransportImpl);
 };
 }  // namespace cast_channel
-}  // namespace core_api
+}  // namespace api
 }  // namespace extensions
 
 #endif  // EXTENSIONS_BROWSER_API_CAST_CHANNEL_CAST_TRANSPORT_H_

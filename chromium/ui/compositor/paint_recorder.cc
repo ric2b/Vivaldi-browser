@@ -24,7 +24,8 @@ PaintRecorder::PaintRecorder(const PaintContext& context,
                                  gfx::RectToSkRect(gfx::Rect(recording_size))))
                   .get(),
               context.device_scale_factor_),
-      cache_(cache) {
+      cache_(cache),
+      bounds_in_layer_(context.ToLayerSpaceBounds(recording_size)) {
 #if DCHECK_IS_ON()
   DCHECK(!context.inside_paint_recorder_);
   context.inside_paint_recorder_ = true;
@@ -40,9 +41,10 @@ PaintRecorder::~PaintRecorder() {
 #if DCHECK_IS_ON()
   context_.inside_paint_recorder_ = false;
 #endif
-
-  auto* item = context_.list_->CreateAndAppendItem<cc::DrawingDisplayItem>();
-  item->SetNew(skia::AdoptRef(context_.recorder_->endRecordingAsPicture()));
+  const auto& item =
+      context_.list_->CreateAndAppendItem<cc::DrawingDisplayItem>(
+          bounds_in_layer_,
+          skia::AdoptRef(context_.recorder_->endRecordingAsPicture()));
   if (cache_)
     cache_->SetCache(item);
 }

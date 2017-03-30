@@ -8,6 +8,8 @@
 #ifndef NET_TEST_URL_REQUEST_URL_REQUEST_SLOW_DOWNLOAD_JOB_H_
 #define NET_TEST_URL_REQUEST_URL_REQUEST_SLOW_DOWNLOAD_JOB_H_
 
+#include <stddef.h>
+
 #include <set>
 #include <string>
 
@@ -37,7 +39,7 @@ class URLRequestSlowDownloadJob : public URLRequestJob {
   void Start() override;
   bool GetMimeType(std::string* mime_type) const override;
   void GetResponseInfo(HttpResponseInfo* info) override;
-  bool ReadRawData(IOBuffer* buf, int buf_size, int* bytes_read) override;
+  int ReadRawData(IOBuffer* buf, int buf_size) override;
 
   // Returns the current number of URLRequestSlowDownloadJobs that have
   // not yet completed.

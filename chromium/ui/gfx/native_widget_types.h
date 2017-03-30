@@ -5,15 +5,15 @@
 #ifndef UI_GFX_NATIVE_WIDGET_TYPES_H_
 #define UI_GFX_NATIVE_WIDGET_TYPES_H_
 
+#include <stdint.h>
+
+#include "base/logging.h"
 #include "build/build_config.h"
+#include "ui/gfx/gfx_export.h"
 
 #if defined(OS_ANDROID)
 #include <jni.h>
 #endif
-
-#include "base/basictypes.h"
-#include "base/logging.h"
-#include "ui/gfx/gfx_export.h"
 
 // This file provides cross platform typedefs for native widget types.
 //   NativeWindow: this is a handle to a native, top-level window
@@ -31,9 +31,6 @@
 //     If you're in the browser, you're probably dealing with NativeViews,
 //     unless you're in the IPC layer, which will be translating between
 //     NativeViewIds from the renderer and NativeViews.
-//
-//   NativeEditView: a handle to a native edit-box. The Mac folks wanted this
-//     specific typedef.
 //
 //   NativeImage: The platform-specific image type used for drawing UI elements
 //     in the browser.
@@ -141,12 +138,10 @@ typedef jobject NativeEvent;
 
 #if defined(OS_WIN)
 typedef HFONT NativeFont;
-typedef HWND NativeEditView;
 typedef HDC NativeDrawingContext;
 typedef IAccessible* NativeViewAccessible;
 #elif defined(OS_IOS)
 typedef UIFont* NativeFont;
-typedef UITextField* NativeEditView;
 typedef CGContext* NativeDrawingContext;
 #ifdef __OBJC__
 typedef id NativeViewAccessible;
@@ -155,7 +150,6 @@ typedef void* NativeViewAccessible;
 #endif  // __OBJC__
 #elif defined(OS_MACOSX)
 typedef NSFont* NativeFont;
-typedef NSTextField* NativeEditView;
 typedef CGContext* NativeDrawingContext;
 #ifdef __OBJC__
 typedef id NativeViewAccessible;
@@ -164,7 +158,6 @@ typedef void* NativeViewAccessible;
 #endif  // __OBJC__
 #else  // Android, Linux, Chrome OS, etc.
 // Linux doesn't have a native font type.
-typedef void* NativeEditView;
 #if defined(USE_CAIRO)
 typedef cairo_t* NativeDrawingContext;
 #else
@@ -210,15 +203,13 @@ typedef intptr_t NativeViewId;
   typedef unsigned long PluginWindowHandle;
   const PluginWindowHandle kNullPluginWindow = 0;
 #elif defined(OS_ANDROID)
-  typedef uint64 PluginWindowHandle;
+  typedef uint32_t PluginWindowHandle;
   const PluginWindowHandle kNullPluginWindow = 0;
 #elif defined(USE_OZONE)
   typedef intptr_t PluginWindowHandle;
   const PluginWindowHandle kNullPluginWindow = 0;
 #else
-  // On Mac we don't have windowed plugins. We use a NULL/0 PluginWindowHandle
-  // in shared code to indicate there is no window present.
-  typedef bool PluginWindowHandle;
+  typedef uint32_t PluginWindowHandle;
   const PluginWindowHandle kNullPluginWindow = 0;
 #endif
 
@@ -230,15 +221,9 @@ enum SurfaceType {
 };
 
 struct GLSurfaceHandle {
-  GLSurfaceHandle()
-      : handle(kNullPluginWindow),
-        transport_type(EMPTY),
-        parent_client_id(0) {
-  }
+  GLSurfaceHandle() : handle(kNullPluginWindow), transport_type(EMPTY) {}
   GLSurfaceHandle(PluginWindowHandle handle_, SurfaceType transport_)
-      : handle(handle_),
-        transport_type(transport_),
-        parent_client_id(0) {
+      : handle(handle_), transport_type(transport_) {
     DCHECK(!is_null() || handle == kNullPluginWindow);
     DCHECK(transport_type != NULL_TRANSPORT ||
            handle == kNullPluginWindow);
@@ -249,7 +234,6 @@ struct GLSurfaceHandle {
   }
   PluginWindowHandle handle;
   SurfaceType transport_type;
-  uint32 parent_client_id;
 };
 
 // AcceleratedWidget provides a surface to compositors to paint pixels.

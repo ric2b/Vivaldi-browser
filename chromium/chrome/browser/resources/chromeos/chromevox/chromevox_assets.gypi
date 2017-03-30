@@ -4,53 +4,49 @@
 
 {
   'variables': {
-    'chromevox_assets_chromevox': [
-      'chromevox/chromevox-128.png',
-      'chromevox/chromevox-16.png',
-      'chromevox/chromevox-19.png',
-      'chromevox/chromevox-48.png',
+    'chromevox_assets_images': [
+      'images/chromevox-128.png',
+      'images/chromevox-16.png',
+      'images/chromevox-19.png',
+      'images/chromevox-48.png',
+      'images/close-19.png',
+      'images/close-hover-19.png',
+      'images/options-19.png',
+      'images/options-hover-19.png',
+      'images/triangle-6.png',
     ],
     'chromevox_assets_chromevox_background_earcons': [
       'chromevox/background/earcons/alert_modal.ogg',
       'chromevox/background/earcons/alert_nonmodal.ogg',
-      'chromevox/background/earcons/bullet.ogg',
-      'chromevox/background/earcons/busy_progress_loop.ogg',
-      'chromevox/background/earcons/busy_working_loop.ogg',
       'chromevox/background/earcons/button.ogg',
       'chromevox/background/earcons/check_off.ogg',
       'chromevox/background/earcons/check_on.ogg',
-      'chromevox/background/earcons/collapsed.ogg',
       'chromevox/background/earcons/editable_text.ogg',
-      'chromevox/background/earcons/ellipsis.ogg',
-      'chromevox/background/earcons/expanded.ogg',
-      'chromevox/background/earcons/font_change.ogg',
       'chromevox/background/earcons/invalid_keypress.ogg',
       'chromevox/background/earcons/link.ogg',
+      'chromevox/background/earcons/list_item.ogg',
       'chromevox/background/earcons/listbox.ogg',
       'chromevox/background/earcons/long_desc.ogg',
-      'chromevox/background/earcons/new_mail.ogg',
+      'chromevox/background/earcons/math.ogg',
       'chromevox/background/earcons/object_close.ogg',
-      'chromevox/background/earcons/object_delete.ogg',
-      'chromevox/background/earcons/object_deselect.ogg',
       'chromevox/background/earcons/object_enter.ogg',
       'chromevox/background/earcons/object_exit.ogg',
       'chromevox/background/earcons/object_open.ogg',
       'chromevox/background/earcons/object_select.ogg',
-      'chromevox/background/earcons/paragraph_break.ogg',
-      'chromevox/background/earcons/search_hit.ogg',
-      'chromevox/background/earcons/search_miss.ogg',
-      'chromevox/background/earcons/section.ogg',
+      'chromevox/background/earcons/page_finish_loading.ogg',
+      'chromevox/background/earcons/page_start_loading.ogg',
+      'chromevox/background/earcons/recover_focus.ogg',
       'chromevox/background/earcons/selection.ogg',
       'chromevox/background/earcons/selection_reverse.ogg',
-      'chromevox/background/earcons/special_content.ogg',
-      'chromevox/background/earcons/task_success.ogg',
-      'chromevox/background/earcons/wrap_edge.ogg',
+      'chromevox/background/earcons/skip.ogg',
       'chromevox/background/earcons/wrap.ogg',
+      'chromevox/background/earcons/wrap_edge.ogg',
     ],
     'chromevox_assets_chromevox_background_keymaps': [
       'chromevox/background/keymaps/classic_keymap.json',
       'chromevox/background/keymaps/experimental.json',
       'chromevox/background/keymaps/flat_keymap.json',
+      'chromevox/background/keymaps/next_keymap.json',
     ],
     'chromevox_assets_chromevox_background_mathmaps_functions': [
       'chromevox/background/mathmaps/functions/algebra.json',
@@ -86,6 +82,14 @@
       'chromevox/background/mathmaps/symbols/math_whitespace.json',
       'chromevox/background/mathmaps/symbols/other_stars.json',
     ],
+    'chromevox_assets_cvox2_background_earcons': [
+      'cvox2/background/earcons/control.wav',
+      'cvox2/background/earcons/selection_reverse.wav',
+      'cvox2/background/earcons/selection.wav',
+      'cvox2/background/earcons/skim.wav',
+      'cvox2/background/earcons/small_room_2.wav',
+      'cvox2/background/earcons/static.wav',
+    ],
   },
   'targets': [
     {
@@ -93,9 +97,9 @@
       'type': 'none',
       'copies': [
         {
-          'destination': '<(chromevox_dest_dir)/chromevox',
+          'destination': '<(chromevox_dest_dir)/images',
           'files': [
-            '<@(chromevox_assets_chromevox)',
+            '<@(chromevox_assets_images)',
           ],
         },
         {
@@ -120,6 +124,12 @@
           'destination': '<(chromevox_dest_dir)/chromevox/background/mathmaps/symbols',
           'files': [
             '<@(chromevox_assets_chromevox_background_mathmaps_symbols)',
+          ],
+        },
+        {
+          'destination': '<(chromevox_dest_dir)/cvox2/background/earcons',
+          'files': [
+            '<@(chromevox_assets_cvox2_background_earcons)',
           ],
         },
       ],

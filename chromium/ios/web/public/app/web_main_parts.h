@@ -5,7 +5,6 @@
 #ifndef IOS_WEB_PUBLIC_APP_WEB_MAIN_PARTS_H_
 #define IOS_WEB_PUBLIC_APP_WEB_MAIN_PARTS_H_
 
-#include "base/basictypes.h"
 
 namespace web {
 
@@ -52,13 +51,12 @@ class WebMainParts {
 
   virtual void PostMainMessageLoopStart() {}
 
-  // Called just before any child threads owned by the web
-  // framework are created.
+  // Called just before any child threads owned by the web framework
+  // are created.
   //
   // The main message loop has been started at this point (but has not
-  // been run), and the toolkit has been initialized. Returns the error code
-  // (or 0 if no error).
-  virtual int PreCreateThreads();
+  // been run).
+  virtual void PreCreateThreads() {}
 
   // This is called just before the main message loop is run.  The
   // various browser threads have all been created at this point

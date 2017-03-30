@@ -4,7 +4,6 @@
 
 #include "content/test/test_render_frame_host_factory.h"
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "content/test/test_render_frame_host.h"
@@ -27,11 +26,12 @@ TestRenderFrameHostFactory::CreateRenderFrameHost(
     RenderWidgetHostDelegate* rwh_delegate,
     FrameTree* frame_tree,
     FrameTreeNode* frame_tree_node,
-    int routing_id,
+    int32_t routing_id,
+    int32_t widget_routing_id,
     int flags) {
   return make_scoped_ptr(new TestRenderFrameHost(
       site_instance, render_view_host, delegate, rwh_delegate, frame_tree,
-      frame_tree_node, routing_id, flags));
+      frame_tree_node, routing_id, widget_routing_id, flags));
 }
 
 }  // namespace content

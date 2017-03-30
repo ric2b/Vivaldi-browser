@@ -6,11 +6,12 @@
 
 #include <algorithm>
 #include <map>
+#include <utility>
 #include <vector>
 
+#include "app/vivaldi_apptools.h"
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/debug/alias.h"
 #include "base/macros.h"
 #include "base/sha1.h"
 #include "base/stl_util.h"
@@ -20,6 +21,7 @@
 #include "components/crx_file/id_util.h"
 #include "extensions/common/extension_api.h"
 #include "extensions/common/features/feature_provider.h"
+#include "extensions/common/features/feature_util.h"
 #include "extensions/common/switches.h"
 
 using crx_file::id_util::HashedIdInHex;
@@ -75,14 +77,8 @@ void ParseEnum(const std::string& string_value,
                T* enum_value,
                const std::map<std::string, T>& mapping) {
   const auto& iter = mapping.find(string_value);
-  if (iter == mapping.end()) {
-    // For http://crbug.com/365192.
-    char minidump[256];
-    base::debug::Alias(&minidump);
-    base::snprintf(minidump, arraysize(minidump),
-        "e::simple_feature.cc:%d:\"%s\"", __LINE__, string_value.c_str());
-    CHECK(false) << string_value;
-  }
+  if (iter == mapping.end())
+    CRASH_WITH_MINIDUMP("Enum value not found: " + string_value);
   *enum_value = iter->second;
 }
 
@@ -188,6 +184,8 @@ std::string GetDisplayName(Feature::Context context) {
       return "hosted app";
     case Feature::WEBUI_CONTEXT:
       return "webui";
+    case Feature::SERVICE_WORKER_CONTEXT:
+      return "service worker";
   }
   NOTREACHED();
   return "";
@@ -299,7 +297,7 @@ bool SimpleFeature::HasDependencies() const {
 }
 
 void SimpleFeature::AddFilter(scoped_ptr<SimpleFeatureFilter> filter) {
-  filters_.push_back(filter.Pass());
+  filters_.push_back(std::move(filter));
 }
 
 std::string SimpleFeature::Parse(const base::DictionaryValue* dictionary) {
@@ -319,14 +317,14 @@ std::string SimpleFeature::Parse(const base::DictionaryValue* dictionary) {
     } else if (key == "whitelist") {
 
       bool parse_whitelist = true;
-      if(!base::CommandLine::ForCurrentProcess()->IsRunningVivaldi()){
+      if(!vivaldi::IsVivaldiRunning()){
         const base::ListValue* list_value = nullptr;
         if (value->GetAsList(&list_value)) {
           size_t list_size = list_value->GetSize();
           if (list_size == 1) {
             std::string str_val;
             CHECK(list_value->GetString(0, &str_val));
-            if (str_val.compare("mpognobbkildjkofajifpdfhcoklimli")==0 ) {
+            if (vivaldi::IsVivaldiApp(str_val)) {
               parse_whitelist = false;
             }
           }
@@ -334,7 +332,7 @@ std::string SimpleFeature::Parse(const base::DictionaryValue* dictionary) {
       }
 
       if(parse_whitelist){
-        ParseVector(value, &whitelist_);
+      ParseVector(value, &whitelist_);
       }
 
     } else if (key == "dependencies") {

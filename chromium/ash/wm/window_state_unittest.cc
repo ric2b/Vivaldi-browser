@@ -4,6 +4,8 @@
 
 #include "ash/wm/window_state.h"
 
+#include <utility>
+
 #include "ash/screen_util.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
@@ -306,11 +308,11 @@ TEST_F(WindowStateTest, StateSwapRestore) {
   scoped_ptr<aura::Window> window(CreateTestWindowInShellWithId(0));
   WindowState* window_state = GetWindowState(window.get());
   EXPECT_FALSE(window_state->IsMaximized());
-  scoped_ptr<WindowState::State> old(window_state->SetStateObject(
-      scoped_ptr<WindowState::State> (new AlwaysMaximizeTestState(
-          window_state->GetStateType()))).Pass());
+  scoped_ptr<WindowState::State> old(
+      window_state->SetStateObject(scoped_ptr<WindowState::State>(
+          new AlwaysMaximizeTestState(window_state->GetStateType()))));
   EXPECT_TRUE(window_state->IsMaximized());
-  window_state->SetStateObject(old.Pass());
+  window_state->SetStateObject(std::move(old));
   EXPECT_FALSE(window_state->IsMaximized());
 }
 
@@ -332,6 +334,35 @@ TEST_F(WindowStateTest, RestoredWindowBoundsShrink) {
   EXPECT_FALSE(window_state->IsMaximized());
   EXPECT_NE(work_area.ToString(), window->bounds().ToString());
   EXPECT_TRUE(work_area.Contains(window->bounds()));
+}
+
+TEST_F(WindowStateTest, DoNotResizeMaximizedWindowInFullscreen) {
+  if (!SupportsHostWindowResize())
+    return;
+
+  scoped_ptr<aura::Window> maximized(CreateTestWindowInShellWithId(0));
+  scoped_ptr<aura::Window> fullscreen(CreateTestWindowInShellWithId(1));
+  WindowState* maximized_state = GetWindowState(maximized.get());
+  maximized_state->Maximize();
+  ASSERT_TRUE(maximized_state->IsMaximized());
+  EXPECT_EQ("0,0 800x553", maximized->GetBoundsInScreen().ToString());
+
+  // Entering fullscreen mode will not update the maximized window's size
+  // under fullscreen.
+  WMEvent fullscreen_event(WM_EVENT_FULLSCREEN);
+  WindowState* fullscreen_state = GetWindowState(fullscreen.get());
+  fullscreen_state->OnWMEvent(&fullscreen_event);
+  ASSERT_TRUE(fullscreen_state->IsFullscreen());
+  ASSERT_TRUE(maximized_state->IsMaximized());
+  EXPECT_EQ("0,0 800x553", maximized->GetBoundsInScreen().ToString());
+
+  // Updating display size will update the maximum window size.
+  UpdateDisplay("900x700");
+  EXPECT_EQ("0,0 900x700", maximized->GetBoundsInScreen().ToString());
+  fullscreen.reset();
+
+  // Exitting fullscreen will update the maximized widnow to the work area.
+  EXPECT_EQ("0,0 900x653", maximized->GetBoundsInScreen().ToString());
 }
 
 // TODO(skuhne): Add more unit test to verify the correctness for the restore

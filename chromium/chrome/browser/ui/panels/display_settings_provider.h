@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_PANELS_DISPLAY_SETTINGS_PROVIDER_H_
 #define CHROME_BROWSER_UI_PANELS_DISPLAY_SETTINGS_PROVIDER_H_
 
+#include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/timer/timer.h"
 #include "ui/gfx/geometry/rect.h"
@@ -149,7 +150,7 @@ class DisplaySettingsProvider {
   bool is_full_screen_;
 
   // Timer used to detect full-screen mode change.
-  base::RepeatingTimer<DisplaySettingsProvider> full_screen_mode_timer_;
+  base::RepeatingTimer full_screen_mode_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(DisplaySettingsProvider);
 };

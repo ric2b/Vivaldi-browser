@@ -4,19 +4,22 @@
 
 #include "chrome/browser/ui/views/extensions/extension_toolbar_icon_surfacing_bubble_views.h"
 
+#include <utility>
+
 #include "chrome/browser/ui/toolbar/toolbar_actions_bar_bubble_delegate.h"
+#include "chrome/grit/locale_settings.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/grid_layout.h"
+#include "ui/views/layout/layout_constants.h"
 
 ExtensionToolbarIconSurfacingBubble::ExtensionToolbarIconSurfacingBubble(
     views::View* anchor_view,
     scoped_ptr<ToolbarActionsBarBubbleDelegate> delegate)
     : views::BubbleDelegateView(anchor_view, views::BubbleBorder::TOP_RIGHT),
-      delegate_(delegate.Pass()),
-      acknowledged_(false) {
-}
+      delegate_(std::move(delegate)),
+      acknowledged_(false) {}
 
 ExtensionToolbarIconSurfacingBubble::~ExtensionToolbarIconSurfacingBubble() {
 }
@@ -28,17 +31,16 @@ void ExtensionToolbarIconSurfacingBubble::Show() {
 
 void ExtensionToolbarIconSurfacingBubble::Init() {
   views::GridLayout* layout = new views::GridLayout(this);
+  layout->SetInsets(views::kPanelVertMargin, views::kPanelHorizMargin,
+                    views::kPanelVertMargin, views::kPanelHorizMargin);
   SetLayoutManager(layout);
-  // Initialize a basic column set of |<padding> <content> <padding>|.
   views::ColumnSet* columns = layout->AddColumnSet(0);
-  columns->AddPaddingColumn(0, 10);
   columns->AddColumn(views::GridLayout::LEADING,
                      views::GridLayout::LEADING,
                      1,
                      views::GridLayout::USE_PREF,
                      0,
                      0);
-  columns->AddPaddingColumn(0, 10);
 
   // Add a header.
   layout->StartRow(0, 0);
@@ -48,8 +50,9 @@ void ExtensionToolbarIconSurfacingBubble::Init() {
           ui::ResourceBundle::MediumFont));
   heading_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   layout->AddView(heading_label);
-  layout->AddPaddingRow(0, 10);
-  int width = heading_label->GetPreferredSize().width();
+  layout->AddPaddingRow(0, views::kLabelToControlVerticalSpacing);
+  int width = views::Widget::GetLocalizedContentsWidth(
+      IDS_EXTENSION_TOOLBAR_REDESIGN_NOTIFICATION_BUBBLE_WIDTH_CHARS);
 
   // Add the content string.
   layout->StartRow(0, 0);
@@ -58,7 +61,7 @@ void ExtensionToolbarIconSurfacingBubble::Init() {
   content_label->SizeToFit(width);
   content_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   layout->AddView(content_label);
-  layout->AddPaddingRow(0, 10);
+  layout->AddPaddingRow(0, views::kLabelToControlVerticalSpacing);
 
   // Add a "got it" button.
   layout->StartRow(0, 0);
@@ -76,7 +79,11 @@ void ExtensionToolbarIconSurfacingBubble::OnWidgetDestroying(
     views::Widget* widget) {
   BubbleDelegateView::OnWidgetDestroying(widget);
   if (!acknowledged_) {
-    delegate_->OnBubbleClosed(ToolbarActionsBarBubbleDelegate::CLOSE_DISMISS);
+    ToolbarActionsBarBubbleDelegate::CloseAction close_action =
+        close_reason() == CloseReason::DEACTIVATION
+            ? ToolbarActionsBarBubbleDelegate::CLOSE_DISMISS_DEACTIVATION
+            : ToolbarActionsBarBubbleDelegate::CLOSE_DISMISS_USER_ACTION;
+    delegate_->OnBubbleClosed(close_action);
     acknowledged_ = true;
   }
 }

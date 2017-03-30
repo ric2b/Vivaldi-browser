@@ -23,7 +23,7 @@ DisplayScheduler::DisplayScheduler(DisplaySchedulerClient* client,
       root_surface_resources_locked_(true),
       inside_begin_frame_deadline_interval_(false),
       needs_draw_(false),
-      entire_display_damaged_(false),
+      expecting_root_surface_damage_because_of_resize_(false),
       all_active_child_surfaces_ready_to_draw_(false),
       pending_swaps_(0),
       max_pending_swaps_(max_pending_swaps),
@@ -33,6 +33,10 @@ DisplayScheduler::DisplayScheduler(DisplaySchedulerClient* client,
   begin_frame_source_->AddObserver(this);
   begin_frame_deadline_closure_ = base::Bind(
       &DisplayScheduler::OnBeginFrameDeadline, weak_ptr_factory_.GetWeakPtr());
+
+  // TODO(tansell): Set this to something useful.
+  begin_frame_source_for_children_ = SyntheticBeginFrameSource::Create(
+      task_runner, BeginFrameArgs::DefaultInterval());
 }
 
 DisplayScheduler::~DisplayScheduler() {
@@ -42,28 +46,34 @@ DisplayScheduler::~DisplayScheduler() {
 // If we try to draw when the root surface resources are locked, the
 // draw will fail.
 void DisplayScheduler::SetRootSurfaceResourcesLocked(bool locked) {
+  TRACE_EVENT1("cc", "DisplayScheduler::SetRootSurfaceResourcesLocked",
+               "locked", locked);
   root_surface_resources_locked_ = locked;
   ScheduleBeginFrameDeadline();
 }
 
 // This is used to force an immediate swap before a resize.
 void DisplayScheduler::ForceImmediateSwapIfPossible() {
+  TRACE_EVENT0("cc", "DisplayScheduler::ForceImmediateSwapIfPossible");
   bool in_begin = inside_begin_frame_deadline_interval_;
   AttemptDrawAndSwap();
   if (in_begin)
     begin_frame_source_->DidFinishFrame(0);
 }
 
+void DisplayScheduler::DisplayResized() {
+  expecting_root_surface_damage_because_of_resize_ = true;
+  expect_damage_from_root_surface_ = true;
+  needs_draw_ = true;
+  ScheduleBeginFrameDeadline();
+}
+
 // Notification that there was a resize or the root surface changed and
 // that we should just draw immediately.
-void DisplayScheduler::EntireDisplayDamaged(SurfaceId root_surface_id) {
-  TRACE_EVENT0("cc", "DisplayScheduler::EntireDisplayDamaged");
-  needs_draw_ = true;
-  entire_display_damaged_ = true;
+void DisplayScheduler::SetNewRootSurface(SurfaceId root_surface_id) {
+  TRACE_EVENT0("cc", "DisplayScheduler::SetNewRootSurface");
   root_surface_id_ = root_surface_id;
-
-  begin_frame_source_->SetNeedsBeginFrames(!output_surface_lost_);
-  ScheduleBeginFrameDeadline();
+  SurfaceDamaged(root_surface_id);
 }
 
 // Indicates that there was damage to one of the surfaces.
@@ -77,6 +87,7 @@ void DisplayScheduler::SurfaceDamaged(SurfaceId surface_id) {
 
   if (surface_id == root_surface_id_) {
     root_surface_damaged_ = true;
+    expecting_root_surface_damage_because_of_resize_ = false;
   } else {
     child_surface_ids_damaged_.insert(surface_id);
 
@@ -113,7 +124,6 @@ void DisplayScheduler::DrawAndSwap() {
   child_surface_ids_damaged_.clear();
 
   needs_draw_ = false;
-  entire_display_damaged_ = false;
   all_active_child_surfaces_ready_to_draw_ =
       child_surface_ids_to_expect_damage_from_.empty();
 
@@ -142,6 +152,13 @@ bool DisplayScheduler::OnBeginFrameDerivedImpl(const BeginFrameArgs& args) {
   return true;
 }
 
+void DisplayScheduler::OnBeginFrameSourcePausedChanged(bool paused) {
+  // BeginFrameSources used with DisplayScheduler do not make use of this
+  // feature.
+  if (paused)
+    NOTIMPLEMENTED();
+}
+
 base::TimeTicks DisplayScheduler::DesiredBeginFrameDeadlineTime() {
   if (output_surface_lost_) {
     TRACE_EVENT_INSTANT0("cc", "Lost output surface", TRACE_EVENT_SCOPE_THREAD);
@@ -150,7 +167,8 @@ base::TimeTicks DisplayScheduler::DesiredBeginFrameDeadlineTime() {
 
   if (pending_swaps_ >= max_pending_swaps_) {
     TRACE_EVENT_INSTANT0("cc", "Swap throttled", TRACE_EVENT_SCOPE_THREAD);
-    return current_begin_frame_args_.deadline;
+    return current_begin_frame_args_.frame_time +
+           current_begin_frame_args_.interval;
   }
 
   if (!needs_draw_) {
@@ -166,13 +184,6 @@ base::TimeTicks DisplayScheduler::DesiredBeginFrameDeadlineTime() {
            current_begin_frame_args_.interval;
   }
 
-  // TODO(mithro): Be smarter about resize deadlines.
-  if (entire_display_damaged_) {
-    TRACE_EVENT_INSTANT0("cc", "Entire display damaged",
-                         TRACE_EVENT_SCOPE_THREAD);
-    return base::TimeTicks();
-  }
-
   bool root_ready_to_draw =
       !expect_damage_from_root_surface_ || root_surface_damaged_;
 
@@ -180,6 +191,14 @@ base::TimeTicks DisplayScheduler::DesiredBeginFrameDeadlineTime() {
     TRACE_EVENT_INSTANT0("cc", "All active surfaces ready",
                          TRACE_EVENT_SCOPE_THREAD);
     return base::TimeTicks();
+  }
+
+  // TODO(mithro): Be smarter about resize deadlines.
+  if (expecting_root_surface_damage_because_of_resize_) {
+    TRACE_EVENT_INSTANT0("cc", "Entire display damaged",
+                         TRACE_EVENT_SCOPE_THREAD);
+    return current_begin_frame_args_.frame_time +
+           current_begin_frame_args_.interval;
   }
 
   // Use an earlier deadline if we are only waiting for the root surface

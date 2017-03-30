@@ -4,6 +4,11 @@
 
 #include "base/trace_event/trace_event_argument.h"
 
+#include <stdint.h>
+
+#include <utility>
+
+#include "base/bits.h"
 #include "base/json/json_writer.h"
 #include "base/trace_event/trace_event_memory_overhead.h"
 #include "base/values.h"
@@ -38,10 +43,10 @@ const bool kStackTypeArray = true;
 
 inline void WriteKeyNameAsRawPtr(Pickle& pickle, const char* ptr) {
   pickle.WriteBytes(&kTypeCStr, 1);
-  pickle.WriteUInt64(static_cast<uint64>(reinterpret_cast<uintptr_t>(ptr)));
+  pickle.WriteUInt64(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ptr)));
 }
 
-inline void WriteKeyNameAsStdString(Pickle& pickle, const std::string& str) {
+inline void WriteKeyNameWithCopy(Pickle& pickle, base::StringPiece str) {
   pickle.WriteBytes(&kTypeString, 1);
   pickle.WriteString(str);
 }
@@ -51,7 +56,7 @@ std::string ReadKeyName(PickleIterator& pickle_iterator) {
   bool res = pickle_iterator.ReadBytes(&type, 1);
   std::string key_name;
   if (res && *type == kTypeCStr) {
-    uint64 ptr_value = 0;
+    uint64_t ptr_value = 0;
     res = pickle_iterator.ReadUInt64(&ptr_value);
     key_name = reinterpret_cast<const char*>(static_cast<uintptr_t>(ptr_value));
   } else if (res && *type == kTypeString) {
@@ -84,11 +89,11 @@ void TracedValue::SetInteger(const char* name, int value) {
   WriteKeyNameAsRawPtr(pickle_, name);
 }
 
-void TracedValue::SetIntegerWithCopiedName(const std::string& name, int value) {
+void TracedValue::SetIntegerWithCopiedName(base::StringPiece name, int value) {
   DCHECK_CURRENT_CONTAINER_IS(kStackTypeDict);
   pickle_.WriteBytes(&kTypeInt, 1);
   pickle_.WriteInt(value);
-  WriteKeyNameAsStdString(pickle_, name);
+  WriteKeyNameWithCopy(pickle_, name);
 }
 
 void TracedValue::SetDouble(const char* name, double value) {
@@ -98,12 +103,12 @@ void TracedValue::SetDouble(const char* name, double value) {
   WriteKeyNameAsRawPtr(pickle_, name);
 }
 
-void TracedValue::SetDoubleWithCopiedName(const std::string& name,
+void TracedValue::SetDoubleWithCopiedName(base::StringPiece name,
                                           double value) {
   DCHECK_CURRENT_CONTAINER_IS(kStackTypeDict);
   pickle_.WriteBytes(&kTypeDouble, 1);
   pickle_.WriteDouble(value);
-  WriteKeyNameAsStdString(pickle_, name);
+  WriteKeyNameWithCopy(pickle_, name);
 }
 
 void TracedValue::SetBoolean(const char* name, bool value) {
@@ -113,27 +118,27 @@ void TracedValue::SetBoolean(const char* name, bool value) {
   WriteKeyNameAsRawPtr(pickle_, name);
 }
 
-void TracedValue::SetBooleanWithCopiedName(const std::string& name,
+void TracedValue::SetBooleanWithCopiedName(base::StringPiece name,
                                            bool value) {
   DCHECK_CURRENT_CONTAINER_IS(kStackTypeDict);
   pickle_.WriteBytes(&kTypeBool, 1);
   pickle_.WriteBool(value);
-  WriteKeyNameAsStdString(pickle_, name);
+  WriteKeyNameWithCopy(pickle_, name);
 }
 
-void TracedValue::SetString(const char* name, const std::string& value) {
+void TracedValue::SetString(const char* name, base::StringPiece value) {
   DCHECK_CURRENT_CONTAINER_IS(kStackTypeDict);
   pickle_.WriteBytes(&kTypeString, 1);
   pickle_.WriteString(value);
   WriteKeyNameAsRawPtr(pickle_, name);
 }
 
-void TracedValue::SetStringWithCopiedName(const std::string& name,
-                                          const std::string& value) {
+void TracedValue::SetStringWithCopiedName(base::StringPiece name,
+                                          base::StringPiece value) {
   DCHECK_CURRENT_CONTAINER_IS(kStackTypeDict);
   pickle_.WriteBytes(&kTypeString, 1);
   pickle_.WriteString(value);
-  WriteKeyNameAsStdString(pickle_, name);
+  WriteKeyNameWithCopy(pickle_, name);
 }
 
 void TracedValue::SetValue(const char* name, const TracedValue& value) {
@@ -144,7 +149,7 @@ void TracedValue::SetValue(const char* name, const TracedValue& value) {
   EndDictionary();
 }
 
-void TracedValue::SetValueWithCopiedName(const std::string& name,
+void TracedValue::SetValueWithCopiedName(base::StringPiece name,
                                          const TracedValue& value) {
   DCHECK_CURRENT_CONTAINER_IS(kStackTypeDict);
   BeginDictionaryWithCopiedName(name);
@@ -160,11 +165,11 @@ void TracedValue::BeginDictionary(const char* name) {
   WriteKeyNameAsRawPtr(pickle_, name);
 }
 
-void TracedValue::BeginDictionaryWithCopiedName(const std::string& name) {
+void TracedValue::BeginDictionaryWithCopiedName(base::StringPiece name) {
   DCHECK_CURRENT_CONTAINER_IS(kStackTypeDict);
   DEBUG_PUSH_CONTAINER(kStackTypeDict);
   pickle_.WriteBytes(&kTypeStartDict, 1);
-  WriteKeyNameAsStdString(pickle_, name);
+  WriteKeyNameWithCopy(pickle_, name);
 }
 
 void TracedValue::BeginArray(const char* name) {
@@ -174,11 +179,11 @@ void TracedValue::BeginArray(const char* name) {
   WriteKeyNameAsRawPtr(pickle_, name);
 }
 
-void TracedValue::BeginArrayWithCopiedName(const std::string& name) {
+void TracedValue::BeginArrayWithCopiedName(base::StringPiece name) {
   DCHECK_CURRENT_CONTAINER_IS(kStackTypeDict);
   DEBUG_PUSH_CONTAINER(kStackTypeArray);
   pickle_.WriteBytes(&kTypeStartArray, 1);
-  WriteKeyNameAsStdString(pickle_, name);
+  WriteKeyNameWithCopy(pickle_, name);
 }
 
 void TracedValue::EndDictionary() {
@@ -205,7 +210,7 @@ void TracedValue::AppendBoolean(bool value) {
   pickle_.WriteBool(value);
 }
 
-void TracedValue::AppendString(const std::string& value) {
+void TracedValue::AppendString(base::StringPiece value) {
   DCHECK_CURRENT_CONTAINER_IS(kStackTypeArray);
   pickle_.WriteBytes(&kTypeString, 1);
   pickle_.WriteString(value);
@@ -233,7 +238,7 @@ void TracedValue::SetValue(const char* name, scoped_ptr<base::Value> value) {
   SetBaseValueWithCopiedName(name, *value);
 }
 
-void TracedValue::SetBaseValueWithCopiedName(const std::string& name,
+void TracedValue::SetBaseValueWithCopiedName(base::StringPiece name,
                                              const base::Value& value) {
   DCHECK_CURRENT_CONTAINER_IS(kStackTypeDict);
   switch (value.GetType()) {
@@ -356,7 +361,8 @@ scoped_ptr<base::Value> TracedValue::ToBaseValue() const {
       case kTypeStartDict: {
         auto new_dict = new DictionaryValue();
         if (cur_dict) {
-          cur_dict->Set(ReadKeyName(it), make_scoped_ptr(new_dict));
+          cur_dict->SetWithoutPathExpansion(ReadKeyName(it),
+                                            make_scoped_ptr(new_dict));
           stack.push_back(cur_dict);
           cur_dict = new_dict;
         } else {
@@ -380,7 +386,8 @@ scoped_ptr<base::Value> TracedValue::ToBaseValue() const {
       case kTypeStartArray: {
         auto new_list = new ListValue();
         if (cur_dict) {
-          cur_dict->Set(ReadKeyName(it), make_scoped_ptr(new_list));
+          cur_dict->SetWithoutPathExpansion(ReadKeyName(it),
+                                            make_scoped_ptr(new_list));
           stack.push_back(cur_dict);
           cur_dict = nullptr;
           cur_list = new_list;
@@ -395,7 +402,7 @@ scoped_ptr<base::Value> TracedValue::ToBaseValue() const {
         bool value;
         CHECK(it.ReadBool(&value));
         if (cur_dict) {
-          cur_dict->SetBoolean(ReadKeyName(it), value);
+          cur_dict->SetBooleanWithoutPathExpansion(ReadKeyName(it), value);
         } else {
           cur_list->AppendBoolean(value);
         }
@@ -405,7 +412,7 @@ scoped_ptr<base::Value> TracedValue::ToBaseValue() const {
         int value;
         CHECK(it.ReadInt(&value));
         if (cur_dict) {
-          cur_dict->SetInteger(ReadKeyName(it), value);
+          cur_dict->SetIntegerWithoutPathExpansion(ReadKeyName(it), value);
         } else {
           cur_list->AppendInteger(value);
         }
@@ -415,7 +422,7 @@ scoped_ptr<base::Value> TracedValue::ToBaseValue() const {
         double value;
         CHECK(it.ReadDouble(&value));
         if (cur_dict) {
-          cur_dict->SetDouble(ReadKeyName(it), value);
+          cur_dict->SetDoubleWithoutPathExpansion(ReadKeyName(it), value);
         } else {
           cur_list->AppendDouble(value);
         }
@@ -425,7 +432,7 @@ scoped_ptr<base::Value> TracedValue::ToBaseValue() const {
         std::string value;
         CHECK(it.ReadString(&value));
         if (cur_dict) {
-          cur_dict->SetString(ReadKeyName(it), value);
+          cur_dict->SetStringWithoutPathExpansion(ReadKeyName(it), value);
         } else {
           cur_list->AppendString(value);
         }
@@ -436,7 +443,7 @@ scoped_ptr<base::Value> TracedValue::ToBaseValue() const {
     }
   }
   DCHECK(stack.empty());
-  return root.Pass();
+  return std::move(root);
 }
 
 void TracedValue::AppendAsTraceFormat(std::string* out) const {
@@ -453,9 +460,14 @@ void TracedValue::AppendAsTraceFormat(std::string* out) const {
 
 void TracedValue::EstimateTraceMemoryOverhead(
     TraceEventMemoryOverhead* overhead) {
+  const size_t kPickleHeapAlign = 4096;  // Must be == Pickle::kPickleHeapAlign.
   overhead->Add("TracedValue",
-                pickle_.GetTotalAllocatedSize() /* allocated size */,
-                pickle_.size() /* resident size */);
+
+                /* allocated size */
+                bits::Align(pickle_.GetTotalAllocatedSize(), kPickleHeapAlign),
+
+                /* resident size */
+                bits::Align(pickle_.size(), kPickleHeapAlign));
 }
 
 }  // namespace trace_event

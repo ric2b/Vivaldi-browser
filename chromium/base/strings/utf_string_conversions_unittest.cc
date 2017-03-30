@@ -2,11 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace base {
@@ -139,13 +142,11 @@ TEST(UTFStringConversionsTest, ConvertUTF16ToUTF8) {
     {L"\x597d\xd800", "\xe5\xa5\xbd\xef\xbf\xbd", false},
   };
 
-  for (int i = 0; i < arraysize(convert_cases); i++) {
+  for (const auto& test : convert_cases) {
     std::string converted;
-    EXPECT_EQ(convert_cases[i].success,
-              WideToUTF8(convert_cases[i].utf16,
-                         wcslen(convert_cases[i].utf16),
-                         &converted));
-    std::string expected(convert_cases[i].utf8);
+    EXPECT_EQ(test.success,
+              WideToUTF8(test.utf16, wcslen(test.utf16), &converted));
+    std::string expected(test.utf8);
     EXPECT_EQ(expected, converted);
   }
 }
@@ -172,13 +173,11 @@ TEST(UTFStringConversionsTest, ConvertUTF32ToUTF8) {
     {L"\xdc01Hello", "\xef\xbf\xbdHello", false},
   };
 
-  for (size_t i = 0; i < arraysize(convert_cases); i++) {
+  for (const auto& test : convert_cases) {
     std::string converted;
-    EXPECT_EQ(convert_cases[i].success,
-              WideToUTF8(convert_cases[i].utf32,
-                         wcslen(convert_cases[i].utf32),
-                         &converted));
-    std::string expected(convert_cases[i].utf8);
+    EXPECT_EQ(test.success,
+              WideToUTF8(test.utf32, wcslen(test.utf32), &converted));
+    std::string expected(test.utf8);
     EXPECT_EQ(expected, converted);
   }
 }

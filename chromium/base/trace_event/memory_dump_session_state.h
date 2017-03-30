@@ -5,10 +5,10 @@
 #ifndef BASE_TRACE_EVENT_MEMORY_DUMP_SESSION_STATE_H_
 #define BASE_TRACE_EVENT_MEMORY_DUMP_SESSION_STATE_H_
 
-#include <string>
-
 #include "base/base_export.h"
 #include "base/memory/ref_counted.h"
+#include "base/trace_event/heap_profiler_stack_frame_deduplicator.h"
+#include "base/trace_event/heap_profiler_type_name_deduplicator.h"
 
 namespace base {
 namespace trace_event {
@@ -18,11 +18,33 @@ namespace trace_event {
 class BASE_EXPORT MemoryDumpSessionState
     : public RefCountedThreadSafe<MemoryDumpSessionState> {
  public:
-  MemoryDumpSessionState();
+  MemoryDumpSessionState(
+      const scoped_refptr<StackFrameDeduplicator>& stack_frame_deduplicator,
+      const scoped_refptr<TypeNameDeduplicator>& type_name_deduplicator);
+
+  // Returns the stack frame deduplicator that should be used by memory dump
+  // providers when doing a heap dump.
+  StackFrameDeduplicator* stack_frame_deduplicator() {
+    return stack_frame_deduplicator_.get();
+  }
+
+  // Returns the type name deduplicator that should be used by memory dump
+  // providers when doing a heap dump.
+  TypeNameDeduplicator* type_name_deduplicator() {
+    return type_name_deduplicator_.get();
+  }
 
  private:
   friend class RefCountedThreadSafe<MemoryDumpSessionState>;
   ~MemoryDumpSessionState();
+
+  // Deduplicates backtraces in heap dumps so they can be written once when the
+  // trace is finalized.
+  scoped_refptr<StackFrameDeduplicator> stack_frame_deduplicator_;
+
+  // Deduplicates type names in heap dumps so they can be written once when the
+  // trace is finalized.
+  scoped_refptr<TypeNameDeduplicator> type_name_deduplicator_;
 };
 
 }  // namespace trace_event

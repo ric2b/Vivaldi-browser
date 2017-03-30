@@ -4,12 +4,17 @@
 
 #include "base/i18n/rtl.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/icu_test_util.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
 #include "third_party/icu/source/i18n/unicode/usearch.h"
@@ -305,6 +310,7 @@ TEST_F(RTLTest, WrapString) {
 
   const bool was_rtl = IsRTL();
 
+  test::ScopedRestoreICUDefaultLocale restore_locale;
   for (size_t i = 0; i < 2; ++i) {
     // Toggle the application default text direction (to try each direction).
     SetRTL(!IsRTL());
@@ -352,6 +358,7 @@ TEST_F(RTLTest, GetDisplayStringInLTRDirectionality) {
 
   const bool was_rtl = IsRTL();
 
+  test::ScopedRestoreICUDefaultLocale restore_locale;
   for (size_t i = 0; i < 2; ++i) {
     // Toggle the application default text direction (to try each direction).
     SetRTL(!IsRTL());
@@ -399,6 +406,28 @@ TEST_F(RTLTest, GetTextDirection) {
   EXPECT_EQ(LEFT_TO_RIGHT, GetTextDirectionForLocale("ja"));
 }
 
+TEST_F(RTLTest, GetTextDirectionForLocaleInStartUp) {
+  EXPECT_EQ(RIGHT_TO_LEFT, GetTextDirectionForLocaleInStartUp("ar"));
+  EXPECT_EQ(RIGHT_TO_LEFT, GetTextDirectionForLocaleInStartUp("ar_EG"));
+  EXPECT_EQ(RIGHT_TO_LEFT, GetTextDirectionForLocaleInStartUp("he"));
+  EXPECT_EQ(RIGHT_TO_LEFT, GetTextDirectionForLocaleInStartUp("he_IL"));
+  // iw is an obsolete code for Hebrew.
+  EXPECT_EQ(RIGHT_TO_LEFT, GetTextDirectionForLocaleInStartUp("iw"));
+  // Although we're not yet localized to Farsi and Urdu, we
+  // do have the text layout direction information for them.
+  EXPECT_EQ(RIGHT_TO_LEFT, GetTextDirectionForLocaleInStartUp("fa"));
+  EXPECT_EQ(RIGHT_TO_LEFT, GetTextDirectionForLocaleInStartUp("ur"));
+  EXPECT_EQ(LEFT_TO_RIGHT, GetTextDirectionForLocaleInStartUp("en"));
+  // Chinese in China with '-'.
+  EXPECT_EQ(LEFT_TO_RIGHT, GetTextDirectionForLocaleInStartUp("zh-CN"));
+  // Filipino : 3-letter code
+  EXPECT_EQ(LEFT_TO_RIGHT, GetTextDirectionForLocaleInStartUp("fil"));
+  // Russian
+  EXPECT_EQ(LEFT_TO_RIGHT, GetTextDirectionForLocaleInStartUp("ru"));
+  // Japanese that uses multiple scripts
+  EXPECT_EQ(LEFT_TO_RIGHT, GetTextDirectionForLocaleInStartUp("ja"));
+}
+
 TEST_F(RTLTest, UnadjustStringForLocaleDirection) {
   // These test strings are borrowed from WrapPathWithLTRFormatting
   const wchar_t* cases[] = {
@@ -416,6 +445,7 @@ TEST_F(RTLTest, UnadjustStringForLocaleDirection) {
 
   const bool was_rtl = IsRTL();
 
+  test::ScopedRestoreICUDefaultLocale restore_locale;
   for (size_t i = 0; i < 2; ++i) {
     // Toggle the application default text direction (to try each direction).
     SetRTL(!IsRTL());

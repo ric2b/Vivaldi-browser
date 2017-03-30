@@ -2,7 +2,11 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("mojo.gni")
+import("//build/toolchain/toolchain.gni")
+
+if (is_android) {
+  import("//build/config/android/rules.gni")
+}
 
 # Generate a binary Mojo application in a self-named directory.
 # Application resources are copied to a "resources" directory alongside the app.
@@ -35,269 +39,126 @@ template("mojo_native_application") {
     mojo_deps += [ ":$copy_step_name" ]
   }
 
-  if (!is_nacl) {
-    output = base_target_name + ".mojo"
-    library_target_name = base_target_name + "_library"
+  output = base_target_name + ".mojo"
+  library_target_name = base_target_name + "_library"
+  library_name = "${shlib_prefix}${library_target_name}${shlib_extension}"
 
-    if (is_linux || is_android) {
-      library_name = "lib${library_target_name}.so"
-    } else if (is_win) {
-      library_name = "${library_target_name}.dll"
-    } else if (is_mac) {
-      library_name = "lib${library_target_name}.dylib"
-    } else {
-      assert(false, "Platform not supported.")
+  shared_library(library_target_name) {
+    if (defined(invoker.cflags)) {
+      cflags = invoker.cflags
+    }
+    if (defined(invoker.cflags_c)) {
+      cflags_c = invoker.cflags_c
+    }
+    if (defined(invoker.cflags_cc)) {
+      cflags_cc = invoker.cflags_cc
+    }
+    if (defined(invoker.cflags_objc)) {
+      cflags_objc = invoker.cflags_objc
+    }
+    if (defined(invoker.cflags_objcc)) {
+      cflags_objcc = invoker.cflags_objcc
+    }
+    if (defined(invoker.defines)) {
+      defines = invoker.defines
+    }
+    if (defined(invoker.include_dirs)) {
+      include_dirs = invoker.include_dirs
+    }
+    if (defined(invoker.ldflags)) {
+      ldflags = invoker.ldflags
+    }
+    if (defined(invoker.lib_dirs)) {
+      lib_dirs = invoker.lib_dirs
+    }
+    if (defined(invoker.libs)) {
+      libs = invoker.libs
     }
 
-    if (is_android) {
-      # On android, use the stripped version of the library, because
-      # applications are always fetched over the network.
-      library_dir = "${root_out_dir}/lib.stripped"
-    } else {
-      library_dir = root_out_dir
+    data_deps = []
+    if (!defined(invoker.avoid_runner_cycle) || !invoker.avoid_runner_cycle) {
+      # Give the user an out; as some mojo services are depended on by the
+      # runner.
+      data_deps += [ "//mojo/runner:mojo_runner" ]
+    }
+    if (defined(invoker.data_deps)) {
+      data_deps += invoker.data_deps
     }
 
-    shared_library(library_target_name) {
-      if (defined(invoker.cflags)) {
-        cflags = invoker.cflags
-      }
-      if (defined(invoker.cflags_c)) {
-        cflags_c = invoker.cflags_c
-      }
-      if (defined(invoker.cflags_cc)) {
-        cflags_cc = invoker.cflags_cc
-      }
-      if (defined(invoker.cflags_objc)) {
-        cflags_objc = invoker.cflags_objc
-      }
-      if (defined(invoker.cflags_objcc)) {
-        cflags_objcc = invoker.cflags_objcc
-      }
-      if (defined(invoker.defines)) {
-        defines = invoker.defines
-      }
-      if (defined(invoker.include_dirs)) {
-        include_dirs = invoker.include_dirs
-      }
-      if (defined(invoker.ldflags)) {
-        ldflags = invoker.ldflags
-      }
-      if (defined(invoker.lib_dirs)) {
-        lib_dirs = invoker.lib_dirs
-      }
-      if (defined(invoker.libs)) {
-        libs = invoker.libs
-      }
+    deps = [
+      "//mojo/platform_handle:for_shared_library",
+      "//mojo/public/c/system:for_shared_library",
+      "//mojo/public/gles2:for_shared_library",
+    ]
 
-      data_deps = []
-      if (defined(invoker.data_deps)) {
-        data_deps = invoker.data_deps
-      }
-
-      # Copy any necessary prebuilt artifacts.
-      if (mojo_use_prebuilt_mojo_shell) {
-        data_deps +=
-            [ rebase_path("mojo/public/tools:copy_mojo_shell", ".", mojo_root) ]
-      }
-      if (mojo_use_prebuilt_network_service) {
-        data_deps += [ rebase_path("mojo/public/tools:copy_network_service",
-                                   ".",
-                                   mojo_root) ]
-      }
-
-      deps = rebase_path([
-                           "mojo/public/c/system",
-                           "mojo/public/platform/native:system",
-                         ],
-                         ".",
-                         mojo_root)
-      deps += mojo_deps
-      if (defined(invoker.forward_dependent_configs_from)) {
-        forward_dependent_configs_from = invoker.forward_dependent_configs_from
-      }
-      if (defined(invoker.public_deps)) {
-        public_deps = invoker.public_deps
-      }
-      if (defined(invoker.all_dependent_configs)) {
-        all_dependent_configs = invoker.all_dependent_configs
-      }
-      if (defined(invoker.public_configs)) {
-        public_configs = invoker.public_configs
-      }
-      if (defined(invoker.check_includes)) {
-        check_includes = invoker.check_includes
-      }
-      if (defined(invoker.configs)) {
-        configs += invoker.configs
-      }
-      if (defined(invoker.data)) {
-        data = invoker.data
-      }
-      if (defined(invoker.inputs)) {
-        inputs = invoker.inputs
-      }
-      if (defined(invoker.public)) {
-        public = invoker.public
-      }
-      if (defined(invoker.sources)) {
-        sources = invoker.sources
-      }
-      if (defined(invoker.testonly)) {
-        testonly = invoker.testonly
-      }
-
-      visibility = [ ":${final_target_name}" ]
+    deps += mojo_deps
+    if (defined(invoker.public_deps)) {
+      public_deps = invoker.public_deps
     }
+    if (defined(invoker.all_dependent_configs)) {
+      all_dependent_configs = invoker.all_dependent_configs
+    }
+    if (defined(invoker.public_configs)) {
+      public_configs = invoker.public_configs
+    }
+    if (defined(invoker.check_includes)) {
+      check_includes = invoker.check_includes
+    }
+    if (defined(invoker.configs)) {
+      configs += invoker.configs
+    }
+    if (defined(invoker.data)) {
+      data = invoker.data
+    }
+    if (defined(invoker.inputs)) {
+      inputs = invoker.inputs
+    }
+    if (defined(invoker.public)) {
+      public = invoker.public
+    }
+    if (defined(invoker.sources)) {
+      sources = invoker.sources
+    }
+    if (defined(invoker.testonly)) {
+      testonly = invoker.testonly
+    }
+  }
 
-    copy(final_target_name) {
-      if (defined(invoker.testonly)) {
-        testonly = invoker.testonly
-      }
-      if (defined(invoker.visibility)) {
-        visibility = invoker.visibility
-      }
+  copy(final_target_name) {
+    forward_variables_from(invoker,
+                            [
+                              "testonly",
+                              "visibility",
+                            ])
+    deps = [
+      ":${library_target_name}",
+    ]
+
+    sources = [
+      "${root_shlib_dir}/${library_name}",
+    ]
+    outputs = [
+      "${root_out_dir}/${base_target_name}/${output}",
+    ]
+  }
+
+  if (is_android) {
+    android_assets("${final_target_name}_assets") {
+      forward_variables_from(invoker, [ "testonly" ])
       deps = [
         ":${library_target_name}",
       ]
-
-      sources = [
-        "${library_dir}/${library_name}",
-      ]
-      outputs = [
-        "${root_out_dir}/${base_target_name}/${output}",
-      ]
-    }
-  } else {
-    nexe_target_name = base_target_name + "_nexe"
-    nexe_name = base_target_name + ".nexe"
-
-    output = "${base_target_name}_${target_cpu}.nexe.mojo"
-
-    executable(nexe_target_name) {
-      output_name = base_target_name
-
-      if (defined(invoker.cflags)) {
-        cflags = invoker.cflags
+      if (defined(invoker.deps)) {
+        deps += invoker.deps
       }
-      if (defined(invoker.cflags_c)) {
-        cflags_c = invoker.cflags_c
+      renaming_sources = [ "${root_shlib_dir}/${library_name}" ]
+      renaming_destinations = [ "${base_target_name}/${output}" ]
+      if (defined(invoker.resources)) {
+        renaming_sources += invoker.resources
+        renaming_destinations += process_file_template(
+                invoker.resources,
+                [ "$base_target_name/resources/{{source_file_part}}" ])
       }
-      if (defined(invoker.cflags_cc)) {
-        cflags_cc = invoker.cflags_cc
-      }
-      if (defined(invoker.cflags_objc)) {
-        cflags_objc = invoker.cflags_objc
-      }
-      if (defined(invoker.cflags_objcc)) {
-        cflags_objcc = invoker.cflags_objcc
-      }
-      if (defined(invoker.defines)) {
-        defines = invoker.defines
-      }
-      if (defined(invoker.include_dirs)) {
-        include_dirs = invoker.include_dirs
-      }
-      if (defined(invoker.ldflags)) {
-        ldflags = invoker.ldflags
-      }
-      if (defined(invoker.lib_dirs)) {
-        lib_dirs = invoker.lib_dirs
-      }
-      if (defined(invoker.libs)) {
-        libs = invoker.libs
-      }
-
-      data_deps = []
-      if (defined(invoker.data_deps)) {
-        data_deps = invoker.data_deps
-      }
-
-      # Copy any necessary prebuilt artifacts.
-      if (mojo_use_prebuilt_mojo_shell) {
-        data_deps +=
-            [ rebase_path("mojo/public/tools:copy_mojo_shell", ".", mojo_root) ]
-      }
-      if (mojo_use_prebuilt_network_service) {
-        data_deps += [ rebase_path("mojo/public/tools:copy_network_service",
-                                   ".",
-                                   mojo_root) ]
-      }
-
-      deps = rebase_path([
-                           "mojo/public/c/system",
-                           "mojo/public/platform/nacl:system",
-                         ],
-                         ".",
-                         mojo_root)
-      deps += mojo_deps
-      if (defined(invoker.forward_dependent_configs_from)) {
-        forward_dependent_configs_from = invoker.forward_dependent_configs_from
-      }
-      if (defined(invoker.public_deps)) {
-        public_deps = invoker.public_deps
-      }
-      if (defined(invoker.all_dependent_configs)) {
-        all_dependent_configs = invoker.all_dependent_configs
-      }
-      if (defined(invoker.public_configs)) {
-        public_configs = invoker.public_configs
-      }
-      if (defined(invoker.check_includes)) {
-        check_includes = invoker.check_includes
-      }
-      if (defined(invoker.configs)) {
-        configs += invoker.configs
-      }
-      if (defined(invoker.data)) {
-        data = invoker.data
-      }
-      if (defined(invoker.inputs)) {
-        inputs = invoker.inputs
-      }
-      if (defined(invoker.public)) {
-        public = invoker.public
-      }
-      if (defined(invoker.sources)) {
-        sources = invoker.sources
-      }
-      if (defined(invoker.testonly)) {
-        testonly = invoker.testonly
-      }
-
-      visibility = [ ":${final_target_name}" ]
-    }
-
-    action(target_name) {
-      if (defined(invoker.testonly)) {
-        testonly = invoker.testonly
-      }
-      if (defined(invoker.visibility)) {
-        visibility = invoker.visibility
-      }
-
-      script = rebase_path("mojo/public/tools/prepend.py", ".", mojo_root)
-
-      input_path = "${root_out_dir}/${nexe_name}"
-      inputs = [
-        input_path,
-      ]
-
-      output_path = "${root_build_dir}/${base_target_name}/${output}"
-      outputs = [
-        output_path,
-      ]
-
-      deps = [
-        ":${nexe_target_name}",
-      ]
-
-      rebase_input = rebase_path(input_path, root_build_dir)
-      rebase_output = rebase_path(output_path, root_build_dir)
-      args = [
-        "--input=$rebase_input",
-        "--output=$rebase_output",
-        "--line=#!mojo mojo:nacl_content_handler",
-      ]
     }
   }
 }
@@ -316,6 +177,29 @@ if (is_android) {
   template("mojo_android_application") {
     assert(defined(invoker.input_so))
     assert(defined(invoker.input_dex_jar))
+
+    base_target_name = target_name
+    if (defined(invoker.output_name)) {
+      base_target_name = invoker.output_name
+    }
+
+    mojo_deps = []
+    if (defined(invoker.resources)) {
+      copy_step_name = "${base_target_name}__copy_resources"
+      copy(copy_step_name) {
+        sources = invoker.resources
+        outputs = [
+          "${root_out_dir}/${base_target_name}/resources/{{source_file_part}}",
+        ]
+        if (defined(invoker.testonly)) {
+          testonly = invoker.testonly
+        }
+        if (defined(invoker.deps)) {
+          deps = invoker.deps
+        }
+      }
+      mojo_deps += [ ":$copy_step_name" ]
+    }
 
     zip_action_name = "${target_name}_zip"
     zip_action_output = "$target_gen_dir/${target_name}.zip"
@@ -352,35 +236,49 @@ if (is_android) {
       }
     }
 
-    action(target_name) {
-      script = rebase_path("mojo/public/tools/prepend.py", ".", mojo_root)
+    _mojo_output =
+        "${root_out_dir}/${base_target_name}/${base_target_name}.mojo"
 
-      base_target_name = target_name
-      if (defined(invoker.output_name)) {
-        base_target_name = invoker.output_name
-      }
+    action(target_name) {
+      script = "//mojo/public/tools/prepend.py"
 
       input = zip_action_output
       inputs = [
         input,
       ]
 
-      output = "${root_out_dir}/${base_target_name}/${base_target_name}.mojo"
       outputs = [
-        output,
+        _mojo_output,
       ]
 
       rebase_input = rebase_path(input, root_build_dir)
-      rebase_output = rebase_path(output, root_build_dir)
+      rebase_output = rebase_path(_mojo_output, root_build_dir)
       args = [
         "--input=$rebase_input",
         "--output=$rebase_output",
         "--line=#!mojo mojo:android_handler",
       ]
 
+      deps = mojo_deps
+
       public_deps = [
         ":$zip_action_name",
       ]
+    }
+
+    android_assets("${target_name}_assets") {
+      forward_variables_from(invoker, [ "testonly" ])
+      deps = [
+        ":$prepend_action_name",
+      ]
+      renaming_sources = [ _mojo_output ]
+      renaming_destinations = [ "${base_target_name}/${base_target_name}.mojo" ]
+      if (defined(invoker.resources)) {
+        renaming_sources += invoker.resources
+        renaming_destinations += process_file_template(
+                invoker.resources,
+                [ "$base_target_name/resources/{{source_file_part}}" ])
+      }
     }
   }
 }

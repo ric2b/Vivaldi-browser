@@ -13,8 +13,7 @@ namespace cc {
 CopyOutputResult::CopyOutputResult() {}
 
 CopyOutputResult::CopyOutputResult(scoped_ptr<SkBitmap> bitmap)
-    : size_(bitmap->width(), bitmap->height()),
-      bitmap_(bitmap.Pass()) {
+    : size_(bitmap->width(), bitmap->height()), bitmap_(std::move(bitmap)) {
   DCHECK(bitmap_);
 }
 
@@ -24,24 +23,24 @@ CopyOutputResult::CopyOutputResult(
     scoped_ptr<SingleReleaseCallback> release_callback)
     : size_(size),
       texture_mailbox_(texture_mailbox),
-      release_callback_(release_callback.Pass()) {
+      release_callback_(std::move(release_callback)) {
   DCHECK(texture_mailbox_.IsTexture());
 }
 
 CopyOutputResult::~CopyOutputResult() {
   if (release_callback_)
-    release_callback_->Run(0, false);
+    release_callback_->Run(gpu::SyncToken(), false);
 }
 
 scoped_ptr<SkBitmap> CopyOutputResult::TakeBitmap() {
-  return bitmap_.Pass();
+  return std::move(bitmap_);
 }
 
 void CopyOutputResult::TakeTexture(
     TextureMailbox* texture_mailbox,
     scoped_ptr<SingleReleaseCallback>* release_callback) {
   *texture_mailbox = texture_mailbox_;
-  *release_callback = release_callback_.Pass();
+  *release_callback = std::move(release_callback_);
 
   texture_mailbox_ = TextureMailbox();
 }

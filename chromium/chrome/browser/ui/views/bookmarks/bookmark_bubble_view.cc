@@ -4,20 +4,27 @@
 
 #include "chrome/browser/ui/views/bookmarks/bookmark_bubble_view.h"
 
+#include <utility>
+
+#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/bookmarks/bookmark_bubble_observer.h"
 #include "chrome/browser/ui/bookmarks/bookmark_editor.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/sync/sync_promo_ui.h"
-#include "chrome/browser/ui/views/bookmarks/bookmark_bubble_view_observer.h"
-#include "chrome/browser/ui/views/bookmarks/bookmark_sync_promo_view.h"
+#include "chrome/browser/ui/views/sync/bubble_sync_promo_view.h"
+#include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "content/public/browser/user_metrics.h"
+#include "grit/components_strings.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -62,28 +69,35 @@ class UnsizedCombobox : public views::Combobox {
 BookmarkBubbleView* BookmarkBubbleView::bookmark_bubble_ = NULL;
 
 // static
-void BookmarkBubbleView::ShowBubble(views::View* anchor_view,
-                                    BookmarkBubbleViewObserver* observer,
-                                    scoped_ptr<BookmarkBubbleDelegate> delegate,
-                                    Profile* profile,
-                                    const GURL& url,
-                                    bool newly_bookmarked) {
+void BookmarkBubbleView::ShowBubble(
+    views::View* anchor_view,
+    const gfx::Rect& anchor_rect,
+    gfx::NativeView parent_window,
+    bookmarks::BookmarkBubbleObserver* observer,
+    scoped_ptr<BubbleSyncPromoDelegate> delegate,
+    Profile* profile,
+    const GURL& url,
+    bool already_bookmarked) {
   if (bookmark_bubble_)
     return;
 
-  bookmark_bubble_ = new BookmarkBubbleView(anchor_view,
-                                            observer,
-                                            delegate.Pass(),
-                                            profile,
-                                            url,
-                                            newly_bookmarked);
+  bookmark_bubble_ =
+      new BookmarkBubbleView(anchor_view, observer, std::move(delegate),
+                             profile, url, !already_bookmarked);
+  if (!anchor_view) {
+    bookmark_bubble_->SetAnchorRect(anchor_rect);
+    bookmark_bubble_->set_parent_window(parent_window);
+  }
   views::BubbleDelegateView::CreateBubble(bookmark_bubble_)->Show();
   // Select the entire title textfield contents when the bubble is first shown.
   bookmark_bubble_->title_tf_->SelectAll(true);
   bookmark_bubble_->SetArrowPaintType(views::BubbleBorder::PAINT_NONE);
 
-  if (bookmark_bubble_->observer_)
-    bookmark_bubble_->observer_->OnBookmarkBubbleShown(url);
+  if (bookmark_bubble_->observer_) {
+    BookmarkModel* model = BookmarkModelFactory::GetForProfile(profile);
+    const BookmarkNode* node = model->GetMostRecentlyAddedUserNodeForURL(url);
+    bookmark_bubble_->observer_->OnBookmarkBubbleShown(node);
+  }
 }
 
 void BookmarkBubbleView::Hide() {
@@ -186,7 +200,7 @@ void BookmarkBubbleView::Init() {
   // The column layout used for middle and bottom rows.
   cs = layout->AddColumnSet(CONTENT_COLUMN_SET_ID);
   cs->AddPaddingColumn(0, views::kButtonHEdgeMarginNew);
-  cs->AddColumn(GridLayout::LEADING, GridLayout::CENTER, 0,
+  cs->AddColumn(views::kControlLabelGridAlignment, GridLayout::CENTER, 0,
                 GridLayout::USE_PREF, 0, 0);
   cs->AddPaddingColumn(0, views::kUnrelatedControlHorizontalSpacing);
 
@@ -237,16 +251,22 @@ void BookmarkBubbleView::Init() {
   if (SyncPromoUI::ShouldShowSyncPromo(profile_)) {
     // The column layout used for the sync promo.
     cs = layout->AddColumnSet(SYNC_PROMO_COLUMN_SET_ID);
+    // Use FIXED as we don't want the width of the promo to impact the overall
+    // width.
     cs->AddColumn(GridLayout::FILL,
                   GridLayout::FILL,
                   1,
-                  GridLayout::USE_PREF,
+                  GridLayout::FIXED,
                   0,
                   0);
     layout->StartRow(0, SYNC_PROMO_COLUMN_SET_ID);
 
-    sync_promo_view_ = new BookmarkSyncPromoView(delegate_.get());
+    sync_promo_view_ =
+        new BubbleSyncPromoView(delegate_.get(), IDS_BOOKMARK_SYNC_PROMO_LINK,
+                                IDS_BOOKMARK_SYNC_PROMO_MESSAGE);
     layout->AddView(sync_promo_view_);
+    content::RecordAction(
+        base::UserMetricsAction("Signin_Impression_FromBookmarkBubble"));
   }
 
   AddAccelerator(ui::Accelerator(ui::VKEY_RETURN, ui::EF_NONE));
@@ -264,21 +284,20 @@ views::View* BookmarkBubbleView::GetInitiallyFocusedView() {
 
 BookmarkBubbleView::BookmarkBubbleView(
     views::View* anchor_view,
-    BookmarkBubbleViewObserver* observer,
-    scoped_ptr<BookmarkBubbleDelegate> delegate,
+    bookmarks::BookmarkBubbleObserver* observer,
+    scoped_ptr<BubbleSyncPromoDelegate> delegate,
     Profile* profile,
     const GURL& url,
     bool newly_bookmarked)
     : BubbleDelegateView(anchor_view, views::BubbleBorder::TOP_RIGHT),
       observer_(observer),
-      delegate_(delegate.Pass()),
+      delegate_(std::move(delegate)),
       profile_(profile),
       url_(url),
       newly_bookmarked_(newly_bookmarked),
-      parent_model_(
-          BookmarkModelFactory::GetForProfile(profile_),
-          BookmarkModelFactory::GetForProfile(profile_)->
-              GetMostRecentlyAddedUserNodeForURL(url)),
+      parent_model_(BookmarkModelFactory::GetForProfile(profile_),
+                    BookmarkModelFactory::GetForProfile(profile_)
+                        ->GetMostRecentlyAddedUserNodeForURL(url)),
       remove_button_(NULL),
       edit_button_(NULL),
       close_button_(NULL),
@@ -343,15 +362,17 @@ void BookmarkBubbleView::HandleButtonPressed(views::Button* sender) {
 void BookmarkBubbleView::ShowEditor() {
   const BookmarkNode* node = BookmarkModelFactory::GetForProfile(
       profile_)->GetMostRecentlyAddedUserNodeForURL(url_);
-  views::Widget* parent = anchor_widget();
-  DCHECK(parent);
+  gfx::NativeWindow native_parent =
+      anchor_widget() ? anchor_widget()->GetNativeWindow()
+                      : platform_util::GetTopLevel(parent_window());
+  DCHECK(native_parent);
 
   Profile* profile = profile_;
   ApplyEdits();
   GetWidget()->Close();
 
-  if (node && parent)
-    BookmarkEditor::Show(parent->GetNativeWindow(), profile,
+  if (node && native_parent)
+    BookmarkEditor::Show(native_parent, profile,
                          BookmarkEditor::EditDetails::EditNode(node),
                          BookmarkEditor::SHOW_TREE);
 }

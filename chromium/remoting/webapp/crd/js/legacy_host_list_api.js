@@ -25,6 +25,22 @@ remoting.LegacyHostListApi = function() {
 remoting.LegacyHostListApi.prototype.register = function(
     hostName, publicKey, hostClientId) {
   var newHostId = base.generateUuid();
+  return remoting.LegacyHostListApi.registerWithHostId(
+      newHostId, hostName, publicKey, hostClientId);
+};
+
+/**
+ * Registers a host with the Chromoting directory using a specified
+ * host ID, which should not be equal to the ID of any existing host.
+ *
+ * @param {string} newHostId The host ID of the new host.
+ * @param {string} hostName The user-visible name of the new host.
+ * @param {string} publicKey The public half of the host's key pair.
+ * @param {?string} hostClientId The OAuth2 client ID of the host.
+ * @return {!Promise<remoting.HostListApi.RegisterResult>}
+ */
+remoting.LegacyHostListApi.registerWithHostId = function(
+    newHostId, hostName, publicKey, hostClientId) {
   var newHostDetails = { data: {
     hostId: newHostId,
     hostName: hostName,
@@ -44,12 +60,13 @@ remoting.LegacyHostListApi.prototype.register = function(
     if (response.status == 200) {
       var result = /** @type {!Object} */ (response.getJson());
       var data = base.getObjectAttr(result, 'data');
-      var authCode = base.getStringAttr(data, 'authorizationCode');
+      var authCode = hostClientId ?
+          base.getStringAttr(data, 'authorizationCode') :
+          '';
       return {
         authCode: authCode,
         email: '',
-        hostId: newHostId,
-        isLegacy: true
+        hostId: newHostId
       };
     } else {
       console.log(
@@ -126,13 +143,14 @@ remoting.LegacyHostListApi.prototype.parseHostListResponse_ =
           host.jabberId = base.getStringAttr(item, 'jabberId', '');
           host.publicKey = base.getStringAttr(item, 'publicKey', '');
           host.hostVersion = base.getStringAttr(item, 'hostVersion', '');
+          host.hostOs = remoting.ChromotingEvent.toOs(
+              base.getStringAttr(item, 'hostOs', ''));
+          host.hostOsVersion = base.getStringAttr(item, 'hostOsVersion', '');
           host.tokenUrlPatterns =
               base.getArrayAttr(item, 'tokenUrlPatterns', []);
           host.updatedTime = base.getStringAttr(item, 'updatedTime', '');
           host.hostOfflineReason =
               base.getStringAttr(item, 'hostOfflineReason', '');
-          host.loggingChannel =
-              base.getStringAttr(item, 'loggingChannel', 'XMPP');
           return host;
       });
       return hosts;
@@ -181,9 +199,9 @@ remoting.LegacyHostListApi.prototype.getSupportHost = function(supportId) {
       if (response && response.data &&
           response.data.jabberId && response.data.publicKey) {
         var host = new remoting.Host(supportId);
-        host.jabberId = response.data.jabberId;
-        host.publicKey = response.data.publicKey;
-        host.hostName = response.data.jabberId.split('/')[0];
+        host.jabberId = base.getStringAttr(response.data, 'jabberId', '');
+        host.publicKey = base.getStringAttr(response.data, 'publicKey', '');
+        host.hostName = host.jabberId.split('/')[0];
         return host;
       } else {
         console.error('Invalid "support-hosts" response from server.');

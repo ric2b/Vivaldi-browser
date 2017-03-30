@@ -140,7 +140,9 @@ class Configurator;
 struct CrxUpdateItem;
 
 enum Error {
+  ERROR_UPDATE_INVALID_ARGUMENT = -1,
   ERROR_UPDATE_IN_PROGRESS = 1,
+  ERROR_UPDATE_CANCELED = 2,
 };
 
 // Defines an interface for a generic CRX installer.
@@ -262,21 +264,39 @@ class UpdateClient : public base::RefCounted<UpdateClient> {
   // the observers are being notified.
   virtual void RemoveObserver(Observer* observer) = 0;
 
-  // Installs the specified CRX. Calls back after the install has been handled.
-  // Calls back on |completion_callback| after the update has been handled. The
-  // |error| parameter of the |completion_callback| contains an error code in
-  // the case of a run-time error, or 0 if the Install has been handled
-  // successfully.
+  // Installs the specified CRX. Calls back on |completion_callback| after the
+  // update has been handled. The |error| parameter of the |completion_callback|
+  // contains an error code in the case of a run-time error, or 0 if the
+  // install has been handled successfully. Overlapping calls of this function
+  // are executed concurrently, as long as the id parameter is different,
+  // meaning that installs of different components are parallelized.
+  // The |Install| function is intended to be used for foreground installs of
+  // one CRX. These cases are usually associated with on-demand install
+  // scenarios, which are triggered by user actions. Installs are never
+  // queued up.
   virtual void Install(const std::string& id,
                        const CrxDataCallback& crx_data_callback,
                        const CompletionCallback& completion_callback) = 0;
 
   // Updates the specified CRXs. Calls back on |crx_data_callback| before the
   // update is attempted to give the caller the opportunity to provide the
-  // instances of CrxComponent to be used for this update.
+  // instances of CrxComponent to be used for this update. The |Update| function
+  // is intended to be used for background updates of several CRXs. Overlapping
+  // calls to this function result in a queuing behavior, and the execution
+  // of each call is serialized. In addition, updates are always queued up when
+  // installs are running.
   virtual void Update(const std::vector<std::string>& ids,
                       const CrxDataCallback& crx_data_callback,
                       const CompletionCallback& completion_callback) = 0;
+
+  // Sends an uninstall ping for the CRX identified by |id| and |version|. The
+  // |reason| parameter is defined by the caller. The current implementation of
+  // this function only sends a best-effort, fire-and-forget ping. It has no
+  // other side effects regarding installs or updates done through an instance
+  // of this class.
+  virtual void SendUninstallPing(const std::string& id,
+                                 const Version& version,
+                                 int reason) = 0;
 
   // Returns status details about a CRX update. The function returns true in
   // case of success and false in case of errors, such as |id| was
@@ -284,7 +304,14 @@ class UpdateClient : public base::RefCounted<UpdateClient> {
   virtual bool GetCrxUpdateState(const std::string& id,
                                  CrxUpdateItem* update_item) const = 0;
 
+  // Returns true if the |id| is found in any running task.
   virtual bool IsUpdating(const std::string& id) const = 0;
+
+  // Cancels the queued updates and makes a best effort to stop updates in
+  // progress as soon as possible. Some updates may not be stopped, in which
+  // case, the updates will run to completion. Calling this function has no
+  // effect if updates are not currently executed or queued up.
+  virtual void Stop() = 0;
 
  protected:
   friend class base::RefCounted<UpdateClient>;

@@ -18,6 +18,9 @@ var logWriterSpy = null;
 /** @type {sinon.TestStub} */
 var userAgentStub;
 
+/** @type {remoting.Host} */
+var fakeHost;
+
 QUnit.module('SessionLogger', {
   beforeEach: function() {
     userAgentStub = sinon.stub(remoting, 'getUserAgent');
@@ -28,6 +31,11 @@ QUnit.module('SessionLogger', {
     var spy = sinon.spy();
     logWriterSpy = /** @type {sinon.Spy} */ (spy);
     logWriter = /** @type {function(Object)} */ (spy);
+    fakeHost = new remoting.Host('host_id');
+    fakeHost.hostVersion = 'host_version';
+    fakeHost.hostOs = remoting.ChromotingEvent.Os.OTHER;
+    fakeHost.hostOsVersion = 'host_os_version';
+    fakeHost.updatedTime = '2015-12-31T01:23:00';
   },
   afterEach: function() {
     userAgentStub.restore();
@@ -44,7 +52,8 @@ function verifyEvent(assert, index, expected) {
   var event = /** @type {Object} */ (logWriterSpy.getCall(index).args[0]);
 
   for (var key in expected) {
-    assert.equal(event[key], expected[key], 'Verifying ChromotingEvent.' + key);
+    assert.deepEqual(event[key], expected[key],
+                     'Verifying ChromotingEvent.' + key);
   }
 }
 
@@ -73,16 +82,17 @@ QUnit.test('logSignalStrategyProgress()', function(assert) {
   });
 });
 
-QUnit.test('logClientSessionStateChange()', function(assert){
+QUnit.test('logSessionStateChange()', function(assert){
+  var clock = sinon.useFakeTimers(new Date('2015-12-31T01:23:05').getTime());
   var Event = remoting.ChromotingEvent;
 
   logger = new remoting.SessionLogger(Event.Role.CLIENT, logWriter);
   logger.setLogEntryMode(Event.Mode.ME2ME);
   logger.setConnectionType('stun');
-  logger.setHostVersion('host_version');
+  logger.setHost(fakeHost);
 
-  logger.logClientSessionStateChange(
-      remoting.ClientSession.State.FAILED,
+  logger.logSessionStateChange(
+      remoting.ChromotingEvent.SessionState.CONNECTION_FAILED,
       new remoting.Error(remoting.Error.Tag.HOST_IS_OFFLINE));
   var sessionId = logger.getSessionId();
 
@@ -101,28 +111,69 @@ QUnit.test('logClientSessionStateChange()', function(assert){
     mode: Event.Mode.ME2ME,
     connection_type: Event.ConnectionType.STUN,
     host_version: 'host_version',
+    host_os: remoting.ChromotingEvent.Os.OTHER,
+    host_os_version: 'host_os_version',
+    host_last_heartbeat_elapsed_time: 5000,
     session_id: sessionId
   });
 });
 
-QUnit.test('logClientSessionStateChange() should handle sessionId change.',
+QUnit.test('logSessionStateChange() should handle XMPP error',
+    function(assert){
+  var Event = remoting.ChromotingEvent;
+
+  logger = new remoting.SessionLogger(Event.Role.CLIENT, logWriter);
+  logger.setLogEntryMode(Event.Mode.ME2ME);
+  logger.setConnectionType('stun');
+  logger.setHost(fakeHost);
+
+  logger.logSessionStateChange(
+      remoting.ChromotingEvent.SessionState.CONNECTION_FAILED,
+      new remoting.Error(remoting.Error.Tag.HOST_IS_OFFLINE, '<fake-stanza/>'));
+  var sessionId = logger.getSessionId();
+
+  assert.ok(sessionId !== null);
+
+  verifyEvent(assert, 0, {
+    type: Event.Type.SESSION_STATE,
+    session_state: Event.SessionState.CONNECTION_FAILED,
+    connection_error: Event.ConnectionError.HOST_OFFLINE,
+    os: Event.Os.MAC,
+    os_version: '10.9.5',
+    cpu: 'Intel',
+    browser_version: '43.0.2357.81',
+    application_id: 'extensionId',
+    role: Event.Role.CLIENT,
+    mode: Event.Mode.ME2ME,
+    connection_type: Event.ConnectionType.STUN,
+    host_version: 'host_version',
+    host_os: remoting.ChromotingEvent.Os.OTHER,
+    host_os_version: 'host_os_version',
+    session_id: sessionId,
+    xmpp_error: {
+      raw_stanza: '<fake-stanza/>'
+    }
+  });
+});
+
+QUnit.test('logSessionStateChange() should handle sessionId change.',
   function(assert){
-  var clock = sinon.useFakeTimers();
+  var clock = sinon.useFakeTimers(new Date('2015-12-31T01:23:05').getTime());
   var Event = remoting.ChromotingEvent;
 
   // Creates the logger.
   logger = new remoting.SessionLogger(Event.Role.CLIENT, logWriter);
   logger.setLogEntryMode(Event.Mode.ME2ME);
   logger.setConnectionType('relay');
-  logger.setHostVersion('host_version');
+  logger.setHost(fakeHost);
   var oldSessionId = logger.getSessionId();
 
   // Expires the session id.
-  clock.tick(remoting.Logger.MAX_SESSION_ID_AGE + 100);
+  clock.tick(remoting.SessionLogger.MAX_SESSION_ID_AGE + 100);
 
   // Logs the event.
-  logger.logClientSessionStateChange(
-      remoting.ClientSession.State.AUTHENTICATED, remoting.Error.none());
+  logger.logSessionStateChange(
+      remoting.ChromotingEvent.SessionState.AUTHENTICATED);
 
   var newSessionId = logger.getSessionId();
   verifyEvent(assert, 0, {
@@ -136,7 +187,10 @@ QUnit.test('logClientSessionStateChange() should handle sessionId change.',
     role: Event.Role.CLIENT,
     mode: Event.Mode.ME2ME,
     connection_type: Event.ConnectionType.RELAY,
-    host_version: 'host_version'
+    host_version: 'host_version',
+    host_os: remoting.ChromotingEvent.Os.OTHER,
+    host_os_version: 'host_os_version',
+    host_last_heartbeat_elapsed_time: 5000
   });
 
   verifyEvent(assert, 1, {
@@ -150,7 +204,10 @@ QUnit.test('logClientSessionStateChange() should handle sessionId change.',
     role: Event.Role.CLIENT,
     mode: Event.Mode.ME2ME,
     connection_type: Event.ConnectionType.RELAY,
-    host_version: 'host_version'
+    host_version: 'host_version',
+    host_os: remoting.ChromotingEvent.Os.OTHER,
+    host_os_version: 'host_os_version',
+    host_last_heartbeat_elapsed_time: 5000
   });
 
   verifyEvent(assert, 2, {
@@ -166,11 +223,14 @@ QUnit.test('logClientSessionStateChange() should handle sessionId change.',
     mode: Event.Mode.ME2ME,
     connection_type: Event.ConnectionType.RELAY,
     host_version: 'host_version',
+    host_os: remoting.ChromotingEvent.Os.OTHER,
+    host_os_version: 'host_os_version',
+    host_last_heartbeat_elapsed_time: 5000,
     session_id: newSessionId
   });
 });
 
-QUnit.test('logClientSessionStateChange() should log session_duration.',
+QUnit.test('logSessionStateChange() should log session_duration.',
   function(assert){
   var clock = sinon.useFakeTimers();
   var Event = remoting.ChromotingEvent;
@@ -179,13 +239,13 @@ QUnit.test('logClientSessionStateChange() should log session_duration.',
   logger = new remoting.SessionLogger(Event.Role.CLIENT, logWriter);
   logger.setLogEntryMode(Event.Mode.ME2ME);
   logger.setConnectionType('direct');
-  logger.setHostVersion('host_version');
+  logger.setHost(fakeHost);
   logger.setAuthTotalTime(1000);
   clock.tick(2500);
 
   // Logs the event.
-  logger.logClientSessionStateChange(
-      remoting.ClientSession.State.CONNECTED, remoting.Error.none());
+  logger.logSessionStateChange(
+    remoting.ChromotingEvent.SessionState.CONNECTED);
 
   verifyEvent(assert, 0, {
     type: Event.Type.SESSION_STATE,
@@ -200,6 +260,8 @@ QUnit.test('logClientSessionStateChange() should log session_duration.',
     mode: Event.Mode.ME2ME,
     connection_type: Event.ConnectionType.DIRECT,
     host_version: 'host_version',
+    host_os: remoting.ChromotingEvent.Os.OTHER,
+    host_os_version: 'host_os_version',
     session_id: logger.getSessionId(),
     session_duration: 1.5
   });
@@ -213,7 +275,7 @@ QUnit.test('logStatistics()', function(assert) {
   logger = new remoting.SessionLogger(Event.Role.CLIENT, logWriter);
   logger.setLogEntryMode(Event.Mode.LGAPP);
   logger.setConnectionType('direct');
-  logger.setHostVersion('host_version');
+  logger.setHost(fakeHost);
 
   // Log the statistics.
   logger.logStatistics({
@@ -236,7 +298,7 @@ QUnit.test('logStatistics()', function(assert) {
 
   sinon.assert.notCalled(logWriterSpy);
   // Stats should only be accumulated at |CONNECTION_STATS_ACCUMULATE_TIME|.
-  clock.tick(remoting.Logger.CONNECTION_STATS_ACCUMULATE_TIME + 10);
+  clock.tick(remoting.SessionLogger.CONNECTION_STATS_ACCUMULATE_TIME + 10);
 
   logger.logStatistics({
     videoBandwidth: 3.0,
@@ -258,6 +320,8 @@ QUnit.test('logStatistics()', function(assert) {
     mode: Event.Mode.LGAPP,
     connection_type: Event.ConnectionType.DIRECT,
     host_version: 'host_version',
+    host_os: remoting.ChromotingEvent.Os.OTHER,
+    host_os_version: 'host_os_version',
     session_id: logger.getSessionId(),
     video_bandwidth: 2.0,
     capture_latency: 2.0,
@@ -285,7 +349,7 @@ QUnit.test('logStatistics() should not log if all stats are zeros ',
     roundtripLatency: 0.0
   });
 
-  clock.tick(remoting.Logger.CONNECTION_STATS_ACCUMULATE_TIME + 10);
+  clock.tick(remoting.SessionLogger.CONNECTION_STATS_ACCUMULATE_TIME + 10);
 
   logger.logStatistics({
     videoBandwidth: 0.0,

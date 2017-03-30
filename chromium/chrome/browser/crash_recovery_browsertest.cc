@@ -2,13 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
+#include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -60,7 +64,7 @@ class CacheMaxAgeHandler {
                                              request_count_));
     response->set_content_type("text/html");
     response->AddCustomHeader("Cache-Control", "max-age=99999");
-    return response.Pass();
+    return std::move(response);
   }
  private:
   std::string path_;
@@ -108,7 +112,7 @@ IN_PROC_BROWSER_TEST_F(CrashRecoveryBrowserTest, ReloadCacheRevalidate) {
 
   // Use the test server so as not to bypass cache behavior. The title of the
   // active tab should change only when this URL is reloaded.
-  ASSERT_TRUE(embedded_test_server()->InitializeAndWaitUntilReady());
+  ASSERT_TRUE(embedded_test_server()->Start());
   embedded_test_server()->RegisterRequestHandler(
       base::Bind(&CacheMaxAgeHandler::HandleRequest,
                  base::Owned(new CacheMaxAgeHandler(kTestPath))));

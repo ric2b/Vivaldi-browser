@@ -15,6 +15,8 @@ if (is_chromeos) {
       "chromeos/display_configurator.cc",
       "chromeos/display_configurator.h",
       "chromeos/display_layout_manager.h",
+      "chromeos/display_snapshot_virtual.cc",
+      "chromeos/display_snapshot_virtual.h",
       "chromeos/display_util.cc",
       "chromeos/display_util.h",
       "chromeos/ozone/display_configurator_ozone.cc",
@@ -122,9 +124,19 @@ if (is_chromeos) {
       "//base",
       "//ui/display/types",
       "//ui/gfx",
+      "//ui/gfx:test_support",
       "//ui/gfx/geometry",
     ]
   }
+}
+
+# TODO(GYP): Delete this after we've converted everything to GN.
+# The _run targets exist only for compatibility w/ GYP.
+group("display_unittests_run") {
+  testonly = true
+  deps = [
+    ":display_unittests",
+  ]
 }
 
 # This test covers the ChromeOS "display" target as well as the cross-platform

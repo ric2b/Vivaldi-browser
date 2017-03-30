@@ -5,7 +5,9 @@
 #ifndef CHROME_BROWSER_FEEDBACK_SYSTEM_LOGS_SCRUBBED_SYSTEM_LOGS_FETCHER_H_
 #define CHROME_BROWSER_FEEDBACK_SYSTEM_LOGS_SCRUBBED_SYSTEM_LOGS_FETCHER_H_
 
+#include "base/macros.h"
 #include "chrome/browser/feedback/system_logs/system_logs_fetcher_base.h"
+#include "components/feedback/anonymizer_tool.h"
 
 namespace system_logs {
 
@@ -16,9 +18,14 @@ namespace system_logs {
 class ScrubbedSystemLogsFetcher : public SystemLogsFetcherBase {
  public:
   ScrubbedSystemLogsFetcher();
-  ~ScrubbedSystemLogsFetcher();
+  ~ScrubbedSystemLogsFetcher() override;
+
+ protected:
+  void Rewrite(const std::string& source_name,
+               SystemLogsResponse* response) override;
 
  private:
+  feedback::AnonymizerTool anonymizer_;
 
   DISALLOW_COPY_AND_ASSIGN(ScrubbedSystemLogsFetcher);
 };

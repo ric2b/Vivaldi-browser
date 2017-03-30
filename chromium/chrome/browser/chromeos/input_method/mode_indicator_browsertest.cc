@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <algorithm>
 
 #include "ash/shell.h"
+#include "base/macros.h"
 #include "chrome/browser/chromeos/input_method/input_method_util.h"
 #include "chrome/browser/chromeos/input_method/mode_indicator_controller.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -13,9 +16,10 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/ime/chromeos/component_extension_ime_manager.h"
 #include "ui/base/ime/chromeos/extension_ime_util.h"
-#include "ui/base/ime/chromeos/ime_bridge.h"
+#include "ui/base/ime/chromeos/ime_candidate_window_handler_interface.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/base/ime/chromeos/input_method_whitelist.h"
+#include "ui/base/ime/ime_bridge.h"
 #include "ui/base/ime/input_method_factory.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
@@ -130,7 +134,7 @@ IN_PROC_BROWSER_TEST_F(ModeIndicatorBrowserTest, Bounds) {
   EXPECT_TRUE(imm->GetActiveIMEState()->CanCycleInputMethod());
 
   chromeos::IMECandidateWindowHandlerInterface* candidate_window =
-      chromeos::IMEBridge::Get()->GetCandidateWindowHandler();
+      ui::IMEBridge::Get()->GetCandidateWindowHandler();
   candidate_window->FocusStateChanged(true);
 
   // Check if the size of the mode indicator is expected.
@@ -199,7 +203,7 @@ IN_PROC_BROWSER_TEST_F(ModeIndicatorBrowserTest, NumOfWidgets) {
   EXPECT_TRUE(imm->GetActiveIMEState()->CanCycleInputMethod());
 
   chromeos::IMECandidateWindowHandlerInterface* candidate_window =
-      chromeos::IMEBridge::Get()->GetCandidateWindowHandler();
+      ui::IMEBridge::Get()->GetCandidateWindowHandler();
   candidate_window->FocusStateChanged(true);
 
   {

@@ -8,6 +8,7 @@
 #include "chrome/browser/extensions/test_extension_dir.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/extensions/features/feature_channel.h"
+#include "components/version_info/version_info.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "ui/gfx/image/image.h"
 
@@ -35,7 +36,7 @@ class SetIconAPITest : public ExtensionApiTest {
   SetIconAPITest()
       // Set the channel to "trunk" since declarativeContent is restricted
       // to trunk.
-      : current_channel_(chrome::VersionInfo::CHANNEL_UNKNOWN) {
+      : current_channel_(version_info::Channel::UNKNOWN) {
   }
   ~SetIconAPITest() override {}
 

@@ -6,6 +6,7 @@
 
 #include <errno.h>
 #include <linux/input.h>
+#include <stddef.h>
 
 #include "base/message_loop/message_loop.h"
 #include "base/trace_event/trace_event.h"
@@ -14,18 +15,26 @@
 
 namespace ui {
 
+namespace {
+
+// Convert tilt from [min, min + num_values) to [-90deg, +90deg)
+float ScaleTilt(int value, int min_value, int num_values) {
+  return 180.f * (value - min_value) / num_values - 90.f;
+}
+
+}  // namespace
+
 TabletEventConverterEvdev::TabletEventConverterEvdev(
     int fd,
     base::FilePath path,
     int id,
-    InputDeviceType type,
     CursorDelegateEvdev* cursor,
     const EventDeviceInfo& info,
     DeviceEventDispatcherEvdev* dispatcher)
     : EventConverterEvdev(fd,
                           path,
                           id,
-                          type,
+                          info.device_type(),
                           info.name(),
                           info.vendor_id(),
                           info.product_id()),
@@ -35,6 +44,11 @@ TabletEventConverterEvdev::TabletEventConverterEvdev(
   x_abs_range_ = info.GetAbsMaximum(ABS_X) - x_abs_min_ + 1;
   y_abs_min_ = info.GetAbsMinimum(ABS_Y);
   y_abs_range_ = info.GetAbsMaximum(ABS_Y) - y_abs_min_ + 1;
+  tilt_x_min_ = info.GetAbsMinimum(ABS_TILT_X);
+  tilt_y_min_ = info.GetAbsMinimum(ABS_TILT_Y);
+  tilt_x_range_ = info.GetAbsMaximum(ABS_TILT_X) - tilt_x_min_ + 1;
+  tilt_y_range_ = info.GetAbsMaximum(ABS_TILT_Y) - tilt_y_min_ + 1;
+  pressure_max_ = info.GetAbsMaximum(ABS_PRESSURE);
 }
 
 TabletEventConverterEvdev::~TabletEventConverterEvdev() {
@@ -112,6 +126,18 @@ void TabletEventConverterEvdev::ConvertAbsEvent(const input_event& input) {
       y_abs_location_ = input.value;
       abs_value_dirty_ = true;
       break;
+    case ABS_TILT_X:
+      tilt_x_ = ScaleTilt(input.value, tilt_x_min_, tilt_x_range_);
+      abs_value_dirty_ = true;
+      break;
+    case ABS_TILT_Y:
+      tilt_y_ = ScaleTilt(input.value, tilt_y_min_, tilt_y_range_);
+      abs_value_dirty_ = true;
+      break;
+    case ABS_PRESSURE:
+      pressure_ = (float)input.value / pressure_max_;
+      abs_value_dirty_ = true;
+      break;
   }
 }
 
@@ -153,7 +179,11 @@ void TabletEventConverterEvdev::DispatchMouseButton(const input_event& input) {
 
   dispatcher_->DispatchMouseButtonEvent(MouseButtonEventParams(
       input_device_.id, cursor_->GetLocation(), button, down,
-      false /* allow_remap */, TimeDeltaFromInputEvent(input)));
+      false /* allow_remap */,
+      PointerDetails(EventPointerType::POINTER_TYPE_PEN,
+                     /* radius_x */ 0.0f, /* radius_y */ 0.0f, pressure_,
+                     tilt_x_, tilt_y_),
+      TimeDeltaFromInputEvent(input)));
 }
 
 void TabletEventConverterEvdev::FlushEvents(const input_event& input) {
@@ -171,9 +201,12 @@ void TabletEventConverterEvdev::FlushEvents(const input_event& input) {
 
   UpdateCursor();
 
-  dispatcher_->DispatchMouseMoveEvent(
-      MouseMoveEventParams(input_device_.id, cursor_->GetLocation(),
-                           TimeDeltaFromInputEvent(input)));
+  dispatcher_->DispatchMouseMoveEvent(MouseMoveEventParams(
+      input_device_.id, cursor_->GetLocation(),
+      PointerDetails(EventPointerType::POINTER_TYPE_PEN,
+                     /* radius_x */ 0.0f, /* radius_y */ 0.0f, pressure_,
+                     tilt_x_, tilt_y_),
+      TimeDeltaFromInputEvent(input)));
 
   abs_value_dirty_ = false;
 }

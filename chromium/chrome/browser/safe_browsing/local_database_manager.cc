@@ -13,6 +13,7 @@
 #include "base/debug/leak_tracker.h"
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/prefs/pref_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
@@ -20,9 +21,9 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/prerender/prerender_field_trial.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/safe_browsing/client_side_detection_service.h"
 #include "chrome/browser/safe_browsing/download_protection_service.h"
-#include "chrome/browser/safe_browsing/malware_details.h"
 #include "chrome/browser/safe_browsing/protocol_manager.h"
 #include "chrome/browser/safe_browsing/safe_browsing_database.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
@@ -30,11 +31,15 @@
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/pref_names.h"
+#include "components/safe_browsing_db/util.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "url/url_constants.h"
 
 using content::BrowserThread;
+
+namespace safe_browsing {
 
 namespace {
 
@@ -45,7 +50,7 @@ const int kCheckTimeoutMs = 10000;
 // |true| if there were any prefix hits in |full_hashes|.
 void RecordGetHashCheckStatus(
     bool hit,
-    safe_browsing_util::ListType check_type,
+    ListType check_type,
     const std::vector<SBFullHashResult>& full_hashes) {
   SafeBrowsingProtocolManager::ResultType result;
   if (full_hashes.empty()) {
@@ -55,7 +60,7 @@ void RecordGetHashCheckStatus(
   } else {
     result = SafeBrowsingProtocolManager::GET_HASH_FULL_HASH_MISS;
   }
-  bool is_download = check_type == safe_browsing_util::BINURL;
+  bool is_download = check_type == BINURL;
   SafeBrowsingProtocolManager::RecordGetHashResult(is_download, result);
 }
 
@@ -69,32 +74,32 @@ bool IsExpectedThreat(
 
 // Return the severest list id from the results in |full_hashes| which matches
 // |hash|, or INVALID if none match.
-safe_browsing_util::ListType GetHashSeverestThreatListType(
+ListType GetHashSeverestThreatListType(
     const SBFullHash& hash,
     const std::vector<SBFullHashResult>& full_hashes,
     size_t* index) {
-  safe_browsing_util::ListType pending_threat = safe_browsing_util::INVALID;
+  ListType pending_threat = INVALID;
   for (size_t i = 0; i < full_hashes.size(); ++i) {
     if (SBFullHashEqual(hash, full_hashes[i].hash)) {
-      const safe_browsing_util::ListType threat =
-          static_cast<safe_browsing_util::ListType>(full_hashes[i].list_id);
+      const ListType threat =
+          static_cast<ListType>(full_hashes[i].list_id);
       switch (threat) {
-        case safe_browsing_util::INVALID:
+        case INVALID:
           // |full_hashes| should never contain INVALID as a |list_id|.
           NOTREACHED();
           break;
-        case safe_browsing_util::MALWARE:                  // Falls through.
-        case safe_browsing_util::PHISH:                    // Falls through.
-        case safe_browsing_util::BINURL:                   // Falls through.
-        case safe_browsing_util::CSDWHITELIST:             // Falls through.
-        case safe_browsing_util::DOWNLOADWHITELIST:        // Falls through.
-        case safe_browsing_util::INCLUSIONWHITELIST:       // Falls through.
-        case safe_browsing_util::EXTENSIONBLACKLIST:       // Falls through.
-        case safe_browsing_util::IPBLACKLIST:
+        case MALWARE:                  // Falls through.
+        case PHISH:                    // Falls through.
+        case BINURL:                   // Falls through.
+        case CSDWHITELIST:             // Falls through.
+        case DOWNLOADWHITELIST:        // Falls through.
+        case INCLUSIONWHITELIST:       // Falls through.
+        case EXTENSIONBLACKLIST:       // Falls through.
+        case IPBLACKLIST:
           if (index)
             *index = i;
           return threat;
-        case safe_browsing_util::UNWANTEDURL:
+        case UNWANTEDURL:
           // UNWANTEDURL is considered less severe than other threats, keep
           // looking.
           pending_threat = threat;
@@ -110,34 +115,34 @@ safe_browsing_util::ListType GetHashSeverestThreatListType(
 // Given a URL, compare all the possible host + path full hashes to the set of
 // provided full hashes.  Returns the list id of the severest matching result
 // from |full_hashes|, or INVALID if none match.
-safe_browsing_util::ListType GetUrlSeverestThreatListType(
+ListType GetUrlSeverestThreatListType(
     const GURL& url,
     const std::vector<SBFullHashResult>& full_hashes,
     size_t* index) {
   if (full_hashes.empty())
-    return safe_browsing_util::INVALID;
+    return INVALID;
 
   std::vector<std::string> patterns;
-  safe_browsing_util::GeneratePatternsToCheck(url, &patterns);
+  GeneratePatternsToCheck(url, &patterns);
 
-  safe_browsing_util::ListType pending_threat = safe_browsing_util::INVALID;
+  ListType pending_threat = INVALID;
   for (size_t i = 0; i < patterns.size(); ++i) {
-    safe_browsing_util::ListType threat = GetHashSeverestThreatListType(
+    ListType threat = GetHashSeverestThreatListType(
         SBFullHashForString(patterns[i]), full_hashes, index);
     switch (threat) {
-      case safe_browsing_util::INVALID:
+      case INVALID:
         // Ignore patterns with no matching threat.
         break;
-      case safe_browsing_util::MALWARE:                  // Falls through.
-      case safe_browsing_util::PHISH:                    // Falls through.
-      case safe_browsing_util::BINURL:                   // Falls through.
-      case safe_browsing_util::CSDWHITELIST:             // Falls through.
-      case safe_browsing_util::DOWNLOADWHITELIST:        // Falls through.
-      case safe_browsing_util::INCLUSIONWHITELIST:       // Falls through.
-      case safe_browsing_util::EXTENSIONBLACKLIST:       // Falls through.
-      case safe_browsing_util::IPBLACKLIST:
+      case MALWARE:                  // Falls through.
+      case PHISH:                    // Falls through.
+      case BINURL:                   // Falls through.
+      case CSDWHITELIST:             // Falls through.
+      case DOWNLOADWHITELIST:        // Falls through.
+      case INCLUSIONWHITELIST:       // Falls through.
+      case EXTENSIONBLACKLIST:       // Falls through.
+      case IPBLACKLIST:
         return threat;
-      case safe_browsing_util::UNWANTEDURL:
+      case UNWANTEDURL:
         // UNWANTEDURL is considered less severe than other threats, keep
         // looking.
         pending_threat = threat;
@@ -147,17 +152,17 @@ safe_browsing_util::ListType GetUrlSeverestThreatListType(
   return pending_threat;
 }
 
-SBThreatType GetThreatTypeFromListType(safe_browsing_util::ListType list_type) {
+SBThreatType GetThreatTypeFromListType(ListType list_type) {
   switch (list_type) {
-    case safe_browsing_util::PHISH:
+    case PHISH:
       return SB_THREAT_TYPE_URL_PHISHING;
-    case safe_browsing_util::MALWARE:
+    case MALWARE:
       return SB_THREAT_TYPE_URL_MALWARE;
-    case safe_browsing_util::UNWANTEDURL:
+    case UNWANTEDURL:
       return SB_THREAT_TYPE_URL_UNWANTED;
-    case safe_browsing_util::BINURL:
+    case BINURL:
       return SB_THREAT_TYPE_BINARY_MALWARE_URL;
-    case safe_browsing_util::EXTENSIONBLACKLIST:
+    case EXTENSIONBLACKLIST:
       return SB_THREAT_TYPE_EXTENSION;
     default:
       DVLOG(1) << "Unknown safe browsing list id " << list_type;
@@ -188,7 +193,7 @@ LocalSafeBrowsingDatabaseManager::SafeBrowsingCheck::SafeBrowsingCheck(
     const std::vector<GURL>& urls,
     const std::vector<SBFullHash>& full_hashes,
     Client* client,
-    safe_browsing_util::ListType check_type,
+    ListType check_type,
     const std::vector<SBThreatType>& expected_threats)
     : urls(urls),
       url_results(urls.size(), SB_THREAT_TYPE_SAFE),
@@ -216,14 +221,14 @@ void LocalSafeBrowsingDatabaseManager::SafeBrowsingCheck::
   if (!urls.empty()) {
     DCHECK(full_hashes.empty());
     switch (check_type) {
-      case safe_browsing_util::MALWARE:
-      case safe_browsing_util::PHISH:
-      case safe_browsing_util::UNWANTEDURL:
+      case MALWARE:
+      case PHISH:
+      case UNWANTEDURL:
         DCHECK_EQ(1u, urls.size());
         client->OnCheckBrowseUrlResult(urls[0], url_results[0],
                                        url_metadata[0]);
         break;
-      case safe_browsing_util::BINURL:
+      case BINURL:
         DCHECK_EQ(urls.size(), url_results.size());
         client->OnCheckDownloadUrlResult(
             urls, *std::max_element(url_results.begin(), url_results.end()));
@@ -233,11 +238,11 @@ void LocalSafeBrowsingDatabaseManager::SafeBrowsingCheck::
     }
   } else if (!full_hashes.empty()) {
     switch (check_type) {
-      case safe_browsing_util::EXTENSIONBLACKLIST: {
+      case EXTENSIONBLACKLIST: {
         std::set<std::string> unsafe_extension_ids;
         for (size_t i = 0; i < full_hashes.size(); ++i) {
           std::string extension_id =
-              safe_browsing_util::SBFullHashToString(full_hashes[i]);
+              SBFullHashToString(full_hashes[i]);
           if (full_hash_results[i] == SB_THREAT_TYPE_EXTENSION)
             unsafe_extension_ids.insert(extension_id);
         }
@@ -270,9 +275,6 @@ LocalSafeBrowsingDatabaseManager::LocalSafeBrowsingDatabaseManager(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(sb_service_.get() != NULL);
 
-  // Android only supports a subset of FULL_SAFE_BROWSING.
-  // TODO(shess): This shouldn't be OS-driven <http://crbug.com/394379>
-#if !defined(OS_ANDROID)
   base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
   enable_download_protection_ =
       !cmdline->HasSwitch(switches::kSbDisableDownloadProtection);
@@ -295,7 +297,6 @@ LocalSafeBrowsingDatabaseManager::LocalSafeBrowsingDatabaseManager(
   // The client-side IP blacklist feature is tightly integrated with client-side
   // phishing protection for now.
   enable_ip_blacklist_ = enable_csd_whitelist_;
-#endif
 }
 
 LocalSafeBrowsingDatabaseManager::~LocalSafeBrowsingDatabaseManager() {
@@ -305,6 +306,25 @@ LocalSafeBrowsingDatabaseManager::~LocalSafeBrowsingDatabaseManager() {
   // We should have already been shut down. If we're still enabled, then the
   // database isn't going to be closed properly, which could lead to corruption.
   DCHECK(!enabled_);
+}
+
+bool LocalSafeBrowsingDatabaseManager::IsSupported() const {
+  return true;
+}
+
+safe_browsing::ThreatSource LocalSafeBrowsingDatabaseManager::GetThreatSource()
+    const {
+  return safe_browsing::ThreatSource::LOCAL_PVER3;
+}
+
+bool LocalSafeBrowsingDatabaseManager::ChecksAreAlwaysAsync() const {
+  return false;
+}
+
+bool LocalSafeBrowsingDatabaseManager::CanCheckResourceType(
+    content::ResourceType resource_type) const {
+  // We check all types since most checks are fast.
+  return true;
 }
 
 bool LocalSafeBrowsingDatabaseManager::CanCheckUrl(const GURL& url) const {
@@ -326,7 +346,7 @@ bool LocalSafeBrowsingDatabaseManager::CheckDownloadUrl(
       new SafeBrowsingCheck(url_chain,
                             std::vector<SBFullHash>(),
                             client,
-                            safe_browsing_util::BINURL,
+                            BINURL,
                             std::vector<SBThreatType>(1,
                                 SB_THREAT_TYPE_BINARY_MALWARE_URL));
   std::vector<SBPrefix> prefixes;
@@ -339,8 +359,7 @@ bool LocalSafeBrowsingDatabaseManager::CheckDownloadUrl(
 }
 
 bool LocalSafeBrowsingDatabaseManager::CheckExtensionIDs(
-    const std::set<std::string>& extension_ids,
-    Client* client) {
+    const std::set<std::string>& extension_ids, Client* client) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   if (!enabled_ || !enable_extension_blacklist_)
@@ -349,7 +368,7 @@ bool LocalSafeBrowsingDatabaseManager::CheckExtensionIDs(
   std::vector<SBFullHash> extension_id_hashes;
   std::transform(extension_ids.begin(), extension_ids.end(),
                  std::back_inserter(extension_id_hashes),
-                 safe_browsing_util::StringToSBFullHash);
+                 StringToSBFullHash);
   std::vector<SBPrefix> prefixes;
   for (const SBFullHash& hash : extension_id_hashes)
     prefixes.push_back(hash.prefix);
@@ -358,7 +377,7 @@ bool LocalSafeBrowsingDatabaseManager::CheckExtensionIDs(
       std::vector<GURL>(),
       extension_id_hashes,
       client,
-      safe_browsing_util::EXTENSIONBLACKLIST,
+      EXTENSIONBLACKLIST,
       std::vector<SBThreatType>(1, SB_THREAT_TYPE_EXTENSION));
   StartSafeBrowsingCheck(
       check,
@@ -446,7 +465,7 @@ bool LocalSafeBrowsingDatabaseManager::CheckBrowseUrl(const GURL& url,
 
   const base::TimeTicks start = base::TimeTicks::Now();
   if (!MakeDatabaseAvailable()) {
-    QueuedCheck queued_check(safe_browsing_util::MALWARE,  // or PHISH
+    QueuedCheck queued_check(MALWARE,  // or PHISH
                              client,
                              url,
                              expected_threats,
@@ -461,14 +480,17 @@ bool LocalSafeBrowsingDatabaseManager::CheckBrowseUrl(const GURL& url,
   // TODO(gab): Refactor SafeBrowsingDatabase to avoid depending on this here.
   std::vector<SBFullHashResult> cache_hits;
 
+  std::vector<SBFullHash> full_hashes;
+  UrlToFullHashes(url, false, &full_hashes);
+
   std::vector<SBPrefix> browse_prefix_hits;
-  bool browse_prefix_match = database_->ContainsBrowseUrl(
-      url, &browse_prefix_hits, &cache_hits);
+  bool browse_prefix_match = database_->ContainsBrowseHashes(
+      full_hashes, &browse_prefix_hits, &cache_hits);
 
   std::vector<SBPrefix> unwanted_prefix_hits;
   std::vector<SBFullHashResult> unused_cache_hits;
-  bool unwanted_prefix_match = database_->ContainsUnwantedSoftwareUrl(
-      url, &unwanted_prefix_hits, &unused_cache_hits);
+  bool unwanted_prefix_match = database_->ContainsUnwantedSoftwareHashes(
+      full_hashes, &unwanted_prefix_hits, &unused_cache_hits);
 
   // Merge the two pre-sorted prefix hits lists.
   // TODO(gab): Refactor SafeBrowsingDatabase for it to return this merged list
@@ -497,7 +519,7 @@ bool LocalSafeBrowsingDatabaseManager::CheckBrowseUrl(const GURL& url,
   SafeBrowsingCheck* check = new SafeBrowsingCheck(std::vector<GURL>(1, url),
                                                    std::vector<SBFullHash>(),
                                                    client,
-                                                   safe_browsing_util::MALWARE,
+                                                   MALWARE,
                                                    expected_threats);
   check->need_get_hash = cache_hits.empty();
   check->prefix_hits.swap(prefix_hits);
@@ -572,7 +594,7 @@ void LocalSafeBrowsingDatabaseManager::GetChunks(GetChunksCallback callback) {
 
 void LocalSafeBrowsingDatabaseManager::AddChunks(
     const std::string& list,
-    scoped_ptr<ScopedVector<SBChunkData> > chunks,
+    scoped_ptr<std::vector<scoped_ptr<SBChunkData>>> chunks,
     AddChunksCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(enabled_);
@@ -659,7 +681,7 @@ void LocalSafeBrowsingDatabaseManager::NotifyDatabaseUpdateFinished(
 }
 
 LocalSafeBrowsingDatabaseManager::QueuedCheck::QueuedCheck(
-    const safe_browsing_util::ListType check_type,
+    const ListType check_type,
     Client* client,
     const GURL& url,
     const std::vector<SBThreatType>& expected_threats,
@@ -813,20 +835,58 @@ void LocalSafeBrowsingDatabaseManager::OnCheckDone(SafeBrowsingCheck* check) {
     // Reset the start time so that we can measure the network time without the
     // database time.
     check->start = base::TimeTicks::Now();
-    // Note: If |this| is deleted or stopped, the protocol_manager will
-    // be destroyed as well - hence it's OK to do unretained in this case.
-    bool is_download = check->check_type == safe_browsing_util::BINURL;
-    sb_service_->protocol_manager()->GetFullHash(
-        check->prefix_hits,
-        base::Bind(&LocalSafeBrowsingDatabaseManager::HandleGetHashResults,
-                   base::Unretained(this),
-                   check),
-        is_download);
+
+    BrowserThread::PostTask(
+        BrowserThread::UI, FROM_HERE,
+        base::Bind(&LocalSafeBrowsingDatabaseManager::OnRequestFullHash, this,
+                   check));
   } else {
     // We may have cached results for previous GetHash queries.  Since
     // this data comes from cache, don't histogram hits.
     HandleOneCheck(check, check->cache_hits);
   }
+}
+
+void LocalSafeBrowsingDatabaseManager::OnRequestFullHash(
+    SafeBrowsingCheck* check) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  check->is_extended_reporting = GetExtendedReporting();
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::Bind(&LocalSafeBrowsingDatabaseManager::RequestFullHash, this,
+                 check));
+}
+
+bool LocalSafeBrowsingDatabaseManager::GetExtendedReporting() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  // Determine if the last used profile is opted into extended reporting.
+  // Note: It is possible that the last used profile is not the one triggers
+  // the hash request, but not very likely.
+  bool is_extended_reporting = false;
+  ProfileManager* profile_manager = g_browser_process->profile_manager();
+  if (profile_manager) {
+    Profile* profile = profile_manager->GetLastUsedProfile();
+    is_extended_reporting = profile &&
+                            profile->GetPrefs()->GetBoolean(
+                                prefs::kSafeBrowsingExtendedReportingEnabled);
+  }
+  return is_extended_reporting;
+}
+
+void LocalSafeBrowsingDatabaseManager::RequestFullHash(
+    SafeBrowsingCheck* check) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  if (!enabled_)
+    return;
+
+  bool is_download = check->check_type == BINURL;
+  sb_service_->protocol_manager()->GetFullHash(
+      check->prefix_hits,
+      base::Bind(&LocalSafeBrowsingDatabaseManager::HandleGetHashResults,
+                 base::Unretained(this), check),
+      is_download, check->is_extended_reporting);
 }
 
 void LocalSafeBrowsingDatabaseManager::GetAllChunksFromDatabase(
@@ -845,17 +905,34 @@ void LocalSafeBrowsingDatabaseManager::GetAllChunksFromDatabase(
   }
 
   BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::Bind(
+          &LocalSafeBrowsingDatabaseManager::BeforeGetAllChunksFromDatabase,
+          this, lists, database_error, callback));
+}
+
+void LocalSafeBrowsingDatabaseManager::BeforeGetAllChunksFromDatabase(
+    const std::vector<SBListChunkRanges>& lists,
+    bool database_error,
+    GetChunksCallback callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  bool is_extended_reporting = GetExtendedReporting();
+
+  BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
       base::Bind(&LocalSafeBrowsingDatabaseManager::OnGetAllChunksFromDatabase,
-                 this, lists, database_error, callback));
+                 this, lists, database_error, is_extended_reporting, callback));
 }
 
 void LocalSafeBrowsingDatabaseManager::OnGetAllChunksFromDatabase(
-    const std::vector<SBListChunkRanges>& lists, bool database_error,
+    const std::vector<SBListChunkRanges>& lists,
+    bool database_error,
+    bool is_extended_reporting,
     GetChunksCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (enabled_)
-    callback.Run(lists, database_error);
+    callback.Run(lists, database_error, is_extended_reporting);
 }
 
 void LocalSafeBrowsingDatabaseManager::OnAddChunksComplete(
@@ -899,11 +976,11 @@ void LocalSafeBrowsingDatabaseManager::DatabaseLoadComplete() {
 
 void LocalSafeBrowsingDatabaseManager::AddDatabaseChunks(
     const std::string& list_name,
-    scoped_ptr<ScopedVector<SBChunkData> > chunks,
+    scoped_ptr<std::vector<scoped_ptr<SBChunkData>>> chunks,
     AddChunksCallback callback) {
   DCHECK(safe_browsing_task_runner_->RunsTasksOnCurrentThread());
   if (chunks)
-    GetDatabase()->InsertChunks(list_name, chunks->get());
+    GetDatabase()->InsertChunks(list_name, *chunks);
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
       base::Bind(&LocalSafeBrowsingDatabaseManager::OnAddChunksComplete, this,
@@ -957,7 +1034,7 @@ void LocalSafeBrowsingDatabaseManager::OnHandleGetHashResults(
     SafeBrowsingCheck* check,
     const std::vector<SBFullHashResult>& full_hashes) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  safe_browsing_util::ListType check_type = check->check_type;
+  ListType check_type = check->check_type;
   SBPrefix prefix = check->prefix_hits[0];
   GetHashRequests::iterator it = gethash_requests_.find(prefix);
   if (check->prefix_hits.size() > 1 || it == gethash_requests_.end()) {
@@ -1121,3 +1198,5 @@ void LocalSafeBrowsingDatabaseManager::StartSafeBrowsingCheck(
 bool LocalSafeBrowsingDatabaseManager::download_protection_enabled() const {
   return enable_download_protection_;
 }
+
+}  // namespace safe_browsing

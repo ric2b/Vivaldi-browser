@@ -1,0 +1,146 @@
+// Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
+
+[
+  {
+    "namespace": "settings",
+    "description": "Use the <code>chrome.settings</code> to change settings.",
+    "types": [
+      {
+        "id": "preferenceTypeEnum",
+        "type": "string",
+        "description": "Type of setting value. Defaults to |boolean|.",
+        "enum": [ "boolean", "string", "integer", "number", "array" ]
+      },
+      {
+        "id": "PreferenceItem",
+        "type": "object",
+        "description": "PreferenceItem.",
+        "properties": {
+          "preferenceKey": {
+            "type": "string",
+            "description": "Preference key name."
+          },
+          "preferenceValue": {
+            "type": "object",
+            "description": "Preference value.",
+            "properties": {
+              "boolean": {
+                "optional": true,
+                "type": "boolean"
+              },
+              "string": {
+                "optional": true,
+                "type": "string"
+              },
+              "integer": {
+                "optional": true,
+                "type": "integer"
+              },
+              "number": {
+                "optional": true,
+                "type": "number"
+              },
+              "array": {
+                "optional": true,
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            }
+          },
+          "preferenceType": { "$ref": "preferenceTypeEnum"}
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "togglePreference",
+        "type": "function",
+        "description": "Toggle preference setting.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "value"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "newValue",
+                "type": "boolean"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getPreference",
+        "type": "function",
+        "description": "Get a specific named preference setting.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "prefName",
+            "description": "Name of the setting to get."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "prefItem",
+                "$ref": "PreferenceItem"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "setPreference",
+        "type": "function",
+        "description": "Set a specific preference.",
+        "parameters": [
+          {
+            "name": "preference",
+            "$ref": "PreferenceItem"
+          }
+        ]
+      },
+      {
+        "name": "getAllPreferences",
+        "type": "function",
+        "description": "Get all settings in a single call.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "results",
+                "type": "array",
+                "items": { "$ref": "PreferenceItem" }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onChanged",
+        "type": "function",
+        "description": "Fired when a preference value has changed.",
+        "parameters": [
+          {
+            "name": "item",
+            "description": "The name of the changed preference item.",
+            "$ref": "PreferenceItem"
+          }
+        ]
+      }
+    ]
+  }
+]

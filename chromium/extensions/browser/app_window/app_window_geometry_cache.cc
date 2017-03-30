@@ -4,6 +4,10 @@
 
 #include "extensions/browser/app_window/app_window_geometry_cache.h"
 
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/bind.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -132,7 +136,7 @@ void AppWindowGeometryCache::SyncToStorage() {
           OnGeometryCacheChanged(extension_id, it->first, bounds));
     }
 
-    prefs_->SetGeometryCache(extension_id, dict.Pass());
+    prefs_->SetGeometryCache(extension_id, std::move(dict));
   }
 }
 
@@ -244,7 +248,7 @@ void AppWindowGeometryCache::LoadGeometryFromStorage(
         }
         std::string ts_as_string;
         if (stored_window->GetString("ts", &ts_as_string)) {
-          int64 ts;
+          int64_t ts;
           if (base::StringToInt64(ts_as_string, &ts)) {
             window_data.last_change = base::Time::FromInternalValue(ts);
           }
@@ -267,7 +271,7 @@ AppWindowGeometryCache* AppWindowGeometryCache::Factory::GetForContext(
 
 AppWindowGeometryCache::Factory*
 AppWindowGeometryCache::Factory::GetInstance() {
-  return Singleton<AppWindowGeometryCache::Factory>::get();
+  return base::Singleton<AppWindowGeometryCache::Factory>::get();
 }
 
 AppWindowGeometryCache::Factory::Factory()

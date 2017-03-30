@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "ios/web/public/browser_url_rewriter.h"
 
@@ -29,7 +30,7 @@ class BrowserURLRewriterImpl : public BrowserURLRewriter {
   // This object is a singleton:
   BrowserURLRewriterImpl();
   ~BrowserURLRewriterImpl() override;
-  friend struct DefaultSingletonTraits<BrowserURLRewriterImpl>;
+  friend struct base::DefaultSingletonTraits<BrowserURLRewriterImpl>;
 
   // The list of known URLRewriters.
   std::vector<URLRewriter> url_rewriters_;

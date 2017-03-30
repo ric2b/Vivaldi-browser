@@ -4,17 +4,21 @@
 
 package org.chromium.content.browser.webcontents;
 
+import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.Parcel;
 import android.os.ParcelUuid;
 import android.os.Parcelable;
 
-import org.chromium.base.CalledByNative;
-import org.chromium.base.JNINamespace;
+import org.chromium.base.ObserverList;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.JNINamespace;
 import org.chromium.content_public.browser.AccessibilitySnapshotCallback;
 import org.chromium.content_public.browser.AccessibilitySnapshotNode;
+import org.chromium.content_public.browser.ContentBitmapCallback;
 import org.chromium.content_public.browser.JavaScriptCallback;
 import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.WebContents;
@@ -80,6 +84,8 @@ import java.util.UUID;
 
     // Lazily created proxy observer for handling all Java-based WebContentsObservers.
     private WebContentsObserverProxy mObserverProxy;
+
+    private boolean mContextMenuOpened;
 
     private WebContentsImpl(
             long nativeWebContentsAndroid, NavigationController navigationController) {
@@ -181,6 +187,11 @@ import java.util.UUID;
     }
 
     @Override
+    public void replace(String word) {
+        nativeReplace(mNativeWebContentsAndroid, word);
+    }
+
+    @Override
     public void selectAll() {
         nativeSelectAll(mNativeWebContentsAndroid);
     }
@@ -190,13 +201,13 @@ import java.util.UUID;
         // Unselect may get triggered when certain selection-related widgets
         // are destroyed. As the timing for such destruction is unpredictable,
         // safely guard against this case.
-        if (mNativeWebContentsAndroid == 0) return;
+        if (isDestroyed()) return;
         nativeUnselect(mNativeWebContentsAndroid);
     }
 
     @Override
     public void insertCSS(String css) {
-        if (mNativeWebContentsAndroid == 0) return;
+        if (isDestroyed()) return;
         nativeInsertCSS(mNativeWebContentsAndroid, css);
     }
 
@@ -229,6 +240,11 @@ import java.util.UUID;
     @Override
     public boolean isShowingInterstitialPage() {
         return nativeIsShowingInterstitialPage(mNativeWebContentsAndroid);
+    }
+
+    @Override
+    public boolean focusLocationBarByDefault() {
+        return nativeFocusLocationBarByDefault(mNativeWebContentsAndroid);
     }
 
     @Override
@@ -274,6 +290,7 @@ import java.util.UUID;
 
     @Override
     public String getUrl() {
+        if (isDestroyed()) return null;
         return nativeGetURL(mNativeWebContentsAndroid);
     }
 
@@ -293,14 +310,25 @@ import java.util.UUID;
     }
 
     @Override
-    @VisibleForTesting
     public void evaluateJavaScript(String script, JavaScriptCallback callback) {
+        if (isDestroyed()) return;
         nativeEvaluateJavaScript(mNativeWebContentsAndroid, script, callback);
+    }
+
+    @Override
+    @VisibleForTesting
+    public void evaluateJavaScriptForTests(String script, JavaScriptCallback callback) {
+        nativeEvaluateJavaScriptForTests(mNativeWebContentsAndroid, script, callback);
     }
 
     @Override
     public void addMessageToDevToolsConsole(int level, String message) {
         nativeAddMessageToDevToolsConsole(mNativeWebContentsAndroid, level, message);
+    }
+
+    @Override
+    public void sendMessageToFrame(String frameName, String message, String targetOrigin) {
+        nativeSendMessageToFrame(mNativeWebContentsAndroid, frameName, message, targetOrigin);
     }
 
     @Override
@@ -339,6 +367,16 @@ import java.util.UUID;
         nativeSuspendMediaSession(mNativeWebContentsAndroid);
     }
 
+    @Override
+    public void stopMediaSession() {
+        nativeStopMediaSession(mNativeWebContentsAndroid);
+    }
+
+    @Override
+    public String getEncoding() {
+        return nativeGetEncoding(mNativeWebContentsAndroid);
+    }
+
     // root node can be null if parsing fails.
     @CalledByNative
     private static void onAccessibilitySnapshot(AccessibilitySnapshotNode root,
@@ -370,6 +408,12 @@ import java.util.UUID;
         return node;
     }
 
+    @CalledByNative
+    private static void setAccessibilitySnapshotSelection(
+            AccessibilitySnapshotNode node, int start, int end) {
+        node.setSelection(start, end);
+    }
+
     @Override
     public void addObserver(WebContentsObserver observer) {
         assert mNativeWebContentsAndroid != 0;
@@ -381,6 +425,43 @@ import java.util.UUID;
     public void removeObserver(WebContentsObserver observer) {
         if (mObserverProxy == null) return;
         mObserverProxy.removeObserver(observer);
+    }
+
+    @VisibleForTesting
+    @Override
+    public ObserverList.RewindableIterator<WebContentsObserver> getObserversForTesting() {
+        return mObserverProxy.getObserversForTesting();
+    }
+
+    @Override
+    public void getContentBitmapAsync(Bitmap.Config config, float scale, Rect srcRect,
+            ContentBitmapCallback callback) {
+        nativeGetContentBitmap(mNativeWebContentsAndroid, callback, config, scale,
+                srcRect.top, srcRect.left, srcRect.width(), srcRect.height());
+    }
+
+    @Override
+    public void onContextMenuOpened() {
+        mContextMenuOpened = true;
+    }
+
+    @Override
+    public void onContextMenuClosed() {
+        if (!mContextMenuOpened) {
+            return;
+        } else {
+            mContextMenuOpened = false;
+        }
+
+        if (mNativeWebContentsAndroid != 0) {
+            nativeOnContextMenuClosed(mNativeWebContentsAndroid);
+        }
+    }
+
+    @CalledByNative
+    private void onGetContentBitmapFinished(ContentBitmapCallback callback, Bitmap bitmap,
+            int response) {
+        callback.onFinishGetBitmap(bitmap, response);
     }
 
     // This is static to avoid exposing a public destroy method on the native side of this class.
@@ -396,6 +477,7 @@ import java.util.UUID;
     private native void nativeCut(long nativeWebContentsAndroid);
     private native void nativeCopy(long nativeWebContentsAndroid);
     private native void nativePaste(long nativeWebContentsAndroid);
+    private native void nativeReplace(long nativeWebContentsAndroid, String word);
     private native void nativeSelectAll(long nativeWebContentsAndroid);
     private native void nativeUnselect(long nativeWebContentsAndroid);
     private native void nativeInsertCSS(long nativeWebContentsAndroid, String css);
@@ -406,6 +488,7 @@ import java.util.UUID;
     private native void nativeShowInterstitialPage(long nativeWebContentsAndroid,
             String url, long nativeInterstitialPageDelegateAndroid);
     private native boolean nativeIsShowingInterstitialPage(long nativeWebContentsAndroid);
+    private native boolean nativeFocusLocationBarByDefault(long nativeWebContentsAndroid);
     private native boolean nativeIsRenderWidgetHostViewReady(long nativeWebContentsAndroid);
     private native void nativeExitFullscreen(long nativeWebContentsAndroid);
     private native void nativeUpdateTopControlsState(long nativeWebContentsAndroid,
@@ -421,8 +504,12 @@ import java.util.UUID;
     private native void nativeResumeLoadingCreatedWebContents(long nativeWebContentsAndroid);
     private native void nativeEvaluateJavaScript(long nativeWebContentsAndroid,
             String script, JavaScriptCallback callback);
+    private native void nativeEvaluateJavaScriptForTests(long nativeWebContentsAndroid,
+            String script, JavaScriptCallback callback);
     private native void nativeAddMessageToDevToolsConsole(
             long nativeWebContentsAndroid, int level, String message);
+    private native void nativeSendMessageToFrame(long nativeWebContentsAndroid,
+            String frameName, String message, String targetOrigin);
     private native boolean nativeHasAccessedInitialDocument(
             long nativeWebContentsAndroid);
     private native int nativeGetThemeColor(long nativeWebContentsAndroid);
@@ -430,4 +517,10 @@ import java.util.UUID;
             AccessibilitySnapshotCallback callback, float offsetY, float scrollX);
     private native void nativeResumeMediaSession(long nativeWebContentsAndroid);
     private native void nativeSuspendMediaSession(long nativeWebContentsAndroid);
+    private native void nativeStopMediaSession(long nativeWebContentsAndroid);
+    private native String nativeGetEncoding(long nativeWebContentsAndroid);
+    private native void nativeGetContentBitmap(long nativeWebContentsAndroid,
+            ContentBitmapCallback callback, Bitmap.Config config, float scale,
+            float x, float y, float width, float height);
+    private native void nativeOnContextMenuClosed(long nativeWebContentsAndroid);
 }

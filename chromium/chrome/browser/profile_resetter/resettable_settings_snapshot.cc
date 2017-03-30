@@ -4,33 +4,39 @@
 
 #include "chrome/browser/profile_resetter/resettable_settings_snapshot.h"
 
+#include "base/guid.h"
 #include "base/json/json_writer.h"
+#include "base/md5.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/cancellation_flag.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/profile_resetter/profile_reset_report.pb.h"
+#include "chrome/browser/profile_resetter/reset_report_uploader.h"
+#include "chrome/browser/profile_resetter/reset_report_uploader_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_content_client.h"
-#include "chrome/common/chrome_version_info.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/feedback/feedback_data.h"
 #include "components/feedback/feedback_util.h"
 #include "components/search_engines/template_url_service.h"
+#include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/extension_registry.h"
+#include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
 using feedback::FeedbackData;
 
 namespace {
 
-// Feedback bucket labels.
-const char kProfileResetPromptBucket[] = "SamplingOfSettingsResetPrompt";
+// Feedback bucket label.
 const char kProfileResetWebUIBucket[] = "ProfileResetReport";
 
 // Dictionary keys for feedback report.
@@ -42,6 +48,7 @@ const char kShortcuts[] = "shortcuts";
 const char kShowHomeButton[] = "show_home_button";
 const char kStartupTypePath[] = "startup_type";
 const char kStartupURLPath[] = "startup_urls";
+const char kGuid[] = "guid";
 
 template <class StringType>
 void AddPair(base::ListValue* list,
@@ -87,6 +94,10 @@ ResettableSettingsSnapshot::ResettableSettingsSnapshot(
 
   // ExtensionSet is sorted but it seems to be an implementation detail.
   std::sort(enabled_extensions_.begin(), enabled_extensions_.end());
+
+  // Calculate the MD5 sum of the GUID to make sure that no part of the GUID
+  // contains information identifying the sender of the report.
+  guid_ = base::MD5String(base::GenerateGUID());
 }
 
 ResettableSettingsSnapshot::~ResettableSettingsSnapshot() {
@@ -211,6 +222,8 @@ std::string SerializeSettingsReport(const ResettableSettingsSnapshot& snapshot,
     dict.Set(kShortcuts, list);
   }
 
+  dict.SetString(kGuid, snapshot.guid());
+
   static_assert(ResettableSettingsSnapshot::ALL_FIELDS == 31,
                 "new field needs to be serialized here");
 
@@ -219,20 +232,68 @@ std::string SerializeSettingsReport(const ResettableSettingsSnapshot& snapshot,
   return json;
 }
 
-void SendSettingsFeedback(const std::string& report,
-                          Profile* profile,
-                          SnapshotCaller caller) {
-  scoped_refptr<FeedbackData> feedback_data = new FeedbackData();
-  std::string bucket;
-  switch (caller) {
-    case PROFILE_RESET_WEBUI:
-      bucket = kProfileResetWebUIBucket;
-      break;
-    case PROFILE_RESET_PROMPT:
-      bucket = kProfileResetPromptBucket;
-      break;
+scoped_ptr<reset_report::ChromeResetReport> SerializeSettingsReportToProto(
+    const ResettableSettingsSnapshot& snapshot,
+    int field_mask) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  scoped_ptr<reset_report::ChromeResetReport> report(
+      new reset_report::ChromeResetReport());
+
+  if (field_mask & ResettableSettingsSnapshot::STARTUP_MODE) {
+    for (const auto& url : snapshot.startup_urls())
+      report->add_startup_url_path(url.spec());
+    switch (snapshot.startup_type()) {
+      case SessionStartupPref::DEFAULT:
+        report->set_startup_type(
+            reset_report::ChromeResetReport_SessionStartupType_DEFAULT);
+        break;
+      case SessionStartupPref::LAST:
+        report->set_startup_type(
+            reset_report::ChromeResetReport_SessionStartupType_LAST);
+        break;
+      case SessionStartupPref::URLS:
+        report->set_startup_type(
+            reset_report::ChromeResetReport_SessionStartupType_URLS);
+        break;
+      default:
+        break;
+    }
   }
-  feedback_data->set_category_tag(bucket);
+
+  if (field_mask & ResettableSettingsSnapshot::HOMEPAGE) {
+    report->set_homepage_path(snapshot.homepage());
+    report->set_homepage_is_new_tab_page(snapshot.homepage_is_ntp());
+    report->set_show_home_button(snapshot.show_home_button());
+  }
+
+  if (field_mask & ResettableSettingsSnapshot::DSE_URL)
+    report->set_default_search_engine_path(snapshot.dse_url());
+
+  if (field_mask & ResettableSettingsSnapshot::EXTENSIONS) {
+    for (const auto& enabled_extension : snapshot.enabled_extensions()) {
+      reset_report::ChromeResetReport_Extension* new_extension =
+          report->add_enabled_extensions();
+      new_extension->set_extension_id(enabled_extension.first);
+      new_extension->set_extension_name(enabled_extension.second);
+    }
+  }
+
+  if (field_mask & ResettableSettingsSnapshot::SHORTCUTS) {
+    for (const auto& shortcut_command : snapshot.shortcuts())
+      report->add_shortcuts(base::UTF16ToUTF8(shortcut_command.second));
+  }
+
+  report->set_guid(snapshot.guid());
+
+  static_assert(ResettableSettingsSnapshot::ALL_FIELDS == 31,
+                "new field needs to be serialized here");
+  return report;
+}
+
+void SendSettingsFeedback(const std::string& report,
+                          Profile* profile) {
+  scoped_refptr<FeedbackData> feedback_data = new FeedbackData();
+  feedback_data->set_category_tag(kProfileResetWebUIBucket);
   feedback_data->set_description(report);
 
   feedback_data->set_image(make_scoped_ptr(new std::string));
@@ -242,6 +303,12 @@ void SendSettingsFeedback(const std::string& report,
   feedback_data->set_user_email("");
 
   feedback_util::SendReport(feedback_data);
+}
+
+void SendSettingsFeedbackProto(const reset_report::ChromeResetReport& report,
+                               Profile* profile) {
+  ResetReportUploaderFactory::GetForBrowserContext(profile)
+      ->DispatchReport(report);
 }
 
 scoped_ptr<base::ListValue> GetReadableFeedbackForSnapshot(
@@ -254,11 +321,10 @@ scoped_ptr<base::ListValue> GetReadableFeedbackForSnapshot(
           l10n_util::GetStringUTF16(IDS_RESET_PROFILE_SETTINGS_LOCALE),
           g_browser_process->GetApplicationLocale());
   AddPair(list.get(),
-          l10n_util::GetStringUTF16(IDS_RESET_PROFILE_SETTINGS_USER_AGENT),
+          l10n_util::GetStringUTF16(IDS_VERSION_UI_USER_AGENT),
           GetUserAgent());
-  chrome::VersionInfo version_info;
-  std::string version = version_info.Version();
-  version += chrome::VersionInfo::GetVersionStringModifier();
+  std::string version = version_info::GetVersionNumber();
+  version += chrome::GetChannelString();
   AddPair(list.get(),
           l10n_util::GetStringUTF16(IDS_PRODUCT_NAME),
           version);
@@ -303,16 +369,16 @@ scoped_ptr<base::ListValue> GetReadableFeedbackForSnapshot(
             snapshot.homepage());
   }
 
-  int is_ntp_message_id = snapshot.homepage_is_ntp() ?
-      IDS_RESET_PROFILE_SETTINGS_HOMEPAGE_IS_NTP_TRUE :
-      IDS_RESET_PROFILE_SETTINGS_HOMEPAGE_IS_NTP_FALSE;
+  int is_ntp_message_id = snapshot.homepage_is_ntp()
+      ? IDS_RESET_PROFILE_SETTINGS_YES
+      : IDS_RESET_PROFILE_SETTINGS_NO;
   AddPair(list.get(),
           l10n_util::GetStringUTF16(IDS_RESET_PROFILE_SETTINGS_HOMEPAGE_IS_NTP),
           l10n_util::GetStringUTF16(is_ntp_message_id));
 
-  int show_home_button_id = snapshot.show_home_button() ?
-      IDS_RESET_PROFILE_SETTINGS_SHOW_HOME_BUTTON_TRUE :
-      IDS_RESET_PROFILE_SETTINGS_SHOW_HOME_BUTTON_FALSE;
+  int show_home_button_id = snapshot.show_home_button()
+      ? IDS_RESET_PROFILE_SETTINGS_YES
+      : IDS_RESET_PROFILE_SETTINGS_NO;
   AddPair(
       list.get(),
       l10n_util::GetStringUTF16(IDS_RESET_PROFILE_SETTINGS_SHOW_HOME_BUTTON),
@@ -364,5 +430,5 @@ scoped_ptr<base::ListValue> GetReadableFeedbackForSnapshot(
             l10n_util::GetStringUTF16(IDS_RESET_PROFILE_SETTINGS_EXTENSIONS),
             extension_names);
   }
-  return list.Pass();
+  return list;
 }

@@ -4,35 +4,69 @@
 
 #include "ipc/brokerable_attachment.h"
 
-#include "crypto/random.h"
+#include <stddef.h>
+
+#include "build/build_config.h"
+#include "ipc/attachment_broker.h"
 
 namespace IPC {
 
-namespace {
+// BrokerableAttachment::AttachmentId ------------------------------------------
+#if !USE_ATTACHMENT_BROKER
+// static
+BrokerableAttachment::AttachmentId
+BrokerableAttachment::AttachmentId::CreateIdWithRandomNonce() {
+  CHECK(false) << "Platforms that don't support attachment brokering shouldn't "
+                  "be trying to generating a random nonce.";
+  return AttachmentId();
+}
+#endif
 
-// In order to prevent mutually untrusted processes from stealing resources from
-// one another, the nonce must be secret. This generates a 128-bit,
-// cryptographicaly-strong random number.
-BrokerableAttachment::AttachmentId GetRandomId() {
-  BrokerableAttachment::AttachmentId id;
-  crypto::RandBytes(id.nonce, BrokerableAttachment::kNonceSize);
-  return id;
+BrokerableAttachment::AttachmentId::AttachmentId() {
+  for (size_t i = 0; i < BrokerableAttachment::kNonceSize; ++i)
+    nonce[i] = 0;
 }
 
-}  // namespace
-
-BrokerableAttachment::BrokerableAttachment() : id_(GetRandomId()) {
+BrokerableAttachment::AttachmentId::AttachmentId(const char* start_address,
+                                                 size_t size) {
+  DCHECK(size == BrokerableAttachment::kNonceSize);
+  for (size_t i = 0; i < BrokerableAttachment::kNonceSize; ++i)
+    nonce[i] = start_address[i];
 }
 
-BrokerableAttachment::~BrokerableAttachment() {
+void BrokerableAttachment::AttachmentId::SerializeToBuffer(char* start_address,
+                                                           size_t size) {
+  DCHECK(size == BrokerableAttachment::kNonceSize);
+  for (size_t i = 0; i < BrokerableAttachment::kNonceSize; ++i)
+    start_address[i] = nonce[i];
 }
+
+// BrokerableAttachment::BrokerableAttachment ----------------------------------
+
+BrokerableAttachment::BrokerableAttachment()
+    : id_(AttachmentId::CreateIdWithRandomNonce()) {}
+
+BrokerableAttachment::BrokerableAttachment(const AttachmentId& id) : id_(id) {}
+
+BrokerableAttachment::~BrokerableAttachment() {}
 
 BrokerableAttachment::AttachmentId BrokerableAttachment::GetIdentifier() const {
   return id_;
 }
 
+bool BrokerableAttachment::NeedsBrokering() const {
+  return GetBrokerableType() == PLACEHOLDER;
+}
+
 BrokerableAttachment::Type BrokerableAttachment::GetType() const {
   return TYPE_BROKERABLE_ATTACHMENT;
 }
+
+#if defined(OS_POSIX)
+base::PlatformFile BrokerableAttachment::TakePlatformFile() {
+  NOTREACHED();
+  return base::PlatformFile();
+}
+#endif  // OS_POSIX
 
 }  // namespace IPC

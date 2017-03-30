@@ -9,26 +9,23 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/values.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "extensions/common/api/networking_private.h"
 
-namespace content {
-class BrowserContext;
-}
-
 namespace extensions {
 
 class NetworkingPrivateDelegateObserver;
 
-namespace core_api {
+namespace api {
 namespace networking_private {
 struct DeviceStateProperties;
 struct VerificationProperties;
 }  // networking_private
-}  // core_api
+}  // api
 
 // Base class for platform dependent networkingPrivate API implementations.
 // All inputs and results for this class use ONC values. See
@@ -43,9 +40,9 @@ class NetworkingPrivateDelegate : public KeyedService {
   using NetworkListCallback = base::Callback<void(scoped_ptr<base::ListValue>)>;
   using FailureCallback = base::Callback<void(const std::string&)>;
   using DeviceStateList =
-      ScopedVector<core_api::networking_private::DeviceStateProperties>;
+      std::vector<scoped_ptr<api::networking_private::DeviceStateProperties>>;
   using VerificationProperties =
-      core_api::networking_private::VerificationProperties;
+      api::networking_private::VerificationProperties;
 
   // The Verify* methods will be forwarded to a delegate implementation if
   // provided, otherwise they will fail. A separate delegate it used so that the
@@ -80,11 +77,36 @@ class NetworkingPrivateDelegate : public KeyedService {
     DISALLOW_COPY_AND_ASSIGN(VerifyDelegate);
   };
 
+  // Delegate for forwarding UI requests, e.g. for showing the account UI.
+  class UIDelegate {
+   public:
+    UIDelegate();
+    virtual ~UIDelegate();
+
+    // Navigate to the acoount details page for the cellular network associated
+    // with |guid|.
+    virtual void ShowAccountDetails(const std::string& guid) const = 0;
+
+    // Possibly handle a connection failure, e.g. by showing the configuration
+    // UI. Returns true if the error was handled, i.e. the UI was shown.
+    virtual bool HandleConnectFailed(const std::string& guid,
+                                     const std::string error) const = 0;
+
+   private:
+    DISALLOW_COPY_AND_ASSIGN(UIDelegate);
+  };
+
   // If |verify_delegate| is not NULL, the Verify* methods will be forwarded
   // to the delegate. Otherwise they will fail with a NotSupported error.
   explicit NetworkingPrivateDelegate(
       scoped_ptr<VerifyDelegate> verify_delegate);
   ~NetworkingPrivateDelegate() override;
+
+  void set_ui_delegate(scoped_ptr<UIDelegate> ui_delegate) {
+    ui_delegate_.reset(ui_delegate.release());
+  }
+
+  const UIDelegate* ui_delegate() { return ui_delegate_.get(); }
 
   // Asynchronous methods
   virtual void GetProperties(const std::string& guid,
@@ -136,6 +158,18 @@ class NetworkingPrivateDelegate : public KeyedService {
       const std::string& guid,
       const StringCallback& success_callback,
       const FailureCallback& failure_callback) = 0;
+  virtual void UnlockCellularSim(const std::string& guid,
+                                 const std::string& pin,
+                                 const std::string& puk,
+                                 const VoidCallback& success_callback,
+                                 const FailureCallback& failure_callback) = 0;
+
+  virtual void SetCellularSimState(const std::string& guid,
+                                   bool require_pin,
+                                   const std::string& current_pin,
+                                   const std::string& new_pin,
+                                   const VoidCallback& success_callback,
+                                   const FailureCallback& failure_callback) = 0;
 
   // Synchronous methods
 
@@ -176,8 +210,11 @@ class NetworkingPrivateDelegate : public KeyedService {
       const FailureCallback& failure_callback);
 
  private:
-  // Interface for Verify* methods. May be NULL.
+  // Interface for Verify* methods. May be null.
   scoped_ptr<VerifyDelegate> verify_delegate_;
+
+  // Interface for UI methods. May be null.
+  scoped_ptr<UIDelegate> ui_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkingPrivateDelegate);
 };

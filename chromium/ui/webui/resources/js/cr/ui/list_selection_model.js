@@ -176,7 +176,7 @@ cr.define('cr.ui', function() {
      * @param {number} index The index to set the selected state for.
      * @param {boolean} b Whether to select the index or not.
      */
-    setIndexSelected: function (index, b) {
+    setIndexSelected: function(index, b) {
       var oldSelected = index in this.selectedIndexes_;
       if (oldSelected == b)
         return;
@@ -189,9 +189,6 @@ cr.define('cr.ui', function() {
       this.beginChange();
 
       this.changedIndexes_[index] = b;
-
-      console.log(index + " " + b);
-      console.log(this.selectedIndexes_);
 
       // End change dispatches an event which in turn may update the view.
       this.endChange();

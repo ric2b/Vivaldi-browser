@@ -5,10 +5,13 @@
 #ifndef SYNC_ENGINE_NET_SERVER_CONNECTION_MANAGER_H_
 #define SYNC_ENGINE_NET_SERVER_CONNECTION_MANAGER_H_
 
+#include <stdint.h>
+
 #include <iosfwd>
 #include <string>
 
 #include "base/atomicops.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "base/strings/string_util.h"
@@ -31,14 +34,14 @@ namespace syncable {
 class Directory;
 }
 
-static const int32 kUnsetResponseCode = -1;
-static const int32 kUnsetContentLength = -1;
-static const int32 kUnsetPayloadLength = -1;
+static const int32_t kUnsetResponseCode = -1;
+static const int32_t kUnsetContentLength = -1;
+static const int32_t kUnsetPayloadLength = -1;
 
 // HttpResponse gathers the relevant output properties of an HTTP request.
 // Depending on the value of the server_status code, response_code, and
 // content_length may not be valid.
-struct SYNC_EXPORT_PRIVATE HttpResponse {
+struct SYNC_EXPORT HttpResponse {
   enum ServerConnectionCode {
     // For uninitialized state.
     NONE,
@@ -73,13 +76,13 @@ struct SYNC_EXPORT_PRIVATE HttpResponse {
   };
 
   // The HTTP Status code.
-  int64 response_code;
+  int64_t response_code;
 
   // The value of the Content-length header.
-  int64 content_length;
+  int64_t content_length;
 
   // The size of a download request's payload.
-  int64 payload_length;
+  int64_t payload_length;
 
   // Identifies the type of failure, if any.
   ServerConnectionCode server_status;
@@ -88,9 +91,6 @@ struct SYNC_EXPORT_PRIVATE HttpResponse {
 
   static const char* GetServerConnectionCodeString(
       ServerConnectionCode code);
-
-  static ServerConnectionCode ServerConnectionCodeFromNetError(
-      int error_code);
 };
 
 struct ServerConnectionEvent {
@@ -99,33 +99,17 @@ struct ServerConnectionEvent {
       connection_code(code) {}
 };
 
-class SYNC_EXPORT_PRIVATE ServerConnectionEventListener {
+class SYNC_EXPORT ServerConnectionEventListener {
  public:
   virtual void OnServerConnectionEvent(const ServerConnectionEvent& event) = 0;
  protected:
   virtual ~ServerConnectionEventListener() {}
 };
 
-class ServerConnectionManager;
-// A helper class that automatically notifies when the status changes.
-// TODO(tim): This class shouldn't be exposed outside of the implementation,
-// bug 35060.
-class SYNC_EXPORT_PRIVATE ScopedServerStatusWatcher
-    : public base::NonThreadSafe {
- public:
-  ScopedServerStatusWatcher(ServerConnectionManager* conn_mgr,
-                            HttpResponse* response);
-  virtual ~ScopedServerStatusWatcher();
- private:
-  ServerConnectionManager* const conn_mgr_;
-  HttpResponse* const response_;
-  DISALLOW_COPY_AND_ASSIGN(ScopedServerStatusWatcher);
-};
-
 // Use this class to interact with the sync server.
 // The ServerConnectionManager currently supports POSTing protocol buffers.
 //
-class SYNC_EXPORT_PRIVATE ServerConnectionManager : public CancelationObserver {
+class SYNC_EXPORT ServerConnectionManager : public CancelationObserver {
  public:
   // buffer_in - will be POSTed
   // buffer_out - string will be overwritten with response
@@ -189,8 +173,7 @@ class SYNC_EXPORT_PRIVATE ServerConnectionManager : public CancelationObserver {
   // set auth token in our headers.
   //
   // Returns true if executed successfully.
-  virtual bool PostBufferWithCachedAuth(PostBufferParams* params,
-                                        ScopedServerStatusWatcher* watcher);
+  virtual bool PostBufferWithCachedAuth(PostBufferParams* params);
 
   void AddListener(ServerConnectionEventListener* listener);
   void RemoveListener(ServerConnectionEventListener* listener);
@@ -250,8 +233,7 @@ class SYNC_EXPORT_PRIVATE ServerConnectionManager : public CancelationObserver {
   // Internal PostBuffer base function.
   virtual bool PostBufferToPath(PostBufferParams*,
                                 const std::string& path,
-                                const std::string& auth_token,
-                                ScopedServerStatusWatcher* watcher);
+                                const std::string& auth_token);
 
   // An internal helper to clear our auth_token_ and cache the old version
   // in |previously_invalidated_token_| to shelter us from retrying with a
@@ -307,7 +289,6 @@ class SYNC_EXPORT_PRIVATE ServerConnectionManager : public CancelationObserver {
 
  private:
   friend class Connection;
-  friend class ScopedServerStatusWatcher;
 
   // A class to help deal with cleaning up active Connection objects when (for
   // ex) multiple early-exits are present in some scope. ScopedConnectionHelper

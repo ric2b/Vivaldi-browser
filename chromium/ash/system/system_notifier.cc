@@ -22,12 +22,12 @@ namespace {
 // which can appear regardless of the situation, such like login screen or lock
 // screen.
 const char* kAlwaysShownSystemNotifierIds[] = {
+    kNotifierDeprecatedAccelerator,
     kNotifierBattery,
     kNotifierDisplay,
     kNotifierDisplayError,
 #if defined(OS_CHROMEOS)
     ui::NetworkStateNotifier::kNotifierNetworkError,
-    kNotifierOobeScreen,
 #endif
     kNotifierPower,
     // Note: Order doesn't matter here, so keep this in alphabetic order, don't
@@ -71,13 +71,14 @@ bool MatchSystemNotifierId(const message_center::NotifierId& notifier_id,
 
 const char kNotifierBattery[] = "ash.battery";
 const char kNotifierBluetooth[] = "ash.bluetooth";
+const char kNotifierDeprecatedAccelerator[] = "ash.accelerator-controller";
 const char kNotifierDisplay[] = "ash.display";
 const char kNotifierDisplayError[] = "ash.display.error";
 const char kNotifierDisplayResolutionChange[] = "ash.display.resolution-change";
+const char kNotifierDualRole[] = "ash.dual-role";
 const char kNotifierLocale[] = "ash.locale";
 const char kNotifierMultiProfileFirstRun[] = "ash.multi-profile.first-run";
 const char kNotifierNetworkPortalDetector[] = "ash.network.portal-detector";
-const char kNotifierOobeScreen[] = "ash.oobe-screen";
 const char kNotifierPower[] = "ash.power";
 const char kNotifierScreenshot[] = "ash.screenshot";
 const char kNotifierScreenCapture[] = "ash.screen-capture";

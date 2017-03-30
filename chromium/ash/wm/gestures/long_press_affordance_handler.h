@@ -5,6 +5,7 @@
 #ifndef ASH_WM_GESTURES_LONG_PRESS_AFFORDANCE_HANDLER_H_
 #define ASH_WM_GESTURES_LONG_PRESS_AFFORDANCE_HANDLER_H_
 
+#include "base/macros.h"
 #include "base/timer/timer.h"
 #include "ui/aura/window_observer.h"
 #include "ui/gfx/animation/linear_animation.h"
@@ -60,7 +61,7 @@ class LongPressAffordanceHandler : public gfx::LinearAnimation,
 
   scoped_ptr<LongPressAffordanceView> view_;
   gfx::Point tap_down_location_;
-  base::OneShotTimer<LongPressAffordanceHandler> timer_;
+  base::OneShotTimer timer_;
   aura::Window* tap_down_target_;
   LongPressAnimationType current_animation_type_;
 

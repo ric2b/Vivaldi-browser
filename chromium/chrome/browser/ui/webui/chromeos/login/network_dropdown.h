@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_CHROMEOS_LOGIN_NETWORK_DROPDOWN_H_
 #define CHROME_BROWSER_UI_WEBUI_CHROMEOS_LOGIN_NETWORK_DROPDOWN_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/chromeos/status/network_menu.h"
 #include "chromeos/network/network_state_handler_observer.h"
@@ -75,7 +75,7 @@ class NetworkDropdown : public NetworkMenu::Delegate,
   bool oobe_;
 
   // Timer used to periodically force network scan.
-  base::RepeatingTimer<NetworkDropdown> network_scan_timer_;
+  base::RepeatingTimer network_scan_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkDropdown);
 };

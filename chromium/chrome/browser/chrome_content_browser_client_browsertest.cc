@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 #include "base/command_line.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
@@ -11,7 +13,8 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/content_switches.h"
+#include "content/public/test/browser_test_utils.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -32,14 +35,8 @@ class ChromeContentBrowserClientBrowserTest : public InProcessBrowserTest {
 #endif
 };
 
-// TODO(vivaldi) Reenable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_UberURLHandler_SettingsPage DISABLED_UberURLHandler_SettingsPage
-#else
-#define MAYBE_UberURLHandler_SettingsPage UberURLHandler_SettingsPage
-#endif
 IN_PROC_BROWSER_TEST_F(ChromeContentBrowserClientBrowserTest,
-                       MAYBE_UberURLHandler_SettingsPage) {
+                       UberURLHandler_SettingsPage) {
   const GURL url_short("chrome://settings/");
   const GURL url_long("chrome://chrome/settings/");
 
@@ -51,14 +48,8 @@ IN_PROC_BROWSER_TEST_F(ChromeContentBrowserClientBrowserTest,
   EXPECT_EQ(url_short, entry->GetVirtualURL());
 }
 
-// TODO(vivaldi) Reenable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_UberURLHandler_ContentSettingsPage DISABLED_UberURLHandler_ContentSettingsPage
-#else
-#define MAYBE_UberURLHandler_ContentSettingsPage UberURLHandler_ContentSettingsPage
-#endif
 IN_PROC_BROWSER_TEST_F(ChromeContentBrowserClientBrowserTest,
-                       MAYBE_UberURLHandler_ContentSettingsPage) {
+                       UberURLHandler_ContentSettingsPage) {
   const GURL url_short("chrome://settings/content");
   const GURL url_long("chrome://chrome/settings/content");
 
@@ -70,14 +61,8 @@ IN_PROC_BROWSER_TEST_F(ChromeContentBrowserClientBrowserTest,
   EXPECT_EQ(url_short, entry->GetVirtualURL());
 }
 
-// TODO(vivaldi) Reenable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_UberURLHandler_AboutPage DISABLED_UberURLHandler_AboutPage
-#else
-#define MAYBE_UberURLHandler_AboutPage UberURLHandler_AboutPage
-#endif
 IN_PROC_BROWSER_TEST_F(ChromeContentBrowserClientBrowserTest,
-                       MAYBE_UberURLHandler_AboutPage) {
+                       UberURLHandler_AboutPage) {
   const GURL url("chrome://chrome/");
 
   ui_test_utils::NavigateToURL(browser(), url);
@@ -88,14 +73,8 @@ IN_PROC_BROWSER_TEST_F(ChromeContentBrowserClientBrowserTest,
   EXPECT_EQ(url, entry->GetVirtualURL());
 }
 
-// TODO(vivaldi) Reenable for Vivaldi
-#if defined(OS_MACOSX)
-#define MAYBE_UberURLHandler_EmptyHost DISABLED_UberURLHandler_EmptyHost
-#else
-#define MAYBE_UberURLHandler_EmptyHost UberURLHandler_EmptyHost
-#endif
 IN_PROC_BROWSER_TEST_F(ChromeContentBrowserClientBrowserTest,
-                       MAYBE_UberURLHandler_EmptyHost) {
+                       UberURLHandler_EmptyHost) {
   const GURL url("chrome://chrome//foo");
 
   ui_test_utils::NavigateToURL(browser(), url);
@@ -106,15 +85,28 @@ IN_PROC_BROWSER_TEST_F(ChromeContentBrowserClientBrowserTest,
   EXPECT_EQ(url, entry->GetVirtualURL());
 }
 
+// Use a test class with SetUpCommandLine to ensure the flag is sent to the
+// first renderer process.
+class ChromeContentBrowserClientSitePerProcessTest
+    : public ChromeContentBrowserClientBrowserTest {
+ public:
+  ChromeContentBrowserClientSitePerProcessTest() {}
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    content::IsolateAllSitesForTesting(command_line);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ChromeContentBrowserClientSitePerProcessTest);
+};
+
 // Test that a basic navigation works in --site-per-process mode.  This prevents
 // regressions when that mode calls out into the ChromeContentBrowserClient,
 // such as http://crbug.com/164223.
-IN_PROC_BROWSER_TEST_F(ChromeContentBrowserClientBrowserTest,
+IN_PROC_BROWSER_TEST_F(ChromeContentBrowserClientSitePerProcessTest,
                        SitePerProcessNavigation) {
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kSitePerProcess);
-  ASSERT_TRUE(test_server()->Start());
-  const GURL url(test_server()->GetURL("files/title1.html"));
+  ASSERT_TRUE(embedded_test_server()->Start());
+  const GURL url(embedded_test_server()->GetURL("/title1.html"));
 
   ui_test_utils::NavigateToURL(browser(), url);
   NavigationEntry* entry = GetLastCommittedEntry();

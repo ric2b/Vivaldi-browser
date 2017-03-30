@@ -4,6 +4,8 @@
 
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_settings_android.h"
 
+#include <stddef.h>
+
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
@@ -21,6 +23,7 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_test_utils.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params_test_utils.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
 #include "components/proxy_config/proxy_prefs.h"
 #include "net/proxy/proxy_server.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -69,8 +72,6 @@ void data_reduction_proxy::DataReductionProxySettingsTestBase::ResetSettings(
   MockDataReductionProxySettings<C>* settings =
       new MockDataReductionProxySettings<C>();
   settings->config_ = test_context_->config();
-  settings->data_reduction_proxy_service_ =
-      test_context_->CreateDataReductionProxyService();
   test_context_->config()->ResetParamFlagsForTest(flags);
   settings->UpdateConfigValues();
   EXPECT_CALL(*settings, GetOriginalProfilePrefs())
@@ -80,6 +81,8 @@ void data_reduction_proxy::DataReductionProxySettingsTestBase::ResetSettings(
       .Times(AnyNumber())
       .WillRepeatedly(Return(test_context_->pref_service()));
   settings_.reset(settings);
+  settings_->data_reduction_proxy_service_ =
+      test_context_->CreateDataReductionProxyService(settings_.get());
 }
 
 template void

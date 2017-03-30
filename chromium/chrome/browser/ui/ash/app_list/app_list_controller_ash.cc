@@ -8,6 +8,7 @@
 #include "ash/shell.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "extensions/common/extension.h"
 #include "ui/app_list/views/app_list_view.h"
 
@@ -50,10 +51,11 @@ void AppListControllerDelegateAsh::UnpinApp(const std::string& extension_id) {
   ChromeLauncherController::instance()->UnpinAppWithID(extension_id);
 }
 
-AppListControllerDelegate::Pinnable
-    AppListControllerDelegateAsh::GetPinnable() {
-  return ChromeLauncherController::instance()->CanPin() ? PIN_EDITABLE :
-      PIN_FIXED;
+AppListControllerDelegate::Pinnable AppListControllerDelegateAsh::GetPinnable(
+    const std::string& extension_id) {
+  return ChromeLauncherController::instance()->CanPin(extension_id)
+             ? PIN_EDITABLE
+             : PIN_FIXED;
 }
 
 void AppListControllerDelegateAsh::OnShowChildDialog() {

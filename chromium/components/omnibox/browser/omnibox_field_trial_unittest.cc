@@ -4,11 +4,12 @@
 
 #include "components/omnibox/browser/omnibox_field_trial.h"
 
-#include "base/basictypes.h"
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "components/metrics/proto/omnibox_event.pb.h"
 #include "components/search/search.h"
 #include "components/variations/entropy_provider.h"
@@ -195,11 +196,10 @@ TEST_F(OmniboxFieldTrialTest, GetDisabledProviderTypes) {
 // group names.
 TEST_F(OmniboxFieldTrialTest, ZeroSuggestFieldTrial) {
   // Default ZeroSuggest setting depends on OS.
-#if defined(OS_WIN) || defined(OS_CHROMEOS) || defined(OS_LINUX) || \
-    (defined(OS_MACOSX) && !defined(OS_IOS))
-  EXPECT_TRUE(OmniboxFieldTrial::InZeroSuggestFieldTrial());
-#else
+#if defined(OS_IOS)
   EXPECT_FALSE(OmniboxFieldTrial::InZeroSuggestFieldTrial());
+#else
+  EXPECT_TRUE(OmniboxFieldTrial::InZeroSuggestFieldTrial());
 #endif
 
   {
@@ -219,8 +219,16 @@ TEST_F(OmniboxFieldTrialTest, ZeroSuggestFieldTrial) {
     base::FieldTrialList::CreateFieldTrial(
         OmniboxFieldTrial::kBundledExperimentFieldTrialName, "A");
     EXPECT_TRUE(OmniboxFieldTrial::InZeroSuggestFieldTrial());
+#if defined(OS_ANDROID)
+    EXPECT_TRUE(OmniboxFieldTrial::InZeroSuggestMostVisitedFieldTrial());
+#else
     EXPECT_FALSE(OmniboxFieldTrial::InZeroSuggestMostVisitedFieldTrial());
+#endif
+#if defined(OS_IOS) || defined(OS_ANDROID)
     EXPECT_FALSE(OmniboxFieldTrial::InZeroSuggestAfterTypingFieldTrial());
+#else
+    EXPECT_TRUE(OmniboxFieldTrial::InZeroSuggestAfterTypingFieldTrial());
+#endif
 
     ResetFieldTrialList();
     params[std::string(OmniboxFieldTrial::kZeroSuggestVariantRule)] =
@@ -231,17 +239,26 @@ TEST_F(OmniboxFieldTrialTest, ZeroSuggestFieldTrial) {
         OmniboxFieldTrial::kBundledExperimentFieldTrialName, "A");
     EXPECT_TRUE(OmniboxFieldTrial::InZeroSuggestFieldTrial());
     EXPECT_TRUE(OmniboxFieldTrial::InZeroSuggestMostVisitedFieldTrial());
+#if defined(OS_IOS) || defined(OS_ANDROID)
     EXPECT_FALSE(OmniboxFieldTrial::InZeroSuggestAfterTypingFieldTrial());
+#else
+    EXPECT_TRUE(OmniboxFieldTrial::InZeroSuggestAfterTypingFieldTrial());
+#endif
 
     ResetFieldTrialList();
-    params[std::string(OmniboxFieldTrial::kZeroSuggestVariantRule)] =
+    params.erase(std::string(OmniboxFieldTrial::kZeroSuggestVariantRule));
+    params[std::string(OmniboxFieldTrial::kSuggestVariantRule)] =
         "AfterTyping";
     base::FieldTrialList::CreateFieldTrial(
         OmniboxFieldTrial::kBundledExperimentFieldTrialName, "A");
     ASSERT_TRUE(variations::AssociateVariationParams(
         OmniboxFieldTrial::kBundledExperimentFieldTrialName, "A", params));
     EXPECT_TRUE(OmniboxFieldTrial::InZeroSuggestFieldTrial());
+#if defined(OS_ANDROID)
+    EXPECT_TRUE(OmniboxFieldTrial::InZeroSuggestMostVisitedFieldTrial());
+#else
     EXPECT_FALSE(OmniboxFieldTrial::InZeroSuggestMostVisitedFieldTrial());
+#endif
     EXPECT_TRUE(OmniboxFieldTrial::InZeroSuggestAfterTypingFieldTrial());
   }
 }
@@ -302,7 +319,7 @@ TEST_F(OmniboxFieldTrialTest, GetValueForRuleInContext) {
   base::FieldTrialList::CreateFieldTrial(
       OmniboxFieldTrial::kBundledExperimentFieldTrialName, "A");
 
-  if (chrome::IsInstantExtendedAPIEnabled()) {
+  if (search::IsInstantExtendedAPIEnabled()) {
     // Tests with Instant Extended enabled.
     // Tests for rule 1.
     ExpectRuleValue("rule1-4-1-value",
@@ -428,6 +445,29 @@ TEST_F(OmniboxFieldTrialTest, HUPNewScoringFieldTrial) {
             scoring_params.visited_count_buckets.buckets()[0]);
   EXPECT_EQ(std::make_pair(0.0, 200),
             scoring_params.visited_count_buckets.buckets()[1]);
+}
+
+TEST_F(OmniboxFieldTrialTest, HUPNewScoringFieldTrialWithDecayFactor) {
+  {
+    std::map<std::string, std::string> params;
+    params[OmniboxFieldTrial::kHUPNewScoringEnabledParam] = "1";
+    params[OmniboxFieldTrial::kHUPNewScoringTypedCountHalfLifeTimeParam] = "10";
+    params[OmniboxFieldTrial::kHUPNewScoringTypedCountUseDecayFactorParam] =
+        "1";
+    params[OmniboxFieldTrial::kHUPNewScoringTypedCountScoreBucketsParam] =
+        "0.1:100,0.5:500,1.0:1000";
+    ASSERT_TRUE(variations::AssociateVariationParams(
+        OmniboxFieldTrial::kBundledExperimentFieldTrialName, "A", params));
+  }
+  base::FieldTrialList::CreateFieldTrial(
+      OmniboxFieldTrial::kBundledExperimentFieldTrialName, "A");
+
+  HUPScoringParams scoring_params;
+  OmniboxFieldTrial::GetExperimentalHUPScoringParams(&scoring_params);
+  EXPECT_TRUE(scoring_params.experimental_scoring_enabled);
+  EXPECT_EQ(10, scoring_params.typed_count_buckets.half_life_days());
+  ASSERT_EQ(3u, scoring_params.typed_count_buckets.buckets().size());
+  ASSERT_TRUE(scoring_params.typed_count_buckets.use_decay_factor());
 }
 
 TEST_F(OmniboxFieldTrialTest, HalfLifeTimeDecay) {

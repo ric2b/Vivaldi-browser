@@ -6,8 +6,8 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/time/time.h"
-#include "media/base/buffers.h"
 #include "media/base/stream_parser_buffer.h"
 #include "media/formats/mp2t/es_parser_adts.h"
 #include "media/formats/mp2t/es_parser_test_base.h"
@@ -65,6 +65,14 @@ TEST_F(EsParserAdtsTest, SinglePts) {
   EXPECT_EQ(45u, buffer_count_);
 }
 
+TEST_F(EsParserAdtsTest, AacLcAdts) {
+  LoadStream("sfx.adts");
+  std::vector<Packet> pes_packets = GenerateFixedSizePesPacket(512);
+  pes_packets.front().pts = base::TimeDelta::FromSeconds(1);
+  EXPECT_TRUE(Process(pes_packets, false));
+  EXPECT_EQ(1u, config_count_);
+  EXPECT_EQ(14u, buffer_count_);
+}
 }  // namespace mp2t
 }  // namespace media
 

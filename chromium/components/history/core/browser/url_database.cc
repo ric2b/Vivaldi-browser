@@ -8,14 +8,16 @@
 #include <string>
 #include <vector>
 
-#include "base/command_line.h"
 #include "base/i18n/case_conversion.h"
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/history/core/browser/keyword_search_term.h"
-#include "net/base/net_util.h"
+#include "components/url_formatter/url_formatter.h"
 #include "sql/statement.h"
 #include "url/gurl.h"
+
+#include "app/vivaldi_apptools.h"
 
 namespace history {
 
@@ -379,7 +381,7 @@ bool URLDatabase::GetTextMatches(const base::string16& query,
   ScopedVector<query_parser::QueryNode> query_nodes;
   // Vivaldi specific; we want all matches. See VB-5754.
   query_parser::MatchingAlgorithm matching_algorithm =
-      base::CommandLine::ForCurrentProcess()->IsRunningVivaldi()
+      vivaldi::IsVivaldiRunning()
           ? query_parser::MatchingAlgorithm::ALWAYS_PREFIX_SEARCH
           : query_parser::MatchingAlgorithm::DEFAULT;
   query_parser_.ParseQueryNodes(query, matching_algorithm, &query_nodes.get());
@@ -398,7 +400,8 @@ bool URLDatabase::GetTextMatches(const base::string16& query,
       // |query_words| won't be shown to user - therefore we can use empty
       // |languages| to reduce dependency (no need to call PrefService).
       base::string16 ascii = base::ASCIIToUTF16(gurl.host());
-      base::string16 utf = net::IDNToUnicode(gurl.host(), std::string());
+      base::string16 utf =
+          url_formatter::IDNToUnicode(gurl.host(), std::string());
       if (ascii != utf)
         query_parser_.ExtractQueryWords(utf, &query_words);
     }

@@ -6,6 +6,7 @@
 
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
 #include "chrome/common/pref_names.h"
@@ -148,7 +149,7 @@ void PasswordsPrivateDelegateImpl::ShowPassword(
 }
 
 void PasswordsPrivateDelegateImpl::SetPasswordList(
-    const ScopedVector<autofill::PasswordForm>& password_list,
+    const std::vector<scoped_ptr<autofill::PasswordForm>>& password_list,
     bool show_passwords) {
   // Rebuild |login_pair_to_index_map_| so that it reflects the contents of the
   // new list.
@@ -162,7 +163,7 @@ void PasswordsPrivateDelegateImpl::SetPasswordList(
 
   // Now, create a list of PasswordUiEntry objects to send to observers.
   current_entries_.clear();
-  for (const autofill::PasswordForm* form : password_list) {
+  for (const auto& form : password_list) {
     linked_ptr<api::passwords_private::PasswordUiEntry> entry(
         new api::passwords_private::PasswordUiEntry);
     entry->login_pair.origin_url =
@@ -192,7 +193,8 @@ void PasswordsPrivateDelegateImpl::SendSavedPasswordsList() {
 }
 
 void PasswordsPrivateDelegateImpl::SetPasswordExceptionList(
-    const ScopedVector<autofill::PasswordForm>& password_exception_list) {
+    const std::vector<scoped_ptr<autofill::PasswordForm>>&
+        password_exception_list) {
   // Rebuild |exception_url_to_index_map_| so that it reflects the contents of
   // the new list.
   exception_url_to_index_map_.clear();
@@ -204,7 +206,7 @@ void PasswordsPrivateDelegateImpl::SetPasswordExceptionList(
 
   // Now, create a list of exceptions to send to observers.
   current_exceptions_.clear();
-  for (const autofill::PasswordForm* form : password_exception_list) {
+  for (const auto& form : password_exception_list) {
     current_exceptions_.push_back(
         password_manager::GetHumanReadableOrigin(*form, languages_));
   }

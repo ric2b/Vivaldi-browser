@@ -4,6 +4,7 @@
 
 #include "components/autofill/core/browser/autofill_cc_infobar_delegate.h"
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/test/histogram_tester.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
@@ -90,13 +91,12 @@ AutofillCCInfobarDelegateTest::CreateDelegate() {
   base::HistogramTester histogram_tester;
   CreditCard credit_card;
   scoped_ptr<ConfirmInfoBarDelegate> delegate(AutofillCCInfoBarDelegate::Create(
-      ChromeAutofillClient::FromWebContents(web_contents()),
       base::Bind(
           base::IgnoreResult(&TestPersonalDataManager::SaveImportedCreditCard),
           base::Unretained(personal_data_.get()), credit_card)));
   histogram_tester.ExpectUniqueSample("Autofill.CreditCardInfoBar",
                                       AutofillMetrics::INFOBAR_SHOWN, 1);
-  return delegate.Pass();
+  return delegate;
 }
 
 // Test that credit card infobar metrics are logged correctly.

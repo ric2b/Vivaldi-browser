@@ -5,6 +5,9 @@
 #ifndef SYNC_API_ATTACHMENTS_ATTACHMENT_ID_H_
 #define SYNC_API_ATTACHMENTS_ATTACHMENT_ID_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <set>
 #include <string>
 #include <vector>
@@ -72,7 +75,7 @@ class SYNC_EXPORT AttachmentId {
 
   ImmutableAttachmentIdProto proto_;
 
-  AttachmentId(sync_pb::AttachmentIdProto* proto);
+  explicit AttachmentId(sync_pb::AttachmentIdProto* proto);
 };
 
 // All public interfaces use AttachmentIdList. AttachmentIdSet is used in

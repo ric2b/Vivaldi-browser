@@ -4,10 +4,13 @@
 
 #include "android_webview/browser/test/rendering_test.h"
 
+#include <utility>
+
 #include "android_webview/browser/browser_view_renderer.h"
 #include "android_webview/browser/child_frame.h"
 #include "base/location.h"
 #include "base/thread_task_runner_handle.h"
+#include "cc/output/compositor_frame.h"
 #include "content/public/test/test_synchronous_compositor_android.h"
 
 namespace android_webview {
@@ -23,8 +26,8 @@ RenderingTest::~RenderingTest() {
 
 void RenderingTest::SetUpTestHarness() {
   DCHECK(!browser_view_renderer_.get());
-  browser_view_renderer_.reset(
-      new BrowserViewRenderer(this, base::ThreadTaskRunnerHandle::Get()));
+  browser_view_renderer_.reset(new BrowserViewRenderer(
+      this, base::ThreadTaskRunnerHandle::Get(), false));
   InitializeCompositor();
   Attach();
 }
@@ -64,6 +67,23 @@ void RenderingTest::QuitMessageLoop() {
   message_loop_->QuitWhenIdle();
 }
 
+void RenderingTest::SetCompositorFrame() {
+  DCHECK(compositor_.get());
+  scoped_ptr<cc::CompositorFrame> compositor_frame(new cc::CompositorFrame);
+  scoped_ptr<cc::DelegatedFrameData> frame(new cc::DelegatedFrameData);
+  scoped_ptr<cc::RenderPass> root_pass(cc::RenderPass::Create());
+  gfx::Rect viewport(browser_view_renderer_->size());
+  root_pass->SetNew(cc::RenderPassId(1, 1), viewport, viewport,
+                    gfx::Transform());
+  frame->render_pass_list.push_back(std::move(root_pass));
+  compositor_frame->delegated_frame_data = std::move(frame);
+  compositor_->SetHardwareFrame(std::move(compositor_frame));
+}
+
+void RenderingTest::WillOnDraw() {
+  SetCompositorFrame();
+}
+
 bool RenderingTest::RequestDrawGL(bool wait_for_completion) {
   window_->RequestDrawGL(wait_for_completion);
   return true;
@@ -91,10 +111,6 @@ void RenderingTest::DetachFunctorFromView() {
 
 gfx::Point RenderingTest::GetLocationOnScreen() {
   return gfx::Point();
-}
-
-bool RenderingTest::IsSmoothScrollingActive() const {
-  return false;
 }
 
 }  // namespace android_webview

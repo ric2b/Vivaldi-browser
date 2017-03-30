@@ -7,13 +7,14 @@
 
 #include <fcntl.h>
 #include <netinet/in.h>
+#include <stddef.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 
 namespace forwarder2 {
 
@@ -122,15 +123,14 @@ class Socket {
   bool InitSocketInternal();
   void SetSocketError();
 
-  // Waits until either the Socket or the |exit_notifier_fd_| has received an
-  // event.
+  // Waits until a read or write i/o event has happened.
   bool WaitForEvent(EventType type, int timeout_secs);
 
   int socket_;
   int port_;
   bool socket_error_;
 
-  // Family of the socket (PF_INET, PF_INET6 or PF_UNIX).
+  // Family of the socket (AF_INET, AF_INET6 or PF_UNIX).
   int family_;
 
   SockAddr addr_;

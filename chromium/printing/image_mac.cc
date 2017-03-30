@@ -5,6 +5,8 @@
 #include "printing/image.h"
 
 #include <ApplicationServices/ApplicationServices.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include "base/mac/scoped_cftyperef.h"
 #include "printing/metafile.h"
@@ -20,7 +22,7 @@ bool Image::LoadMetafile(const Metafile& metafile) {
     return false;
 
   size_ = rect.size();
-  row_length_ = size_.width() * sizeof(uint32);
+  row_length_ = size_.width() * sizeof(uint32_t);
   size_t bytes = row_length_ * size_.height();
   DCHECK(bytes);
 

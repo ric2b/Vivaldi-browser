@@ -2,20 +2,16 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-component("pref_registry") {
+source_set("pref_registry") {
   sources = [
-    "pref_registry_export.h",
     "pref_registry_syncable.cc",
     "pref_registry_syncable.h",
   ]
-
-  defines = [ "PREF_REGISTRY_IMPLEMENTATION" ]
 
   deps = [
     "//base",
     "//base:prefs",
     "//base/third_party/dynamic_annotations",
-    "//ui/base",
   ]
 }
 
@@ -26,8 +22,11 @@ source_set("test_support") {
     "testing_pref_service_syncable.h",
   ]
 
-  deps = [
+  public_deps = [
     ":pref_registry",
+  ]
+
+  deps = [
     "//base",
     "//base:prefs",
     "//base:prefs_test_support",

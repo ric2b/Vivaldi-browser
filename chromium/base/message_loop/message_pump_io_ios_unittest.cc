@@ -6,6 +6,7 @@
 
 #include <unistd.h>
 
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/threading/thread.h"
@@ -43,7 +44,7 @@ class MessagePumpIOSForIOTest : public testing::Test {
   }
 
   void HandleFdIOEvent(MessageLoopForIO::FileDescriptorWatcher* watcher) {
-    MessagePumpIOSForIO::HandleFdIOEvent(watcher->fdref_,
+    MessagePumpIOSForIO::HandleFdIOEvent(watcher->fdref_.get(),
         kCFFileDescriptorReadCallBack | kCFFileDescriptorWriteCallBack,
         watcher);
   }

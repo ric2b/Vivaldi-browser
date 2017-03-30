@@ -15,8 +15,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace net {
-
-namespace {
+namespace test {
 
 using base::StringPiece;
 using std::map;
@@ -35,7 +34,7 @@ TEST(HpackFuzzUtilTest, GeneratorContextInitialization) {
 TEST(HpackFuzzUtil, GeneratorContextExpansion) {
   HpackFuzzUtil::GeneratorContext context;
 
-  map<string, string> headers = HpackFuzzUtil::NextGeneratedHeaderSet(&context);
+  SpdyHeaderBlock headers = HpackFuzzUtil::NextGeneratedHeaderSet(&context);
 
   // Headers were generated, and the generator context was expanded.
   EXPECT_LT(0u, headers.size());
@@ -104,7 +103,7 @@ TEST(HpackFuzzUtilTest, PassValidInputThroughAllStages) {
   EXPECT_TRUE(
       HpackFuzzUtil::RunHeaderBlockThroughFuzzerStages(&context, input));
 
-  std::map<string, string> expect;
+  SpdyHeaderBlock expect;
   expect[":method"] = "GET";
   expect[":scheme"] = "http";
   expect[":path"] = "/";
@@ -141,12 +140,10 @@ TEST(HpackFuzzUtilTest, FlipBitsMutatesBuffer) {
   string unmodified(buffer, arraysize(buffer) - 1);
 
   EXPECT_EQ(unmodified, buffer);
-  HpackFuzzUtil::FlipBits(reinterpret_cast<uint8*>(buffer),
-                          arraysize(buffer) - 1,
-                          1);
+  HpackFuzzUtil::FlipBits(reinterpret_cast<uint8_t*>(buffer),
+                          arraysize(buffer) - 1, 1);
   EXPECT_NE(unmodified, buffer);
 }
 
-}  // namespace
-
+}  // namespace test
 }  // namespace net

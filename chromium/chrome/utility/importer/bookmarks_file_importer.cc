@@ -4,7 +4,10 @@
 
 #include "chrome/utility/importer/bookmarks_file_importer.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "chrome/common/importer/imported_bookmark_entry.h"
 #include "chrome/common/importer/importer_bridge.h"
 #include "chrome/common/importer/importer_data_types.h"
@@ -12,7 +15,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/utility/importer/bookmark_html_reader.h"
 #include "components/favicon_base/favicon_usage_data.h"
-#include "components/url_fixer/url_fixer.h"
+#include "components/url_formatter/url_fixer.h"
 #include "content/public/common/url_constants.h"
 
 namespace {
@@ -51,7 +54,7 @@ bool CanImportURL(const GURL& url) {
         url.host() == chrome::kChromeUIAboutHost)
       return true;
 
-    GURL fixed_url(url_fixer::FixupURL(url.spec(), std::string()));
+    GURL fixed_url(url_formatter::FixupURL(url.spec(), std::string()));
     for (size_t i = 0; i < chrome::kNumberOfChromeHostURLs; ++i) {
       if (fixed_url.DomainIs(chrome::kChromeHostURLs[i]))
         return true;
@@ -80,12 +83,12 @@ BookmarksFileImporter::~BookmarksFileImporter() {}
 
 void BookmarksFileImporter::StartImport(
     const importer::SourceProfile& source_profile,
-    uint16 items,
+    uint16_t items,
     ImporterBridge* bridge) {
   // The only thing this importer can import is a bookmarks file, aka
   // "favorites".
   DCHECK_EQ(importer::FAVORITES, items);
-  //MessageBox(NULL, L"Attach debugger", L"", MB_OK);
+
   bridge->NotifyStarted();
   bridge->NotifyItemStarted(importer::FAVORITES);
 

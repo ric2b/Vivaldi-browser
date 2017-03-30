@@ -5,6 +5,7 @@
 #ifndef UI_EVENTS_OZONE_LAYOUT_XKB_XKB_KEYBOARD_LAYOUT_ENGINE_H_
 #define UI_EVENTS_OZONE_LAYOUT_XKB_XKB_KEYBOARD_LAYOUT_ENGINE_H_
 
+#include <stdint.h>
 #include <xkbcommon/xkbcommon.h>
 #include <vector>
 
@@ -14,9 +15,9 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "base/task_runner.h"
+#include "ui/events/keycodes/scoped_xkb.h"
 #include "ui/events/ozone/layout/events_ozone_layout_export.h"
 #include "ui/events/ozone/layout/keyboard_layout_engine.h"
-#include "ui/events/ozone/layout/xkb/scoped_xkb.h"
 #include "ui/events/ozone/layout/xkb/xkb_key_code_converter.h"
 
 namespace ui {
@@ -26,6 +27,8 @@ class EVENTS_OZONE_LAYOUT_EXPORT XkbKeyboardLayoutEngine
  public:
   XkbKeyboardLayoutEngine(const XkbKeyCodeConverter& converter);
   ~XkbKeyboardLayoutEngine() override;
+
+  void SetKeymapFromStringForTest(const char* keymap_string);
 
   // KeyboardLayoutEngine:
   bool CanSetCurrentLayout() const override;
@@ -37,9 +40,7 @@ class EVENTS_OZONE_LAYOUT_EXPORT XkbKeyboardLayoutEngine
   bool Lookup(DomCode dom_code,
               int flags,
               DomKey* dom_key,
-              base::char16* character,
-              KeyboardCode* key_code,
-              uint32* platform_keycode) const override;
+              KeyboardCode* key_code) const override;
 
   static void ParseLayoutName(const std::string& layout_name,
                               std::string* layout_id,
@@ -59,13 +60,12 @@ class EVENTS_OZONE_LAYOUT_EXPORT XkbKeyboardLayoutEngine
   // Determines the Windows-based KeyboardCode (VKEY) for a character key,
   // accounting for non-US layouts. May return VKEY_UNKNOWN, in which case the
   // caller should, as a last resort, obtain a KeyboardCode using
-  // |DomCodeToUsLayoutMeaning()|.
+  // |DomCodeToUsLayoutDomKey()|.
   KeyboardCode DifficultKeyboardCode(DomCode dom_code,
                                      int ui_flags,
                                      xkb_keycode_t xkb_keycode,
                                      xkb_mod_mask_t xkb_flags,
                                      xkb_keysym_t xkb_keysym,
-                                     DomKey dom_key,
                                      base::char16 character) const;
 
   // Maps DomCode to xkb_keycode_t.
@@ -89,7 +89,7 @@ class EVENTS_OZONE_LAYOUT_EXPORT XkbKeyboardLayoutEngine
   virtual bool XkbLookup(xkb_keycode_t xkb_keycode,
                          xkb_mod_mask_t xkb_flags,
                          xkb_keysym_t* xkb_keysym,
-                         base::char16* character) const;
+                         uint32_t* character) const;
 
   // Helper for difficult VKEY lookup. If |ui_flags| matches |base_flags|,
   // returns |base_character|; otherwise returns the XKB character for

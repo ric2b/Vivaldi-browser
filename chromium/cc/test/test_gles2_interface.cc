@@ -266,39 +266,6 @@ void TestGLES2Interface::RenderbufferStorage(GLenum target,
   test_context_->renderbufferStorage(target, internalformat, width, height);
 }
 
-void TestGLES2Interface::AsyncTexImage2DCHROMIUM(GLenum target,
-                                                 GLint level,
-                                                 GLenum internalformat,
-                                                 GLsizei width,
-                                                 GLsizei height,
-                                                 GLint border,
-                                                 GLenum format,
-                                                 GLenum type,
-                                                 const void* pixels) {
-  test_context_->asyncTexImage2DCHROMIUM(target,
-                                         level,
-                                         internalformat,
-                                         width,
-                                         height,
-                                         border,
-                                         format,
-                                         type,
-                                         pixels);
-}
-
-void TestGLES2Interface::AsyncTexSubImage2DCHROMIUM(GLenum target,
-                                                    GLint level,
-                                                    GLint xoffset,
-                                                    GLint yoffset,
-                                                    GLsizei width,
-                                                    GLsizei height,
-                                                    GLenum format,
-                                                    GLenum type,
-                                                    const void* pixels) {
-  test_context_->asyncTexSubImage2DCHROMIUM(
-      target, level, xoffset, yoffset, width, height, format, type, pixels);
-}
-
 void TestGLES2Interface::CompressedTexImage2D(GLenum target,
                                               GLint level,
                                               GLenum internalformat,
@@ -309,10 +276,6 @@ void TestGLES2Interface::CompressedTexImage2D(GLenum target,
                                               const void* data) {
   test_context_->compressedTexImage2D(
       target, level, internalformat, width, height, border, image_size, data);
-}
-
-void TestGLES2Interface::WaitAsyncTexImage2DCHROMIUM(GLenum target) {
-  test_context_->waitAsyncTexImage2DCHROMIUM(target);
 }
 
 GLuint TestGLES2Interface::CreateImageCHROMIUM(ClientBuffer buffer,
@@ -360,12 +323,31 @@ void TestGLES2Interface::BufferData(GLenum target,
   test_context_->bufferData(target, size, data, usage);
 }
 
-void TestGLES2Interface::WaitSyncPointCHROMIUM(GLuint sync_point) {
-  test_context_->waitSyncPoint(sync_point);
-}
-
 GLuint TestGLES2Interface::InsertSyncPointCHROMIUM() {
   return test_context_->insertSyncPoint();
+}
+
+GLuint64 TestGLES2Interface::InsertFenceSyncCHROMIUM() {
+  return test_context_->insertFenceSync();
+}
+
+void TestGLES2Interface::GenSyncTokenCHROMIUM(GLuint64 fence_sync,
+                                              GLbyte* sync_token) {
+  test_context_->genSyncToken(fence_sync, sync_token);
+}
+
+void TestGLES2Interface::GenUnverifiedSyncTokenCHROMIUM(GLuint64 fence_sync,
+                                                        GLbyte* sync_token) {
+  test_context_->genSyncToken(fence_sync, sync_token);
+}
+
+void TestGLES2Interface::VerifySyncTokensCHROMIUM(GLbyte** sync_tokens,
+                                                  GLsizei count) {
+  test_context_->verifySyncTokens(sync_tokens, count);
+}
+
+void TestGLES2Interface::WaitSyncTokenCHROMIUM(const GLbyte* sync_token) {
+  test_context_->waitSyncToken(sync_token);
 }
 
 void TestGLES2Interface::BeginQueryEXT(GLenum target, GLuint id) {
@@ -416,7 +398,8 @@ GLuint TestGLES2Interface::CreateAndConsumeTextureCHROMIUM(
 
 void TestGLES2Interface::ResizeCHROMIUM(GLuint width,
                                         GLuint height,
-                                        float device_scale) {
+                                        float device_scale,
+                                        GLboolean has_alpha) {
   test_context_->reshapeWithScaleFactor(width, height, device_scale);
 }
 

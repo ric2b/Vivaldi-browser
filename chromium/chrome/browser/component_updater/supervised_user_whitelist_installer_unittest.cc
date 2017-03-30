@@ -2,12 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_file_value_serializer.h"
+#include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
@@ -16,12 +19,15 @@
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/test/scoped_path_override.h"
+#include "base/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/browser/component_updater/supervised_user_whitelist_installer.h"
+#include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
 #include "components/component_updater/component_updater_paths.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/crx_file/id_util.h"
+#include "components/safe_json/testing_json_parser.h"
 #include "components/update_client/crx_update_item.h"
 #include "components/update_client/update_client.h"
 #include "components/update_client/utils.h"
@@ -159,6 +165,7 @@ class WhitelistLoadObserver {
 
  private:
   void OnWhitelistReady(const std::string& crx_id,
+                        const base::string16& title,
                         const base::FilePath& whitelist_path) {
     EXPECT_EQ(base::FilePath::StringType(), whitelist_path_.value());
     whitelist_path_ = whitelist_path;
@@ -176,8 +183,10 @@ class WhitelistLoadObserver {
 class SupervisedUserWhitelistInstallerTest : public testing::Test {
  public:
   SupervisedUserWhitelistInstallerTest()
-      : path_override_(DIR_SUPERVISED_USER_WHITELISTS),
-        component_update_service_(message_loop_.task_runner()),
+      : raw_whitelists_path_override_(DIR_SUPERVISED_USER_WHITELISTS),
+        installed_whitelists_path_override_(
+            chrome::DIR_SUPERVISED_USER_INSTALLED_WHITELISTS),
+        component_update_service_(base::ThreadTaskRunnerHandle::Get()),
         installer_(
             SupervisedUserWhitelistInstaller::Create(&component_update_service_,
                                                      nullptr,
@@ -192,12 +201,18 @@ class SupervisedUserWhitelistInstallerTest : public testing::Test {
                                  &whitelist_base_directory_));
     whitelist_directory_ = whitelist_base_directory_.AppendASCII(kCrxId);
     whitelist_version_directory_ = whitelist_directory_.AppendASCII(kVersion);
-    whitelist_path_ = whitelist_version_directory_.AppendASCII(kWhitelistFile);
+
+    ASSERT_TRUE(
+        PathService::Get(chrome::DIR_SUPERVISED_USER_INSTALLED_WHITELISTS,
+                         &installed_whitelist_directory_));
+    std::string crx_id(kCrxId);
+    whitelist_path_ =
+        installed_whitelist_directory_.AppendASCII(crx_id + ".json");
 
     scoped_ptr<base::DictionaryValue> whitelist_dict(
         new base::DictionaryValue);
-    whitelist_dict->SetString("file", kWhitelistFile);
-    manifest_.Set("whitelist", whitelist_dict.release());
+    whitelist_dict->SetString("sites", kWhitelistFile);
+    manifest_.Set("whitelisted_content", whitelist_dict.release());
     manifest_.SetString("version", kVersion);
 
     scoped_ptr<base::DictionaryValue> crx_dict(new base::DictionaryValue);
@@ -210,13 +225,15 @@ class SupervisedUserWhitelistInstallerTest : public testing::Test {
   }
 
  protected:
-  void PrepareWhitelistDirectory(const base::FilePath& whitelist_directory) {
-    base::FilePath whitelist_path =
-        whitelist_directory.AppendASCII(kWhitelistFile);
+  void PrepareWhitelistFile(const base::FilePath& whitelist_path) {
     size_t whitelist_contents_length = sizeof(kWhitelistContents) - 1;
     ASSERT_EQ(static_cast<int>(whitelist_contents_length),
               base::WriteFile(whitelist_path, kWhitelistContents,
                               whitelist_contents_length));
+  }
+
+  void PrepareWhitelistDirectory(const base::FilePath& whitelist_directory) {
+    PrepareWhitelistFile(whitelist_directory.AppendASCII(kWhitelistFile));
     base::FilePath manifest_file =
         whitelist_directory.AppendASCII("manifest.json");
     ASSERT_TRUE(JSONFileValueSerializer(manifest_file).Serialize(manifest_));
@@ -224,9 +241,8 @@ class SupervisedUserWhitelistInstallerTest : public testing::Test {
 
   void RegisterExistingComponents() {
     local_state_.Set(prefs::kRegisteredSupervisedUserWhitelists, pref_);
-    base::RunLoop run_loop;
     installer_->RegisterComponents();
-    run_loop.RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
   }
 
   void CheckRegisteredComponent(const char* version) {
@@ -239,13 +255,16 @@ class SupervisedUserWhitelistInstallerTest : public testing::Test {
   }
 
   base::MessageLoop message_loop_;
-  base::ScopedPathOverride path_override_;
+  base::ScopedPathOverride raw_whitelists_path_override_;
+  base::ScopedPathOverride installed_whitelists_path_override_;
+  safe_json::TestingJsonParser::ScopedFactoryOverride json_parser_override_;
   MockComponentUpdateService component_update_service_;
   TestingPrefServiceSimple local_state_;
   scoped_ptr<SupervisedUserWhitelistInstaller> installer_;
   base::FilePath whitelist_base_directory_;
   base::FilePath whitelist_directory_;
   base::FilePath whitelist_version_directory_;
+  base::FilePath installed_whitelist_directory_;
   base::FilePath whitelist_path_;
   base::DictionaryValue manifest_;
   base::DictionaryValue pref_;
@@ -259,7 +278,7 @@ TEST_F(SupervisedUserWhitelistInstallerTest, GetHashFromCrxId) {
 
   {
     std::string extension_id = "aBcDeFgHiJkLmNoPpOnMlKjIhGfEdCbA";
-    ASSERT_EQ(base::StringToLowerASCII(extension_id),
+    ASSERT_EQ(base::ToLowerASCII(extension_id),
               CrxIdToHashToCrxId(extension_id));
   }
 
@@ -292,13 +311,19 @@ TEST_F(SupervisedUserWhitelistInstallerTest, InstallNewWhitelist) {
   const CrxComponent* component =
       component_update_service_.registered_component();
   ASSERT_TRUE(component);
-  ASSERT_TRUE(component->installer->Install(manifest_, unpacked_path));
+  EXPECT_TRUE(component->installer->Install(manifest_, unpacked_path));
+
   observer.Wait();
   EXPECT_EQ(whitelist_path_.value(), observer.whitelist_path().value());
 
   std::string whitelist_contents;
   ASSERT_TRUE(base::ReadFileToString(whitelist_path_, &whitelist_contents));
-  EXPECT_EQ(kWhitelistContents, whitelist_contents);
+
+  // The actual file contents don't have to be equal, but the parsed values
+  // should be.
+  EXPECT_TRUE(base::JSONReader::Read(kWhitelistContents)
+                  ->Equals(base::JSONReader::Read(whitelist_contents).get()))
+      << kWhitelistContents << " vs. " << whitelist_contents;
 
   EXPECT_EQ(JsonToString(pref_),
             JsonToString(*local_state_.GetDictionary(
@@ -310,6 +335,7 @@ TEST_F(SupervisedUserWhitelistInstallerTest,
   ASSERT_TRUE(base::CreateDirectory(whitelist_version_directory_));
   ASSERT_NO_FATAL_FAILURE(
       PrepareWhitelistDirectory(whitelist_version_directory_));
+  ASSERT_NO_FATAL_FAILURE(PrepareWhitelistFile(whitelist_path_));
 
   // Create another whitelist directory, with an ID that is not registered.
   base::FilePath other_directory =
@@ -345,6 +371,7 @@ TEST_F(SupervisedUserWhitelistInstallerTest,
   }
   EXPECT_TRUE(component_update_service_.registered_component());
   EXPECT_TRUE(base::DirectoryExists(whitelist_version_directory_));
+  EXPECT_TRUE(base::PathExists(whitelist_path_));
 
   // Unregistering for the second client should uninstall the whitelist.
   {
@@ -354,6 +381,7 @@ TEST_F(SupervisedUserWhitelistInstallerTest,
   }
   EXPECT_FALSE(component_update_service_.registered_component());
   EXPECT_FALSE(base::DirectoryExists(whitelist_directory_));
+  EXPECT_FALSE(base::PathExists(whitelist_path_));
 }
 
 }  // namespace component_updater

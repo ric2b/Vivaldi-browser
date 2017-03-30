@@ -4,6 +4,8 @@
 
 #include "remoting/signaling/xmpp_signal_strategy.h"
 
+#include <utility>
+
 #include "base/base64.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -16,13 +18,16 @@ namespace remoting {
 
 namespace {
 
-class XmppSocketDataProvider: public net::SocketDataProvider {
+class XmppSocketDataProvider : public net::SocketDataProvider {
  public:
   net::MockRead OnRead() override {
     return net::MockRead(net::ASYNC, net::ERR_IO_PENDING);
   }
 
   net::MockWriteResult OnWrite(const std::string& data) override {
+    if (write_error_ != net::OK)
+      return net::MockWriteResult(net::SYNCHRONOUS, write_error_);
+
     written_data_.append(data);
 
     if (use_async_write_) {
@@ -52,7 +57,7 @@ class XmppSocketDataProvider: public net::SocketDataProvider {
     ReceiveData(std::string());
   }
 
-  void SimulateNetworkError() {
+  void SimulateAsyncReadError() {
     socket()->OnReadComplete(
         net::MockRead(net::ASYNC, net::ERR_CONNECTION_RESET));
   }
@@ -67,6 +72,10 @@ class XmppSocketDataProvider: public net::SocketDataProvider {
     use_async_write_ = use_async_write;
   }
 
+  void set_write_error(net::Error error) {
+    write_error_ = error;
+  }
+
   void CompletePendingWrite() {
     socket()->OnWriteComplete(pending_write_size_);
   }
@@ -75,6 +84,7 @@ class XmppSocketDataProvider: public net::SocketDataProvider {
   std::string written_data_;
   bool use_async_write_ = false;
   int pending_write_size_ = 0;
+  net::Error write_error_ = net::OK;
 };
 
 class MockClientSocketFactory : public net::MockClientSocketFactory {
@@ -86,7 +96,7 @@ class MockClientSocketFactory : public net::MockClientSocketFactory {
       const net::SSLClientSocketContext& context) override {
     ssl_socket_created_ = true;
     return net::MockClientSocketFactory::CreateSSLClientSocket(
-        transport_socket.Pass(), host_and_port, ssl_config, context);
+        std::move(transport_socket), host_and_port, ssl_config, context);
   }
 
   bool ssl_socket_created() const { return ssl_socket_created_; }
@@ -107,10 +117,9 @@ class XmppSignalStrategyTest : public testing::Test,
   XmppSignalStrategyTest() : message_loop_(base::MessageLoop::TYPE_IO) {}
 
   void SetUp() override {
-    scoped_ptr<net::TestURLRequestContext> context(
-        new net::TestURLRequestContext());
     request_context_getter_ = new net::TestURLRequestContextGetter(
-        message_loop_.task_runner(), context.Pass());
+        message_loop_.task_runner(),
+        make_scoped_ptr(new net::TestURLRequestContext()));
   }
 
   void CreateSignalStrategy(int port) {
@@ -296,11 +305,11 @@ TEST_F(XmppSignalStrategyTest, ConnectionClosed) {
   Connect(true);
 }
 
-TEST_F(XmppSignalStrategyTest, NetworkError) {
+TEST_F(XmppSignalStrategyTest, NetworkReadError) {
   CreateSignalStrategy(kDefaultPort);
   Connect(true);
 
-  socket_data_provider_->SimulateNetworkError();
+  socket_data_provider_->SimulateAsyncReadError();
 
   EXPECT_EQ(3U, state_history_.size());
   EXPECT_EQ(SignalStrategy::DISCONNECTED, state_history_[2]);
@@ -309,6 +318,24 @@ TEST_F(XmppSignalStrategyTest, NetworkError) {
   // Can't send messages anymore.
   EXPECT_FALSE(signal_strategy_->SendStanza(make_scoped_ptr(
       new buzz::XmlElement(buzz::QName(std::string(), "hello")))));
+
+  // Try connecting again.
+  Connect(true);
+}
+
+TEST_F(XmppSignalStrategyTest, NetworkWriteError) {
+  CreateSignalStrategy(kDefaultPort);
+  Connect(true);
+
+  socket_data_provider_->set_write_error(net::ERR_FAILED);
+
+  // Next SendMessage() will call Write() which will fail.
+  EXPECT_FALSE(signal_strategy_->SendStanza(make_scoped_ptr(
+      new buzz::XmlElement(buzz::QName(std::string(), "hello")))));
+
+  EXPECT_EQ(3U, state_history_.size());
+  EXPECT_EQ(SignalStrategy::DISCONNECTED, state_history_[2]);
+  EXPECT_EQ(SignalStrategy::NETWORK_ERROR, signal_strategy_->GetError());
 
   // Try connecting again.
   Connect(true);

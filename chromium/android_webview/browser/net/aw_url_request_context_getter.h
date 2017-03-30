@@ -5,18 +5,23 @@
 #ifndef ANDROID_WEBVIEW_BROWSER_NET_AW_URL_REQUEST_CONTEXT_GETTER_H_
 #define ANDROID_WEBVIEW_BROWSER_NET_AW_URL_REQUEST_CONTEXT_GETTER_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/prefs/pref_member.h"
 #include "content/public/browser/content_browser_client.h"
-#include "net/http/http_network_session.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_job_factory.h"
 
+class PrefService;
+
 namespace net {
 class CookieStore;
-class HttpTransactionFactory;
+class HostResolver;
+class HttpAuthHandlerFactory;
+class HttpAuthPreferences;
+class HttpUserAgentSettings;
 class NetLog;
 class ProxyConfigService;
 class URLRequestContext;
@@ -32,7 +37,8 @@ class AwURLRequestContextGetter : public net::URLRequestContextGetter {
   AwURLRequestContextGetter(
       const base::FilePath& cache_path,
       net::CookieStore* cookie_store,
-      scoped_ptr<net::ProxyConfigService> config_service);
+      scoped_ptr<net::ProxyConfigService> config_service,
+      PrefService* pref_service);
 
   // net::URLRequestContextGetter implementation.
   net::URLRequestContext* GetURLRequestContext() override;
@@ -63,13 +69,30 @@ class AwURLRequestContextGetter : public net::URLRequestContextGetter {
 
   void InitializeURLRequestContext();
 
+  // This is called to create a HttpAuthHandlerFactory that will handle
+  // auth challenges for the new URLRequestContext
+  scoped_ptr<net::HttpAuthHandlerFactory> CreateAuthHandlerFactory(
+      net::HostResolver* resolver);
+
+  // Update methods for the auth related preferences
+  void UpdateServerWhitelist();
+  void UpdateAndroidAuthNegotiateAccountType();
+
   const base::FilePath cache_path_;
-  scoped_refptr<net::CookieStore> cookie_store_;
+
   scoped_ptr<net::NetLog> net_log_;
-  scoped_ptr<net::URLRequestContext> url_request_context_;
   scoped_ptr<net::ProxyConfigService> proxy_config_service_;
+  scoped_refptr<net::CookieStore> cookie_store_;
   scoped_ptr<net::URLRequestJobFactory> job_factory_;
-  scoped_ptr<net::HttpTransactionFactory> main_http_factory_;
+  scoped_ptr<net::HttpUserAgentSettings> http_user_agent_settings_;
+  // http_auth_preferences_ holds the preferences for the negotiate
+  // authenticator.
+  scoped_ptr<net::HttpAuthPreferences> http_auth_preferences_;
+  scoped_ptr<net::URLRequestContext> url_request_context_;
+
+  // Store HTTP Auth-related policies in this thread.
+  StringPrefMember auth_android_negotiate_account_type_;
+  StringPrefMember auth_server_whitelist_;
 
   // ProtocolHandlers and interceptors are stored here between
   // SetHandlersAndInterceptors() and the first GetURLRequestContext() call.

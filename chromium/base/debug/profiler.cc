@@ -6,16 +6,18 @@
 
 #include <string>
 
+#include "base/debug/debugging_flags.h"
 #include "base/process/process_handle.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 
 #if defined(OS_WIN)
 #include "base/win/pe_image.h"
 #endif  // defined(OS_WIN)
 
 // TODO(peria): Enable profiling on Windows.
-#if defined(ENABLE_PROFILING) && !defined(NO_TCMALLOC) && !defined(OS_WIN)
+#if BUILDFLAG(ENABLE_PROFILING) && !defined(NO_TCMALLOC) && !defined(OS_WIN)
 #include "third_party/tcmalloc/chromium/src/gperftools/profiler.h"
 #endif
 
@@ -23,7 +25,7 @@ namespace base {
 namespace debug {
 
 // TODO(peria): Enable profiling on Windows.
-#if defined(ENABLE_PROFILING) && !defined(NO_TCMALLOC) && !defined(OS_WIN)
+#if BUILDFLAG(ENABLE_PROFILING) && !defined(NO_TCMALLOC) && !defined(OS_WIN)
 
 static int profile_count = 0;
 

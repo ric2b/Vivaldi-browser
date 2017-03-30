@@ -5,15 +5,17 @@
 #ifndef ASH_ACCELERATORS_ACCELERATOR_CONTROLLER_H_
 #define ASH_ACCELERATORS_ACCELERATOR_CONTROLLER_H_
 
+#include <stddef.h>
+
 #include <map>
 #include <set>
 
 #include "ash/accelerators/accelerator_table.h"
 #include "ash/accelerators/exit_warning_handler.h"
 #include "ash/ash_export.h"
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/accelerators/accelerator_history.h"
@@ -88,6 +90,10 @@ class ASH_EXPORT AcceleratorController : public ui::AcceleratorTarget {
   // is always handled and will never be passed to an window/web contents.
   bool IsReserved(const ui::Accelerator& accelerator) const;
 
+  // Returns true if the |accelerator| is deprecated. Deprecated accelerators
+  // can be consumed by web contents if needed.
+  bool IsDeprecated(const ui::Accelerator& accelerator) const;
+
   // Performs the specified action if it is enabled. Returns whether the action
   // was performed successfully.
   bool PerformActionIfEnabled(AcceleratorAction action);
@@ -113,6 +119,10 @@ class ASH_EXPORT AcceleratorController : public ui::AcceleratorTarget {
     return &exit_warning_handler_;
   }
 
+  // Returns true if the menu should close in order to perform the accelerator.
+  bool ShouldCloseMenuAndRepostAccelerator(
+      const ui::Accelerator& accelerator) const;
+
   ui::AcceleratorHistory* accelerator_history() {
     return accelerator_history_.get();
   }
@@ -125,6 +135,8 @@ class ASH_EXPORT AcceleratorController : public ui::AcceleratorTarget {
   FRIEND_TEST_ALL_PREFIXES(AcceleratorControllerTest, GlobalAccelerators);
   FRIEND_TEST_ALL_PREFIXES(AcceleratorControllerTest,
                            DontRepeatToggleFullscreen);
+  FRIEND_TEST_ALL_PREFIXES(DeprecatedAcceleratorTester,
+                           TestDeprecatedAcceleratorsBehavior);
 
   // Initializes the accelerators this class handles as a target.
   void Init();
@@ -132,6 +144,9 @@ class ASH_EXPORT AcceleratorController : public ui::AcceleratorTarget {
   // Registers the specified accelerators.
   void RegisterAccelerators(const AcceleratorData accelerators[],
                             size_t accelerators_length);
+
+  // Registers the deprecated accelerators and their replacing new ones.
+  void RegisterDeprecatedAccelerators();
 
   // Returns whether |action| can be performed. The |accelerator| may provide
   // additional data the action needs.
@@ -176,6 +191,10 @@ class ASH_EXPORT AcceleratorController : public ui::AcceleratorTarget {
   // the implementation.
   std::map<ui::Accelerator, AcceleratorAction> accelerators_;
 
+  std::map<AcceleratorAction, const DeprecatedAcceleratorData*>
+      actions_with_deprecations_;
+  std::set<ui::Accelerator> deprecated_accelerators_;
+
   // Actions allowed when the user is not signed in.
   std::set<int> actions_allowed_at_login_screen_;
   // Actions allowed when the screen is locked.
@@ -192,6 +211,8 @@ class ASH_EXPORT AcceleratorController : public ui::AcceleratorTarget {
   std::set<int> actions_allowed_in_app_mode_;
   // Actions disallowed if there are no windows.
   std::set<int> actions_needing_window_;
+  // Actions that can be performed without closing the menu (if one is present).
+  std::set<int> actions_keeping_menu_open_;
 
   DISALLOW_COPY_AND_ASSIGN(AcceleratorController);
 };

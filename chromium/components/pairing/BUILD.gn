@@ -29,10 +29,11 @@ source_set("pairing") {
   ]
 
   deps = [
+    ":proto",
     "//base",
+    "//chromeos",
     "//device/bluetooth",
     "//net",
-    ":proto",
   ]
 }
 
@@ -44,6 +45,7 @@ source_set("unit_tests") {
 
   deps = [
     ":pairing",
+    "//net",
     "//testing/gtest",
   ]
 }

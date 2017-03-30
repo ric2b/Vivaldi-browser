@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/omnibox/alternate_nav_infobar_delegate.h"
 
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/autocomplete/shortcuts_backend_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/infobars/infobar_service.h"
@@ -16,7 +17,7 @@
 #include "content/public/browser/web_contents.h"
 #include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
-
+#include "ui/gfx/vector_icons_public.h"
 
 AlternateNavInfoBarDelegate::~AlternateNavInfoBarDelegate() {
 }
@@ -63,6 +64,10 @@ base::string16 AlternateNavInfoBarDelegate::GetLinkText() const {
   return base::UTF8ToUTF16(match_.destination_url.spec());
 }
 
+GURL AlternateNavInfoBarDelegate::GetLinkURL() const {
+  return match_.destination_url;
+}
+
 bool AlternateNavInfoBarDelegate::LinkClicked(
     WindowOpenDisposition disposition) {
   // Tell the shortcuts backend to remove the shortcut it added for the original
@@ -98,6 +103,19 @@ AlternateNavInfoBarDelegate::GetInfoBarType() const {
   return PAGE_ACTION_TYPE;
 }
 
-int AlternateNavInfoBarDelegate::GetIconID() const {
+infobars::InfoBarDelegate::InfoBarIdentifier
+AlternateNavInfoBarDelegate::GetIdentifier() const {
+  return ALTERNATE_NAV_INFOBAR_DELEGATE;
+}
+
+int AlternateNavInfoBarDelegate::GetIconId() const {
   return IDR_INFOBAR_ALT_NAV_URL;
+}
+
+gfx::VectorIconId AlternateNavInfoBarDelegate::GetVectorIconId() const {
+#if defined(OS_MACOSX)
+  return gfx::VectorIconId::VECTOR_ICON_NONE;
+#else
+  return gfx::VectorIconId::GLOBE;
+#endif
 }

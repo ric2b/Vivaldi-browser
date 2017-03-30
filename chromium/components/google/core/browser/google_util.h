@@ -9,8 +9,6 @@
 
 #include <string>
 
-#include "base/basictypes.h"
-
 class GURL;
 
 // This namespace provides various helpers around handling Google-related URLs.
@@ -54,9 +52,7 @@ bool StartsWithCommandLineGoogleBaseURL(const GURL& url);
 
 // WARNING: The following IsGoogleXXX() functions use heuristics to rule out
 // "obviously false" answers.  They do NOT guarantee that the string in question
-// is actually on a Google-owned domain, just that it looks plausible.  If you
-// need to restrict some behavior to only happen on Google's officially-owned
-// domains, use TransportSecurityState::IsGooglePinnedProperty() instead.
+// is actually on a Google-owned domain, just that it looks plausible.
 
 // Designate whether or not a URL checking function also checks for specific
 // subdomains, or only "www" and empty subdomains.
@@ -108,6 +104,22 @@ bool IsGoogleSearchUrl(const GURL& url);
 bool IsYoutubeDomainUrl(const GURL& url,
                         SubdomainPermission subdomain_permission,
                         PortPermission port_permission);
+
+bool IsWhatsappDomainUrl(const GURL& url,
+                         SubdomainPermission subdomain_permission,
+                         PortPermission port_permission);
+
+// True if |host| is "[www.]<domain_in_lower_case>.<TLD>" with a valid TLD. If
+// |subdomain_permission| is ALLOW_SUBDOMAIN, we check against host
+// "*.<domain_in_lower_case>.<TLD>" instead.
+bool IsValidHostName(const std::string& host,
+                     const std::string& domain_in_lower_case,
+                     google_util::SubdomainPermission subdomain_permission);
+
+// True if |url| is a valid URL with HTTP or HTTPS scheme. If |port_permission|
+// is DISALLOW_NON_STANDARD_PORTS, this also requires |url| to use the standard
+// port for its scheme (80 for HTTP, 443 for HTTPS).
+bool IsValidURL(const GURL& url, google_util::PortPermission port_permission);
 
 }  // namespace google_util
 

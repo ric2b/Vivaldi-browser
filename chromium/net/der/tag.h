@@ -28,10 +28,14 @@ const Tag kBitString = 0x03;
 const Tag kOctetString = 0x04;
 const Tag kNull = 0x05;
 const Tag kOid = 0x06;
+const Tag kEnumerated = 0x0A;
 const Tag kUtf8String = 0x0C;
 const Tag kPrintableString = 0x13;
+const Tag kIA5String = 0x16;
 const Tag kUtcTime = 0x17;
 const Tag kGeneralizedTime = 0x18;
+const Tag kUniversalString = 0x1C;
+const Tag kBmpString = 0x1E;
 
 // Universal class constructed types
 const Tag kSequence = 0x30;
@@ -62,7 +66,12 @@ const uint8_t kTagClassMask = 0xC0;
 NET_EXPORT Tag ContextSpecificConstructed(uint8_t class_number);
 
 NET_EXPORT Tag ContextSpecificPrimitive(uint8_t base);
+
+NET_EXPORT bool IsContextSpecific(Tag tag);
+
 NET_EXPORT bool IsConstructed(Tag tag);
+
+NET_EXPORT uint8_t GetTagNumber(Tag tag);
 
 }  // namespace der
 

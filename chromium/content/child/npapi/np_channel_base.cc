@@ -4,6 +4,8 @@
 
 #include "content/child/npapi/np_channel_base.h"
 
+#include <stddef.h>
+
 #include "base/auto_reset.h"
 #include "base/containers/hash_tables.h"
 #include "base/files/scoped_file.h"
@@ -11,6 +13,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_local.h"
+#include "build/build_config.h"
 #include "ipc/ipc_sync_message.h"
 
 #if defined(OS_POSIX)
@@ -68,8 +71,7 @@ NPChannelBase* NPChannelBase::GetChannel(
     ChannelFactory factory,
     base::SingleThreadTaskRunner* ipc_task_runner,
     bool create_pipe_now,
-    base::WaitableEvent* shutdown_event,
-    IPC::AttachmentBroker* broker) {
+    base::WaitableEvent* shutdown_event) {
 #if defined(OS_POSIX)
   // On POSIX the channel_handle conveys an FD (socket) which is duped by the
   // kernel during the IPC message exchange (via the SCM_RIGHTS mechanism).
@@ -99,8 +101,7 @@ NPChannelBase* NPChannelBase::GetChannel(
           IPC::Channel::GenerateVerifiedChannelID(channel_key);
     }
     channel->mode_ = mode;
-    if (channel->Init(ipc_task_runner, create_pipe_now, shutdown_event,
-                      broker)) {
+    if (channel->Init(ipc_task_runner, create_pipe_now, shutdown_event)) {
       (*GetChannelMap())[channel_key] = channel;
     } else {
       channel = NULL;
@@ -176,8 +177,7 @@ base::WaitableEvent* NPChannelBase::GetModalDialogEvent(int render_view_id) {
 
 bool NPChannelBase::Init(base::SingleThreadTaskRunner* ipc_task_runner,
                          bool create_pipe_now,
-                         base::WaitableEvent* shutdown_event,
-                         IPC::AttachmentBroker* broker) {
+                         base::WaitableEvent* shutdown_event) {
 #if defined(OS_POSIX)
   // Attempting to initialize with an invalid channel handle.
   // See http://crbug.com/97285 for details.
@@ -187,7 +187,7 @@ bool NPChannelBase::Init(base::SingleThreadTaskRunner* ipc_task_runner,
 
   channel_ =
       IPC::SyncChannel::Create(channel_handle_, mode_, this, ipc_task_runner,
-                               create_pipe_now, shutdown_event, broker);
+                               create_pipe_now, shutdown_event);
 
 #if defined(OS_POSIX)
   // Check the validity of fd for bug investigation.  Remove after fixed.
@@ -248,7 +248,7 @@ bool NPChannelBase::OnMessageReceived(const IPC::Message& message) {
   return handled;
 }
 
-void NPChannelBase::OnChannelConnected(int32 peer_pid) {
+void NPChannelBase::OnChannelConnected(int32_t peer_pid) {
   peer_pid_ = peer_pid;
 }
 

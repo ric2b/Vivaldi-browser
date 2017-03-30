@@ -2,11 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include <algorithm>
 #include <iostream>
 #include <limits>
 
-#include "base/basictypes.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/pickle.h"
 #include "base/time/time.h"
@@ -22,9 +23,9 @@ namespace {
 struct TestData {
   const char* raw_headers;
   const char* expected_headers;
-  int expected_response_code;
-  HttpVersion expected_parsed_version;
   HttpVersion expected_version;
+  int expected_response_code;
+  const char* expected_status_text;
 };
 
 class HttpResponseHeadersTest : public testing::Test {
@@ -110,15 +111,13 @@ TEST_P(CommonHttpResponseHeadersTest, TestCommon) {
 
   EXPECT_EQ(expected_headers, headers);
 
-  EXPECT_EQ(test.expected_response_code, parsed->response_code());
-
-  EXPECT_TRUE(test.expected_parsed_version == parsed->GetParsedHttpVersion());
   EXPECT_TRUE(test.expected_version == parsed->GetHttpVersion());
+  EXPECT_EQ(test.expected_response_code, parsed->response_code());
+  EXPECT_EQ(test.expected_status_text, parsed->GetStatusText());
 }
 
 TestData response_headers_tests[] = {
-    {// Normalise whitespace.
-
+    {// Normalize whitespace.
      "HTTP/1.1    202   Accepted  \n"
      "Content-TYPE  : text/html; charset=utf-8  \n"
      "Set-Cookie: a \n"
@@ -128,11 +127,8 @@ TestData response_headers_tests[] = {
      "Content-TYPE: text/html; charset=utf-8\n"
      "Set-Cookie: a, b\n",
 
-     202,
-     HttpVersion(1, 1),
-     HttpVersion(1, 1)},
+     HttpVersion(1, 1), 202, "Accepted"},
     {// Normalize leading whitespace.
-
      "HTTP/1.1    202   Accepted  \n"
      // Starts with space -- will be skipped as invalid.
      "  Content-TYPE  : text/html; charset=utf-8  \n"
@@ -142,11 +138,14 @@ TestData response_headers_tests[] = {
      "HTTP/1.1 202 Accepted\n"
      "Set-Cookie: a, b\n",
 
-     202,
-     HttpVersion(1, 1),
-     HttpVersion(1, 1)},
-    {// Normalize blank headers.
+     HttpVersion(1, 1), 202, "Accepted"},
+    {// Keep whitespace within status text.
+     "HTTP/1.0 404 Not   found  \n",
 
+     "HTTP/1.0 404 Not   found\n",
+
+     HttpVersion(1, 0), 404, "Not   found"},
+    {// Normalize blank headers.
      "HTTP/1.1 200 OK\n"
      "Header1 :          \n"
      "Header2: \n"
@@ -160,73 +159,58 @@ TestData response_headers_tests[] = {
      "Header3: \n"
      "Header5: \n",
 
-     200,
-     HttpVersion(1, 1),
-     HttpVersion(1, 1)},
+     HttpVersion(1, 1), 200, "OK"},
     {// Don't believe the http/0.9 version if there are headers!
-
      "hTtP/0.9 201\n"
      "Content-TYPE: text/html; charset=utf-8\n",
 
-     "HTTP/1.0 201 OK\n"
+     "HTTP/1.0 201\n"
      "Content-TYPE: text/html; charset=utf-8\n",
 
-     201,
-     HttpVersion(0, 9),
-     HttpVersion(1, 0)},
+     HttpVersion(1, 0), 201, ""},
     {// Accept the HTTP/0.9 version number if there are no headers.
      // This is how HTTP/0.9 responses get constructed from
      // HttpNetworkTransaction.
-
      "hTtP/0.9 200 OK\n",
 
      "HTTP/0.9 200 OK\n",
 
-     200,
-     HttpVersion(0, 9),
-     HttpVersion(0, 9)},
-    {// Add missing OK.
+     HttpVersion(0, 9), 200, "OK"},
+    {// Do not add missing status text.
+     "HTTP/1.1 201\n"
+     "Content-TYPE: text/html; charset=utf-8\n",
 
      "HTTP/1.1 201\n"
      "Content-TYPE: text/html; charset=utf-8\n",
 
-     "HTTP/1.1 201 OK\n"
-     "Content-TYPE: text/html; charset=utf-8\n",
-
-     201,
-     HttpVersion(1, 1),
-     HttpVersion(1, 1)},
+     HttpVersion(1, 1), 201, ""},
     {// Normalize bad status line.
-
      "SCREWED_UP_STATUS_LINE\n"
      "Content-TYPE: text/html; charset=utf-8\n",
 
      "HTTP/1.0 200 OK\n"
      "Content-TYPE: text/html; charset=utf-8\n",
 
-     200,
-     HttpVersion(0, 0),  // Parse error.
-     HttpVersion(1, 0)},
-    {// Normalize invalid status code.
+     HttpVersion(1, 0), 200, "OK"},
+    {// Normalize bad status line.
+     "Foo bar.",
 
+     "HTTP/1.0 200\n",
+
+     HttpVersion(1, 0), 200, ""},
+    {// Normalize invalid status code.
      "HTTP/1.1 -1  Unknown\n",
 
-     "HTTP/1.1 200 OK\n",
+     "HTTP/1.1 200\n",
 
-     200,
-     HttpVersion(1, 1),
-     HttpVersion(1, 1)},
+     HttpVersion(1, 1), 200, ""},
     {// Normalize empty header.
-
      "",
 
      "HTTP/1.0 200 OK\n",
 
-     200,
-     HttpVersion(0, 0),  // Parse Error.
-     HttpVersion(1, 0)},
+     HttpVersion(1, 0), 200, "OK"},
     {// Normalize headers that start with a colon.
-
      "HTTP/1.1    202   Accepted  \n"
      "foo: bar\n"
      ": a \n"
@@ -237,11 +221,8 @@ TestData response_headers_tests[] = {
      "foo: bar\n"
      "baz: blat\n",
 
-     202,
-     HttpVersion(1, 1),
-     HttpVersion(1, 1)},
+     HttpVersion(1, 1), 202, "Accepted"},
     {// Normalize headers that end with a colon.
-
      "HTTP/1.1    202   Accepted  \n"
      "foo:   \n"
      "bar:\n"
@@ -254,20 +235,14 @@ TestData response_headers_tests[] = {
      "baz: blat\n"
      "zip: \n",
 
-     202,
-     HttpVersion(1, 1),
-     HttpVersion(1, 1)},
+     HttpVersion(1, 1), 202, "Accepted"},
     {// Normalize whitespace headers.
-
      "\n   \n",
 
      "HTTP/1.0 200 OK\n",
 
-     200,
-     HttpVersion(0, 0),  // Parse error.
-     HttpVersion(1, 0)},
+     HttpVersion(1, 0), 200, "OK"},
     {// Consolidate Set-Cookie headers.
-
      "HTTP/1.1 200 OK\n"
      "Set-Cookie: x=1\n"
      "Set-Cookie: y=2\n",
@@ -275,27 +250,21 @@ TestData response_headers_tests[] = {
      "HTTP/1.1 200 OK\n"
      "Set-Cookie: x=1, y=2\n",
 
-     200,
-     HttpVersion(1, 1),
-     HttpVersion(1, 1)},
+     HttpVersion(1, 1), 200, "OK"},
+    {// Consolidate cache-control headers.
+     "HTTP/1.1 200 OK\n"
+     "Cache-control: private\n"
+     "cache-Control: no-store\n",
+
+     "HTTP/1.1 200 OK\n"
+     "Cache-control: private, no-store\n",
+
+     HttpVersion(1, 1), 200, "OK"},
 };
 
 INSTANTIATE_TEST_CASE_P(HttpResponseHeaders,
                         CommonHttpResponseHeadersTest,
                         testing::ValuesIn(response_headers_tests));
-
-TEST(HttpResponseHeadersTest, GetNormalizedHeader) {
-  std::string headers =
-      "HTTP/1.1 200 OK\n"
-      "Cache-control: private\n"
-      "cache-Control: no-store\n";
-  HeadersToRaw(&headers);
-  scoped_refptr<HttpResponseHeaders> parsed(new HttpResponseHeaders(headers));
-
-  std::string value;
-  EXPECT_TRUE(parsed->GetNormalizedHeader("cache-control", &value));
-  EXPECT_EQ("private, no-store", value);
-}
 
 struct PersistData {
   HttpResponseHeaders::PersistOptions options;
@@ -467,8 +436,8 @@ const struct PersistData persistence_tests[] = {
      "Strict-Transport-Security: max-age=1576800\n"
      "Bar: 1\n"
      "Public-Key-Pins: max-age=100000; "
-     "pin-sha1=\"ObT42aoSpAqWdY9WfRfL7i0HsVk=\";"
-     "pin-sha1=\"7kW49EVwZG0hSNx41ZO/fUPN0ek=\"",
+     "pin-sha256=\"1111111111111111111111111111111111111111111=\";"
+     "pin-sha256=\"2222222222222222222222222222222222222222222=\"",
 
      "HTTP/1.1 200 OK\n"
      "Bar: 1\n"},
@@ -1214,7 +1183,7 @@ INSTANTIATE_TEST_CASE_P(HttpResponseHeaders,
 
 struct ContentLengthTestData {
   const char* headers;
-  int64 expected_len;
+  int64_t expected_len;
 };
 
 class GetContentLengthTest
@@ -1233,74 +1202,56 @@ TEST_P(GetContentLengthTest, GetContentLength) {
 }
 
 const ContentLengthTestData content_length_tests[] = {
-  { "HTTP/1.1 200 OK\n",
-    -1
-  },
-  { "HTTP/1.1 200 OK\n"
-    "Content-Length: 10\n",
-    10
-  },
-  { "HTTP/1.1 200 OK\n"
-    "Content-Length: \n",
-    -1
-  },
-  { "HTTP/1.1 200 OK\n"
-    "Content-Length: abc\n",
-    -1
-  },
-  { "HTTP/1.1 200 OK\n"
-    "Content-Length: -10\n",
-    -1
-  },
-  { "HTTP/1.1 200 OK\n"
-    "Content-Length:  +10\n",
-    -1
-  },
-  { "HTTP/1.1 200 OK\n"
-    "Content-Length: 23xb5\n",
-    -1
-  },
-  { "HTTP/1.1 200 OK\n"
-    "Content-Length: 0xA\n",
-    -1
-  },
-  { "HTTP/1.1 200 OK\n"
-    "Content-Length: 010\n",
-    10
-  },
-  // Content-Length too big, will overflow an int64.
-  { "HTTP/1.1 200 OK\n"
-    "Content-Length: 40000000000000000000\n",
-    -1
-  },
-  { "HTTP/1.1 200 OK\n"
-    "Content-Length:       10\n",
-    10
-  },
-  { "HTTP/1.1 200 OK\n"
-    "Content-Length: 10  \n",
-    10
-  },
-  { "HTTP/1.1 200 OK\n"
-    "Content-Length: \t10\n",
-    10
-  },
-  { "HTTP/1.1 200 OK\n"
-    "Content-Length: \v10\n",
-    -1
-  },
-  { "HTTP/1.1 200 OK\n"
-    "Content-Length: \f10\n",
-    -1
-  },
-  { "HTTP/1.1 200 OK\n"
-    "cOnTeNt-LENgth: 33\n",
-    33
-  },
-  { "HTTP/1.1 200 OK\n"
-    "Content-Length: 34\r\n",
-    -1
-  },
+    {"HTTP/1.1 200 OK\n", -1},
+    {"HTTP/1.1 200 OK\n"
+     "Content-Length: 10\n",
+     10},
+    {"HTTP/1.1 200 OK\n"
+     "Content-Length: \n",
+     -1},
+    {"HTTP/1.1 200 OK\n"
+     "Content-Length: abc\n",
+     -1},
+    {"HTTP/1.1 200 OK\n"
+     "Content-Length: -10\n",
+     -1},
+    {"HTTP/1.1 200 OK\n"
+     "Content-Length:  +10\n",
+     -1},
+    {"HTTP/1.1 200 OK\n"
+     "Content-Length: 23xb5\n",
+     -1},
+    {"HTTP/1.1 200 OK\n"
+     "Content-Length: 0xA\n",
+     -1},
+    {"HTTP/1.1 200 OK\n"
+     "Content-Length: 010\n",
+     10},
+    // Content-Length too big, will overflow an int64_t.
+    {"HTTP/1.1 200 OK\n"
+     "Content-Length: 40000000000000000000\n",
+     -1},
+    {"HTTP/1.1 200 OK\n"
+     "Content-Length:       10\n",
+     10},
+    {"HTTP/1.1 200 OK\n"
+     "Content-Length: 10  \n",
+     10},
+    {"HTTP/1.1 200 OK\n"
+     "Content-Length: \t10\n",
+     10},
+    {"HTTP/1.1 200 OK\n"
+     "Content-Length: \v10\n",
+     -1},
+    {"HTTP/1.1 200 OK\n"
+     "Content-Length: \f10\n",
+     -1},
+    {"HTTP/1.1 200 OK\n"
+     "cOnTeNt-LENgth: 33\n",
+     33},
+    {"HTTP/1.1 200 OK\n"
+     "Content-Length: 34\r\n",
+     -1},
 };
 
 INSTANTIATE_TEST_CASE_P(HttpResponseHeaders,
@@ -1310,9 +1261,9 @@ INSTANTIATE_TEST_CASE_P(HttpResponseHeaders,
 struct ContentRangeTestData {
   const char* headers;
   bool expected_return_value;
-  int64 expected_first_byte_position;
-  int64 expected_last_byte_position;
-  int64 expected_instance_size;
+  int64_t expected_first_byte_position;
+  int64_t expected_last_byte_position;
+  int64_t expected_instance_size;
 };
 
 class ContentRangeTest
@@ -1327,9 +1278,9 @@ TEST_P(ContentRangeTest, GetContentRange) {
   HeadersToRaw(&headers);
   scoped_refptr<HttpResponseHeaders> parsed(new HttpResponseHeaders(headers));
 
-  int64 first_byte_position;
-  int64 last_byte_position;
-  int64 instance_size;
+  int64_t first_byte_position;
+  int64_t last_byte_position;
+  int64_t instance_size;
   bool return_value = parsed->GetContentRange(&first_byte_position,
                                               &last_byte_position,
                                               &instance_size);
@@ -1340,238 +1291,105 @@ TEST_P(ContentRangeTest, GetContentRange) {
 }
 
 const ContentRangeTestData content_range_tests[] = {
-  { "HTTP/1.1 206 Partial Content",
-    false,
-    -1,
-    -1,
-    -1
-  },
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range:",
-    false,
-    -1,
-    -1,
-    -1
-  },
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range: megabytes 0-10/50",
-    false,
-    -1,
-    -1,
-    -1
-  },
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range: 0-10/50",
-    false,
-    -1,
-    -1,
-    -1
-  },
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range: Bytes 0-50/51",
-    true,
-    0,
-    50,
-    51
-  },
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range: bytes 0-50/51",
-    true,
-    0,
-    50,
-    51
-  },
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range: bytes\t0-50/51",
-    false,
-    -1,
-    -1,
-    -1
-  },
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range:     bytes 0-50/51",
-    true,
-    0,
-    50,
-    51
-  },
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range:     bytes    0    -   50  \t / \t51",
-    true,
-    0,
-    50,
-    51
-  },
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range: bytes 0\t-\t50\t/\t51\t",
-    true,
-    0,
-    50,
-    51
-  },
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range:   \tbytes\t\t\t 0\t-\t50\t/\t51\t",
-    true,
-    0,
-    50,
-    51
-  },
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range: \t   bytes \t  0    -   50   /   5   1",
-    false,
-    0,
-    50,
-    -1
-  },
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range: \t   bytes \t  0    -   5 0   /   51",
-    false,
-    -1,
-    -1,
-    -1
-  },
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range: bytes 50-0/51",
-    false,
-    50,
-    0,
-    -1
-  },
-  { "HTTP/1.1 416 Requested range not satisfiable\n"
-    "Content-Range: bytes * /*",
-    false,
-    -1,
-    -1,
-    -1
-  },
-  { "HTTP/1.1 416 Requested range not satisfiable\n"
-    "Content-Range: bytes *   /    *   ",
-    false,
-    -1,
-    -1,
-    -1
-  },
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range: bytes 0-50/*",
-    false,
-    0,
-    50,
-    -1
-  },
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range: bytes 0-50  /    * ",
-    false,
-    0,
-    50,
-    -1
-  },
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range: bytes 0-10000000000/10000000001",
-    true,
-    0,
-    10000000000ll,
-    10000000001ll
-  },
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range: bytes 0-10000000000/10000000000",
-    false,
-    0,
-    10000000000ll,
-    10000000000ll
-  },
-  // 64 bit wraparound.
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range: bytes 0 - 9223372036854775807 / 100",
-    false,
-    0,
-    kint64max,
-    100
-  },
-  // 64 bit wraparound.
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range: bytes 0 - 100 / -9223372036854775808",
-    false,
-    0,
-    100,
-    kint64min
-  },
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range: bytes */50",
-    false,
-    -1,
-    -1,
-    50
-  },
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range: bytes 0-50/10",
-    false,
-    0,
-    50,
-    10
-  },
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range: bytes 40-50/45",
-    false,
-    40,
-    50,
-    45
-  },
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range: bytes 0-50/-10",
-    false,
-    0,
-    50,
-    -10
-  },
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range: bytes 0-0/1",
-    true,
-    0,
-    0,
-    1
-  },
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range: bytes 0-40000000000000000000/40000000000000000001",
-    false,
-    -1,
-    -1,
-    -1
-  },
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range: bytes 1-/100",
-    false,
-    -1,
-    -1,
-    -1
-  },
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range: bytes -/100",
-    false,
-    -1,
-    -1,
-    -1
-  },
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range: bytes -1/100",
-    false,
-    -1,
-    -1,
-    -1
-  },
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range: bytes 0-1233/*",
-    false,
-    0,
-    1233,
-    -1
-  },
-  { "HTTP/1.1 206 Partial Content\n"
-    "Content-Range: bytes -123 - -1/100",
-    false,
-    -1,
-    -1,
-    -1
-  },
+    {"HTTP/1.1 206 Partial Content", false, -1, -1, -1},
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range:",
+     false, -1, -1, -1},
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range: megabytes 0-10/50",
+     false, -1, -1, -1},
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range: 0-10/50",
+     false, -1, -1, -1},
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range: Bytes 0-50/51",
+     true, 0, 50, 51},
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range: bytes 0-50/51",
+     true, 0, 50, 51},
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range: bytes\t0-50/51",
+     false, -1, -1, -1},
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range:     bytes 0-50/51",
+     true, 0, 50, 51},
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range:     bytes    0    -   50  \t / \t51",
+     true, 0, 50, 51},
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range: bytes 0\t-\t50\t/\t51\t",
+     true, 0, 50, 51},
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range:   \tbytes\t\t\t 0\t-\t50\t/\t51\t",
+     true, 0, 50, 51},
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range: \t   bytes \t  0    -   50   /   5   1",
+     false, 0, 50, -1},
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range: \t   bytes \t  0    -   5 0   /   51",
+     false, -1, -1, -1},
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range: bytes 50-0/51",
+     false, 50, 0, -1},
+    {"HTTP/1.1 416 Requested range not satisfiable\n"
+     "Content-Range: bytes * /*",
+     false, -1, -1, -1},
+    {"HTTP/1.1 416 Requested range not satisfiable\n"
+     "Content-Range: bytes *   /    *   ",
+     false, -1, -1, -1},
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range: bytes 0-50/*",
+     false, 0, 50, -1},
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range: bytes 0-50  /    * ",
+     false, 0, 50, -1},
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range: bytes 0-10000000000/10000000001",
+     true, 0, 10000000000ll, 10000000001ll},
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range: bytes 0-10000000000/10000000000",
+     false, 0, 10000000000ll, 10000000000ll},
+    // 64 bit wraparound.
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range: bytes 0 - 9223372036854775807 / 100",
+     false, 0, std::numeric_limits<int64_t>::max(), 100},
+    // 64 bit wraparound.
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range: bytes 0 - 100 / -9223372036854775808",
+     false, 0, 100, std::numeric_limits<int64_t>::min()},
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range: bytes */50",
+     false, -1, -1, 50},
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range: bytes 0-50/10",
+     false, 0, 50, 10},
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range: bytes 40-50/45",
+     false, 40, 50, 45},
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range: bytes 0-50/-10",
+     false, 0, 50, -10},
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range: bytes 0-0/1",
+     true, 0, 0, 1},
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range: bytes 0-40000000000000000000/40000000000000000001",
+     false, -1, -1, -1},
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range: bytes 1-/100",
+     false, -1, -1, -1},
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range: bytes -/100",
+     false, -1, -1, -1},
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range: bytes -1/100",
+     false, -1, -1, -1},
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range: bytes 0-1233/*",
+     false, 0, 1233, -1},
+    {"HTTP/1.1 206 Partial Content\n"
+     "Content-Range: bytes -123 - -1/100",
+     false, -1, -1, -1},
 };
 
 INSTANTIATE_TEST_CASE_P(HttpResponseHeaders,
@@ -1815,37 +1633,6 @@ const HasStrongValidatorsTestData strong_validators_tests[] = {
 INSTANTIATE_TEST_CASE_P(HttpResponseHeaders,
                         HasStrongValidatorsTest,
                         testing::ValuesIn(strong_validators_tests));
-
-TEST(HttpResponseHeadersTest, GetStatusText) {
-  std::string headers("HTTP/1.1 404 Not Found");
-  HeadersToRaw(&headers);
-  scoped_refptr<HttpResponseHeaders> parsed(new HttpResponseHeaders(headers));
-  EXPECT_EQ(std::string("Not Found"), parsed->GetStatusText());
-}
-
-TEST(HttpResponseHeadersTest, GetStatusTextMissing) {
-  std::string headers("HTTP/1.1 404");
-  HeadersToRaw(&headers);
-  scoped_refptr<HttpResponseHeaders> parsed(new HttpResponseHeaders(headers));
-  // Since the status line gets normalized, we have OK.
-  EXPECT_EQ(std::string("OK"), parsed->GetStatusText());
-}
-
-TEST(HttpResponseHeadersTest, GetStatusTextMultiSpace) {
-  std::string headers("HTTP/1.0     404     Not   Found");
-  HeadersToRaw(&headers);
-  scoped_refptr<HttpResponseHeaders> parsed(new HttpResponseHeaders(headers));
-  EXPECT_EQ(std::string("Not   Found"), parsed->GetStatusText());
-}
-
-TEST(HttpResponseHeadersTest, GetStatusBadStatusLine) {
-  std::string headers("Foo bar.");
-  HeadersToRaw(&headers);
-  scoped_refptr<HttpResponseHeaders> parsed(new HttpResponseHeaders(headers));
-  // The bad status line would have gotten rewritten as
-  // HTTP/1.0 200 OK.
-  EXPECT_EQ(std::string("OK"), parsed->GetStatusText());
-}
 
 struct AddHeaderTestData {
   const char* orig_headers;
@@ -2150,7 +1937,7 @@ TEST_P(UpdateWithNewRangeTest, UpdateWithNewRange) {
   std::replace(orig_headers.begin(), orig_headers.end(), '\n', '\0');
   scoped_refptr<HttpResponseHeaders> parsed(
       new HttpResponseHeaders(orig_headers + '\0'));
-  int64 content_size = parsed->GetContentLength();
+  int64_t content_size = parsed->GetContentLength();
   std::string resulting_headers;
 
   // Update headers without replacing status line.
@@ -2260,7 +2047,7 @@ TEST_F(HttpResponseHeadersCacheControlTest, MaxAgeCaseInsensitive) {
 
 struct MaxAgeTestData {
   const char* max_age_string;
-  const int64 expected_seconds;
+  const int64_t expected_seconds;
 };
 
 class MaxAgeEdgeCasesTest
@@ -2279,22 +2066,22 @@ TEST_P(MaxAgeEdgeCasesTest, MaxAgeEdgeCases) {
 }
 
 const MaxAgeTestData max_age_tests[] = {
-  {" 1 ", 1},    // Spaces are ignored.
-  {"-1", -1},    // Negative numbers are passed through.
-  {"--1", 0},    // Leading junk gives 0.
-  {"2s", 2},     // Trailing junk is ignored.
-  {"3 days", 3},
-  {"'4'", 0},    // Single quotes don't work.
-  {"\"5\"", 0},  // Double quotes don't work.
-  {"0x6", 0},    // Hex not parsed as hex.
-  {"7F", 7},     // Hex without 0x still not parsed as hex.
-  {"010", 10},   // Octal not parsed as octal.
-  {"9223372036854", 9223372036854},
-  //  {"9223372036855", -9223372036854},  // Undefined behaviour.
-  //  {"9223372036854775806", -2},        // Undefined behaviour.
-  {"9223372036854775807", 9223372036854775807},
-  {"20000000000000000000",
-  std::numeric_limits<int64>::max()},  // Overflow int64.
+    {" 1 ", 1},  // Spaces are ignored.
+    {"-1", -1},  // Negative numbers are passed through.
+    {"--1", 0},  // Leading junk gives 0.
+    {"2s", 2},   // Trailing junk is ignored.
+    {"3 days", 3},
+    {"'4'", 0},    // Single quotes don't work.
+    {"\"5\"", 0},  // Double quotes don't work.
+    {"0x6", 0},    // Hex not parsed as hex.
+    {"7F", 7},     // Hex without 0x still not parsed as hex.
+    {"010", 10},   // Octal not parsed as octal.
+    {"9223372036854", 9223372036854},
+    //  {"9223372036855", -9223372036854},  // Undefined behaviour.
+    //  {"9223372036854775806", -2},        // Undefined behaviour.
+    {"9223372036854775807", 9223372036854775807},
+    {"20000000000000000000",
+     std::numeric_limits<int64_t>::max()},  // Overflow int64_t.
 };
 
 INSTANTIATE_TEST_CASE_P(HttpResponseHeadersCacheControl,

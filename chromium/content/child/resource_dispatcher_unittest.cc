@@ -2,7 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "content/child/resource_dispatcher.h"
+
+#include <stddef.h>
+#include <stdint.h>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/macros.h"
@@ -14,7 +19,6 @@
 #include "base/stl_util.h"
 #include "content/child/request_extra_data.h"
 #include "content/child/request_info.h"
-#include "content/child/resource_dispatcher.h"
 #include "content/common/appcache_interfaces.h"
 #include "content/common/resource_messages.h"
 #include "content/common/service_worker/service_worker_types.h"
@@ -55,7 +59,7 @@ class TestRequestPeer : public RequestPeer {
 
   void set_request_id(int request_id) { request_id_ = request_id; }
 
-  void OnUploadProgress(uint64 position, uint64 size) override {}
+  void OnUploadProgress(uint64_t position, uint64_t size) override {}
 
   bool OnReceivedRedirect(const net::RedirectInfo& redirect_info,
                           const ResourceResponseInfo& info) override {
@@ -89,7 +93,7 @@ class TestRequestPeer : public RequestPeer {
                           bool stale_copy_in_cache,
                           const std::string& security_info,
                           const base::TimeTicks& completion_time,
-                          int64 total_transfer_size) override {
+                          int64_t total_transfer_size) override {
     EXPECT_TRUE(received_response_);
     EXPECT_FALSE(complete_);
     complete_ = true;
@@ -102,13 +106,13 @@ class TestRequestPeer : public RequestPeer {
                                    bool stale_copy_in_cache,
                                    const std::string& security_info,
                                    const base::TimeTicks& completion_time,
-                                   int64 total_transfer_size) override {
+                                   int64_t total_transfer_size) override {
     bool cancel_on_receive_response = cancel_on_receive_response_;
     OnReceivedResponse(info);
     if (cancel_on_receive_response)
       return;
     if (data)
-      OnReceivedData(data.Pass());
+      OnReceivedData(std::move(data));
     OnCompletedRequest(error_code, was_ignored_by_handler, stale_copy_in_cache,
                        security_info, completion_time, total_transfer_size);
   }
@@ -299,11 +303,13 @@ class ResourceDispatcherTest : public testing::Test, public IPC::Sender {
                                   shared_memory->requested_size(), 0)));
   }
 
-  void NotifyDataReceived(int request_id, std::string data) {
+  void NotifyDataReceived(int request_id, const std::string& data) {
     ASSERT_LE(data.length(), shared_memory_map_[request_id]->requested_size());
     memcpy(shared_memory_map_[request_id]->memory(), data.c_str(),
            data.length());
 
+    EXPECT_TRUE(dispatcher_.OnMessageReceived(
+        ResourceMsg_DataReceivedDebug(request_id, 0)));
     EXPECT_TRUE(dispatcher_.OnMessageReceived(
         ResourceMsg_DataReceived(request_id, 0, data.length(), data.length())));
   }
@@ -719,8 +725,7 @@ TEST_F(ResourceDispatcherTest, SerializedPostData) {
   // FIXME
 }
 
-class TimeConversionTest : public ResourceDispatcherTest,
-                           public RequestPeer {
+class TimeConversionTest : public ResourceDispatcherTest {
  public:
   bool Send(IPC::Message* msg) override {
     delete msg;
@@ -735,38 +740,6 @@ class TimeConversionTest : public ResourceDispatcherTest,
     dispatcher()->OnMessageReceived(
         ResourceMsg_ReceivedResponse(0, response_head));
   }
-
-  // RequestPeer methods.
-  void OnUploadProgress(uint64 position, uint64 size) override {}
-
-  bool OnReceivedRedirect(const net::RedirectInfo& redirect_info,
-                          const ResourceResponseInfo& info) override {
-    return true;
-  }
-
-  void OnReceivedResponse(const ResourceResponseInfo& info) override {
-    response_info_ = info;
-  }
-
-  void OnDownloadedData(int len, int encoded_data_length) override {}
-
-  void OnReceivedData(scoped_ptr<ReceivedData> data) override {}
-
-  void OnCompletedRequest(int error_code,
-                          bool was_ignored_by_handler,
-                          bool stale_copy_in_cache,
-                          const std::string& security_info,
-                          const base::TimeTicks& completion_time,
-                          int64 total_transfer_size) override {}
-
-  void OnReceivedCompletedResponse(const ResourceResponseInfo& info,
-                                   scoped_ptr<ReceivedData> data,
-                                   int error_code,
-                                   bool was_ignored_by_handler,
-                                   bool stale_copy_in_cache,
-                                   const std::string& security_info,
-                                   const base::TimeTicks& completion_time,
-                                   int64 total_transfer_size) override {}
 
   const ResourceResponseInfo& response_info() const { return response_info_; }
 

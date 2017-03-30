@@ -4,8 +4,11 @@
 
 #include "components/mime_util/mime_util.h"
 
+#include <stddef.h>
+
 #include "base/containers/hash_tables.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
 
@@ -17,20 +20,6 @@
 namespace mime_util {
 
 namespace {
-
-// Dictionary of cryptographic file mime types.
-struct CertificateMimeTypeInfo {
-  const char* const mime_type;
-  net::CertificateMimeType cert_type;
-};
-
-const CertificateMimeTypeInfo kSupportedCertificateTypes[] = {
-    {"application/x-x509-user-cert", net::CERTIFICATE_MIME_TYPE_X509_USER_CERT},
-#if defined(OS_ANDROID)
-    {"application/x-x509-ca-cert", net::CERTIFICATE_MIME_TYPE_X509_CA_CERT},
-    {"application/x-pkcs12", net::CERTIFICATE_MIME_TYPE_PKCS12_ARCHIVE},
-#endif
-};
 
 // From WebKit's WebCore/platform/MIMETypeRegistry.cpp:
 
@@ -84,6 +73,7 @@ static const char* const kUnsupportedTextTypes[] = {
     "text/x-csv",
     "text/x-vcf",
     "text/rtf",
+    "text/x-suse-ymp",                  // Added by Vivaldi (VB-6861)
     "text/comma-separated-values",
     "text/csv",
     "text/tab-separated-values",
@@ -146,30 +136,28 @@ MimeUtil::MimeUtil() {
     javascript_types_.insert(kSupportedJavascriptTypes[i]);
     non_image_types_.insert(kSupportedJavascriptTypes[i]);
   }
-  for (size_t i = 0; i < arraysize(kSupportedCertificateTypes); ++i)
-    non_image_types_.insert(kSupportedCertificateTypes[i].mime_type);
 }
 
 bool MimeUtil::IsSupportedImageMimeType(const std::string& mime_type) const {
-  return image_types_.find(base::StringToLowerASCII(mime_type)) !=
-         image_types_.end();
+  return image_types_.find(base::ToLowerASCII(mime_type)) != image_types_.end();
 }
 
 bool MimeUtil::IsSupportedNonImageMimeType(const std::string& mime_type) const {
-  return non_image_types_.find(base::StringToLowerASCII(mime_type)) !=
+  return non_image_types_.find(base::ToLowerASCII(mime_type)) !=
              non_image_types_.end() ||
 #if !defined(OS_IOS)
          media::IsSupportedMediaMimeType(mime_type) ||
 #endif
-         (base::StartsWithASCII(mime_type, "text/",
-                                false /* case insensitive */) &&
+         (base::StartsWith(mime_type, "text/",
+                           base::CompareCase::INSENSITIVE_ASCII) &&
           !IsUnsupportedTextMimeType(mime_type)) ||
-         (base::StartsWithASCII(mime_type, "application/", false) &&
+         (base::StartsWith(mime_type, "application/",
+                           base::CompareCase::INSENSITIVE_ASCII) &&
           net::MatchesMimeType("application/*+json", mime_type));
 }
 
 bool MimeUtil::IsUnsupportedTextMimeType(const std::string& mime_type) const {
-  return unsupported_text_types_.find(base::StringToLowerASCII(mime_type)) !=
+  return unsupported_text_types_.find(base::ToLowerASCII(mime_type)) !=
          unsupported_text_types_.end();
 }
 
@@ -179,7 +167,8 @@ bool MimeUtil::IsSupportedJavascriptMimeType(
 }
 
 bool MimeUtil::IsSupportedMimeType(const std::string& mime_type) const {
-  return (base::StartsWithASCII(mime_type, "image/", false) &&
+  return (base::StartsWith(mime_type, "image/",
+                           base::CompareCase::INSENSITIVE_ASCII) &&
           IsSupportedImageMimeType(mime_type)) ||
          IsSupportedNonImageMimeType(mime_type);
 }
@@ -206,28 +195,8 @@ bool IsSupportedJavascriptMimeType(const std::string& mime_type) {
   return g_mime_util.Get().IsSupportedJavascriptMimeType(mime_type);
 }
 
-bool IsSupportedCertificateMimeType(const std::string& mime_type) {
-  net::CertificateMimeType file_type =
-      GetCertificateMimeTypeForMimeType(mime_type);
-  return file_type != net::CERTIFICATE_MIME_TYPE_UNKNOWN;
-}
-
 bool IsSupportedMimeType(const std::string& mime_type) {
   return g_mime_util.Get().IsSupportedMimeType(mime_type);
-}
-
-net::CertificateMimeType GetCertificateMimeTypeForMimeType(
-    const std::string& mime_type) {
-  // Don't create a map, there is only one entry in the table,
-  // except on Android.
-  for (size_t i = 0; i < arraysize(kSupportedCertificateTypes); ++i) {
-    if (base::strcasecmp(mime_type.c_str(),
-                         kSupportedCertificateTypes[i].mime_type) == 0) {
-      return kSupportedCertificateTypes[i].cert_type;
-    }
-  }
-
-  return net::CERTIFICATE_MIME_TYPE_UNKNOWN;
 }
 
 }  // namespace mime_util

@@ -4,11 +4,14 @@
 
 #include "cc/trees/occlusion_tracker.h"
 
+#include <stddef.h>
+
 #include "base/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "cc/debug/lap_timer.h"
 #include "cc/layers/layer_iterator.h"
 #include "cc/layers/solid_color_layer_impl.h"
+#include "cc/test/fake_impl_task_runner_provider.h"
 #include "cc/test/fake_layer_tree_host_impl_client.h"
 #include "cc/test/fake_output_surface.h"
 #include "cc/test/fake_proxy.h"
@@ -34,18 +37,18 @@ class OcclusionTrackerPerfTest : public testing::Test {
       : timer_(kWarmupRuns,
                base::TimeDelta::FromMilliseconds(kTimeLimitMillis),
                kTimeCheckInterval),
-        proxy_(base::ThreadTaskRunnerHandle::Get(), nullptr),
-        impl_(&proxy_) {}
+        output_surface_(FakeOutputSurface::Create3d()) {}
   void CreateHost() {
     LayerTreeSettings settings;
-    host_impl_ = LayerTreeHostImpl::Create(settings, &client_, &proxy_, &stats_,
-                                           &shared_bitmap_manager_, nullptr,
-                                           &task_graph_runner_, 1);
-    host_impl_->InitializeRenderer(FakeOutputSurface::Create3d());
+    host_impl_ = LayerTreeHostImpl::Create(
+        settings, &client_, &impl_task_runner_provider_, &stats_,
+        &shared_bitmap_manager_, nullptr, &task_graph_runner_, 1);
+    host_impl_->SetVisible(true);
+    host_impl_->InitializeRenderer(output_surface_.get());
 
     scoped_ptr<LayerImpl> root_layer = LayerImpl::Create(active_tree(), 1);
-    root_layer->SetHasRenderSurface(true);
-    active_tree()->SetRootLayer(root_layer.Pass());
+    root_layer->SetForceRenderSurface(true);
+    active_tree()->SetRootLayer(std::move(root_layer));
   }
 
   LayerTreeImpl* active_tree() { return host_impl_->active_tree(); }
@@ -66,11 +69,11 @@ class OcclusionTrackerPerfTest : public testing::Test {
   LapTimer timer_;
   std::string test_name_;
   FakeLayerTreeHostImplClient client_;
-  FakeProxy proxy_;
-  DebugScopedSetImplThread impl_;
+  FakeImplTaskRunnerProvider impl_task_runner_provider_;
   FakeRenderingStatsInstrumentation stats_;
   TestSharedBitmapManager shared_bitmap_manager_;
   TestTaskGraphRunner task_graph_runner_;
+  scoped_ptr<OutputSurface> output_surface_;
   scoped_ptr<LayerTreeHostImpl> host_impl_;
 };
 
@@ -89,7 +92,8 @@ TEST_F(OcclusionTrackerPerfTest, UnoccludedContentRect_FullyOccluded) {
   opaque_layer->SetContentsOpaque(true);
   opaque_layer->SetDrawsContent(true);
   opaque_layer->SetBounds(viewport_rect.size());
-  active_tree()->root_layer()->AddChild(opaque_layer.Pass());
+  active_tree()->root_layer()->AddChild(std::move(opaque_layer));
+  active_tree()->BuildPropertyTreesForTesting();
 
   bool update_lcd_text = false;
   active_tree()->UpdateDrawProperties(update_lcd_text);
@@ -157,10 +161,11 @@ TEST_F(OcclusionTrackerPerfTest, UnoccludedContentRect_10OpaqueLayers) {
     opaque_layer->SetDrawsContent(true);
     opaque_layer->SetBounds(
         gfx::Size(viewport_rect.width() / 2, viewport_rect.height() / 2));
-    opaque_layer->SetPosition(gfx::Point(i, i));
-    active_tree()->root_layer()->AddChild(opaque_layer.Pass());
+    opaque_layer->SetPosition(gfx::PointF(i, i));
+    active_tree()->root_layer()->AddChild(std::move(opaque_layer));
   }
 
+  active_tree()->BuildPropertyTreesForTesting();
   bool update_lcd_text = false;
   active_tree()->UpdateDrawProperties(update_lcd_text);
   const LayerImplList& rsll = active_tree()->RenderSurfaceLayerList();

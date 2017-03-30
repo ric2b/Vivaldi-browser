@@ -18,19 +18,22 @@
 #include "components/nacl/common/nacl_switches.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/sandbox_init.h"
+#include "ipc/attachment_broker_unprivileged.h"
 #include "ipc/ipc_channel.h"
 #include "ipc/ipc_switches.h"
 #include "sandbox/win/src/sandbox_policy.h"
 
 namespace {
 
-void SendReply(IPC::Channel* channel, int32 pid, bool result) {
+void SendReply(IPC::Channel* channel, int32_t pid, bool result) {
   channel->Send(new NaClProcessMsg_DebugExceptionHandlerLaunched(pid, result));
 }
 
 }  // namespace
 
 NaClBrokerListener::NaClBrokerListener() {
+  attachment_broker_.reset(
+      IPC::AttachmentBrokerUnprivileged::CreateBroker().release());
 }
 
 NaClBrokerListener::~NaClBrokerListener() {
@@ -41,13 +44,14 @@ void NaClBrokerListener::Listen() {
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
           switches::kProcessChannelID);
   channel_ = IPC::Channel::CreateClient(channel_name, this);
+  if (attachment_broker_.get())
+    attachment_broker_->DesignateBrokerCommunicationChannel(channel_.get());
   CHECK(channel_->Connect());
   base::MessageLoop::current()->Run();
 }
 
 // NOTE: changes to this method need to be reviewed by the security team.
-void NaClBrokerListener::PreSpawnTarget(sandbox::TargetPolicy* policy,
-                                        bool* success) {
+bool NaClBrokerListener::PreSpawnTarget(sandbox::TargetPolicy* policy) {
   // This code is duplicated in chrome_content_browser_client.cc.
 
   // Allow the server side of a pipe restricted to the "chrome.nacl."
@@ -57,10 +61,10 @@ void NaClBrokerListener::PreSpawnTarget(sandbox::TargetPolicy* policy,
       sandbox::TargetPolicy::SUBSYS_NAMED_PIPES,
       sandbox::TargetPolicy::NAMEDPIPES_ALLOW_ANY,
       L"\\\\.\\pipe\\chrome.nacl.*");
-  *success = (result == sandbox::SBOX_ALL_OK);
+  return result == sandbox::SBOX_ALL_OK;
 }
 
-void NaClBrokerListener::OnChannelConnected(int32 peer_pid) {
+void NaClBrokerListener::OnChannelConnected(int32_t peer_pid) {
   browser_process_ = base::Process::OpenWithExtraPrivileges(peer_pid);
   CHECK(browser_process_.IsValid());
 }
@@ -80,7 +84,7 @@ bool NaClBrokerListener::OnMessageReceived(const IPC::Message& msg) {
 
 void NaClBrokerListener::OnChannelError() {
   // The browser died unexpectedly, quit to avoid a zombie process.
-  base::MessageLoop::current()->Quit();
+  base::MessageLoop::current()->QuitWhenIdle();
 }
 
 void NaClBrokerListener::OnLaunchLoaderThroughBroker(
@@ -124,7 +128,8 @@ void NaClBrokerListener::OnLaunchLoaderThroughBroker(
 }
 
 void NaClBrokerListener::OnLaunchDebugExceptionHandler(
-    int32 pid, base::ProcessHandle process_handle,
+    int32_t pid,
+    base::ProcessHandle process_handle,
     const std::string& startup_info) {
   NaClStartDebugExceptionHandlerThread(
       base::Process(process_handle), startup_info,
@@ -133,5 +138,5 @@ void NaClBrokerListener::OnLaunchDebugExceptionHandler(
 }
 
 void NaClBrokerListener::OnStopBroker() {
-  base::MessageLoop::current()->Quit();
+  base::MessageLoop::current()->QuitWhenIdle();
 }

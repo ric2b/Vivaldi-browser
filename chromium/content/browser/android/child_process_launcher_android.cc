@@ -4,14 +4,18 @@
 
 #include "content/browser/android/child_process_launcher_android.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
+#include "base/android/context_utils.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/media/android/browser_media_player_manager.h"
-#include "content/browser/media/media_web_contents_observer.h"
-#include "content/browser/renderer_host/compositor_impl_android.h"
+#include "content/browser/media/android/media_web_contents_observer_android.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
@@ -37,6 +41,7 @@ static void SetSurfacePeer(
     base::ProcessHandle render_process_handle,
     int render_frame_id,
     int player_id) {
+#if !defined(USE_AURA)
   int render_process_id = 0;
   RenderProcessHost::iterator it = RenderProcessHost::AllHostsIterator();
   while (!it.IsAtEnd()) {
@@ -59,10 +64,10 @@ static void SetSurfacePeer(
     return;
   }
 
-  WebContentsImpl* web_contents =
-      static_cast<WebContentsImpl*>(WebContents::FromRenderFrameHost(frame));
   BrowserMediaPlayerManager* player_manager =
-      web_contents->media_web_contents_observer()->GetMediaPlayerManager(frame);
+      MediaWebContentsObserverAndroid::FromWebContents(
+          WebContents::FromRenderFrameHost(frame))
+          ->GetMediaPlayerManager(frame);
   if (!player_manager) {
     DVLOG(1) << "Cannot find the media player manager for frame " << frame;
     return;
@@ -76,8 +81,11 @@ static void SetSurfacePeer(
 
   if (player != player_manager->GetFullscreenPlayer()) {
     gfx::ScopedJavaSurface scoped_surface(surface);
-    player->SetVideoSurface(scoped_surface.Pass());
+    player->SetVideoSurface(std::move(scoped_surface));
   }
+#else
+  NOTREACHED();
+#endif
 }
 
 }  // anonymous namespace
@@ -89,7 +97,7 @@ static void SetSurfacePeer(
 // |handle| is the processID of the child process as originated in Java, 0 if
 // the ChildProcess could not be created.
 static void OnChildProcessStarted(JNIEnv*,
-                                  jclass,
+                                  const JavaParamRef<jclass>&,
                                   jlong client_context,
                                   jint handle) {
   StartChildProcessCallback* callback =
@@ -125,8 +133,8 @@ void StartChildProcess(
     PCHECK(0 <= fd);
     int id = files_to_register->GetIDAt(i);
     bool auto_close = files_to_register->OwnsFD(fd);
-    int64 offset = 0L;
-    int64 size = 0L;
+    int64_t offset = 0L;
+    int64_t size = 0L;
     auto found_region_iter = regions.find(id);
     if (found_region_iter != regions.end()) {
       offset = found_region_iter->second.offset;
@@ -169,9 +177,12 @@ void SetChildProcessInForeground(base::ProcessHandle handle,
       static_cast<jint>(handle), static_cast<jboolean>(in_foreground));
 }
 
-void EstablishSurfacePeer(
-    JNIEnv* env, jclass clazz,
-    jint pid, jobject surface, jint primary_id, jint secondary_id) {
+void EstablishSurfacePeer(JNIEnv* env,
+                          const JavaParamRef<jclass>& clazz,
+                          jint pid,
+                          const JavaParamRef<jobject>& surface,
+                          jint primary_id,
+                          jint secondary_id) {
   ScopedJavaGlobalRef<jobject> jsurface;
   jsurface.Reset(env, surface);
   if (jsurface.is_null())
@@ -222,7 +233,7 @@ gfx::ScopedJavaSurface GetSurfaceTextureSurface(int surface_texture_id,
           env, surface_texture_id, client_id).obj());
 }
 
-jboolean IsSingleProcess(JNIEnv* env, jclass clazz) {
+jboolean IsSingleProcess(JNIEnv* env, const JavaParamRef<jclass>& clazz) {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kSingleProcess);
 }

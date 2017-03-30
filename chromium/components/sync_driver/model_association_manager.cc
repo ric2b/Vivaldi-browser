@@ -4,13 +4,18 @@
 
 #include "components/sync_driver/model_association_manager.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <functional>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/trace_event.h"
+#include "sync/api/sync_merge_result.h"
 #include "sync/internal_api/public/base/model_type.h"
 
 using syncer::ModelTypeSet;
@@ -71,7 +76,7 @@ static_assert(arraysize(kStartOrder) ==
 // The amount of time we wait for association to finish. If some types haven't
 // finished association by the time, DataTypeManager is notified of the
 // unfinished types.
-const int64 kAssociationTimeOutInSeconds = 600;
+const int64_t kAssociationTimeOutInSeconds = 600;
 
 syncer::DataTypeAssociationStats BuildAssociationStatsFromMergeResults(
     const syncer::SyncMergeResult& local_merge_result,
@@ -359,7 +364,7 @@ void ModelAssociationManager::TypeStartCallback(
     base::TimeDelta association_wait_time =
         std::max(base::TimeDelta(), type_start_time - association_start_time_);
     base::TimeDelta association_time =
-        base::TimeTicks::Now() - type_start_time;;
+        base::TimeTicks::Now() - type_start_time;
     syncer::DataTypeAssociationStats stats =
         BuildAssociationStatsFromMergeResults(local_merge_result,
                                               syncer_merge_result,
@@ -418,8 +423,7 @@ void ModelAssociationManager::ModelAssociationDone(State new_state) {
   delegate_->OnModelAssociationDone(result);
 }
 
-base::OneShotTimer<ModelAssociationManager>*
-    ModelAssociationManager::GetTimerForTesting() {
+base::OneShotTimer* ModelAssociationManager::GetTimerForTesting() {
   return &timer_;
 }
 

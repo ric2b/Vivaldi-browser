@@ -7,14 +7,13 @@
 #include <algorithm>
 #include <cmath>
 #include <string>
+#include <utility>
 
 #include "ash/accelerators/accelerator_commands.h"
 #include "ash/accelerators/debug_commands.h"
 #include "ash/ash_switches.h"
 #include "ash/debug.h"
-#include "ash/display/display_controller.h"
-#include "ash/display/display_manager.h"
-#include "ash/display/display_util.h"
+#include "ash/display/window_tree_host_manager.h"
 #include "ash/focus_cycler.h"
 #include "ash/gpu_support.h"
 #include "ash/ime_control_delegate.h"
@@ -38,6 +37,7 @@
 #include "ash/system/brightness_control_delegate.h"
 #include "ash/system/keyboard_brightness/keyboard_brightness_control_delegate.h"
 #include "ash/system/status_area_widget.h"
+#include "ash/system/system_notifier.h"
 #include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/system_tray_delegate.h"
 #include "ash/system/tray/system_tray_notifier.h"
@@ -55,16 +55,23 @@
 #include "ash/wm/wm_event.h"
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
+#include "base/strings/utf_string_conversions.h"
 #include "ui/aura/env.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/accelerators/accelerator_manager.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "ui/base/resource/resource_bundle.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_sequence.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/screen.h"
+#include "ui/message_center/message_center.h"
+#include "ui/message_center/notification.h"
+#include "ui/message_center/notifier_settings.h"
 #include "ui/views/controls/webview/webview.h"
 
 #if defined(OS_CHROMEOS)
@@ -78,6 +85,102 @@ namespace ash {
 namespace {
 
 using base::UserMetricsAction;
+
+// The notification delegate that will be used to open the keyboard shortcut
+// help page when the notification is clicked.
+class DeprecatedAcceleratorNotificationDelegate
+    : public message_center::NotificationDelegate {
+ public:
+  DeprecatedAcceleratorNotificationDelegate() {}
+
+  // message_center::NotificationDelegate:
+  bool HasClickedListener() override { return true; }
+
+  void Click() override {
+    if (!Shell::GetInstance()->session_state_delegate()->IsUserSessionBlocked())
+      Shell::GetInstance()->delegate()->OpenKeyboardShortcutHelpPage();
+  }
+
+ private:
+  // Private destructor since NotificationDelegate is ref-counted.
+  ~DeprecatedAcceleratorNotificationDelegate() override {}
+
+  DISALLOW_COPY_AND_ASSIGN(DeprecatedAcceleratorNotificationDelegate);
+};
+
+ui::Accelerator CreateAccelerator(ui::KeyboardCode keycode,
+                                  int modifiers,
+                                  bool trigger_on_press) {
+  ui::Accelerator accelerator(keycode, modifiers);
+  accelerator.set_type(trigger_on_press ? ui::ET_KEY_PRESSED
+                                        : ui::ET_KEY_RELEASED);
+  return accelerator;
+}
+
+// Ensures that there are no word breaks at the "+"s in the shortcut texts such
+// as "Ctrl+Shift+Space".
+void EnsureNoWordBreaks(base::string16* shortcut_text) {
+  std::vector<base::string16> keys =
+      base::SplitString(*shortcut_text, base::ASCIIToUTF16("+"),
+                        base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+
+  if (keys.size() < 2U)
+    return;
+
+  // The plus sign surrounded by the word joiner to guarantee an non-breaking
+  // shortcut.
+  const base::string16 non_breaking_plus =
+      base::UTF8ToUTF16("\xe2\x81\xa0+\xe2\x81\xa0");
+  shortcut_text->clear();
+  for (size_t i = 0; i < keys.size() - 1; ++i) {
+    *shortcut_text += keys[i];
+    *shortcut_text += non_breaking_plus;
+  }
+
+  *shortcut_text += keys[keys.size() - 1];
+}
+
+// Gets the notification message after it formats it in such a way that there
+// are no line breaks in the middle of the shortcut texts.
+base::string16 GetNotificationText(int message_id,
+                                   int old_shortcut_id,
+                                   int new_shortcut_id) {
+  base::string16 old_shortcut = l10n_util::GetStringUTF16(old_shortcut_id);
+  base::string16 new_shortcut = l10n_util::GetStringUTF16(new_shortcut_id);
+  EnsureNoWordBreaks(&old_shortcut);
+  EnsureNoWordBreaks(&new_shortcut);
+
+  return l10n_util::GetStringFUTF16(message_id, new_shortcut, old_shortcut);
+}
+
+void ShowDeprecatedAcceleratorNotification(const char* const notification_id,
+                                           int message_id,
+                                           int old_shortcut_id,
+                                           int new_shortcut_id) {
+  const base::string16 message =
+      GetNotificationText(message_id, old_shortcut_id, new_shortcut_id);
+  scoped_ptr<message_center::Notification> notification(
+      new message_center::Notification(
+          message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
+          base::string16(), message,
+          Shell::GetInstance()->delegate()->GetDeprecatedAcceleratorImage(),
+          base::string16(), GURL(),
+          message_center::NotifierId(
+              message_center::NotifierId::SYSTEM_COMPONENT,
+              system_notifier::kNotifierDeprecatedAccelerator),
+          message_center::RichNotificationData(),
+          new DeprecatedAcceleratorNotificationDelegate));
+  message_center::MessageCenter::Get()->AddNotification(
+      std::move(notification));
+}
+
+void RecordUmaHistogram(const char* histogram_name,
+                        DeprecatedAcceleratorUsage sample) {
+  auto histogram = base::LinearHistogram::FactoryGet(
+      histogram_name, 1, DEPRECATED_USAGE_COUNT, DEPRECATED_USAGE_COUNT + 1,
+      base::HistogramBase::kUmaTargetedHistogramFlag);
+  histogram->Add(sample);
+}
 
 void HandleCycleBackwardMRU(const ui::Accelerator& accelerator) {
   if (accelerator.key_code() == ui::VKEY_TAB)
@@ -192,25 +295,37 @@ void HandleNewWindow() {
 }
 
 bool CanHandleNextIme(ImeControlDelegate* ime_control_delegate,
-                      const ui::Accelerator& previous_accelerator) {
-  // This check is necessary e.g. not to process the Shift+Alt+
-  // ET_KEY_RELEASED accelerator for Chrome OS (see ash/accelerators/
-  // accelerator_controller.cc) when Shift+Alt+Tab is pressed and then Tab
-  // is released.
-  ui::KeyboardCode previous_key_code = previous_accelerator.key_code();
-  if (previous_accelerator.type() == ui::ET_KEY_RELEASED &&
-      // Workaround for crbug.com/139556. CJK IME users tend to press
-      // Enter (or Space) and Shift+Alt almost at the same time to commit
-      // an IME string and then switch from the IME to the English layout.
-      // This workaround allows the user to trigger NEXT_IME even if the
-      // user presses Shift+Alt before releasing Enter.
-      // TODO(nona|mazda): Fix crbug.com/139556 in a cleaner way.
-      previous_key_code != ui::VKEY_RETURN &&
-      previous_key_code != ui::VKEY_SPACE) {
-    // We totally ignore this accelerator.
-    // TODO(mazda): Fix crbug.com/158217
-    return false;
+                      const ui::Accelerator& previous_accelerator,
+                      bool current_accelerator_is_deprecated) {
+  if (current_accelerator_is_deprecated) {
+    // We only allow next IME to be triggered if the previous is accelerator key
+    // is ONLY either Shift, Alt, Enter or Space.
+    // The first six cases below are to avoid conflicting accelerators that
+    // contain Alt+Shift (like Alt+Shift+Tab or Alt+Shift+S) to trigger next IME
+    // when the wrong order of key sequences is pressed. crbug.com/527154.
+    // The latter two cases are needed for CJK IME users who tend to press Enter
+    // (or Space) and Shift+Alt almost at the same time to commit an IME string
+    // and then switch from the IME to the English layout. This allows these
+    // users to trigger NEXT_IME even if they press Shift+Alt before releasing
+    // Enter. crbug.com/139556.
+    // TODO(nona|mazda): Fix crbug.com/139556 in a cleaner way.
+    const ui::KeyboardCode previous_key_code = previous_accelerator.key_code();
+    switch (previous_key_code) {
+      case ui::VKEY_SHIFT:
+      case ui::VKEY_LSHIFT:
+      case ui::VKEY_RSHIFT:
+      case ui::VKEY_MENU:
+      case ui::VKEY_LMENU:
+      case ui::VKEY_RMENU:
+      case ui::VKEY_RETURN:
+      case ui::VKEY_SPACE:
+        break;
+
+      default:
+        return false;
+    }
   }
+
   return ime_control_delegate && ime_control_delegate->CanCycleIme();
 }
 
@@ -258,6 +373,9 @@ gfx::Display::Rotation GetNextRotation(gfx::Display::Rotation current) {
 
 // Rotates the screen.
 void HandleRotateScreen() {
+  if (Shell::GetInstance()->display_manager()->IsInUnifiedMode())
+    return;
+
   base::RecordAction(UserMetricsAction("Accel_Rotate_Window"));
   gfx::Point point = Shell::GetScreen()->GetCursorScreenPoint();
   gfx::Display display = Shell::GetScreen()->GetDisplayNearestPoint(point);
@@ -283,42 +401,6 @@ void HandleRotateActiveWindow() {
         new ui::LayerAnimationSequence(
             new ash::WindowRotation(360, active_window->layer())));
   }
-}
-
-bool CanHandleScaleReset() {
-  DisplayManager* display_manager = Shell::GetInstance()->display_manager();
-  int64 display_id = display_manager->GetDisplayIdForUIScaling();
-  return (display_id != gfx::Display::kInvalidDisplayID &&
-          display_manager->GetDisplayInfo(display_id).configured_ui_scale() !=
-              1.0f);
-}
-
-void HandleScaleReset() {
-  base::RecordAction(UserMetricsAction("Accel_Scale_Ui_Reset"));
-  DisplayManager* display_manager = Shell::GetInstance()->display_manager();
-  int64 display_id = display_manager->GetDisplayIdForUIScaling();
-  display_manager->SetDisplayUIScale(display_id, 1.0f);
-}
-
-bool CanHandleScaleUI() {
-  DisplayManager* display_manager = Shell::GetInstance()->display_manager();
-  int64 display_id = display_manager->GetDisplayIdForUIScaling();
-  return display_id != gfx::Display::kInvalidDisplayID;
-}
-
-void HandleScaleUI(bool up) {
-  DisplayManager* display_manager = Shell::GetInstance()->display_manager();
-  int64 display_id = display_manager->GetDisplayIdForUIScaling();
-
-  if (up) {
-    base::RecordAction(UserMetricsAction("Accel_Scale_Ui_Up"));
-  } else {
-    base::RecordAction(UserMetricsAction("Accel_Scale_Ui_Down"));
-  }
-
-  const DisplayInfo& display_info = display_manager->GetDisplayInfo(display_id);
-  float next_scale = GetNextUIScale(display_info, up);
-  display_manager->SetDisplayUIScale(display_id, next_scale);
 }
 
 void HandleShowKeyboardOverlay() {
@@ -515,6 +597,10 @@ void HandleKeyboardBrightnessUp(KeyboardBrightnessControlDelegate* delegate,
     delegate->HandleKeyboardBrightnessUp(accelerator);
 }
 
+bool CanHandleLock() {
+  return Shell::GetInstance()->session_state_delegate()->CanLockScreen();
+}
+
 void HandleLock() {
   base::RecordAction(UserMetricsAction("Accel_LockScreen_L"));
   Shell::GetInstance()->session_state_delegate()->LockScreen();
@@ -549,7 +635,7 @@ void HandleSilenceSpokenFeedback() {
 
 void HandleSwapPrimaryDisplay() {
   base::RecordAction(UserMetricsAction("Accel_Swap_Primary_Display"));
-  Shell::GetInstance()->display_controller()->SwapPrimaryDisplay();
+  Shell::GetInstance()->window_tree_host_manager()->SwapPrimaryDisplay();
 }
 
 bool CanHandleCycleUser() {
@@ -598,7 +684,7 @@ void HandleToggleCapsLock() {
 
 void HandleToggleMirrorMode() {
   base::RecordAction(UserMetricsAction("Accel_Toggle_Mirror_Mode"));
-  Shell::GetInstance()->display_controller()->ToggleMirrorMode();
+  Shell::GetInstance()->window_tree_host_manager()->ToggleMirrorMode();
 }
 
 void HandleToggleSpokenFeedback() {
@@ -727,6 +813,11 @@ bool AcceleratorController::IsReserved(
   return reserved_actions_.find(iter->second) != reserved_actions_.end();
 }
 
+bool AcceleratorController::IsDeprecated(
+    const ui::Accelerator& accelerator) const {
+  return deprecated_accelerators_.count(accelerator) != 0;
+}
+
 bool AcceleratorController::PerformActionIfEnabled(AcceleratorAction action) {
   if (CanPerformAction(action, ui::Accelerator())) {
     PerformAction(action, ui::Accelerator());
@@ -742,17 +833,27 @@ AcceleratorController::GetCurrentAcceleratorRestriction() {
 
 void AcceleratorController::SetBrightnessControlDelegate(
     scoped_ptr<BrightnessControlDelegate> brightness_control_delegate) {
-  brightness_control_delegate_ = brightness_control_delegate.Pass();
+  brightness_control_delegate_ = std::move(brightness_control_delegate);
 }
 
 void AcceleratorController::SetImeControlDelegate(
     scoped_ptr<ImeControlDelegate> ime_control_delegate) {
-  ime_control_delegate_ = ime_control_delegate.Pass();
+  ime_control_delegate_ = std::move(ime_control_delegate);
 }
 
 void AcceleratorController::SetScreenshotDelegate(
     scoped_ptr<ScreenshotDelegate> screenshot_delegate) {
-  screenshot_delegate_ = screenshot_delegate.Pass();
+  screenshot_delegate_ = std::move(screenshot_delegate);
+}
+
+bool AcceleratorController::ShouldCloseMenuAndRepostAccelerator(
+    const ui::Accelerator& accelerator) const {
+  auto itr = accelerators_.find(accelerator);
+  if (itr == accelerators_.end())
+    return false;  // Menu shouldn't be closed for an invalid accelerator.
+
+  AcceleratorAction action = itr->second;
+  return actions_keeping_menu_open_.count(action) == 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -765,6 +866,32 @@ bool AcceleratorController::AcceleratorPressed(
   DCHECK(it != accelerators_.end());
   AcceleratorAction action = it->second;
   if (CanPerformAction(action, accelerator)) {
+    // Handling the deprecated accelerators (if any) only if action can be
+    // performed.
+    auto itr = actions_with_deprecations_.find(action);
+    if (itr != actions_with_deprecations_.end()) {
+      const DeprecatedAcceleratorData* data = itr->second;
+      if (deprecated_accelerators_.count(accelerator)) {
+        // This accelerator has been deprecated and should be treated according
+        // to its |DeprecatedAcceleratorData|.
+
+        // Record UMA stats.
+        RecordUmaHistogram(data->uma_histogram_name, DEPRECATED_USED);
+
+        // We always display the notification as long as this entry exists.
+        ShowDeprecatedAcceleratorNotification(
+            data->uma_histogram_name, data->notification_message_id,
+            data->old_shortcut_id, data->new_shortcut_id);
+
+        if (!data->deprecated_enabled)
+          return false;
+      } else {
+        // This is a new accelerator replacing the old deprecated one.
+        // Record UMA stats and proceed normally.
+        RecordUmaHistogram(data->uma_histogram_name, NEW_USED);
+      }
+    }
+
     PerformAction(action, accelerator);
     return ShouldActionConsumeKeyEvent(action);
   }
@@ -799,8 +926,12 @@ void AcceleratorController::Init() {
     actions_allowed_in_app_mode_.insert(kActionsAllowedInAppMode[i]);
   for (size_t i = 0; i < kActionsNeedingWindowLength; ++i)
     actions_needing_window_.insert(kActionsNeedingWindow[i]);
+  for (size_t i = 0; i < kActionsKeepingMenuOpenLength; ++i)
+    actions_keeping_menu_open_.insert(kActionsKeepingMenuOpen[i]);
 
   RegisterAccelerators(kAcceleratorData, kAcceleratorDataLength);
+
+  RegisterDeprecatedAccelerators();
 
   if (debug::DebugAcceleratorsEnabled()) {
     RegisterAccelerators(kDebugAcceleratorData, kDebugAcceleratorDataLength);
@@ -819,14 +950,33 @@ void AcceleratorController::RegisterAccelerators(
     const AcceleratorData accelerators[],
     size_t accelerators_length) {
   for (size_t i = 0; i < accelerators_length; ++i) {
-    ui::Accelerator accelerator(accelerators[i].keycode,
-                                accelerators[i].modifiers);
-    accelerator.set_type(accelerators[i].trigger_on_press ?
-                         ui::ET_KEY_PRESSED : ui::ET_KEY_RELEASED);
+    ui::Accelerator accelerator =
+        CreateAccelerator(accelerators[i].keycode, accelerators[i].modifiers,
+                          accelerators[i].trigger_on_press);
     Register(accelerator, this);
     accelerators_.insert(
         std::make_pair(accelerator, accelerators[i].action));
   }
+}
+
+void AcceleratorController::RegisterDeprecatedAccelerators() {
+#if defined(OS_CHROMEOS)
+  for (size_t i = 0; i < kDeprecatedAcceleratorsDataLength; ++i) {
+    const DeprecatedAcceleratorData* data = &kDeprecatedAcceleratorsData[i];
+    actions_with_deprecations_[data->action] = data;
+  }
+
+  for (size_t i = 0; i < kDeprecatedAcceleratorsLength; ++i) {
+    const AcceleratorData& accelerator_data = kDeprecatedAccelerators[i];
+    const ui::Accelerator deprecated_accelerator =
+        CreateAccelerator(accelerator_data.keycode, accelerator_data.modifiers,
+                          accelerator_data.trigger_on_press);
+
+    Register(deprecated_accelerator, this);
+    accelerators_[deprecated_accelerator] = accelerator_data.action;
+    deprecated_accelerators_.insert(deprecated_accelerator);
+  }
+#endif  // defined(OS_CHROMEOS)
 }
 
 bool AcceleratorController::CanPerformAction(
@@ -864,16 +1014,24 @@ bool AcceleratorController::CanPerformAction(
       return CanHandleMagnifyScreen();
     case NEW_INCOGNITO_WINDOW:
       return CanHandleNewIncognitoWindow();
-    case NEXT_IME:
-      return CanHandleNextIme(ime_control_delegate_.get(),
-                              previous_accelerator);
+    case NEXT_IME: {
+#if defined(OS_CHROMEOS)
+      bool accelerator_is_deprecated =
+          (deprecated_accelerators_.count(accelerator) != 0);
+#else
+      // On non-chromeos, the NEXT_IME deprecated accelerators are always used.
+      bool accelerator_is_deprecated = true;
+#endif  // defined(OS_CHROMEOS)
+
+      return CanHandleNextIme(ime_control_delegate_.get(), previous_accelerator,
+                              accelerator_is_deprecated);
+    }
     case PREVIOUS_IME:
       return CanHandlePreviousIme(ime_control_delegate_.get());
     case SCALE_UI_RESET:
-      return CanHandleScaleReset();
     case SCALE_UI_UP:
     case SCALE_UI_DOWN:
-      return CanHandleScaleUI();
+      return accelerators::IsInternalDisplayZoomEnabled();
     case SHOW_MESSAGE_CENTER_BUBBLE:
       return CanHandleShowMessageCenterBubble();
     case SWITCH_IME:
@@ -887,9 +1045,14 @@ bool AcceleratorController::CanPerformAction(
       return CanHandlePositionCenter();
 #if defined(OS_CHROMEOS)
     case DEBUG_ADD_REMOVE_DISPLAY:
+    case DEBUG_TOGGLE_TOUCH_PAD:
+    case DEBUG_TOGGLE_TOUCH_SCREEN:
+    case DEBUG_TOGGLE_UNIFIED_DESKTOP:
       return debug::DebugAcceleratorsEnabled();
     case DISABLE_CAPS_LOCK:
       return CanHandleDisableCapsLock(previous_accelerator);
+    case LOCK_SCREEN:
+      return CanHandleLock();
     case SILENCE_SPOKEN_FEEDBACK:
       return CanHandleSilenceSpokenFeedback();
     case SWITCH_TO_PREVIOUS_USER:
@@ -946,7 +1109,6 @@ bool AcceleratorController::CanPerformAction(
     case KEYBOARD_BRIGHTNESS_UP:
     case LOCK_PRESSED:
     case LOCK_RELEASED:
-    case LOCK_SCREEN:
     case OPEN_CROSH:
     case OPEN_FILE_MANAGER:
     case OPEN_GET_HELP:
@@ -1082,13 +1244,13 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
       HandleRotateActiveWindow();
       break;
     case SCALE_UI_DOWN:
-      HandleScaleUI(false /* down */);
+      accelerators::ZoomInternalDisplay(false /* down */);
       break;
     case SCALE_UI_RESET:
-      HandleScaleReset();
+      accelerators::ResetInternalDisplayZoom();
       break;
     case SCALE_UI_UP:
-      HandleScaleUI(true /* up */);
+      accelerators::ZoomInternalDisplay(true /* up */);
       break;
     case SHOW_KEYBOARD_OVERLAY:
       HandleShowKeyboardOverlay();
@@ -1141,6 +1303,9 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
       HandleBrightnessUp(brightness_control_delegate_.get(), accelerator);
       break;
     case DEBUG_ADD_REMOVE_DISPLAY:
+    case DEBUG_TOGGLE_TOUCH_PAD:
+    case DEBUG_TOGGLE_TOUCH_SCREEN:
+    case DEBUG_TOGGLE_UNIFIED_DESKTOP:
       debug::PerformDebugActionIfEnabled(action);
       break;
     case DISABLE_CAPS_LOCK:
@@ -1291,7 +1456,7 @@ void AcceleratorController::SetKeyboardBrightnessControlDelegate(
     scoped_ptr<KeyboardBrightnessControlDelegate>
     keyboard_brightness_control_delegate) {
   keyboard_brightness_control_delegate_ =
-      keyboard_brightness_control_delegate.Pass();
+      std::move(keyboard_brightness_control_delegate);
 }
 
 }  // namespace ash

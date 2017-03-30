@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_FRAME_BROWSER_NON_CLIENT_FRAME_VIEW_MAC_H_
 #define CHROME_BROWSER_UI_VIEWS_FRAME_BROWSER_NON_CLIENT_FRAME_VIEW_MAC_H_
 
+#include "base/macros.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
 
 class BrowserNonClientFrameViewMac : public BrowserNonClientFrameView {
@@ -15,7 +16,7 @@ class BrowserNonClientFrameViewMac : public BrowserNonClientFrameView {
 
   // BrowserNonClientFrameView:
   gfx::Rect GetBoundsForTabStrip(views::View* tabstrip) const override;
-  int GetTopInset() const override;
+  int GetTopInset(bool restored) const override;
   int GetThemeBackgroundXInset() const override;
   void UpdateThrobber(bool running) override;
 

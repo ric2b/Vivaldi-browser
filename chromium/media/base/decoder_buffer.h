@@ -5,18 +5,23 @@
 #ifndef MEDIA_BASE_DECODER_BUFFER_H_
 #define MEDIA_BASE_DECODER_BUFFER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 #include <utility>
 
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/aligned_memory.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "media/base/buffers.h"
 #include "media/base/decrypt_config.h"
 #include "media/base/media_export.h"
+#include "media/base/timestamp_constants.h"
+
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
 #include "media/filters/pass_through_decoder_texture.h"
 #endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
@@ -46,20 +51,22 @@ class MEDIA_EXPORT DecoderBuffer
 
   // Allocates buffer with |size| >= 0.  Buffer will be padded and aligned
   // as necessary, and |is_key_frame_| will default to false.
-  explicit DecoderBuffer(int size);
+  explicit DecoderBuffer(size_t size);
 
   // Create a DecoderBuffer whose |data_| is copied from |data|.  Buffer will be
   // padded and aligned as necessary.  |data| must not be NULL and |size| >= 0.
   // The buffer's |is_key_frame_| will default to false.
-  static scoped_refptr<DecoderBuffer> CopyFrom(const uint8* data, int size);
+  static scoped_refptr<DecoderBuffer> CopyFrom(const uint8_t* data,
+                                               size_t size);
 
   // Create a DecoderBuffer whose |data_| is copied from |data| and |side_data_|
   // is copied from |side_data|. Buffers will be padded and aligned as necessary
   // Data pointers must not be NULL and sizes must be >= 0. The buffer's
   // |is_key_frame_| will default to false.
-  static scoped_refptr<DecoderBuffer> CopyFrom(const uint8* data, int size,
-                                               const uint8* side_data,
-                                               int side_data_size);
+  static scoped_refptr<DecoderBuffer> CopyFrom(const uint8_t* data,
+                                               size_t size,
+                                               const uint8_t* side_data,
+                                               size_t side_data_size);
 
   // Create a DecoderBuffer indicating we've reached end of stream.
   //
@@ -89,27 +96,27 @@ class MEDIA_EXPORT DecoderBuffer
     duration_ = duration;
   }
 
-  const uint8* data() const {
+  const uint8_t* data() const {
     DCHECK(!end_of_stream());
     return data_.get();
   }
 
-  uint8* writable_data() const {
+  uint8_t* writable_data() const {
     DCHECK(!end_of_stream());
     return data_.get();
   }
 
-  int data_size() const {
+  size_t data_size() const {
     DCHECK(!end_of_stream());
     return size_;
   }
 
-  const uint8* side_data() const {
+  const uint8_t* side_data() const {
     DCHECK(!end_of_stream());
     return side_data_.get();
   }
 
-  int side_data_size() const {
+  size_t side_data_size() const {
     DCHECK(!end_of_stream());
     return side_data_size_;
   }
@@ -137,7 +144,7 @@ class MEDIA_EXPORT DecoderBuffer
 
   void set_decrypt_config(scoped_ptr<DecryptConfig> decrypt_config) {
     DCHECK(!end_of_stream());
-    decrypt_config_ = decrypt_config.Pass();
+    decrypt_config_ = std::move(decrypt_config);
   }
 
   // If there's no data in this buffer, it represents end of stream.
@@ -161,12 +168,12 @@ class MEDIA_EXPORT DecoderBuffer
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   scoped_ptr<AutoReleasedPassThroughDecoderTexture> PassWrappedTexture() {
-    return wrapped_texture_.Pass();
+    return std::move(wrapped_texture_);
   }
 
   void set_wrapped_texture(scoped_ptr<
       media::AutoReleasedPassThroughDecoderTexture> wrapped_texture) {
-    wrapped_texture_ = wrapped_texture.Pass();
+    wrapped_texture_ = std::move(wrapped_texture);
   }
 #endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
 
@@ -184,7 +191,7 @@ class MEDIA_EXPORT DecoderBuffer
   std::string AsHumanReadableString();
 
   // Replaces any existing side data with data copied from |side_data|.
-  void CopySideDataFrom(const uint8* side_data, int side_data_size);
+  void CopySideDataFrom(const uint8_t* side_data, size_t side_data_size);
 
  protected:
   friend class base::RefCountedThreadSafe<DecoderBuffer>;
@@ -193,18 +200,20 @@ class MEDIA_EXPORT DecoderBuffer
   // will be padded and aligned as necessary.  If |data| is NULL then |data_| is
   // set to NULL and |buffer_size_| to 0.  |is_key_frame_| will default to
   // false.
-  DecoderBuffer(const uint8* data, int size,
-                const uint8* side_data, int side_data_size);
+  DecoderBuffer(const uint8_t* data,
+                size_t size,
+                const uint8_t* side_data,
+                size_t side_data_size);
   virtual ~DecoderBuffer();
 
  private:
   base::TimeDelta timestamp_;
   base::TimeDelta duration_;
 
-  int size_;
-  scoped_ptr<uint8, base::AlignedFreeDeleter> data_;
-  int side_data_size_;
-  scoped_ptr<uint8, base::AlignedFreeDeleter> side_data_;
+  size_t size_;
+  scoped_ptr<uint8_t, base::AlignedFreeDeleter> data_;
+  size_t side_data_size_;
+  scoped_ptr<uint8_t, base::AlignedFreeDeleter> side_data_;
   scoped_ptr<DecryptConfig> decrypt_config_;
   DiscardPadding discard_padding_;
   base::TimeDelta splice_timestamp_;

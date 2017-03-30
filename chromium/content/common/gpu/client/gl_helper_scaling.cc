@@ -4,6 +4,8 @@
 
 #include "content/common/gpu/client/gl_helper_scaling.h"
 
+#include <stddef.h>
+
 #include <deque>
 #include <string>
 #include <vector>
@@ -11,6 +13,7 @@
 #include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/time/time.h"
@@ -870,8 +873,7 @@ void ShaderProgram::Setup(const GLchar* vertex_shader_text,
   // The only reason fetching these attribute locations should fail is
   // if the context was spontaneously lost (i.e., because the GPU
   // process crashed, perhaps deliberately for testing).
-  DCHECK_IMPLIES(!Initialized(),
-                 gl_->GetGraphicsResetStatusKHR() != GL_NO_ERROR);
+  DCHECK(Initialized() || gl_->GetGraphicsResetStatusKHR() != GL_NO_ERROR);
 }
 
 void ShaderProgram::UseProgram(const gfx::Size& src_size,

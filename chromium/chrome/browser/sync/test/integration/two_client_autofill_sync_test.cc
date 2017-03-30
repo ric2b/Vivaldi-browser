@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/sync/test/integration/autofill_helper.h"
 #include "chrome/browser/sync/test/integration/bookmarks_helper.h"
@@ -14,9 +15,6 @@
 #include "components/autofill/core/browser/webdata/autofill_entry.h"
 #include "components/autofill/core/browser/webdata/autofill_table.h"
 
-// The E2E tests are designed to run only against real backend servers. They are
-// disabled on regular bots. TODO(shadi): consolidate this into a common macro.
-#define E2E_ONLY(x) DISABLED_E2ETest_##x
 
 using autofill::AutofillKey;
 using autofill::AutofillTable;

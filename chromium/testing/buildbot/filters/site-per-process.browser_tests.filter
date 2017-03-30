@@ -1,0 +1,37 @@
+# crbug.com/417518: Get tests working with --site-per-process
+-AllUrlsApiTest.WhitelistedExtension
+-BrowserNavigatorTest.NavigateFromNTPToOptionsInSameTab
+-BrowserTest.OtherRedirectsDontForkProcess
+-ChromeRenderProcessHostTest.*
+-ChromeRenderProcessHostTestWithCommandLine.*
+-ErrorPageTest.*
+-PolicyTest.HomepageLocation
+-PrerenderBrowserTest.*
+-ProcessManagementTest.*
+-RedirectTest.ClientEmptyReferer
+-ReferrerPolicyTest.HttpsRedirect
+-RestoreOnStartupPolicyTestInstance/RestoreOnStartupPolicyTest.RunTest*
+-SSLUITest.TestGoodFrameNavigation
+-WebNavigationApiTest.CrossProcessFragment
+-WebNavigationApiTest.ServerRedirectSingleProcess
+-WebNavigationApiTest.CrossProcessHistory
+-WebRtcBrowserTest.RunsAudioVideoWebRTCCallInTwoTabs
+
+# crbug.com/574997: Navigating to a file: URL for a non-existing dir.
+-SSLUITest.TestMarkNonSecureAs
+
+# crbug.com/467126: BrowserTest.WindowOpenClose is flaky in --site-per-process
+# mode:
+-BrowserTest.WindowOpenClose
+
+# crbug.com/448592: Get extension browsertests to pass in --site-per-process
+# mode:
+-ExtensionApiTest.Tabs2
+-ExtensionApiTest.TabMove
+-ExtensionApiTest.TabsOnUpdated
+-ExtensionURLRewriteBrowserTest.NewTabPageURL
+-IsolatedAppTest.*
+
+# crbug.com/568710: Some PhishingClassifierDelegateTest are not compatible
+# with out-of-process iframes:
+-PhishingClassifierDelegateTest.*

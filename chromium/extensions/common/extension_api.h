@@ -8,8 +8,8 @@
 #include <map>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
@@ -130,7 +130,7 @@ class ExtensionAPI {
  private:
   FRIEND_TEST_ALL_PREFIXES(ExtensionAPITest, DefaultConfigurationFeatures);
   FRIEND_TEST_ALL_PREFIXES(ExtensionAPITest, TypesHaveNamespace);
-  friend struct DefaultSingletonTraits<ExtensionAPI>;
+  friend struct base::DefaultSingletonTraits<ExtensionAPI>;
 
   void InitDefaultConfiguration();
 

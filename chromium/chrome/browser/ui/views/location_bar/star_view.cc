@@ -15,7 +15,9 @@
 #include "chrome/grit/generated_resources.h"
 #include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/resource/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/vector_icons_public.h"
 
 StarView::StarView(CommandUpdater* command_updater, Browser* browser)
     : BubbleIconView(command_updater, IDC_BOOKMARK_PAGE), browser_(browser) {
@@ -26,10 +28,9 @@ StarView::StarView(CommandUpdater* command_updater, Browser* browser)
 StarView::~StarView() {}
 
 void StarView::SetToggled(bool on) {
+  BubbleIconView::SetActiveInternal(on);
   SetTooltipText(l10n_util::GetStringUTF16(
       on ? IDS_TOOLTIP_STARRED : IDS_TOOLTIP_STAR));
-  SetImage(ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-      on ? IDR_STAR_LIT : IDR_STAR));
 }
 
 void StarView::OnExecuting(
@@ -62,4 +63,18 @@ void StarView::ExecuteCommand(ExecuteSource source) {
 
 views::BubbleDelegateView* StarView::GetBubble() const {
   return BookmarkBubbleView::bookmark_bubble();
+}
+
+bool StarView::SetRasterIcon() {
+  if (ui::MaterialDesignController::IsModeMaterial())
+    return false;
+
+  SetImage(ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+      active() ? IDR_STAR_LIT : IDR_STAR));
+  return true;
+}
+
+gfx::VectorIconId StarView::GetVectorIcon() const {
+  return active() ? gfx::VectorIconId::LOCATION_BAR_STAR_ACTIVE
+                  : gfx::VectorIconId::LOCATION_BAR_STAR;
 }

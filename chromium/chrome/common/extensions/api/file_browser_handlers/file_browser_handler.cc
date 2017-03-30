@@ -4,6 +4,8 @@
 
 #include "chrome/common/extensions/api/file_browser_handlers/file_browser_handler.h"
 
+#include <stddef.h>
+
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -199,7 +201,7 @@ FileBrowserHandler* LoadFileBrowserHandler(
             errors::kInvalidFileFilterValue, base::IntToString(i));
         return NULL;
       }
-      base::StringToLowerASCII(&filter);
+      filter = base::ToLowerASCII(filter);
       if (!base::StartsWith(filter, std::string(url::kFileSystemScheme) + ':',
                             base::CompareCase::SENSITIVE)) {
         *error = extensions::ErrorUtils::FormatErrorMessageUTF16(

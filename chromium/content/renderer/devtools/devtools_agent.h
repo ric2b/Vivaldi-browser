@@ -7,6 +7,8 @@
 
 #include <string>
 
+#include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "content/common/content_export.h"
 #include "content/public/common/console_message_level.h"
 #include "content/public/renderer/render_frame_observer.h"
@@ -18,6 +20,7 @@ class WebDevToolsAgent;
 
 namespace content {
 
+class DevToolsCPUThrottler;
 class RenderFrameImpl;
 
 // DevToolsAgent belongs to the inspectable RenderFrameImpl and communicates
@@ -33,12 +36,12 @@ class CONTENT_EXPORT DevToolsAgent
   // Returns agent instance for its routing id.
   static DevToolsAgent* FromRoutingId(int routing_id);
 
-  static void SendChunkedProtocolMessage(
-      IPC::Sender* sender,
-      int routing_id,
-      int call_id,
-      const std::string& message,
-      const std::string& post_state);
+  static void SendChunkedProtocolMessage(IPC::Sender* sender,
+                                         int routing_id,
+                                         int session_id,
+                                         int call_id,
+                                         const std::string& message,
+                                         const std::string& post_state);
 
   blink::WebDevToolsAgent* GetWebAgent();
 
@@ -55,7 +58,8 @@ class CONTENT_EXPORT DevToolsAgent
   void WidgetWillClose() override;
 
   // WebDevToolsAgentClient implementation.
-  void sendProtocolMessage(int call_id,
+  void sendProtocolMessage(int session_id,
+                           int call_id,
                            const blink::WebString& response,
                            const blink::WebString& state) override;
   blink::WebDevToolsAgentClient::WebKitClientMessageLoop*
@@ -66,12 +70,15 @@ class CONTENT_EXPORT DevToolsAgent
   void enableTracing(const blink::WebString& category_filter) override;
   void disableTracing() override;
 
-  void OnAttach(const std::string& host_id);
+  void setCPUThrottlingRate(double rate) override;
+
+  void OnAttach(const std::string& host_id, int session_id);
   void OnReattach(const std::string& host_id,
+                  int session_id,
                   const std::string& agent_state);
   void OnDetach();
-  void OnDispatchOnInspectorBackend(const std::string& message);
-  void OnInspectElement(const std::string& host_id, int x, int y);
+  void OnDispatchOnInspectorBackend(int session_id, const std::string& message);
+  void OnInspectElement(int x, int y);
   void ContinueProgram();
   void OnSetupDevToolsClient(const std::string& compatibility_script);
 
@@ -80,6 +87,7 @@ class CONTENT_EXPORT DevToolsAgent
   bool paused_in_mouse_move_;
   bool paused_;
   RenderFrameImpl* frame_;
+  scoped_ptr<DevToolsCPUThrottler> cpu_throttler_;
 
   DISALLOW_COPY_AND_ASSIGN(DevToolsAgent);
 };

@@ -9,7 +9,7 @@
 #include <map>
 
 #include "base/callback.h"
-#include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "chrome/browser/browsing_data/browsing_data_indexed_db_helper.h"
 
 class Profile;
@@ -36,14 +36,13 @@ class MockBrowsingDataIndexedDBHelper
   bool AllDeleted();
 
   // BrowsingDataIndexedDBHelper.
-  void StartFetching(const base::Callback<
-      void(const std::list<content::IndexedDBInfo>&)>& callback) override;
+  void StartFetching(const FetchCallback& callback) override;
   void DeleteIndexedDB(const GURL& origin) override;
 
  private:
   ~MockBrowsingDataIndexedDBHelper() override;
 
-  base::Callback<void(const std::list<content::IndexedDBInfo>&)> callback_;
+  FetchCallback callback_;
   std::map<GURL, bool> origins_;
   std::list<content::IndexedDBInfo> response_;
 

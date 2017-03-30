@@ -8,8 +8,8 @@
 #include <vector>
 
 #include "ash/ash_export.h"
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 
 namespace views {
 class Widget;
@@ -36,6 +36,9 @@ class ASH_EXPORT FocusCycler {
   // Add a widget to the focus cycle. The widget needs to have an
   // AccessiblePaneView as the content view.
   void AddWidget(views::Widget* widget);
+
+  // Remove a widget from the focus cycle.
+  void RemoveWidget(views::Widget* widget);
 
   // Move focus to the next widget.
   void RotateFocus(Direction direction);

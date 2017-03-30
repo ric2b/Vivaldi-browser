@@ -8,8 +8,8 @@
 #include <queue>
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/sequenced_worker_pool.h"
@@ -67,7 +67,7 @@ class FeedbackUploader : public base::SupportsWeakPtr<FeedbackUploader> {
 
   base::FilePath report_path_;
   // Timer to upload the next report at.
-  base::OneShotTimer<FeedbackUploader> upload_timer_;
+  base::OneShotTimer upload_timer_;
   // Priority queue of reports prioritized by the time the report is supposed
   // to be uploaded at.
   std::priority_queue<scoped_refptr<FeedbackReport>,

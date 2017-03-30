@@ -4,13 +4,12 @@
 
 #include "remoting/client/plugin/chromoting_instance.h"
 
-#include <string>
-#include <vector>
-
-#if defined(OS_NACL)
 #include <nacl_io/nacl_io.h>
 #include <sys/mount.h>
-#endif
+
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/callback.h"
@@ -19,46 +18,44 @@
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
+#include "base/threading/platform_thread.h"
 #include "base/threading/thread.h"
 #include "base/values.h"
 #include "crypto/random.h"
 #include "jingle/glue/thread_wrapper.h"
-#include "media/base/yuv_convert.h"
 #include "net/socket/ssl_server_socket.h"
 #include "ppapi/cpp/completion_callback.h"
 #include "ppapi/cpp/dev/url_util_dev.h"
 #include "ppapi/cpp/image_data.h"
 #include "ppapi/cpp/input_event.h"
+#include "ppapi/cpp/private/uma_private.h"
 #include "ppapi/cpp/rect.h"
 #include "ppapi/cpp/var_array_buffer.h"
 #include "ppapi/cpp/var_dictionary.h"
 #include "remoting/base/constants.h"
 #include "remoting/base/util.h"
 #include "remoting/client/chromoting_client.h"
+#include "remoting/client/normalizing_input_filter_cros.h"
+#include "remoting/client/normalizing_input_filter_mac.h"
+#include "remoting/client/normalizing_input_filter_win.h"
 #include "remoting/client/plugin/delegating_signal_strategy.h"
-#include "remoting/client/plugin/normalizing_input_filter_cros.h"
-#include "remoting/client/plugin/normalizing_input_filter_mac.h"
 #include "remoting/client/plugin/pepper_audio_player.h"
+#include "remoting/client/plugin/pepper_main_thread_task_runner.h"
 #include "remoting/client/plugin/pepper_mouse_locker.h"
 #include "remoting/client/plugin/pepper_port_allocator.h"
 #include "remoting/client/plugin/pepper_video_renderer_2d.h"
 #include "remoting/client/plugin/pepper_video_renderer_3d.h"
 #include "remoting/client/software_video_renderer.h"
 #include "remoting/client/token_fetcher_proxy.h"
+#include "remoting/proto/control.pb.h"
 #include "remoting/protocol/connection_to_host.h"
 #include "remoting/protocol/host_stub.h"
-#include "remoting/protocol/libjingle_transport_factory.h"
-#include "third_party/webrtc/base/helpers.h"
-#include "third_party/webrtc/base/ssladapter.h"
+#include "remoting/protocol/transport_context.h"
 #include "url/gurl.h"
-
-// Windows defines 'PostMessage', so we have to undef it.
-#if defined(PostMessage)
-#undef PostMessage
-#endif
 
 namespace remoting {
 
@@ -67,40 +64,39 @@ namespace {
 // Default DPI to assume for old clients that use notifyClientResolution.
 const int kDefaultDPI = 96;
 
-// Interval at which to sample performance statistics.
-const int kPerfStatsIntervalMs = 1000;
-
-// URL scheme used by Chrome apps and extensions.
-const char kChromeExtensionUrlScheme[] = "chrome-extension";
-
-#if defined(USE_OPENSSL)
-// Size of the random seed blob used to initialize RNG in libjingle. Libjingle
-// uses the seed only for OpenSSL builds. OpenSSL needs at least 32 bytes of
-// entropy (see http://wiki.openssl.org/index.php/Random_Numbers), but stores
-// 1039 bytes of state, so we initialize it with 1k or random data.
+// Size of the random seed blob used to initialize RNG in libjingle. OpenSSL
+// needs at least 32 bytes of entropy (see
+// http://wiki.openssl.org/index.php/Random_Numbers), but stores 1039 bytes of
+// state, so we initialize it with 1k or random data.
 const int kRandomSeedSize = 1024;
-#endif  // defined(USE_OPENSSL)
 
-std::string ConnectionStateToString(protocol::ConnectionToHost::State state) {
-  // Values returned by this function must match the
-  // remoting.ClientSession.State enum in JS code.
-  switch (state) {
-    case protocol::ConnectionToHost::INITIALIZING:
-      return "INITIALIZING";
-    case protocol::ConnectionToHost::CONNECTING:
-      return "CONNECTING";
-    case protocol::ConnectionToHost::AUTHENTICATED:
-      return "AUTHENTICATED";
-    case protocol::ConnectionToHost::CONNECTED:
-      return "CONNECTED";
-    case protocol::ConnectionToHost::CLOSED:
-      return "CLOSED";
-    case protocol::ConnectionToHost::FAILED:
-      return "FAILED";
-  }
-  NOTREACHED();
-  return std::string();
-}
+// The connection times and duration values are stored in UMA custom-time
+// histograms, that are log-scaled by default. The histogram specifications are
+// based off values seen over a recent 7-day period.
+// The connection times histograms are in milliseconds and the connection
+// duration histograms are in minutes.
+const char kTimeToAuthenticateHistogram[] =
+    "Chromoting.Connections.Times.ToAuthenticate";
+const char kTimeToConnectHistogram[] = "Chromoting.Connections.Times.ToConnect";
+const char kClosedSessionDurationHistogram[] =
+    "Chromoting.Connections.Durations.Closed";
+const char kFailedSessionDurationHistogram[] =
+    "Chromoting.Connections.Durations.Failed";
+const int kConnectionTimesHistogramMinMs = 1;
+const int kConnectionTimesHistogramMaxMs = 30000;
+const int kConnectionTimesHistogramBuckets = 50;
+const int kConnectionDurationHistogramMinMinutes = 1;
+const int kConnectionDurationHistogramMaxMinutes = 24 * 60;
+const int kConnectionDurationHistogramBuckets = 50;
+
+// Input event latency is expected to be below 10ms.
+const char kInputEventLatencyHistogram[] = "Chromoting.Input.EventLatency";
+const int kInputEventLatencyHistogramMinUs = 1;
+const int kInputEventLatencyHistogramMaxUs = 10000;
+const int kInputEventLatencyHistogramBuckets = 50;
+
+// Update perf stats in the UI every second.
+const int kUIStatsUpdatePeriodSeconds = 1;
 
 // TODO(sergeyu): Ideally we should just pass ErrorCode to the webapp
 // and let it handle it, but it would be hard to fix it now because
@@ -126,6 +122,12 @@ std::string ConnectionErrorToString(protocol::ErrorCode error) {
     case protocol::HOST_OVERLOAD:
       return "HOST_OVERLOAD";
 
+    case protocol::MAX_SESSION_LENGTH:
+      return "MAX_SESSION_LENGTH";
+
+    case protocol::HOST_CONFIGURATION_ERROR:
+      return "HOST_CONFIGURATION_ERROR";
+
     case protocol::CHANNEL_CONNECTION_ERROR:
     case protocol::SIGNALING_ERROR:
     case protocol::SIGNALING_TIMEOUT:
@@ -136,54 +138,16 @@ std::string ConnectionErrorToString(protocol::ErrorCode error) {
   return std::string();
 }
 
-bool ParseAuthMethods(
-    const std::string& auth_methods_str,
-    std::vector<protocol::AuthenticationMethod>* auth_methods) {
-  std::vector<std::string> parts;
-  base::SplitString(auth_methods_str, ',', &parts);
-  for (std::vector<std::string>::iterator it = parts.begin();
-       it != parts.end(); ++it) {
-    protocol::AuthenticationMethod authentication_method =
-        protocol::AuthenticationMethod::FromString(*it);
-    if (authentication_method.is_valid())
-      auth_methods->push_back(authentication_method);
-  }
-  if (auth_methods->empty()) {
-    LOG(ERROR) << "No valid authentication methods specified.";
-    return false;
-  }
-
-  return true;
-}
-
-// This flag blocks LOGs to the UI if we're already in the middle of logging
-// to the UI. This prevents a potential infinite loop if we encounter an error
-// while sending the log message to the UI.
-bool g_logging_to_plugin = false;
-bool g_has_logging_instance = false;
-base::LazyInstance<scoped_refptr<base::SingleThreadTaskRunner> >::Leaky
-    g_logging_task_runner = LAZY_INSTANCE_INITIALIZER;
-base::LazyInstance<base::WeakPtr<ChromotingInstance> >::Leaky
-    g_logging_instance = LAZY_INSTANCE_INITIALIZER;
-base::LazyInstance<base::Lock>::Leaky
-    g_logging_lock = LAZY_INSTANCE_INITIALIZER;
-logging::LogMessageHandlerFunction g_logging_old_handler = nullptr;
+PP_Instance g_logging_instance = 0;
+base::LazyInstance<base::Lock>::Leaky g_logging_lock =
+    LAZY_INSTANCE_INITIALIZER;
 
 }  // namespace
-
-// String sent in the "hello" message to the webapp to describe features.
-const char ChromotingInstance::kApiFeatures[] =
-    "highQualityScaling injectKeyEvent sendClipboardItem remapKey trapKey "
-    "notifyClientResolution pauseVideo pauseAudio asyncPin thirdPartyAuth "
-    "pinlessAuth extensionMessage allowMouseLock videoControl";
-
-const char ChromotingInstance::kRequestedCapabilities[] = "";
-const char ChromotingInstance::kSupportedCapabilities[] = "desktopShape";
 
 ChromotingInstance::ChromotingInstance(PP_Instance pp_instance)
     : pp::Instance(pp_instance),
       initialized_(false),
-      plugin_task_runner_(new PluginThreadTaskRunner(&plugin_thread_delegate_)),
+      plugin_task_runner_(new PepperMainThreadTaskRunner()),
       context_(plugin_task_runner_.get()),
       input_tracker_(&mouse_input_filter_),
       touch_input_scaler_(&input_tracker_),
@@ -194,26 +158,19 @@ ChromotingInstance::ChromotingInstance(PP_Instance pp_instance)
       text_input_controller_(this),
       use_async_pin_dialog_(false),
       weak_factory_(this) {
-#if defined(OS_NACL)
   // In NaCl global resources need to be initialized differently because they
   // are not shared with Chrome.
   thread_task_runner_handle_.reset(
       new base::ThreadTaskRunnerHandle(plugin_task_runner_));
   thread_wrapper_ =
       jingle_glue::JingleThreadWrapper::WrapTaskRunner(plugin_task_runner_);
-  media::InitializeCPUSpecificYUVConversions();
 
   // Register a global log handler.
   ChromotingInstance::RegisterLogMessageHandler();
-#else
-  jingle_glue::JingleThreadWrapper::EnsureForCurrentMessageLoop();
-#endif
 
-#if defined(OS_NACL)
   nacl_io_init_ppapi(pp_instance, pp::Module::Get()->get_browser_interface());
   mount("", "/etc", "memfs", 0, "");
   mount("", "/usr", "memfs", 0, "");
-#endif
 
   // Register for mouse, wheel and keyboard events.
   RequestInputEvents(PP_INPUTEVENT_CLASS_MOUSE | PP_INPUTEVENT_CLASS_WHEEL);
@@ -225,27 +182,13 @@ ChromotingInstance::ChromotingInstance(PP_Instance pp_instance)
   // Resister this instance to handle debug log messsages.
   RegisterLoggingInstance();
 
-#if defined(USE_OPENSSL)
   // Initialize random seed for libjingle. It's necessary only with OpenSSL.
   char random_seed[kRandomSeedSize];
   crypto::RandBytes(random_seed, sizeof(random_seed));
   rtc::InitRandom(random_seed, sizeof(random_seed));
-#else
-  // Libjingle's SSL implementation is not really used, but it has to be
-  // initialized for NSS builds to make sure that RNG is initialized in NSS,
-  // because libjingle uses it.
-  rtc::InitializeSSL();
-#endif  // !defined(USE_OPENSSL)
 
   // Send hello message.
-  scoped_ptr<base::DictionaryValue> data(new base::DictionaryValue());
-  data->SetInteger("apiVersion", kApiVersion);
-  data->SetString("apiFeatures", kApiFeatures);
-  data->SetInteger("apiMinVersion", kApiMinMessagingVersion);
-  data->SetString("requestedCapabilities", kRequestedCapabilities);
-  data->SetString("supportedCapabilities", kSupportedCapabilities);
-
-  PostLegacyJsonMessage("hello", data.Pass());
+  PostLegacyJsonMessage("hello", make_scoped_ptr(new base::DictionaryValue()));
 }
 
 ChromotingInstance::~ChromotingInstance() {
@@ -257,11 +200,6 @@ ChromotingInstance::~ChromotingInstance() {
   // Unregister this instance so that debug log messages will no longer be sent
   // to it. This will stop all logging in all Chromoting instances.
   UnregisterLoggingInstance();
-
-  plugin_task_runner_->Quit();
-
-  // Ensure that nothing touches the plugin thread delegate after this point.
-  plugin_task_runner_->DetachAndRunShutdownLoop();
 
   // Stopping the context shuts down all chromoting threads.
   context_.Stop();
@@ -275,16 +213,6 @@ bool ChromotingInstance::Init(uint32_t argc,
 
   VLOG(1) << "Started ChromotingInstance::Init";
 
-  // Check that the calling content is part of an app or extension. This is only
-  // necessary for non-PNaCl version of the plugin. Also PPB_URLUtil_Dev doesn't
-  // work in NaCl at the moment so the check fails in NaCl builds.
-#if !defined(OS_NACL)
-  if (!IsCallerAppOrExtension()) {
-    LOG(ERROR) << "Not an app or extension";
-    return false;
-  }
-#endif
-
   // Start all the threads.
   context_.Start();
 
@@ -297,8 +225,8 @@ void ChromotingInstance::HandleMessage(const pp::Var& message) {
     return;
   }
 
-  scoped_ptr<base::Value> json(base::JSONReader::DeprecatedRead(
-      message.AsString(), base::JSON_ALLOW_TRAILING_COMMAS));
+  scoped_ptr<base::Value> json = base::JSONReader::Read(
+      message.AsString(), base::JSON_ALLOW_TRAILING_COMMAS);
   base::DictionaryValue* message_dict = nullptr;
   std::string method;
   base::DictionaryValue* data = nullptr;
@@ -328,8 +256,6 @@ void ChromotingInstance::HandleMessage(const pp::Var& message) {
     HandleSendClipboardItem(*data);
   } else if (method == "notifyClientResolution") {
     HandleNotifyClientResolution(*data);
-  } else if (method == "pauseVideo") {
-    HandlePauseVideo(*data);
   } else if (method == "videoControl") {
     HandleVideoControl(*data);
   } else if (method == "pauseAudio") {
@@ -387,6 +313,14 @@ bool ChromotingInstance::HandleInputEvent(const pp::InputEvent& event) {
   if (!IsConnected())
     return false;
 
+  PP_TimeTicks latency =
+      pp::Module::Get()->core()->GetTimeTicks() - event.GetTimeStamp();
+  pp::UMAPrivate uma(this);
+  uma.HistogramCustomTimes(
+      kInputEventLatencyHistogram, static_cast<int64_t>(latency * 1000000),
+      kInputEventLatencyHistogramMinUs, kInputEventLatencyHistogramMaxUs,
+      kInputEventLatencyHistogramBuckets);
+
   return input_handler_.HandleInputEvent(event);
 }
 
@@ -402,8 +336,8 @@ void ChromotingInstance::OnVideoDecodeError() {
 }
 
 void ChromotingInstance::OnVideoFirstFrameReceived() {
-  scoped_ptr<base::DictionaryValue> data(new base::DictionaryValue());
-  PostLegacyJsonMessage("onFirstFrameReceived", data.Pass());
+  PostLegacyJsonMessage("onFirstFrameReceived",
+                        make_scoped_ptr(new base::DictionaryValue()));
 }
 
 void ChromotingInstance::OnVideoSize(const webrtc::DesktopSize& size,
@@ -418,29 +352,32 @@ void ChromotingInstance::OnVideoSize(const webrtc::DesktopSize& size,
     data->SetInteger("x_dpi", dpi.x());
   if (dpi.y())
     data->SetInteger("y_dpi", dpi.y());
-  PostLegacyJsonMessage("onDesktopSize", data.Pass());
+  PostLegacyJsonMessage("onDesktopSize", std::move(data));
 }
 
-void ChromotingInstance::OnVideoShape(const webrtc::DesktopRegion& shape) {
-  if (desktop_shape_ && shape.Equals(*desktop_shape_))
+void ChromotingInstance::OnVideoShape(const webrtc::DesktopRegion* shape) {
+  if ((shape && desktop_shape_ && shape->Equals(*desktop_shape_)) ||
+      (!shape && !desktop_shape_)) {
     return;
-
-  desktop_shape_.reset(new webrtc::DesktopRegion(shape));
-
-  scoped_ptr<base::ListValue> rects_value(new base::ListValue());
-  for (webrtc::DesktopRegion::Iterator i(shape); !i.IsAtEnd(); i.Advance()) {
-    const webrtc::DesktopRect& rect = i.rect();
-    scoped_ptr<base::ListValue> rect_value(new base::ListValue());
-    rect_value->AppendInteger(rect.left());
-    rect_value->AppendInteger(rect.top());
-    rect_value->AppendInteger(rect.width());
-    rect_value->AppendInteger(rect.height());
-    rects_value->Append(rect_value.release());
   }
 
-  scoped_ptr<base::DictionaryValue> data(new base::DictionaryValue());
-  data->Set("rects", rects_value.release());
-  PostLegacyJsonMessage("onDesktopShape", data.Pass());
+  scoped_ptr<base::DictionaryValue> shape_message(new base::DictionaryValue());
+  if (shape) {
+    desktop_shape_ = make_scoped_ptr(new webrtc::DesktopRegion(*shape));
+    scoped_ptr<base::ListValue> rects_value(new base::ListValue());
+    for (webrtc::DesktopRegion::Iterator i(*shape); !i.IsAtEnd(); i.Advance()) {
+      const webrtc::DesktopRect& rect = i.rect();
+      scoped_ptr<base::ListValue> rect_value(new base::ListValue());
+      rect_value->AppendInteger(rect.left());
+      rect_value->AppendInteger(rect.top());
+      rect_value->AppendInteger(rect.width());
+      rect_value->AppendInteger(rect.height());
+      rects_value->Append(rect_value.release());
+    }
+    shape_message->Set("rects", rects_value.release());
+  }
+
+  PostLegacyJsonMessage("onDesktopShape", std::move(shape_message));
 }
 
 void ChromotingInstance::OnVideoFrameDirtyRegion(
@@ -459,16 +396,67 @@ void ChromotingInstance::OnVideoFrameDirtyRegion(
 
   scoped_ptr<base::DictionaryValue> data(new base::DictionaryValue());
   data->Set("rects", rects_value.release());
-  PostLegacyJsonMessage("onDebugRegion", data.Pass());
+  PostLegacyJsonMessage("onDebugRegion", std::move(data));
 }
 
 void ChromotingInstance::OnConnectionState(
     protocol::ConnectionToHost::State state,
     protocol::ErrorCode error) {
+  pp::UMAPrivate uma(this);
+
+  switch (state) {
+    case protocol::ConnectionToHost::INITIALIZING:
+      NOTREACHED();
+      break;
+    case protocol::ConnectionToHost::CONNECTING:
+      connection_started_time = base::TimeTicks::Now();
+      break;
+    case protocol::ConnectionToHost::AUTHENTICATED:
+      connection_authenticated_time_ = base::TimeTicks::Now();
+      uma.HistogramCustomTimes(
+          kTimeToAuthenticateHistogram,
+          (connection_authenticated_time_ - connection_started_time)
+              .InMilliseconds(),
+          kConnectionTimesHistogramMinMs, kConnectionTimesHistogramMaxMs,
+          kConnectionTimesHistogramBuckets);
+      break;
+    case protocol::ConnectionToHost::CONNECTED:
+      connection_connected_time_ = base::TimeTicks::Now();
+      uma.HistogramCustomTimes(
+          kTimeToConnectHistogram,
+          (connection_connected_time_ - connection_authenticated_time_)
+              .InMilliseconds(),
+          kConnectionTimesHistogramMinMs, kConnectionTimesHistogramMaxMs,
+          kConnectionTimesHistogramBuckets);
+      break;
+    case protocol::ConnectionToHost::CLOSED:
+      if (!connection_connected_time_.is_null()) {
+        uma.HistogramCustomTimes(
+            kClosedSessionDurationHistogram,
+            (base::TimeTicks::Now() - connection_connected_time_)
+                .InMilliseconds(),
+            kConnectionDurationHistogramMinMinutes,
+            kConnectionDurationHistogramMaxMinutes,
+            kConnectionDurationHistogramBuckets);
+      }
+      break;
+    case protocol::ConnectionToHost::FAILED:
+      if (!connection_connected_time_.is_null()) {
+        uma.HistogramCustomTimes(
+            kFailedSessionDurationHistogram,
+            (base::TimeTicks::Now() - connection_connected_time_)
+                .InMilliseconds(),
+            kConnectionDurationHistogramMinMinutes,
+            kConnectionDurationHistogramMaxMinutes,
+            kConnectionDurationHistogramBuckets);
+      }
+      break;
+  }
+
   scoped_ptr<base::DictionaryValue> data(new base::DictionaryValue());
-  data->SetString("state", ConnectionStateToString(state));
+  data->SetString("state", protocol::ConnectionToHost::StateToString(state));
   data->SetString("error", ConnectionErrorToString(error));
-  PostLegacyJsonMessage("onConnectionStatus", data.Pass());
+  PostLegacyJsonMessage("onConnectionStatus", std::move(data));
 }
 
 void ChromotingInstance::FetchThirdPartyToken(
@@ -485,13 +473,13 @@ void ChromotingInstance::FetchThirdPartyToken(
   data->SetString("tokenUrl", token_url.spec());
   data->SetString("hostPublicKey", host_public_key);
   data->SetString("scope", scope);
-  PostLegacyJsonMessage("fetchThirdPartyToken", data.Pass());
+  PostLegacyJsonMessage("fetchThirdPartyToken", std::move(data));
 }
 
 void ChromotingInstance::OnConnectionReady(bool ready) {
   scoped_ptr<base::DictionaryValue> data(new base::DictionaryValue());
   data->SetBoolean("ready", ready);
-  PostLegacyJsonMessage("onConnectionReady", data.Pass());
+  PostLegacyJsonMessage("onConnectionReady", std::move(data));
 }
 
 void ChromotingInstance::OnRouteChanged(const std::string& channel_name,
@@ -500,13 +488,13 @@ void ChromotingInstance::OnRouteChanged(const std::string& channel_name,
   data->SetString("channel", channel_name);
   data->SetString("connectionType",
                   protocol::TransportRoute::GetTypeString(route.type));
-  PostLegacyJsonMessage("onRouteChanged", data.Pass());
+  PostLegacyJsonMessage("onRouteChanged", std::move(data));
 }
 
 void ChromotingInstance::SetCapabilities(const std::string& capabilities) {
   scoped_ptr<base::DictionaryValue> data(new base::DictionaryValue());
   data->SetString("capabilities", capabilities);
-  PostLegacyJsonMessage("setCapabilities", data.Pass());
+  PostLegacyJsonMessage("setCapabilities", std::move(data));
 }
 
 void ChromotingInstance::SetPairingResponse(
@@ -514,7 +502,7 @@ void ChromotingInstance::SetPairingResponse(
   scoped_ptr<base::DictionaryValue> data(new base::DictionaryValue());
   data->SetString("clientId", pairing_response.client_id());
   data->SetString("sharedSecret", pairing_response.shared_secret());
-  PostLegacyJsonMessage("pairingResponse", data.Pass());
+  PostLegacyJsonMessage("pairingResponse", std::move(data));
 }
 
 void ChromotingInstance::DeliverHostMessage(
@@ -522,7 +510,7 @@ void ChromotingInstance::DeliverHostMessage(
   scoped_ptr<base::DictionaryValue> data(new base::DictionaryValue());
   data->SetString("type", message.type());
   data->SetString("data", message.data());
-  PostLegacyJsonMessage("extensionMessage", data.Pass());
+  PostLegacyJsonMessage("extensionMessage", std::move(data));
 }
 
 void ChromotingInstance::FetchSecretFromDialog(
@@ -535,7 +523,7 @@ void ChromotingInstance::FetchSecretFromDialog(
   secret_fetched_callback_ = secret_fetched_callback;
   scoped_ptr<base::DictionaryValue> data(new base::DictionaryValue());
   data->SetBoolean("pairingSupported", pairing_supported);
-  PostLegacyJsonMessage("fetchPin", data.Pass());
+  PostLegacyJsonMessage("fetchPin", std::move(data));
 }
 
 void ChromotingInstance::FetchSecretFromString(
@@ -560,7 +548,7 @@ void ChromotingInstance::InjectClipboardEvent(
   scoped_ptr<base::DictionaryValue> data(new base::DictionaryValue());
   data->SetString("mimeType", event.mime_type());
   data->SetString("item", event.data());
-  PostLegacyJsonMessage("injectClipboardItem", data.Pass());
+  PostLegacyJsonMessage("injectClipboardItem", std::move(data));
 }
 
 void ChromotingInstance::SetCursorShape(
@@ -594,14 +582,10 @@ void ChromotingInstance::HandleConnect(const base::DictionaryValue& data) {
   std::string local_jid;
   std::string host_jid;
   std::string host_public_key;
-  std::string auth_methods_str;
   std::string authentication_tag;
-  std::vector<protocol::AuthenticationMethod> auth_methods;
   if (!data.GetString("hostJid", &host_jid) ||
       !data.GetString("hostPublicKey", &host_public_key) ||
       !data.GetString("localJid", &local_jid) ||
-      !data.GetString("authenticationMethods", &auth_methods_str) ||
-      !ParseAuthMethods(auth_methods_str, &auth_methods) ||
       !data.GetString("authenticationTag", &authentication_tag)) {
     LOG(ERROR) << "Invalid connect() data.";
     return;
@@ -635,10 +619,17 @@ void ChromotingInstance::HandleConnect(const base::DictionaryValue& data) {
     }
   }
 
+  // Read and parse list of experiments.
+  std::string experiments;
+  std::vector<std::string> experiments_list;
+  if (data.GetString("experiments", &experiments)) {
+    experiments_list = base::SplitString(
+        experiments, " ", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+  }
+
   VLOG(0) << "Connecting to " << host_jid
           << ". Local jid: " << local_jid << ".";
 
-#if defined(OS_NACL)
   std::string key_filter;
   if (!data.GetString("keyFilter", &key_filter)) {
     NOTREACHED();
@@ -649,47 +640,45 @@ void ChromotingInstance::HandleConnect(const base::DictionaryValue& data) {
   } else if (key_filter == "cros") {
     normalizing_input_filter_.reset(
         new NormalizingInputFilterCros(&key_mapper_));
+  } else if (key_filter == "windows") {
+    normalizing_input_filter_.reset(
+        new NormalizingInputFilterWin(&key_mapper_));
   } else {
     DCHECK(key_filter.empty());
     normalizing_input_filter_.reset(new protocol::InputFilter(&key_mapper_));
   }
-#elif defined(OS_MACOSX)
-  normalizing_input_filter_.reset(new NormalizingInputFilterMac(&key_mapper_));
-#elif defined(OS_CHROMEOS)
-  normalizing_input_filter_.reset(new NormalizingInputFilterCros(&key_mapper_));
-#else
-  normalizing_input_filter_.reset(new protocol::InputFilter(&key_mapper_));
-#endif
   input_handler_.set_input_stub(normalizing_input_filter_.get());
 
-  // PPB_VideoDecoder is not always enabled because it's broken in some versions
-  // of Chrome. See crbug.com/447403 .
-  bool enable_video_decode_renderer = false;
-  if (data.GetBoolean("enableVideoDecodeRenderer",
-                      &enable_video_decode_renderer) &&
-      enable_video_decode_renderer) {
-    LogToWebapp("Initializing 3D renderer.");
-    video_renderer_.reset(new PepperVideoRenderer3D());
-    if (!video_renderer_->Initialize(this, context_, this))
-      video_renderer_.reset();
-  }
+  // Try initializing 3D video renderer.
+  video_renderer_.reset(new PepperVideoRenderer3D());
+  if (!video_renderer_->Initialize(this, context_, this, &perf_tracker_))
+    video_renderer_.reset();
 
   // If we didn't initialize 3D renderer then use the 2D renderer.
   if (!video_renderer_) {
-    LogToWebapp("Initializing 2D renderer.");
+    LOG(WARNING)
+        << "Failed to initialize 3D renderer. Using 2D renderer instead.";
     video_renderer_.reset(new PepperVideoRenderer2D());
-    if (!video_renderer_->Initialize(this, context_, this))
+    if (!video_renderer_->Initialize(this, context_, this, &perf_tracker_))
       video_renderer_.reset();
   }
 
   CHECK(video_renderer_);
 
+  perf_tracker_.SetUpdateUmaCallbacks(
+      base::Bind(&ChromotingInstance::UpdateUmaCustomHistogram,
+                 weak_factory_.GetWeakPtr(), true),
+      base::Bind(&ChromotingInstance::UpdateUmaCustomHistogram,
+                 weak_factory_.GetWeakPtr(), false),
+      base::Bind(&ChromotingInstance::UpdateUmaEnumHistogram,
+                 weak_factory_.GetWeakPtr()));
+
   if (!plugin_view_.is_null())
     video_renderer_->OnViewChanged(plugin_view_);
 
-  scoped_ptr<AudioPlayer> audio_player(new PepperAudioPlayer(this));
-  client_.reset(new ChromotingClient(&context_, this, video_renderer_.get(),
-                                     audio_player.Pass()));
+  client_.reset(
+      new ChromotingClient(&context_, this, video_renderer_.get(),
+                           make_scoped_ptr(new PepperAudioPlayer(this))));
 
   // Connect the input pipeline to the protocol stub & initialize components.
   mouse_input_filter_.set_input_stub(client_->input_stub());
@@ -705,10 +694,11 @@ void ChromotingInstance::HandleConnect(const base::DictionaryValue& data) {
       local_jid, base::Bind(&ChromotingInstance::SendOutgoingIq,
                             weak_factory_.GetWeakPtr())));
 
-  // Create TransportFactory.
-  scoped_ptr<protocol::TransportFactory> transport_factory(
-      new protocol::LibjingleTransportFactory(
-          signal_strategy_.get(), PepperPortAllocator::Create(this).Pass(),
+  // Create TransportContext.
+  scoped_refptr<protocol::TransportContext> transport_context(
+      new protocol::TransportContext(
+          signal_strategy_.get(),
+          make_scoped_ptr(new PepperPortAllocatorFactory(this)),
           protocol::NetworkSettings(
               protocol::NetworkSettings::NAT_TRAVERSAL_FULL),
           protocol::TransportRole::CLIENT));
@@ -719,20 +709,37 @@ void ChromotingInstance::HandleConnect(const base::DictionaryValue& data) {
           base::Bind(&ChromotingInstance::FetchThirdPartyToken,
                      weak_factory_.GetWeakPtr()),
           host_public_key));
+
+  std::vector<protocol::AuthenticationMethod> auth_methods;
+  auth_methods.push_back(protocol::AuthenticationMethod::ThirdParty());
+  auth_methods.push_back(protocol::AuthenticationMethod::Spake2Pair());
+  auth_methods.push_back(protocol::AuthenticationMethod::Spake2(
+      protocol::AuthenticationMethod::HMAC_SHA256));
+  auth_methods.push_back(protocol::AuthenticationMethod::Spake2(
+      protocol::AuthenticationMethod::NONE));
+
   scoped_ptr<protocol::Authenticator> authenticator(
       new protocol::NegotiatingClientAuthenticator(
           client_pairing_id, client_paired_secret, authentication_tag,
-          fetch_secret_callback, token_fetcher.Pass(), auth_methods));
+          fetch_secret_callback, std::move(token_fetcher), auth_methods));
+
+  scoped_ptr<protocol::CandidateSessionConfig> config =
+      protocol::CandidateSessionConfig::CreateDefault();
+  if (std::find(experiments_list.begin(), experiments_list.end(), "vp9") !=
+      experiments_list.end()) {
+    config->set_vp9_experiment_enabled(true);
+  }
+  client_->set_protocol_config(std::move(config));
 
   // Kick off the connection.
-  client_->Start(signal_strategy_.get(), authenticator.Pass(),
-                 transport_factory.Pass(), host_jid, capabilities);
+  client_->Start(signal_strategy_.get(), std::move(authenticator),
+                 transport_context, host_jid, capabilities);
 
   // Start timer that periodically sends perf stats.
-  plugin_task_runner_->PostDelayedTask(
-      FROM_HERE, base::Bind(&ChromotingInstance::SendPerfStats,
-                            weak_factory_.GetWeakPtr()),
-      base::TimeDelta::FromMilliseconds(kPerfStatsIntervalMs));
+  stats_update_timer_.Start(
+      FROM_HERE, base::TimeDelta::FromSeconds(kUIStatsUpdatePeriodSeconds),
+      base::Bind(&ChromotingInstance::UpdatePerfStatsInUI,
+                 base::Unretained(this)));
 }
 
 void ChromotingInstance::HandleDisconnect(const base::DictionaryValue& data) {
@@ -853,19 +860,12 @@ void ChromotingInstance::HandleNotifyClientResolution(
   client_->host_stub()->NotifyClientResolution(client_resolution);
 }
 
-void ChromotingInstance::HandlePauseVideo(const base::DictionaryValue& data) {
-  if (!data.HasKey("pause")) {
-    LOG(ERROR) << "Invalid pauseVideo.";
-    return;
-  }
-  HandleVideoControl(data);
-}
-
 void ChromotingInstance::HandleVideoControl(const base::DictionaryValue& data) {
   protocol::VideoControl video_control;
   bool pause_video = false;
   if (data.GetBoolean("pause", &pause_video)) {
     video_control.set_enable(!pause_video);
+    perf_tracker_.OnPauseStateChanged(pause_video);
   }
   bool lossless_encode = false;
   if (data.GetBoolean("losslessEncode", &lossless_encode)) {
@@ -1009,6 +1009,7 @@ void ChromotingInstance::Disconnect() {
   mouse_input_filter_.set_input_stub(nullptr);
   client_.reset();
   video_renderer_.reset();
+  stats_update_timer_.Stop();
 }
 
 void ChromotingInstance::PostChromotingMessage(const std::string& method,
@@ -1031,49 +1032,36 @@ void ChromotingInstance::PostLegacyJsonMessage(
   PostMessage(pp::Var(message_json));
 }
 
-void ChromotingInstance::SendTrappedKey(uint32 usb_keycode, bool pressed) {
+void ChromotingInstance::SendTrappedKey(uint32_t usb_keycode, bool pressed) {
   scoped_ptr<base::DictionaryValue> data(new base::DictionaryValue());
   data->SetInteger("usbKeycode", usb_keycode);
   data->SetBoolean("pressed", pressed);
-  PostLegacyJsonMessage("trappedKeyEvent", data.Pass());
+  PostLegacyJsonMessage("trappedKeyEvent", std::move(data));
 }
 
 void ChromotingInstance::SendOutgoingIq(const std::string& iq) {
   scoped_ptr<base::DictionaryValue> data(new base::DictionaryValue());
   data->SetString("iq", iq);
-  PostLegacyJsonMessage("sendOutgoingIq", data.Pass());
+  PostLegacyJsonMessage("sendOutgoingIq", std::move(data));
 }
 
-void ChromotingInstance::SendPerfStats() {
-  if (!video_renderer_.get()) {
-    return;
-  }
-
-  plugin_task_runner_->PostDelayedTask(
-      FROM_HERE, base::Bind(&ChromotingInstance::SendPerfStats,
-                            weak_factory_.GetWeakPtr()),
-      base::TimeDelta::FromMilliseconds(kPerfStatsIntervalMs));
-
+void ChromotingInstance::UpdatePerfStatsInUI() {
+  // Fetch performance stats from the VideoRenderer and send them to the client
+  // for display to users.
   scoped_ptr<base::DictionaryValue> data(new base::DictionaryValue());
-  ChromotingStats* stats = video_renderer_->GetStats();
-  data->SetDouble("videoBandwidth", stats->video_bandwidth()->Rate());
-  data->SetDouble("videoFrameRate", stats->video_frame_rate()->Rate());
-  data->SetDouble("captureLatency", stats->video_capture_ms()->Average());
-  data->SetDouble("encodeLatency", stats->video_encode_ms()->Average());
-  data->SetDouble("decodeLatency", stats->video_decode_ms()->Average());
-  data->SetDouble("renderLatency", stats->video_paint_ms()->Average());
-  data->SetDouble("roundtripLatency", stats->round_trip_ms()->Average());
-  PostLegacyJsonMessage("onPerfStats", data.Pass());
+  data->SetDouble("videoBandwidth", perf_tracker_.video_bandwidth());
+  data->SetDouble("videoFrameRate", perf_tracker_.video_frame_rate());
+  data->SetDouble("captureLatency", perf_tracker_.video_capture_ms());
+  data->SetDouble("encodeLatency", perf_tracker_.video_encode_ms());
+  data->SetDouble("decodeLatency", perf_tracker_.video_decode_ms());
+  data->SetDouble("renderLatency", perf_tracker_.video_paint_ms());
+  data->SetDouble("roundtripLatency", perf_tracker_.round_trip_ms());
+  PostLegacyJsonMessage("onPerfStats", std::move(data));
 }
 
 // static
 void ChromotingInstance::RegisterLogMessageHandler() {
   base::AutoLock lock(g_logging_lock.Get());
-
-  VLOG(1) << "Registering global log handler";
-
-  // Record previous handler so we can call it in a chain.
-  g_logging_old_handler = logging::GetLogMessageHandler();
 
   // Set up log message handler.
   // This is not thread-safe so we need it within our lock.
@@ -1082,106 +1070,58 @@ void ChromotingInstance::RegisterLogMessageHandler() {
 
 void ChromotingInstance::RegisterLoggingInstance() {
   base::AutoLock lock(g_logging_lock.Get());
-
-  // Register this instance as the one that will handle all logging calls
-  // and display them to the user.
-  // If multiple plugins are run, then the last one registered will handle all
-  // logging for all instances.
-  g_logging_instance.Get() = weak_factory_.GetWeakPtr();
-  g_logging_task_runner.Get() = plugin_task_runner_;
-  g_has_logging_instance = true;
+  g_logging_instance = pp_instance();
 }
 
 void ChromotingInstance::UnregisterLoggingInstance() {
   base::AutoLock lock(g_logging_lock.Get());
 
   // Don't unregister unless we're the currently registered instance.
-  if (this != g_logging_instance.Get().get())
+  if (pp_instance() != g_logging_instance)
     return;
 
   // Unregister this instance for logging.
-  g_has_logging_instance = false;
-  g_logging_instance.Get().reset();
-  g_logging_task_runner.Get() = nullptr;
-
-  VLOG(1) << "Unregistering global log handler";
+  g_logging_instance = 0;
 }
 
 // static
 bool ChromotingInstance::LogToUI(int severity, const char* file, int line,
                                  size_t message_start,
                                  const std::string& str) {
-  // Note that we're reading |g_has_logging_instance| outside of a lock.
-  // This lockless read is done so that we don't needlessly slow down global
-  // logging with a lock for each log message.
-  //
-  // This lockless read is safe because:
-  //
-  // Misreading a false value (when it should be true) means that we'll simply
-  // skip processing a few log messages.
-  //
-  // Misreading a true value (when it should be false) means that we'll take
-  // the lock and check |g_logging_instance| unnecessarily. This is not
-  // problematic because we always set |g_logging_instance| inside a lock.
-  if (g_has_logging_instance) {
-    scoped_refptr<base::SingleThreadTaskRunner> logging_task_runner;
-    base::WeakPtr<ChromotingInstance> logging_instance;
-
-    {
-      base::AutoLock lock(g_logging_lock.Get());
-      // If we're on the logging thread and |g_logging_to_plugin| is set then
-      // this LOG message came from handling a previous LOG message and we
-      // should skip it to avoid an infinite loop of LOG messages.
-      if (!g_logging_task_runner.Get()->BelongsToCurrentThread() ||
-          !g_logging_to_plugin) {
-        logging_task_runner = g_logging_task_runner.Get();
-        logging_instance = g_logging_instance.Get();
-      }
-    }
-
-    if (logging_task_runner.get()) {
-      std::string message = remoting::GetTimestampString();
-      message += (str.c_str() + message_start);
-
-      logging_task_runner->PostTask(
-          FROM_HERE, base::Bind(&ChromotingInstance::ProcessLogToUI,
-                                logging_instance, message));
-    }
+  PP_LogLevel log_level = PP_LOGLEVEL_ERROR;
+  switch(severity) {
+    case logging::LOG_INFO:
+      log_level = PP_LOGLEVEL_TIP;
+      break;
+    case logging::LOG_WARNING:
+      log_level = PP_LOGLEVEL_WARNING;
+      break;
+    case logging::LOG_ERROR:
+    case logging::LOG_FATAL:
+      log_level = PP_LOGLEVEL_ERROR;
+      break;
   }
 
-  if (g_logging_old_handler)
-    return (g_logging_old_handler)(severity, file, line, message_start, str);
+  PP_Instance pp_instance = 0;
+  {
+    base::AutoLock lock(g_logging_lock.Get());
+    if (g_logging_instance)
+      pp_instance = g_logging_instance;
+  }
+  if (pp_instance) {
+    const PPB_Console* console = reinterpret_cast<const PPB_Console*>(
+        pp::Module::Get()->GetBrowserInterface(PPB_CONSOLE_INTERFACE));
+    if (console)
+      console->Log(pp_instance, log_level, pp::Var(str).pp_var());
+  }
+
+  // If this is a fatal message the log handler is going to crash after this
+  // function returns. In that case sleep for 1 second, Otherwise the plugin
+  // may crash before the message is delivered to the console.
+  if (severity == logging::LOG_FATAL)
+    base::PlatformThread::Sleep(base::TimeDelta::FromSeconds(1));
+
   return false;
-}
-
-void ChromotingInstance::ProcessLogToUI(const std::string& message) {
-  DCHECK(plugin_task_runner_->BelongsToCurrentThread());
-
-  // This flag (which is set only here) is used to prevent LogToUI from posting
-  // new tasks while we're in the middle of servicing a LOG call. This can
-  // happen if the call to LogDebugInfo tries to LOG anything.
-  // Since it is read on the plugin thread, we don't need to lock to set it.
-  g_logging_to_plugin = true;
-  scoped_ptr<base::DictionaryValue> data(new base::DictionaryValue());
-  data->SetString("message", message);
-  PostLegacyJsonMessage("logDebugMessage", data.Pass());
-  g_logging_to_plugin = false;
-}
-
-bool ChromotingInstance::IsCallerAppOrExtension() {
-  const pp::URLUtil_Dev* url_util = pp::URLUtil_Dev::Get();
-  if (!url_util)
-    return false;
-
-  PP_URLComponents_Dev url_components;
-  pp::Var url_var = url_util->GetDocumentURL(this, &url_components);
-  if (!url_var.is_string())
-    return false;
-
-  std::string url = url_var.AsString();
-  std::string url_scheme = url.substr(url_components.scheme.begin,
-                                      url_components.scheme.len);
-  return url_scheme == kChromeExtensionUrlScheme;
 }
 
 bool ChromotingInstance::IsConnected() {
@@ -1189,17 +1129,30 @@ bool ChromotingInstance::IsConnected() {
          (client_->connection_state() == protocol::ConnectionToHost::CONNECTED);
 }
 
-void ChromotingInstance::LogToWebapp(const std::string& message) {
-  DCHECK(plugin_task_runner_->BelongsToCurrentThread());
+void ChromotingInstance::UpdateUmaEnumHistogram(
+    const std::string& histogram_name,
+    int64_t value,
+    int histogram_max) {
+  pp::UMAPrivate uma(this);
+  uma.HistogramEnumeration(histogram_name, value, histogram_max);
+}
 
-  LOG(ERROR) << message;
+void ChromotingInstance::UpdateUmaCustomHistogram(
+    bool is_custom_counts_histogram,
+    const std::string& histogram_name,
+    int64_t value,
+    int histogram_min,
+    int histogram_max,
+    int histogram_buckets) {
+  pp::UMAPrivate uma(this);
 
-#if !defined(OS_NACL)
-  // Log messages are forwarded to the webapp only in PNaCl version of the
-  // plugin, so ProcessLogToUI() needs to be called explicitly in the non-PNaCl
-  // version.
-  ProcessLogToUI(message);
-#endif  // !defined(OS_NACL)
+  if (is_custom_counts_histogram) {
+    uma.HistogramCustomCounts(histogram_name, value, histogram_min,
+                              histogram_max, histogram_buckets);
+  } else {
+    uma.HistogramCustomTimes(histogram_name, value, histogram_min,
+                             histogram_max, histogram_buckets);
+  }
 }
 
 }  // namespace remoting

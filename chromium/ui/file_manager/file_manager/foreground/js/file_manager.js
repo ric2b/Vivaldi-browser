@@ -100,10 +100,16 @@ function FileManager() {
   this.providersModel_ = null;
 
   /**
-   * Handler for command events.
-   * @type {CommandHandler}
+   * Controller for actions for current selection.
+   * @private {ActionsController}
    */
-  this.commandHandler = null;
+  this.actionsController_ = null;
+
+  /**
+   * Handler for command events.
+   * @private {CommandHandler}
+   */
+  this.commandHandler_ = null;
 
   /**
    * Handler for the change of file selection.
@@ -158,6 +164,12 @@ function FileManager() {
   this.namingController_ = null;
 
   /**
+   * Directory tree naming controller.
+   * @private {DirectoryTreeNamingController}
+   */
+  this.directoryTreeNamingController_ = null;
+
+  /**
    * Controller for search UI.
    * @type {SearchController}
    * @private
@@ -198,13 +210,6 @@ function FileManager() {
    * @private
    */
   this.toolbarController_ = null;
-
-  /**
-   * Tooltip controller.
-   * @type {TooltipController}
-   * @private
-   */
-  this.tooltipController_ = null;
 
   /**
    * Empty folder controller.
@@ -277,11 +282,20 @@ function FileManager() {
   // Miscellaneous FileManager's states.
 
   /**
-   * Queue for ordering FileManager's initialization process.
-   * @type {!AsyncUtil.Group}
+   * Promise object which is fullfilled when initialization for app state
+   * controller is done.
+   * @type {Promise}
    * @private
    */
-  this.initializeQueue_ = new AsyncUtil.Group();
+  this.initSettingsPromise_ = null;
+
+  /**
+   * Promise object which is fullfilled when initialization related to the
+   * background page is done.
+   * @type {Promise}
+   * @private
+   */
+  this.initBackgroundPagePromise_ = null;
 }
 
 FileManager.prototype = /** @struct */ {
@@ -305,10 +319,28 @@ FileManager.prototype = /** @struct */ {
     return this.folderShortcutsModel_;
   },
   /**
+   * @return {ActionsController}
+   */
+  get actionsController() {
+    return this.actionsController_;
+  },
+  /**
+   * @return {CommandHandler}
+   */
+  get commandHandler() {
+    return this.commandHandler_;
+  },
+  /**
    * @return {ProvidersModel}
    */
   get providersModel() {
     return this.providersModel_;
+  },
+  /**
+   * @return {MetadataModel}
+   */
+  get metadataModel() {
+    return this.metadataModel_;
   },
   /**
    * @return {DirectoryTree}
@@ -398,18 +430,24 @@ FileManager.prototype = /** @struct */ {
 
 // Anonymous "namespace".
 (function() {
-  FileManager.prototype.initSettings_ = function(callback) {
+  /**
+   * One time initialization for app state controller to load view option from
+   * local storage.
+   * @return {!Promise} A promise to be fillfilled when initialization is done.
+   * @private
+   */
+  FileManager.prototype.startInitSettings_ = function() {
     this.appStateController_ = new AppStateController(this.dialogType);
-    this.appStateController_.loadInitialViewOptions().then(callback);
+    return new Promise(function(resolve) {
+      this.appStateController_.loadInitialViewOptions().then(resolve);
+    }.bind(this));
   };
 
   /**
    * One time initialization for the file system and related things.
-   *
-   * @param {function()} callback Completion callback.
    * @private
    */
-  FileManager.prototype.initFileSystemUI_ = function(callback) {
+  FileManager.prototype.initFileSystemUI_ = function() {
     this.ui_.listContainer.startBatchUpdates();
 
     this.initFileList_();
@@ -434,7 +472,7 @@ FileManager.prototype = /** @struct */ {
 
     assert(this.directoryModel_);
     assert(this.spinnerController_);
-    assert(this.commandHandler);
+    assert(this.commandHandler_);
     assert(this.selectionHandler_);
     assert(this.launchParams_);
     assert(this.volumeManager_);
@@ -444,7 +482,7 @@ FileManager.prototype = /** @struct */ {
         this.directoryModel_,
         this.ui_.listContainer,
         this.spinnerController_,
-        this.commandHandler,
+        this.commandHandler_,
         this.selectionHandler_);
     this.sortMenuController_ = new SortMenuController(
         this.ui_.sortButton,
@@ -455,7 +493,7 @@ FileManager.prototype = /** @struct */ {
         this.ui_.gearButtonToggleRipple,
         this.ui_.gearMenu,
         this.directoryModel_,
-        this.commandHandler);
+        this.commandHandler_);
     this.toolbarController_ = new ToolbarController(
         this.ui_.toolbar,
         this.ui_.dialogNavigationList,
@@ -463,13 +501,14 @@ FileManager.prototype = /** @struct */ {
         assert(this.ui_.locationLine),
         this.selectionHandler_,
         this.directoryModel_);
-    this.tooltipController_ = new TooltipController(
-        queryRequiredElement(this.dialogDom_, '#tooltip'),
-        Array.prototype.slice.call(
-            this.dialogDom_.querySelectorAll('[has-tooltip]')));
     this.emptyFolderController_ = new EmptyFolderController(
         this.ui_.emptyFolder,
         this.directoryModel_);
+    this.actionsController_ = new ActionsController(
+        this.volumeManager_, assert(this.metadataModel_), this.directoryModel_,
+        assert(this.folderShortcutsModel_),
+        this.backgroundPage_.background.driveSyncHandler,
+        this.selectionHandler_, assert(this.ui_));
 
     if (this.dialogType === DialogType.FULL_PAGE) {
       importer.importEnabled().then(
@@ -507,19 +546,17 @@ FileManager.prototype = /** @struct */ {
     this.selectionHandler_.onFileSelectionChanged();
     this.ui_.listContainer.endBatchUpdates();
 
-    // Get the 'allowRedeemOffers' preference for banners.
-    chrome.fileManagerPrivate.getPreferences(function(pref) {
-      this.ui_.initBanners(
-          new Banners(
-              this.directoryModel_,
-              this.volumeManager_,
-              this.document_,
-              // Whether to show offers on the welcome banner.
-              pref.allowRedeemOffers,
-              // Whether to show any welcome banner.
-              this.dialogType === DialogType.FULL_PAGE));
-      callback();
-    }.bind(this));
+    this.ui_.initBanners(
+        new Banners(
+            this.directoryModel_,
+            this.volumeManager_,
+            this.document_,
+            // Whether to show any welcome banner.
+            this.dialogType === DialogType.FULL_PAGE));
+
+    this.ui_.attachFilesTooltip();
+
+    this.ui_.decorateFilesMenuItems();
   };
 
   /**
@@ -552,7 +589,7 @@ FileManager.prototype = /** @struct */ {
   FileManager.prototype.initCommands_ = function() {
     assert(this.ui_.textContextMenu);
 
-    this.commandHandler = new CommandHandler(this);
+    this.commandHandler_ = new CommandHandler(this);
 
     // TODO(hirono): Move the following block to the UI part.
     var commandButtons = this.dialogDom_.querySelectorAll('button[command]');
@@ -570,6 +607,13 @@ FileManager.prototype = /** @struct */ {
     cr.ui.contextMenuHandler.setContextMenu(this.ui_.listContainer.renameInput,
                                             this.ui_.textContextMenu);
     this.registerInputCommands_(this.ui_.listContainer.renameInput);
+
+    cr.ui.contextMenuHandler.setContextMenu(
+        this.directoryTreeNamingController_.getInputElement(),
+        this.ui_.textContextMenu);
+    this.registerInputCommands_(
+        this.directoryTreeNamingController_.getInputElement());
+
     this.document_.addEventListener(
         'command',
         this.ui_.listContainer.clearHover.bind(this.ui_.listContainer));
@@ -601,49 +645,40 @@ FileManager.prototype = /** @struct */ {
    * This method is called from main.js.
    */
   FileManager.prototype.initializeCore = function() {
-    this.initializeQueue_.add(this.initGeneral_.bind(this), [], 'initGeneral');
-    this.initializeQueue_.add(this.initBackgroundPage_.bind(this),
-                              [], 'initBackgroundPage');
-    this.initializeQueue_.add(this.initSettings_.bind(this),
-                              ['initGeneral'], 'initSettings');
-    this.initializeQueue_.add(this.initVolumeManager_.bind(this),
-                              ['initGeneral', 'initBackgroundPage'],
-                              'initVolumeManager');
+    this.initGeneral_();
+    this.initSettingsPromise_ = this.startInitSettings_();
+    this.initBackgroundPagePromise_ = this.startInitBackgroundPage_();
+    this.initBackgroundPagePromise_.then(function() {
+      this.initVolumeManager_();
+    }.bind(this));
 
-    this.initializeQueue_.run();
     window.addEventListener('pagehide', this.onUnload_.bind(this));
   };
 
-  FileManager.prototype.initializeUI = function(dialogDom, callback) {
+  /**
+   * @return {!Promise} A promise to be fillfilled when initialization is done.
+   */
+  FileManager.prototype.initializeUI = function(dialogDom) {
     this.dialogDom_ = dialogDom;
     this.document_ = this.dialogDom_.ownerDocument;
 
-    this.initializeQueue_.add(
-        this.initEssentialUI_.bind(this),
-        ['initGeneral', 'initBackgroundPage'],
-        'initEssentialUI');
-    this.initializeQueue_.add(this.initAdditionalUI_.bind(this),
-        ['initEssentialUI'], 'initAdditionalUI');
-    this.initializeQueue_.add(
-        this.initFileSystemUI_.bind(this),
-        ['initAdditionalUI', 'initSettings'], 'initFileSystemUI');
-    this.initializeQueue_.add(
-        this.initUIFocus_.bind(this),
-        ['initAdditionalUI', 'initFileSystemUI'], 'initUIFocus');
-
-    // Run again just in case if all pending closures have completed and the
-    // queue has stopped and monitor the completion.
-    this.initializeQueue_.run(callback);
+    return this.initBackgroundPagePromise_.then(function() {
+      this.initEssentialUI_();
+      this.initAdditionalUI_();
+      return this.initSettingsPromise_;
+    }.bind(this)).then(function() {
+      this.initFileSystemUI_();
+      this.initUIFocus_();
+    }.bind(this));
   };
 
   /**
    * Initializes general purpose basic things, which are used by other
    * initializing methods.
    *
-   * @param {function()} callback Completion callback.
    * @private
    */
-  FileManager.prototype.initGeneral_ = function(callback) {
+  FileManager.prototype.initGeneral_ = function() {
     // Initialize the application state.
     // TODO(mtomasz): Unify window.appState with location.search format.
     if (window.appState) {
@@ -670,43 +705,43 @@ FileManager.prototype = /** @struct */ {
     // we really can't do this (as instanceof checks fail across
     // different script contexts).
     this.tracker_ = metrics.getTracker();
-
-    callback();
   };
 
   /**
    * Initializes the background page.
-   * @param {function()} callback Completion callback.
+   * @return {!Promise} A promise to be fillfilled when initialization is done.
    * @private
    */
-  FileManager.prototype.initBackgroundPage_ = function(callback) {
-    chrome.runtime.getBackgroundPage(/** @type {function(Window=)} */ (
-        function(opt_backgroundPage) {
-          assert(opt_backgroundPage);
-          this.backgroundPage_ =
-              /** @type {!BackgroundWindow} */ (opt_backgroundPage);
-          this.backgroundPage_.background.ready(function() {
-            loadTimeData.data = this.backgroundPage_.background.stringData;
-            if (util.runningInBrowser())
-              this.backgroundPage_.registerDialog(window);
-            this.fileOperationManager_ =
-                this.backgroundPage_.background.fileOperationManager;
-            this.mediaImportHandler_ =
-                this.backgroundPage_.background.mediaImportHandler;
-            this.mediaScanner_ =
-                this.backgroundPage_.background.mediaScanner;
-            this.historyLoader_ = this.backgroundPage_.background.historyLoader;
-            callback();
-          }.bind(this));
-        }.bind(this)));
+  FileManager.prototype.startInitBackgroundPage_ = function() {
+    return new Promise(function(resolve) {
+      chrome.runtime.getBackgroundPage(/** @type {function(Window=)} */ (
+          function(opt_backgroundPage) {
+            assert(opt_backgroundPage);
+            this.backgroundPage_ =
+                /** @type {!BackgroundWindow} */ (opt_backgroundPage);
+            this.backgroundPage_.background.ready(function() {
+              loadTimeData.data = this.backgroundPage_.background.stringData;
+              if (util.runningInBrowser())
+                this.backgroundPage_.registerDialog(window);
+              this.fileOperationManager_ =
+                  this.backgroundPage_.background.fileOperationManager;
+              this.mediaImportHandler_ =
+                  this.backgroundPage_.background.mediaImportHandler;
+              this.mediaScanner_ =
+                  this.backgroundPage_.background.mediaScanner;
+              this.historyLoader_ =
+                  this.backgroundPage_.background.historyLoader;
+              resolve();
+            }.bind(this));
+          }.bind(this)));
+    }.bind(this));
   };
 
   /**
    * Initializes the VolumeManager instance.
-   * @param {function()} callback Completion callback.
    * @private
    */
-  FileManager.prototype.initVolumeManager_ = function(callback) {
+  FileManager.prototype.initVolumeManager_ = function() {
     // Auto resolving to local path does not work for folders (e.g., dialog for
     // loading unpacked extensions).
     var noLocalPathResolution =
@@ -725,7 +760,6 @@ FileManager.prototype = /** @struct */ {
         /** @type {VolumeManagerWrapper.NonNativeVolumeStatus} */
         (nonNativeEnabled),
         this.backgroundPage_);
-    callback();
   };
 
   /**
@@ -733,11 +767,9 @@ FileManager.prototype = /** @struct */ {
    * elements will be shown to the user. Only visible elements should be
    * initialized here. Any heavy operation should be avoided. Files.app's
    * window is shown at the end of this routine.
-   *
-   * @param {function()} callback Completion callback.
    * @private
    */
-  FileManager.prototype.initEssentialUI_ = function(callback) {
+  FileManager.prototype.initEssentialUI_ = function() {
     // Record stats of dialog types. New values must NOT be inserted into the
     // array enumerating the types. It must be in sync with
     // FileDialogType enum in tools/metrics/histograms/histogram.xml.
@@ -753,32 +785,27 @@ FileManager.prototype = /** @struct */ {
     assert(this.volumeManager_);
     this.metadataModel_ = MetadataModel.create(this.volumeManager_);
     this.thumbnailModel_ = new ThumbnailModel(this.metadataModel_);
-
-    // Create the providers model.
     this.providersModel_ = new ProvidersModel(this.volumeManager_);
 
     // Create the root view of FileManager.
     assert(this.dialogDom_);
     assert(this.launchParams_);
     this.ui_ = new FileManagerUI(
-        this.providersModel_, this.dialogDom_, this.launchParams_);
+        assert(this.providersModel_), this.dialogDom_, this.launchParams_);
 
     // Show the window as soon as the UI pre-initialization is done.
     if (this.dialogType == DialogType.FULL_PAGE && !util.runningInBrowser()) {
       chrome.app.window.current().show();
     }
-    callback();
   };
 
   /**
    * One-time initialization of various DOM nodes. Loads the additional DOM
    * elements visible to the user. Initialize here elements, which are expensive
    * or hidden in the beginning.
-   *
-   * @param {function()} callback Completion callback.
    * @private
    */
-  FileManager.prototype.initAdditionalUI_ = function(callback) {
+  FileManager.prototype.initAdditionalUI_ = function() {
     assert(this.metadataModel_);
     assert(this.volumeManager_);
     assert(this.historyLoader_);
@@ -792,14 +819,14 @@ FileManager.prototype = /** @struct */ {
     // Initialize the dialog.
     FileManagerDialogBase.setFileManager(this);
 
-    var table = queryRequiredElement(dom, '.detail-table');
+    var table = queryRequiredElement('.detail-table', dom);
     FileTable.decorate(
         table,
         this.metadataModel_,
         this.volumeManager_,
         this.historyLoader_,
         this.dialogType == DialogType.FULL_PAGE);
-    var grid = queryRequiredElement(dom, '.thumbnail-grid');
+    var grid = queryRequiredElement('.thumbnail-grid', dom);
     FileGrid.decorate(
         grid,
         this.metadataModel_,
@@ -812,7 +839,7 @@ FileManager.prototype = /** @struct */ {
         assertInstanceof(table, FileTable),
         assertInstanceof(grid, FileGrid),
         new LocationLine(
-            queryRequiredElement(dom, '#location-breadcrumbs'),
+            queryRequiredElement('#location-breadcrumbs', dom),
             this.volumeManager_));
 
     // Handle UI events.
@@ -833,19 +860,15 @@ FileManager.prototype = /** @struct */ {
     // Arrange the file list.
     this.ui_.listContainer.table.normalizeColumns();
     this.ui_.listContainer.table.redraw();
-
-    callback();
   };
 
   /**
    * One-time initialization of focus. This should run at the last of UI
    *  initialization.
-   *
    * @private
    */
-  FileManager.prototype.initUIFocus_ = function(callback) {
+  FileManager.prototype.initUIFocus_ = function() {
     this.ui_.initUIFocus();
-    callback();
   };
 
   /**
@@ -943,8 +966,10 @@ FileManager.prototype = /** @struct */ {
 
     this.appStateController_.initialize(this.ui_, this.directoryModel_);
 
-    this.columnVisibilityController_ = new ColumnVisibilityController(
-        this.ui_, this.directoryModel_, this.volumeManager_);
+    if (this.dialogType === DialogType.FULL_PAGE) {
+      this.columnVisibilityController_ = new ColumnVisibilityController(
+          this.ui_, this.directoryModel_, this.volumeManager_);
+    }
 
     // Create metadata update controller.
     this.metadataUpdateController_ = new MetadataUpdateController(
@@ -955,11 +980,12 @@ FileManager.prototype = /** @struct */ {
     // Create task controller.
     this.taskController_ = new TaskController(
         this.dialogType,
+        this.volumeManager_,
         this.ui_,
         this.metadataModel_,
+        this.directoryModel_,
         this.selectionHandler_,
-        this.metadataUpdateController_,
-        function() { return new FileTasks(this); }.bind(this));
+        this.metadataUpdateController_);
 
     // Create search controller.
     this.searchController_ = new SearchController(
@@ -979,6 +1005,12 @@ FileManager.prototype = /** @struct */ {
         this.directoryModel_,
         this.fileFilter_,
         this.selectionHandler_);
+
+    // Create directory tree naming controller.
+    this.directoryTreeNamingController_ = new DirectoryTreeNamingController(
+        this.directoryModel_,
+        assert(this.ui_.directoryTree),
+        this.ui_.alertDialog);
 
     // Create spinner controller.
     this.spinnerController_ = new SpinnerController(
@@ -1000,6 +1032,13 @@ FileManager.prototype = /** @struct */ {
   };
 
   /**
+   * @return {DirectoryTreeNamingController}
+   */
+  FileManager.prototype.getDirectoryTreeNamingController = function() {
+    return this.directoryTreeNamingController_;
+  };
+
+  /**
    * @private
    */
   FileManager.prototype.initDirectoryTree_ = function() {
@@ -1014,6 +1053,7 @@ FileManager.prototype = /** @struct */ {
                            assert(this.directoryModel_),
                            assert(this.volumeManager_),
                            assert(this.metadataModel_),
+                           assert(this.fileOperationManager_),
                            fakeEntriesVisible);
     directoryTree.dataModel = new NavigationListModel(
         assert(this.volumeManager_),
@@ -1360,25 +1400,12 @@ FileManager.prototype = /** @struct */ {
   };
 
   /**
-   * @return {!MetadataModel}
-   */
-  FileManager.prototype.getMetadataModel = function() {
-    return assert(this.metadataModel_);
-  };
-
-  /**
    * Outputs the current state for debugging.
    */
   FileManager.prototype.debugMe = function() {
-    var out = 'Debug information.\n' +
-        '1. fileManager.initializeQueue_.pendingTasks_\n';
-    var keys = Object.keys(this.initializeQueue_.pendingTasks);
-    out += 'Length: ' + keys.length + '\n';
-    keys.forEach(function(key) {
-      out += this.initializeQueue_.pendingTasks[key].toString() + '\n';
-    }.bind(this));
+    var out = 'Debug information.\n';
 
-    out += '2. VolumeManagerWrapper\n' +
+    out += '1. VolumeManagerWrapper\n' +
         this.volumeManager_.toString() + '\n';
 
     out += 'End of debug information.';

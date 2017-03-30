@@ -4,6 +4,7 @@
 
 #include "chrome/browser/process_info_snapshot.h"
 
+#include <stdint.h>
 #include <sys/types.h>  // For |uid_t| (and |pid_t|).
 #include <unistd.h>  // For |getpid()|, |getuid()|, etc.
 
@@ -21,8 +22,7 @@
 
 typedef testing::Test ProcessInfoSnapshotMacTest;
 
-// TODO: Re-enable for Vivaldi
-TEST_F(ProcessInfoSnapshotMacTest, DISABLED_FindPidOneTest) {
+TEST_F(ProcessInfoSnapshotMacTest, FindPidOneTest) {
   // Sample process with PID 1, which should exist and presumably belong to
   // root.
   std::vector<base::ProcessId> pid_list;
@@ -32,10 +32,10 @@ TEST_F(ProcessInfoSnapshotMacTest, DISABLED_FindPidOneTest) {
 
   ProcessInfoSnapshot::ProcInfoEntry proc_info;
   ASSERT_TRUE(snapshot.GetProcInfo(1, &proc_info));
-  EXPECT_EQ(1, static_cast<int64>(proc_info.pid));
-  EXPECT_EQ(0, static_cast<int64>(proc_info.ppid));
-  EXPECT_EQ(0, static_cast<int64>(proc_info.uid));
-  EXPECT_EQ(0, static_cast<int64>(proc_info.euid));
+  EXPECT_EQ(1, static_cast<int64_t>(proc_info.pid));
+  EXPECT_EQ(0, static_cast<int64_t>(proc_info.ppid));
+  EXPECT_EQ(0, static_cast<int64_t>(proc_info.uid));
+  EXPECT_EQ(0, static_cast<int64_t>(proc_info.euid));
   EXPECT_GE(proc_info.rss, 0u);
   EXPECT_GT(proc_info.vsize, 0u);
 
@@ -57,14 +57,13 @@ TEST_F(ProcessInfoSnapshotMacTest, DISABLED_FindPidOneTest) {
   EXPECT_FALSE(snapshot.GetProcInfo(1, &proc_info));
 }
 
-// TODO: Re-enable for Vivaldi
-TEST_F(ProcessInfoSnapshotMacTest, DISABLED_FindPidSelfTest) {
+TEST_F(ProcessInfoSnapshotMacTest, FindPidSelfTest) {
   // Sample this process and its parent.
   base::ProcessId pid = static_cast<base::ProcessId>(getpid());
   base::ProcessId ppid = static_cast<base::ProcessId>(getppid());
   uid_t uid = getuid();
   uid_t euid = geteuid();
-  EXPECT_NE(static_cast<int64>(ppid), 0);
+  EXPECT_NE(static_cast<int64_t>(ppid), 0);
 
   std::vector<base::ProcessId> pid_list;
   pid_list.push_back(pid);
@@ -96,7 +95,7 @@ TEST_F(ProcessInfoSnapshotMacTest, DISABLED_FindPidSelfTest) {
   // Find our parent.
   ASSERT_TRUE(snapshot.GetProcInfo(ppid, &proc_info));
   EXPECT_EQ(ppid, proc_info.pid);
-  EXPECT_NE(static_cast<int64>(proc_info.ppid), 0);
+  EXPECT_NE(static_cast<int64_t>(proc_info.ppid), 0);
   EXPECT_EQ(uid, proc_info.uid);    // This (and the following) should be true
   EXPECT_EQ(euid, proc_info.euid);  // under reasonable circumstances.
   // Can't say anything definite about its |rss|.
@@ -106,8 +105,7 @@ TEST_F(ProcessInfoSnapshotMacTest, DISABLED_FindPidSelfTest) {
 // To verify that ProcessInfoSnapshot is getting the actual uid and effective
 // uid, this test runs top. top should have a uid of the caller and effective
 // uid of 0 (root).
-// TODO: Re-enable for Vivaldi
-TEST_F(ProcessInfoSnapshotMacTest, DISABLED_EffectiveVsRealUserIDTest) {
+TEST_F(ProcessInfoSnapshotMacTest, EffectiveVsRealUserIDTest) {
   // Create a pipe to be able to read top's output.
   int fds[2];
   PCHECK(pipe(fds) == 0);

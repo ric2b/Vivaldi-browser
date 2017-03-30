@@ -4,7 +4,13 @@
 
 #include "ui/events/platform/platform_event_source.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/message_loop/message_loop.h"
@@ -21,7 +27,7 @@ namespace {
 scoped_ptr<PlatformEvent> CreatePlatformEvent() {
   scoped_ptr<PlatformEvent> event(new PlatformEvent());
   memset(event.get(), 0, sizeof(PlatformEvent));
-  return event.Pass();
+  return event;
 }
 
 template <typename T>
@@ -502,7 +508,7 @@ class PlatformEventTestWithMessageLoop : public PlatformEventTest {
  protected:
   void RunTest() {
     RunTestImpl();
-    message_loop_.Quit();
+    message_loop_.QuitWhenIdle();
   }
 
   virtual void RunTestImpl() = 0;
@@ -564,7 +570,7 @@ class DestroyScopedHandleDispatcher : public TestPlatformEventDispatcher {
   ~DestroyScopedHandleDispatcher() override {}
 
   void SetScopedHandle(scoped_ptr<ScopedEventDispatcher> handler) {
-    handler_ = handler.Pass();
+    handler_ = std::move(handler);
   }
 
   void set_callback(const base::Closure& callback) {
@@ -601,9 +607,9 @@ class DestroyedNestedOverriddenDispatcherQuitsNestedLoopIteration
                   TestPlatformEventDispatcher* dispatcher) {
     ScopedVector<PlatformEvent> events;
     scoped_ptr<PlatformEvent> event(CreatePlatformEvent());
-    events.push_back(event.Pass());
+    events.push_back(std::move(event));
     event = CreatePlatformEvent();
-    events.push_back(event.Pass());
+    events.push_back(std::move(event));
 
     // Attempt to dispatch a couple of events. Dispatching the first event will
     // have terminated the ScopedEventDispatcher object, which will terminate
@@ -647,7 +653,7 @@ class DestroyedNestedOverriddenDispatcherQuitsNestedLoopIteration
     EXPECT_EQ(20, list[1]);
     list.clear();
 
-    overriding.SetScopedHandle(override_handle.Pass());
+    overriding.SetScopedHandle(std::move(override_handle));
     base::RunLoop run_loop;
     base::MessageLoopForUI* loop = base::MessageLoopForUI::current();
     base::MessageLoopForUI::ScopedNestableTaskAllower allow_nested(loop);
@@ -708,7 +714,7 @@ class ConsecutiveOverriddenDispatcherInTheSameMessageLoopIteration
     EXPECT_EQ(70, (*list)[1]);
     list->clear();
 
-    second_overriding.SetScopedHandle(second_override_handle.Pass());
+    second_overriding.SetScopedHandle(std::move(second_override_handle));
     second_overriding.set_post_dispatch_action(POST_DISPATCH_NONE);
     base::RunLoop run_loop;
     second_overriding.set_callback(run_loop.QuitClosure());

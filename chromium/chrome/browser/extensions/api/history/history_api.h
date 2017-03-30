@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/scoped_observer.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
@@ -49,6 +50,7 @@ class HistoryEventRouter : public history::HistoryServiceObserver {
                      const std::set<GURL>& favicon_urls) override;
 
   void DispatchEvent(Profile* profile,
+                     events::HistogramValue histogram_value,
                      const std::string& event_name,
                      scoped_ptr<base::ListValue> event_args);
 
@@ -158,21 +160,6 @@ class HistorySearchFunction : public HistoryFunctionWithCallback {
   // Callback for the history function to provide results.
   void SearchComplete(history::QueryResults* results);
 };
-
-class HistoryDbSearchFunction : public HistoryFunctionWithCallback {
- public:
-  DECLARE_EXTENSION_FUNCTION("history.dbSearch", HISTORY_DBSEARCH)
-
- protected:
-  ~HistoryDbSearchFunction() override {}
-
-  // HistoryFunctionWithCallback:
-  bool RunAsyncImpl() override;
-
-  // Callback for the history function to provide results.
-  void SearchComplete(history::QueryResults* results);
-};
-
 
 class HistoryAddUrlFunction : public HistoryFunction {
  public:

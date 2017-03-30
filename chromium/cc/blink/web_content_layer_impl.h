@@ -5,6 +5,9 @@
 #ifndef CC_BLINK_WEB_CONTENT_LAYER_IMPL_H_
 #define CC_BLINK_WEB_CONTENT_LAYER_IMPL_H_
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "cc/blink/cc_blink_export.h"
 #include "cc/blink/web_layer_impl.h"
@@ -28,25 +31,20 @@ class WebContentLayerImpl : public blink::WebContentLayer,
   CC_BLINK_EXPORT explicit WebContentLayerImpl(blink::WebContentLayerClient*);
 
   // WebContentLayer implementation.
-  virtual blink::WebLayer* layer();
-  virtual void setDoubleSided(bool double_sided);
-  virtual void setDrawCheckerboardForMissingTiles(bool checkerboard);
+  blink::WebLayer* layer() override;
 
  protected:
-  virtual ~WebContentLayerImpl();
+  ~WebContentLayerImpl() override;
 
   // ContentLayerClient implementation.
-  void PaintContents(SkCanvas* canvas,
-                     const gfx::Rect& clip,
-                     PaintingControlSetting painting_control) override;
+  gfx::Rect PaintableRegion() override;
   scoped_refptr<cc::DisplayItemList> PaintContentsToDisplayList(
-      const gfx::Rect& clip,
       PaintingControlSetting painting_control) override;
   bool FillsBoundsCompletely() const override;
+  size_t GetApproximateUnsharedMemoryUsage() const override;
 
   scoped_ptr<WebLayerImpl> layer_;
   blink::WebContentLayerClient* client_;
-  bool draws_content_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(WebContentLayerImpl);

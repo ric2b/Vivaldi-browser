@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/edk/embedder/platform_channel_pair.h"
+#include "third_party/mojo/src/mojo/edk/embedder/platform_channel_pair.h"
 
 #include <errno.h>
 #include <poll.h>
@@ -12,21 +12,24 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
-
 #include <deque>
+#include <utility>
 
-#include "base/files/file_path.h"
-#include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
-#include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
-#include "mojo/edk/embedder/platform_channel_utils_posix.h"
-#include "mojo/edk/embedder/platform_handle.h"
-#include "mojo/edk/embedder/platform_handle_vector.h"
-#include "mojo/edk/embedder/scoped_platform_handle.h"
-#include "mojo/edk/test/test_utils.h"
+#include "build/build_config.h"
 #include "mojo/public/cpp/system/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/mojo/src/mojo/edk/embedder/platform_channel_utils_posix.h"
+#include "third_party/mojo/src/mojo/edk/embedder/platform_handle.h"
+#include "third_party/mojo/src/mojo/edk/embedder/platform_handle_vector.h"
+#include "third_party/mojo/src/mojo/edk/embedder/scoped_platform_handle.h"
+#include "third_party/mojo/src/mojo/edk/test/test_utils.h"
+
+#if defined(OS_ANDROID)
+#include "base/android/path_utils.h"
+#include "base/files/file_path.h"
+#endif
 
 namespace mojo {
 namespace embedder {
@@ -37,6 +40,22 @@ void WaitReadable(PlatformHandle h) {
   pfds.fd = h.fd;
   pfds.events = POLLIN;
   CHECK_EQ(poll(&pfds, 1, -1), 1);
+}
+
+FILE* NewTmpFile() {
+#if defined(OS_ANDROID)
+  base::FilePath tmpdir;
+  if (!base::android::GetCacheDirectory(&tmpdir))
+    return nullptr;
+  std::string templ = tmpdir.Append("XXXXXXXX").value();
+  int fd = mkstemp(const_cast<char*>(templ.c_str()));
+  if (fd == -1)
+    return nullptr;
+  CHECK(unlink(templ.c_str()) == 0);
+  return fdopen(fd, "w+");
+#else
+  return tmpfile();
+#endif
 }
 
 class PlatformChannelPairPosixTest : public testing::Test {
@@ -64,8 +83,8 @@ class PlatformChannelPairPosixTest : public testing::Test {
 
 TEST_F(PlatformChannelPairPosixTest, NoSigPipe) {
   PlatformChannelPair channel_pair;
-  ScopedPlatformHandle server_handle = channel_pair.PassServerHandle().Pass();
-  ScopedPlatformHandle client_handle = channel_pair.PassClientHandle().Pass();
+  ScopedPlatformHandle server_handle = channel_pair.PassServerHandle();
+  ScopedPlatformHandle client_handle = channel_pair.PassClientHandle();
 
   // Write to the client.
   static const char kHello[] = "hello";
@@ -105,8 +124,8 @@ TEST_F(PlatformChannelPairPosixTest, NoSigPipe) {
 
 TEST_F(PlatformChannelPairPosixTest, SendReceiveData) {
   PlatformChannelPair channel_pair;
-  ScopedPlatformHandle server_handle = channel_pair.PassServerHandle().Pass();
-  ScopedPlatformHandle client_handle = channel_pair.PassClientHandle().Pass();
+  ScopedPlatformHandle server_handle = channel_pair.PassServerHandle();
+  ScopedPlatformHandle client_handle = channel_pair.PassClientHandle();
 
   for (size_t i = 0; i < 10; i++) {
     std::string send_string(1 << i, 'A' + i);
@@ -128,14 +147,11 @@ TEST_F(PlatformChannelPairPosixTest, SendReceiveData) {
 }
 
 TEST_F(PlatformChannelPairPosixTest, SendReceiveFDs) {
-  base::ScopedTempDir temp_dir;
-  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
-
   static const char kHello[] = "hello";
 
   PlatformChannelPair channel_pair;
-  ScopedPlatformHandle server_handle = channel_pair.PassServerHandle().Pass();
-  ScopedPlatformHandle client_handle = channel_pair.PassClientHandle().Pass();
+  ScopedPlatformHandle server_handle = channel_pair.PassServerHandle();
+  ScopedPlatformHandle client_handle = channel_pair.PassClientHandle();
 
 // Reduce the number of FDs opened on OS X to avoid test flake.
 #if defined(OS_MACOSX)
@@ -150,13 +166,11 @@ TEST_F(PlatformChannelPairPosixTest, SendReceiveFDs) {
     const char c = '0' + (i % 10);
     ScopedPlatformHandleVectorPtr platform_handles(new PlatformHandleVector);
     for (size_t j = 1; j <= i; j++) {
-      base::FilePath unused;
-      base::ScopedFILE fp(
-          base::CreateAndOpenTemporaryFileInDir(temp_dir.path(), &unused));
+      base::ScopedFILE fp(NewTmpFile());
       ASSERT_TRUE(fp);
       ASSERT_EQ(j, fwrite(std::string(j, c).data(), 1, j, fp.get()));
       platform_handles->push_back(
-          test::PlatformHandleFromFILE(fp.Pass()).release());
+          test::PlatformHandleFromFILE(std::move(fp)).release());
       ASSERT_TRUE(platform_handles->back().is_valid());
     }
 
@@ -194,27 +208,22 @@ TEST_F(PlatformChannelPairPosixTest, SendReceiveFDs) {
 }
 
 TEST_F(PlatformChannelPairPosixTest, AppendReceivedFDs) {
-  base::ScopedTempDir temp_dir;
-  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
-
   static const char kHello[] = "hello";
 
   PlatformChannelPair channel_pair;
-  ScopedPlatformHandle server_handle = channel_pair.PassServerHandle().Pass();
-  ScopedPlatformHandle client_handle = channel_pair.PassClientHandle().Pass();
+  ScopedPlatformHandle server_handle = channel_pair.PassServerHandle();
+  ScopedPlatformHandle client_handle = channel_pair.PassClientHandle();
 
   const std::string file_contents("hello world");
 
   {
-    base::FilePath unused;
-    base::ScopedFILE fp(
-        base::CreateAndOpenTemporaryFileInDir(temp_dir.path(), &unused));
+    base::ScopedFILE fp(NewTmpFile());
     ASSERT_TRUE(fp);
     ASSERT_EQ(file_contents.size(),
               fwrite(file_contents.data(), 1, file_contents.size(), fp.get()));
     ScopedPlatformHandleVectorPtr platform_handles(new PlatformHandleVector);
     platform_handles->push_back(
-        test::PlatformHandleFromFILE(fp.Pass()).release());
+        test::PlatformHandleFromFILE(std::move(fp)).release());
     ASSERT_TRUE(platform_handles->back().is_valid());
 
     // Send the FD (+ "hello").

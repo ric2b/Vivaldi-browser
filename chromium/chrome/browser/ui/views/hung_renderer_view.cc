@@ -5,8 +5,8 @@
 #include "chrome/browser/ui/views/hung_renderer_view.h"
 
 #include "base/i18n/rtl.h"
-#include "base/memory/scoped_vector.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/chrome_web_modal_dialog_manager_delegate.h"
@@ -20,6 +20,7 @@
 #include "components/web_modal/web_contents_modal_dialog_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/result_codes.h"
 #include "grit/theme_resources.h"
@@ -362,8 +363,11 @@ bool HungRendererDialogView::Accept(bool window_closing) {
     return true;
 
   // Start waiting again for responsiveness.
-  if (hung_pages_table_model_->GetRenderViewHost())
-    hung_pages_table_model_->GetRenderViewHost()->RestartHangMonitorTimeout();
+  if (hung_pages_table_model_->GetRenderViewHost()) {
+    hung_pages_table_model_->GetRenderViewHost()
+        ->GetWidget()
+        ->RestartHangMonitorTimeout();
+  }
   return true;
 }
 

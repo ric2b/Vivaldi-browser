@@ -2,10 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/autofill/autofill_popup_controller_impl.h"
 #include "chrome/browser/ui/autofill/autofill_popup_view.h"
 #include "chrome/browser/ui/autofill/popup_constants.h"
@@ -91,7 +95,6 @@ class TestAutofillPopupController : public AutofillPopupControllerImpl {
   }
 
   // Making protected functions public for testing
-  using AutofillPopupControllerImpl::SetPopupBounds;
   using AutofillPopupControllerImpl::GetLineCount;
   using AutofillPopupControllerImpl::GetSuggestionAt;
   using AutofillPopupControllerImpl::GetElidedValueAt;
@@ -141,6 +144,8 @@ class AutofillPopupControllerUnitTest : public ChromeRenderViewHostTestHarness {
     ContentAutofillDriverFactory::CreateForWebContentsAndDelegate(
         web_contents(), autofill_client_.get(), "en-US",
         AutofillManager::ENABLE_AUTOFILL_DOWNLOAD_MANAGER);
+    // Make sure RenderFrame is created.
+    NavigateAndCommit(GURL("about:blank"));
     ContentAutofillDriverFactory* factory =
         ContentAutofillDriverFactory::FromWebContents(web_contents());
     ContentAutofillDriver* driver =
@@ -152,7 +157,7 @@ class AutofillPopupControllerUnitTest : public ChromeRenderViewHostTestHarness {
 
     autofill_popup_controller_ =
         new testing::NiceMock<TestAutofillPopupController>(
-            external_delegate_->GetWeakPtr(),gfx::Rect());
+            external_delegate_->GetWeakPtr(), gfx::RectF());
   }
 
   void TearDown() override {
@@ -178,18 +183,6 @@ class AutofillPopupControllerUnitTest : public ChromeRenderViewHostTestHarness {
   scoped_ptr<NiceMock<MockAutofillExternalDelegate> > external_delegate_;
   testing::NiceMock<TestAutofillPopupController>* autofill_popup_controller_;
 };
-
-TEST_F(AutofillPopupControllerUnitTest, SetBounds) {
-  // Ensure the popup size can be set and causes a redraw.
-  gfx::Rect popup_bounds(10, 10, 100, 100);
-
-  EXPECT_CALL(*autofill_popup_controller_,
-              UpdateBoundsAndRedrawPopup());
-
-  popup_controller()->SetPopupBounds(popup_bounds);
-
-  EXPECT_EQ(popup_bounds, popup_controller()->popup_bounds());
-}
 
 TEST_F(AutofillPopupControllerUnitTest, ChangeSelectedLine) {
   // Set up the popup.
@@ -430,30 +423,27 @@ TEST_F(AutofillPopupControllerUnitTest, GetOrCreate) {
 
   WeakPtr<AutofillPopupControllerImpl> controller =
       AutofillPopupControllerImpl::GetOrCreate(
-          WeakPtr<AutofillPopupControllerImpl>(), delegate.GetWeakPtr(),
-          NULL, NULL, gfx::Rect(), base::i18n::UNKNOWN_DIRECTION);
+          WeakPtr<AutofillPopupControllerImpl>(), delegate.GetWeakPtr(), NULL,
+          NULL, gfx::RectF(), base::i18n::UNKNOWN_DIRECTION);
   EXPECT_TRUE(controller.get());
 
   controller->Hide();
 
   controller = AutofillPopupControllerImpl::GetOrCreate(
-      WeakPtr<AutofillPopupControllerImpl>(), delegate.GetWeakPtr(),
-      NULL, NULL, gfx::Rect(), base::i18n::UNKNOWN_DIRECTION);
+      WeakPtr<AutofillPopupControllerImpl>(), delegate.GetWeakPtr(), NULL, NULL,
+      gfx::RectF(), base::i18n::UNKNOWN_DIRECTION);
   EXPECT_TRUE(controller.get());
 
   WeakPtr<AutofillPopupControllerImpl> controller2 =
-      AutofillPopupControllerImpl::GetOrCreate(controller,
-                                               delegate.GetWeakPtr(),
-                                               NULL,
-                                               NULL,
-                                               gfx::Rect(),
-                                               base::i18n::UNKNOWN_DIRECTION);
+      AutofillPopupControllerImpl::GetOrCreate(
+          controller, delegate.GetWeakPtr(), NULL, NULL, gfx::RectF(),
+          base::i18n::UNKNOWN_DIRECTION);
   EXPECT_EQ(controller.get(), controller2.get());
   controller->Hide();
 
   testing::NiceMock<TestAutofillPopupController>* test_controller =
       new testing::NiceMock<TestAutofillPopupController>(delegate.GetWeakPtr(),
-                                                         gfx::Rect());
+                                                         gfx::RectF());
   EXPECT_CALL(*test_controller, Hide());
 
   gfx::RectF bounds(0.f, 0.f, 1.f, 2.f);
@@ -485,12 +475,8 @@ TEST_F(AutofillPopupControllerUnitTest, ProperlyResetController) {
   // Now show a new popup with the same controller, but with fewer items.
   WeakPtr<AutofillPopupControllerImpl> controller =
       AutofillPopupControllerImpl::GetOrCreate(
-          popup_controller()->GetWeakPtr(),
-          delegate()->GetWeakPtr(),
-          NULL,
-          NULL,
-          gfx::Rect(),
-          base::i18n::UNKNOWN_DIRECTION);
+          popup_controller()->GetWeakPtr(), delegate()->GetWeakPtr(), NULL,
+          NULL, gfx::RectF(), base::i18n::UNKNOWN_DIRECTION);
   EXPECT_NE(0, controller->selected_line());
   EXPECT_EQ(0u, controller->GetLineCount());
 }

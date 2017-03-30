@@ -4,9 +4,13 @@
 
 #include "chrome/browser/media/desktop_capture_access_handler.h"
 
+#include <utility>
+
 #include "base/command_line.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/media/desktop_streams_registry.h"
 #include "chrome/browser/media/media_capture_devices_dispatcher.h"
 #include "chrome/browser/ui/browser.h"
@@ -20,7 +24,9 @@
 #include "content/public/browser/desktop_media_id.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/common/media_stream_request.h"
+#include "content/public/common/origin_util.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/common/constants.h"
@@ -76,8 +82,8 @@ base::string16 GetApplicationTitle(content::WebContents* web_contents,
     return base::UTF8ToUTF16(title);
   }
   GURL url = web_contents->GetURL();
-  title = url.SchemeIsSecure() ? net::GetHostAndOptionalPort(url)
-                               : url.GetOrigin().spec();
+  title = content::IsOriginSecure(url) ? net::GetHostAndOptionalPort(url)
+                                       : url.GetOrigin().spec();
   return base::UTF8ToUTF16(title);
 }
 
@@ -91,7 +97,7 @@ scoped_ptr<content::MediaStreamUI> GetDevicesForDesktopCapture(
     bool display_notification,
     const base::string16& application_title,
     const base::string16& registered_extension_name) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   scoped_ptr<content::MediaStreamUI> ui;
 
   // Add selected desktop source to the list.
@@ -116,7 +122,7 @@ scoped_ptr<content::MediaStreamUI> GetDevicesForDesktopCapture(
     }
   }
 
-  return ui.Pass();
+  return ui;
 }
 
 #if !defined(OS_ANDROID)
@@ -178,8 +184,7 @@ void DesktopCaptureAccessHandler::ProcessScreenCaptureAccessRequest(
       IsBuiltInExtension(request.security_origin);
 
   const bool origin_is_secure =
-      request.security_origin.SchemeIsSecure() ||
-      request.security_origin.SchemeIs(extensions::kExtensionScheme) ||
+      content::IsOriginSecure(request.security_origin) ||
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kAllowHttpScreenCapture);
 
@@ -237,6 +242,7 @@ void DesktopCaptureAccessHandler::ProcessScreenCaptureAccessRequest(
       content::DesktopMediaID screen_id;
 #if defined(OS_CHROMEOS)
       screen_id = content::DesktopMediaID::RegisterAuraWindow(
+          content::DesktopMediaID::TYPE_SCREEN,
           ash::Shell::GetInstance()->GetPrimaryRootWindow());
 #else   // defined(OS_CHROMEOS)
       screen_id = content::DesktopMediaID(content::DesktopMediaID::TYPE_SCREEN,
@@ -263,7 +269,7 @@ void DesktopCaptureAccessHandler::ProcessScreenCaptureAccessRequest(
                              : content::MEDIA_DEVICE_OK;
   }
 
-  callback.Run(devices, result, ui.Pass());
+  callback.Run(devices, result, std::move(ui));
 }
 
 bool DesktopCaptureAccessHandler::SupportsStreamType(
@@ -290,7 +296,7 @@ void DesktopCaptureAccessHandler::HandleRequest(
   scoped_ptr<content::MediaStreamUI> ui;
 
   if (request.video_type != content::MEDIA_DESKTOP_VIDEO_CAPTURE) {
-    callback.Run(devices, content::MEDIA_DEVICE_INVALID_STATE, ui.Pass());
+    callback.Run(devices, content::MEDIA_DEVICE_INVALID_STATE, std::move(ui));
     return;
   }
 
@@ -327,7 +333,7 @@ void DesktopCaptureAccessHandler::HandleRequest(
 
   // Received invalid device id.
   if (media_id.type == content::DesktopMediaID::TYPE_NONE) {
-    callback.Run(devices, content::MEDIA_DEVICE_INVALID_STATE, ui.Pass());
+    callback.Run(devices, content::MEDIA_DEVICE_INVALID_STATE, std::move(ui));
     return;
   }
 
@@ -347,7 +353,7 @@ void DesktopCaptureAccessHandler::HandleRequest(
                                    GetApplicationTitle(web_contents, extension),
                                    base::UTF8ToUTF16(original_extension_name));
 
-  callback.Run(devices, content::MEDIA_DEVICE_OK, ui.Pass());
+  callback.Run(devices, content::MEDIA_DEVICE_OK, std::move(ui));
 }
 
 void DesktopCaptureAccessHandler::UpdateMediaRequestState(

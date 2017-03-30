@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "extensions/renderer/native_handler.h"
 #include "v8/include/v8-util.h"
@@ -48,6 +49,27 @@ class ObjectBackedNativeHandler : public NativeHandler {
   ScriptContext* context() const { return context_; }
 
   void Invalidate() override;
+
+  // The following methods are convenience wrappers for methods on v8::Object
+  // with the corresponding names.
+  void SetPrivate(v8::Local<v8::Object> obj,
+                  const char* key,
+                  v8::Local<v8::Value> value);
+  static void SetPrivate(v8::Local<v8::Context> context,
+                         v8::Local<v8::Object> obj,
+                         const char* key,
+                         v8::Local<v8::Value> value);
+  bool GetPrivate(v8::Local<v8::Object> obj,
+                  const char* key,
+                  v8::Local<v8::Value>* result);
+  static bool GetPrivate(v8::Local<v8::Context> context,
+                         v8::Local<v8::Object> obj,
+                         const char* key,
+                         v8::Local<v8::Value>* result);
+  void DeletePrivate(v8::Local<v8::Object> obj, const char* key);
+  static void DeletePrivate(v8::Local<v8::Context> context,
+                            v8::Local<v8::Object> obj,
+                            const char* key);
 
  private:
   // Callback for RouteFunction which routes the V8 call to the correct

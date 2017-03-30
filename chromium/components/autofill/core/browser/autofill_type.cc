@@ -9,8 +9,7 @@
 namespace autofill {
 
 AutofillType::AutofillType(ServerFieldType field_type)
-    : html_type_(HTML_TYPE_UNKNOWN),
-      html_mode_(HTML_MODE_NONE) {
+    : html_type_(HTML_TYPE_UNSPECIFIED), html_mode_(HTML_MODE_NONE) {
   if ((field_type < NO_SERVER_DATA || field_type >= MAX_VALID_FIELD_TYPE) ||
       (field_type >= 15 && field_type <= 19) ||
       (field_type >= 25 && field_type <= 29) ||
@@ -120,6 +119,9 @@ FieldTypeGroup AutofillType::group() const {
     case PASSWORD:
     case ACCOUNT_CREATION_PASSWORD:
     case NOT_ACCOUNT_CREATION_PASSWORD:
+    case NEW_PASSWORD:
+    case PROBABLY_NEW_PASSWORD:
+    case NOT_NEW_PASSWORD:
       return PASSWORD_FIELD;
 
     case NO_SERVER_DATA:
@@ -198,7 +200,8 @@ FieldTypeGroup AutofillType::group() const {
     case HTML_TYPE_EMAIL:
       return EMAIL;
 
-    case HTML_TYPE_UNKNOWN:
+    case HTML_TYPE_UNSPECIFIED:
+    case HTML_TYPE_UNRECOGNIZED:
       break;
   }
 
@@ -206,7 +209,8 @@ FieldTypeGroup AutofillType::group() const {
 }
 
 bool AutofillType::IsUnknown() const {
-  return server_type_ == UNKNOWN_TYPE && html_type_ == HTML_TYPE_UNKNOWN;
+  return server_type_ == UNKNOWN_TYPE && (html_type_ == HTML_TYPE_UNSPECIFIED ||
+                                          html_type_ == HTML_TYPE_UNRECOGNIZED);
 }
 
 ServerFieldType AutofillType::GetStorableType() const {
@@ -286,7 +290,7 @@ ServerFieldType AutofillType::GetStorableType() const {
   }
 
   switch (html_type_) {
-    case HTML_TYPE_UNKNOWN:
+    case HTML_TYPE_UNSPECIFIED:
       return UNKNOWN_TYPE;
 
     case HTML_TYPE_NAME:
@@ -395,6 +399,9 @@ ServerFieldType AutofillType::GetStorableType() const {
     // These types aren't stored; they're transient.
     case HTML_TYPE_TRANSACTION_AMOUNT:
     case HTML_TYPE_TRANSACTION_CURRENCY:
+      return UNKNOWN_TYPE;
+
+    case HTML_TYPE_UNRECOGNIZED:
       return UNKNOWN_TYPE;
   }
 
@@ -621,13 +628,19 @@ std::string AutofillType::ToString() const {
       return "USERNAME";
     case USERNAME_AND_EMAIL_ADDRESS:
       return "USERNAME_AND_EMAIL_ADDRESS";
+    case NEW_PASSWORD:
+      return "NEW_PASSWORD";
+    case PROBABLY_NEW_PASSWORD:
+      return "PROBABLY_NEW_PASSWORD";
+    case NOT_NEW_PASSWORD:
+      return "NOT_NEW_PASSWORD";
 
     case MAX_VALID_FIELD_TYPE:
       return std::string();
   }
 
   switch (html_type_) {
-    case HTML_TYPE_UNKNOWN:
+    case HTML_TYPE_UNSPECIFIED:
       NOTREACHED();
       break;
     case HTML_TYPE_NAME:
@@ -706,6 +719,8 @@ std::string AutofillType::ToString() const {
       return "HTML_TRANSACTION_AMOUNT";
     case HTML_TYPE_TRANSACTION_CURRENCY:
       return "HTML_TRANSACTION_CURRENCY";
+    case HTML_TYPE_UNRECOGNIZED:
+      return "HTML_TYPE_UNRECOGNIZED";
   }
 
   NOTREACHED();

@@ -6,12 +6,12 @@
 
 #import "chrome/browser/ui/cocoa/content_settings/collected_cookies_mac.h"
 #import "chrome/browser/ui/cocoa/hung_renderer_controller.h"
-#import "chrome/browser/ui/cocoa/passwords/manage_passwords_bubble_cocoa.h"
+#import "chrome/browser/ui/cocoa/passwords/passwords_bubble_cocoa.h"
 #import "chrome/browser/ui/cocoa/profiles/profile_signin_confirmation_dialog_cocoa.h"
 #import "chrome/browser/ui/cocoa/validation_message_bubble_cocoa.h"
 #include "content/public/browser/web_contents.h"
 
-#include "base/command_line.h"
+#include "app/vivaldi_apptools.h"
 
 // static
 void TabDialogs::CreateForWebContents(content::WebContents* contents) {
@@ -69,7 +69,7 @@ void TabDialogsCocoa::HideManagePasswordsBubble() {
   // The bubble is closed when it loses the focus.
 
   // gisli@vivaldi.com:, but for Vivaldi we want to force clse:
-  if (base::CommandLine::ForCurrentProcess()->IsRunningVivaldi()) {
+  if (vivaldi::IsVivaldiRunning()) {
     ManagePasswordsBubbleCocoa* instance = ManagePasswordsBubbleCocoa::instance();
     if (instance && (instance->webContents_ == web_contents_)) {
       instance->Close();

@@ -5,9 +5,11 @@
 #include "remoting/host/win/launch_process_with_token.h"
 
 #include <windows.h>
+#include <stddef.h>
 #include <winternl.h>
 
 #include <limits>
+#include <utility>
 
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
@@ -52,7 +54,7 @@ void CloseHandlesAndTerminateProcess(PROCESS_INFORMATION* process_information) {
 }
 
 // Connects to the executor server corresponding to |session_id|.
-bool ConnectToExecutionServer(uint32 session_id,
+bool ConnectToExecutionServer(uint32_t session_id,
                               base::win::ScopedHandle* pipe_out) {
   base::string16 pipe_name;
 
@@ -116,7 +118,7 @@ bool ConnectToExecutionServer(uint32 session_id,
     return false;
   }
 
-  *pipe_out = pipe.Pass();
+  *pipe_out = std::move(pipe);
   return true;
 }
 
@@ -171,7 +173,7 @@ bool CreatePrivilegedToken(ScopedHandle* token_out) {
     return false;
   }
 
-  *token_out = privileged_token.Pass();
+  *token_out = std::move(privileged_token);
   return true;
 }
 
@@ -369,7 +371,7 @@ bool SendCreateProcessRequest(
 // using the default (i.e. Winlogon) token. This routine relies on undocumented
 // OS functionality and will likely not work on anything but XP or W2K3.
 bool CreateRemoteSessionProcess(
-    uint32 session_id,
+    uint32_t session_id,
     const base::FilePath::StringType& application_name,
     const base::CommandLine::StringType& command_line,
     DWORD creation_flags,
@@ -408,7 +410,7 @@ base::LazyInstance<base::Lock>::Leaky g_inherit_handles_lock =
 
 // Creates a copy of the current process token for the given |session_id| so
 // it can be used to launch a process in that session.
-bool CreateSessionToken(uint32 session_id, ScopedHandle* token_out) {
+bool CreateSessionToken(uint32_t session_id, ScopedHandle* token_out) {
   ScopedHandle session_token;
   DWORD desired_access = TOKEN_ADJUST_DEFAULT | TOKEN_ADJUST_SESSIONID |
                          TOKEN_ASSIGN_PRIMARY | TOKEN_DUPLICATE | TOKEN_QUERY;
@@ -443,7 +445,7 @@ bool CreateSessionToken(uint32 session_id, ScopedHandle* token_out) {
   // Revert to the default token.
   CHECK(RevertToSelf());
 
-  *token_out = session_token.Pass();
+  *token_out = std::move(session_token);
   return true;
 }
 

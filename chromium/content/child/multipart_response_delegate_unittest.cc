@@ -4,8 +4,12 @@
 
 #include "content/child/multipart_response_delegate.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <vector>
 
+#include "base/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
@@ -51,29 +55,31 @@ class MockWebURLLoaderClient : public WebURLLoaderClient {
  public:
   MockWebURLLoaderClient() { Reset(); }
 
-  virtual void willSendRequest(
-      WebURLLoader*, WebURLRequest&, const WebURLResponse&) {}
-  virtual void didSendData(
-      WebURLLoader*, unsigned long long, unsigned long long) {}
+  void willFollowRedirect(WebURLLoader*,
+                          WebURLRequest&,
+                          const WebURLResponse&) override {}
+  void didSendData(WebURLLoader*,
+                   unsigned long long,
+                   unsigned long long) override {}
 
-  virtual void didReceiveResponse(WebURLLoader* loader,
-                                  const WebURLResponse& response) {
+  void didReceiveResponse(WebURLLoader* loader,
+                          const WebURLResponse& response) override {
     ++received_response_;
     response_ = response;
     data_.clear();
   }
-  virtual void didReceiveData(
-      blink::WebURLLoader* loader,
-      const char* data,
-      int data_length,
-      int encoded_data_length) {
+  void didReceiveData(blink::WebURLLoader* loader,
+                      const char* data,
+                      int data_length,
+                      int encoded_data_length) override {
     ++received_data_;
     data_.append(data, data_length);
     total_encoded_data_length_ += encoded_data_length;
   }
-  virtual void didFinishLoading(
-      WebURLLoader*, double finishTime, int64_t total_encoded_data_length) {}
-  virtual void didFail(WebURLLoader*, const WebURLError&) {}
+  void didFinishLoading(WebURLLoader*,
+                        double finishTime,
+                        int64_t total_encoded_data_length) override {}
+  void didFail(WebURLLoader*, const WebURLError&) override {}
 
   void Reset() {
     received_response_ = received_data_ = total_encoded_data_length_ = 0;
@@ -568,9 +574,9 @@ TEST(MultipartResponseTest, MultipartContentRangesTest) {
   response1.setHTTPHeaderField("Content-Range",
                                "bytes 5000000000-5000000050/6000000000");
 
-  int64 content_range_lower_bound = 0;
-  int64 content_range_upper_bound = 0;
-  int64 content_range_instance_size = 0;
+  int64_t content_range_lower_bound = 0;
+  int64_t content_range_upper_bound = 0;
+  int64_t content_range_instance_size = 0;
 
   bool result = MultipartResponseDelegate::ReadContentRanges(
       response1, &content_range_lower_bound,

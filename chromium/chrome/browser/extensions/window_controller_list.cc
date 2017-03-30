@@ -9,7 +9,8 @@
 #include "chrome/browser/extensions/api/tabs/windows_util.h"
 #include "chrome/browser/extensions/chrome_extension_function_details.h"
 #include "chrome/browser/extensions/window_controller_list_observer.h"
-#include "components/sessions/session_id.h"
+#include "chrome/common/extensions/api/windows.h"
+#include "components/sessions/core/session_id.h"
 #include "extensions/browser/extension_function.h"
 #include "ui/base/base_window.h"
 
@@ -20,7 +21,7 @@ namespace extensions {
 
 // static
 WindowControllerList* WindowControllerList::GetInstance() {
-  return Singleton<WindowControllerList>::get();
+  return base::Singleton<WindowControllerList>::get();
 }
 
 WindowControllerList::WindowControllerList() {
@@ -55,30 +56,49 @@ void WindowControllerList::RemoveObserver(
 }
 
 WindowController* WindowControllerList::FindWindowById(int id) const {
-  for (ControllerList::const_iterator iter = windows().begin();
-       iter != windows().end(); ++iter) {
-    if ((*iter)->GetWindowId() == id)
-      return *iter;
-  }
-  return NULL;
+  return FindWindowByIdWithFilter(id, WindowController::GetAllWindowFilter());
 }
 
-WindowController* WindowControllerList::FindWindowForFunctionById(
+WindowController* WindowControllerList::FindWindowByIdWithFilter(
+    int id,
+    WindowController::TypeFilter filter) const {
+  for (ControllerList::const_iterator iter = windows().begin();
+       iter != windows().end(); ++iter) {
+    if ((*iter)->GetWindowId() == id && (*iter)->MatchesFilter(filter))
+      return *iter;
+  }
+  return nullptr;
+}
+
+WindowController* WindowControllerList::FindWindowForFunctionByIdWithFilter(
     const UIThreadExtensionFunction* function,
-    int id) const {
-  WindowController* controller = FindWindowById(id);
-  if (controller && windows_util::CanOperateOnWindow(function, controller))
-    return controller;
-  return NULL;
+    int id,
+    WindowController::TypeFilter filter) const {
+  for (ControllerList::const_iterator iter = windows().begin();
+       iter != windows().end(); ++iter) {
+    if ((*iter)->GetWindowId() == id) {
+      if (windows_util::CanOperateOnWindow(function, *iter, filter))
+        return *iter;
+      return nullptr;
+    }
+  }
+  return nullptr;
 }
 
 WindowController* WindowControllerList::CurrentWindowForFunction(
     const UIThreadExtensionFunction* function) const {
-  WindowController* result = NULL;
+  return CurrentWindowForFunctionWithFilter(function,
+                                            WindowController::kNoWindowFilter);
+}
+
+WindowController* WindowControllerList::CurrentWindowForFunctionWithFilter(
+    const UIThreadExtensionFunction* function,
+    WindowController::TypeFilter filter) const {
+  WindowController* result = nullptr;
   // Returns either the focused window (if any), or the last window in the list.
   for (ControllerList::const_iterator iter = windows().begin();
        iter != windows().end(); ++iter) {
-    if (windows_util::CanOperateOnWindow(function, *iter)) {
+    if (windows_util::CanOperateOnWindow(function, *iter, filter)) {
       result = *iter;
       if (result->window()->IsActive())
         break;  // use focused window

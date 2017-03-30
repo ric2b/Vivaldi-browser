@@ -16,7 +16,8 @@ WindowTreeHostMac::WindowTreeHostMac(const gfx::Rect& bounds) {
                     styleMask:NSBorderlessWindowMask
                       backing:NSBackingStoreBuffered
                         defer:NO]);
-  CreateCompositor(GetAcceleratedWidget());
+  CreateCompositor();
+  OnAcceleratedWidgetAvailable();
 }
 
 WindowTreeHostMac::~WindowTreeHostMac() {
@@ -99,12 +100,6 @@ void WindowTreeHostMac::OnDeviceScaleFactorChanged(float device_scale_factor) {
 // static
 WindowTreeHost* WindowTreeHost::Create(const gfx::Rect& bounds) {
   return new WindowTreeHostMac(bounds);
-}
-
-// static
-gfx::Size WindowTreeHost::GetNativeScreenSize() {
-  NOTIMPLEMENTED();
-  return gfx::Size(1024, 768);
 }
 
 }  // namespace aura

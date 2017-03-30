@@ -6,8 +6,8 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "chrome/browser/chromeos/drive/file_system_core_util.h"
 #include "chrome/browser/chromeos/drive/fileapi/fileapi_worker.h"
+#include "components/drive/file_system_core_util.h"
 #include "content/public/browser/browser_thread.h"
 #include "google_apis/drive/task_util.h"
 #include "net/base/io_buffer.h"
@@ -46,13 +46,12 @@ WebkitFileStreamWriterImpl::WebkitFileStreamWriterImpl(
     const FileSystemGetter& file_system_getter,
     base::TaskRunner* file_task_runner,
     const base::FilePath& file_path,
-    int64 offset)
+    int64_t offset)
     : file_system_getter_(file_system_getter),
       file_task_runner_(file_task_runner),
       file_path_(file_path),
       offset_(offset),
-      weak_ptr_factory_(this) {
-}
+      weak_ptr_factory_(this) {}
 
 WebkitFileStreamWriterImpl::~WebkitFileStreamWriterImpl() {
   if (local_file_writer_) {

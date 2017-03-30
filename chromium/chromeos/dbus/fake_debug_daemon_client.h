@@ -5,10 +5,12 @@
 #ifndef CHROMEOS_DBUS_FAKE_DEBUG_DAEMON_CLIENT_H_
 #define CHROMEOS_DBUS_FAKE_DEBUG_DAEMON_CLIENT_H_
 
+#include <stdint.h>
+
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "chromeos/dbus/debug_daemon_client.h"
 
 namespace chromeos {
@@ -27,10 +29,13 @@ class CHROMEOS_EXPORT FakeDebugDaemonClient : public DebugDaemonClient {
                      const GetDebugLogsCallback& callback) override;
   void SetDebugMode(const std::string& subsystem,
                     const SetDebugModeCallback& callback) override;
-  void StartSystemTracing() override;
-  bool RequestStopSystemTracing(
-      scoped_refptr<base::TaskRunner> task_runner,
-      const StopSystemTracingCallback& callback) override;
+  std::string GetTracingAgentName() override;
+  std::string GetTraceEventLabel() override;
+  bool StartAgentTracing(
+      const base::trace_event::TraceConfig& trace_config) override;
+  void StopAgentTracing(const StopAgentTracingCallback& callback) override;
+  void SetStopAgentTracingTaskRunner(
+      scoped_refptr<base::TaskRunner> task_runner) override;
   void GetRoutes(bool numeric,
                  bool ipv6,
                  const GetRoutesCallback& callback) override;
@@ -39,9 +44,8 @@ class CHROMEOS_EXPORT FakeDebugDaemonClient : public DebugDaemonClient {
   void GetWiMaxStatus(const GetWiMaxStatusCallback& callback) override;
   void GetNetworkInterfaces(
       const GetNetworkInterfacesCallback& callback) override;
-  void GetPerfData(uint32_t duration,
-                   const GetPerfDataCallback& callback) override;
   void GetPerfOutput(uint32_t duration,
+                     const std::vector<std::string>& perf_args,
                      const GetPerfOutputCallback& callback) override;
   void GetScrubbedLogs(const GetLogsCallback& callback) override;
   void GetAllLogs(const GetLogsCallback& callback) override;

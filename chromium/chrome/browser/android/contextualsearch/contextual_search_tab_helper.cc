@@ -36,11 +36,14 @@ void ContextualSearchTabHelper::OnContextualSearchPrefChanged() {
   Java_ContextualSearchTabHelper_onContextualSearchPrefChanged(env, jobj.obj());
 }
 
-void ContextualSearchTabHelper::Destroy(JNIEnv* env, jobject obj) {
+void ContextualSearchTabHelper::Destroy(JNIEnv* env,
+                                        const JavaParamRef<jobject>& obj) {
   delete this;
 }
 
-static jlong Init(JNIEnv* env, jobject obj, jobject java_profile) {
+static jlong Init(JNIEnv* env,
+                  const JavaParamRef<jobject>& obj,
+                  const JavaParamRef<jobject>& java_profile) {
   Profile* profile = ProfileAndroid::FromProfileAndroid(java_profile);
   CHECK(profile);
   ContextualSearchTabHelper* tab = new ContextualSearchTabHelper(

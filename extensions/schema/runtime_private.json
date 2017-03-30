@@ -1,0 +1,19 @@
+// Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved
+
+[
+  {
+    "namespace": "runtimePrivate",
+    "description": "Use the <code>vivaldi.runtimePrivate</code> API to exit the browser.",
+    "compiler_options": {
+      "implemented_in": "extensions/api/runtime/runtime_api.h"
+    },
+    "functions": [
+      {
+        "name": "exit",
+        "description": "Close all browsers and exit the application.",
+        "type": "function",
+        "parameters": []
+      }
+    ]
+  }
+]

@@ -5,24 +5,16 @@
 #include "extensions/common/permissions/permission_message.h"
 
 namespace extensions {
-//
-// PermissionMessage
-//
+
+PermissionMessage::PermissionMessage(const base::string16& message,
+                                     const PermissionIDSet& permissions)
+    : message_(message), permissions_(permissions) {}
 
 PermissionMessage::PermissionMessage(
-    PermissionMessage::ID id, const base::string16& message)
-  : id_(id),
-    message_(message) {
-}
-
-PermissionMessage::PermissionMessage(
-    PermissionMessage::ID id,
     const base::string16& message,
-    const base::string16& details)
-  : id_(id),
-    message_(message),
-    details_(details) {
-}
+    const PermissionIDSet& permissions,
+    const std::vector<base::string16>& submessages)
+    : message_(message), permissions_(permissions), submessages_(submessages) {}
 
 PermissionMessage::~PermissionMessage() {}
 

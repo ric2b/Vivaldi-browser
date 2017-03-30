@@ -4,7 +4,8 @@
 
 #include "chrome/test/chromedriver/chrome/chrome_android_impl.h"
 
-#include "base/strings/string_number_conversions.h"
+#include <utility>
+
 #include "base/strings/string_split.h"
 #include "chrome/test/chromedriver/chrome/device_manager.h"
 #include "chrome/test/chromedriver/chrome/devtools_client.h"
@@ -18,11 +19,11 @@ ChromeAndroidImpl::ChromeAndroidImpl(
     ScopedVector<DevToolsEventListener>& devtools_event_listeners,
     scoped_ptr<PortReservation> port_reservation,
     scoped_ptr<Device> device)
-    : ChromeImpl(http_client.Pass(),
-                 websocket_client.Pass(),
+    : ChromeImpl(std::move(http_client),
+                 std::move(websocket_client),
                  devtools_event_listeners,
-                 port_reservation.Pass()),
-      device_(device.Pass()) {}
+                 std::move(port_reservation)),
+      device_(std::move(device)) {}
 
 ChromeAndroidImpl::~ChromeAndroidImpl() {}
 
@@ -36,20 +37,10 @@ std::string ChromeAndroidImpl::GetOperatingSystemName() {
 
 bool ChromeAndroidImpl::HasTouchScreen() const {
   const BrowserInfo* browser_info = GetBrowserInfo();
-  if (browser_info->browser_name == "webview") {
-    std::vector<std::string> version_parts;
-    base::SplitString(browser_info->browser_version, '.', &version_parts);
-    int major_version;
-    if (version_parts.size() != 4 ||
-        !base::StringToInt(version_parts[0], &major_version)) {
-      LOG(WARNING) << "Unrecognized webview version: "
-                   << browser_info->browser_version;
-      return false;
-    }
-    return major_version >= 44;
-  } else {
+  if (browser_info->browser_name == "webview")
+    return browser_info->major_version >= 44;
+  else
     return browser_info->build_no >= 2388;
-  }
 }
 
 Status ChromeAndroidImpl::QuitImpl() {

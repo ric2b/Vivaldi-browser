@@ -5,6 +5,9 @@
 #ifndef CONTENT_BROWSER_RENDERER_HOST_INPUT_MOCK_INPUT_ACK_HANDLER_H_
 #define CONTENT_BROWSER_RENDERER_HOST_INPUT_MOCK_INPUT_ACK_HANDLER_H_
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/memory/scoped_ptr.h"
 #include "content/browser/renderer_host/input/input_ack_handler.h"
 
@@ -18,8 +21,10 @@ class MockInputAckHandler : public InputAckHandler {
   ~MockInputAckHandler() override;
 
   // InputAckHandler
-  void OnKeyboardEventAck(const NativeWebKeyboardEvent& event,
+  void OnKeyboardEventAck(const NativeWebKeyboardEventWithLatencyInfo& event,
                           InputEventAckState ack_result) override;
+  void OnMouseEventAck(const MouseEventWithLatencyInfo& event,
+                       InputEventAckState ack_result) override;
   void OnWheelEventAck(const MouseWheelEventWithLatencyInfo& event,
                        InputEventAckState ack_result) override;
   void OnTouchEventAck(const TouchEventWithLatencyInfo& event,
@@ -35,11 +40,11 @@ class MockInputAckHandler : public InputAckHandler {
   }
 
   void set_followup_touch_event(scoped_ptr<GestureEventWithLatencyInfo> event) {
-    gesture_followup_event_ = event.Pass();
+    gesture_followup_event_ = std::move(event);
   }
 
   void set_followup_touch_event(scoped_ptr<TouchEventWithLatencyInfo> event) {
-    touch_followup_event_ = event.Pass();
+    touch_followup_event_ = std::move(event);
   }
 
   bool unexpected_event_ack_called() const {
@@ -76,6 +81,7 @@ class MockInputAckHandler : public InputAckHandler {
   blink::WebMouseWheelEvent acked_wheel_event_;
   TouchEventWithLatencyInfo acked_touch_event_;
   blink::WebGestureEvent acked_gesture_event_;
+  blink::WebMouseEvent acked_mouse_event_;
 
   scoped_ptr<GestureEventWithLatencyInfo> gesture_followup_event_;
   scoped_ptr<TouchEventWithLatencyInfo> touch_followup_event_;

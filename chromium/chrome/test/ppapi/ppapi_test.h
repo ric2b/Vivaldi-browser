@@ -7,11 +7,11 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/test/javascript_test_observer.h"
-#include "net/test/spawned_test_server/spawned_test_server.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 
 namespace content {
 class RenderViewHost;
@@ -83,7 +83,7 @@ class PPAPITestBase : public InProcessBrowserTest {
   void RunTestURL(const GURL& test_url);
   // Gets the URL of the the given |test_case| for the given HTTP test server.
   // If |extra_params| is non-empty, it will be appended as URL parameters.
-  GURL GetTestURL(const net::SpawnedTestServer& http_server,
+  GURL GetTestURL(const net::EmbeddedTestServer& http_server,
                   const std::string& test_case,
                   const std::string& extra_params);
 };
@@ -182,24 +182,7 @@ class PPAPINaClPNaClNonSfiTest : public PPAPINaClTest {
                          const std::string& test_case) override;
 };
 
-// TODO(hidehiko): Remove this when clean-up to drop Non-SFI support from
-// nacl_helper is done. See NaClBrowserTestPnaclTransitionalNonSfi
-// for more details.
-class PPAPINaClPNaClTransitionalNonSfiTest : public PPAPINaClPNaClNonSfiTest {
- public:
-  void SetUpCommandLine(base::CommandLine* command_line) override;
-};
-
 class PPAPIPrivateNaClPNaClNonSfiTest : public PPAPINaClPNaClNonSfiTest {
- protected:
-  void SetUpCommandLine(base::CommandLine* command_line) override;
-};
-
-// TODO(hidehiko): Remove this when clean-up to drop Non-SFI support from
-// nacl_helper is done. See NaClBrowserTestPnaclTransitionalNonSfi
-// for more details.
-class PPAPIPrivateNaClPNaClTransitionalNonSfiTest
-    : public PPAPIPrivateNaClPNaClNonSfiTest {
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override;
 };

@@ -6,14 +6,16 @@
     ['OS=="linux"', {
       'variables': {
         'command': [
-          'media_router_tests.py',
+          'internal/media_router_tests.py',
           '--extension',
           '<(PRODUCT_DIR)/mr_extension/',
           '--prod_dir',
           '<(PRODUCT_DIR)',
         ],
         'files': [
-          'media_router_tests.py',
+          'internal/media_router_tests.py',
+          '../../../media/test/data/player.html',
+          '../../../media/test/data/bear-vp9-opus.webm',
           '<(PRODUCT_DIR)/browser_tests<(EXECUTABLE_SUFFIX)',
           '<(PRODUCT_DIR)/chrome_100_percent.pak',
           '<(PRODUCT_DIR)/chrome_200_percent.pak',

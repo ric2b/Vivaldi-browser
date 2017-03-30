@@ -7,7 +7,8 @@
 
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_piece.h"
 
 namespace net {
@@ -15,8 +16,9 @@ namespace net {
 class HttpConnection;
 class HttpServer;
 class HttpServerRequestInfo;
+class WebSocketEncoder;
 
-class WebSocket {
+class WebSocket final {
  public:
   enum ParseResult {
     FRAME_OK,
@@ -25,23 +27,22 @@ class WebSocket {
     FRAME_ERROR
   };
 
-  static WebSocket* CreateWebSocket(HttpServer* server,
-                                    HttpConnection* connection,
-                                    const HttpServerRequestInfo& request,
-                                    size_t* pos);
-
-  virtual void Accept(const HttpServerRequestInfo& request) = 0;
-  virtual ParseResult Read(std::string* message) = 0;
-  virtual void Send(const std::string& message) = 0;
-  virtual ~WebSocket();
-
- protected:
   WebSocket(HttpServer* server, HttpConnection* connection);
+
+  void Accept(const HttpServerRequestInfo& request);
+  ParseResult Read(std::string* message);
+  void Send(const std::string& message);
+  ~WebSocket();
+
+ private:
+  void Fail();
+  void SendErrorResponse(const std::string& message);
 
   HttpServer* const server_;
   HttpConnection* const connection_;
+  scoped_ptr<WebSocketEncoder> encoder_;
+  bool closed_;
 
- private:
   DISALLOW_COPY_AND_ASSIGN(WebSocket);
 };
 

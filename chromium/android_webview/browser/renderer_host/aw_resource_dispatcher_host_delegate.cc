@@ -152,7 +152,7 @@ bool IoThreadClientThrottle::ShouldBlockRequest() {
     return false;
 
   // Part of implementation of WebSettings.allowContentAccess.
-  if (request_->url().SchemeIs(android_webview::kContentScheme) &&
+  if (request_->url().SchemeIs(url::kContentScheme) &&
       io_client->ShouldBlockContentUrls()) {
     return true;
   }
@@ -160,13 +160,8 @@ bool IoThreadClientThrottle::ShouldBlockRequest() {
   // Part of implementation of WebSettings.allowFileAccess.
   if (request_->url().SchemeIsFile() &&
       io_client->ShouldBlockFileUrls()) {
-    const GURL& url = request_->url();
-    if (!url.has_path() ||
-        // Application's assets and resources are always available.
-        (url.path().find(android_webview::kAndroidResourcePath) != 0 &&
-         url.path().find(android_webview::kAndroidAssetPath) != 0)) {
-      return true;
-    }
+    // Application's assets and resources are always available.
+    return !IsAndroidSpecialFileUrl(request_->url());
   }
 
   if (io_client->ShouldBlockNetworkLoads()) {
@@ -226,15 +221,8 @@ void AwResourceDispatcherHostDelegate::RequestBeginning(
   throttles->push_back(new IoThreadClientThrottle(
       request_info->GetChildID(), request_info->GetRenderFrameID(), request));
 
-  // We allow intercepting only navigations within main frames. This
-  // is used to post onPageStarted. We handle shouldOverrideUrlLoading
-  // via a sync IPC.
-  if (resource_type == content::RESOURCE_TYPE_MAIN_FRAME) {
-    throttles->push_back(InterceptNavigationDelegate::CreateThrottleFor(
-        request));
-  } else {
+  if (resource_type != content::RESOURCE_TYPE_MAIN_FRAME)
     InterceptNavigationDelegate::UpdateUserGestureCarryoverInfo(request);
-  }
 }
 
 void AwResourceDispatcherHostDelegate::OnRequestRedirected(
@@ -276,7 +264,7 @@ void AwResourceDispatcherHostDelegate::DownloadStarting(
   std::string user_agent;
   std::string content_disposition;
   std::string mime_type;
-  int64 content_length = request->GetExpectedContentSize();
+  int64_t content_length = request->GetExpectedContentSize();
 
   request->extra_request_headers().GetHeader(
       net::HttpRequestHeaders::kUserAgent, &user_agent);
@@ -319,7 +307,7 @@ content::ResourceDispatcherHostLoginDelegate*
 bool AwResourceDispatcherHostDelegate::HandleExternalProtocol(
     const GURL& url,
     int child_id,
-    int route_id,
+    const content::ResourceRequestInfo::WebContentsGetter& web_contents_getter,
     bool is_main_frame,
     ui::PageTransition page_transition,
     bool has_user_gesture) {

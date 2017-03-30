@@ -3,8 +3,15 @@
 // found in the LICENSE file.
 
 #include "gpu/command_buffer/service/buffer_manager.h"
+
+#include <stdint.h>
+
 #include <limits>
+
 #include "base/logging.h"
+#include "base/strings/stringprintf.h"
+#include "base/thread_task_runner_handle.h"
+#include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event.h"
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
 #include "gpu/command_buffer/service/context_state.h"
@@ -13,34 +20,46 @@
 #include "gpu/command_buffer/service/memory_tracking.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_implementation.h"
+#include "ui/gl/trace_util.h"
 
 namespace gpu {
 namespace gles2 {
 
-BufferManager::BufferManager(
-    MemoryTracker* memory_tracker,
-    FeatureInfo* feature_info)
-    : memory_tracker_(
-          new MemoryTypeTracker(memory_tracker, MemoryTracker::kManaged)),
+BufferManager::BufferManager(MemoryTracker* memory_tracker,
+                             FeatureInfo* feature_info)
+    : memory_type_tracker_(
+          new MemoryTypeTracker(memory_tracker)),
+      memory_tracker_(memory_tracker),
       feature_info_(feature_info),
       allow_buffers_on_multiple_targets_(false),
       allow_fixed_attribs_(false),
       buffer_count_(0),
       have_context_(true),
       use_client_side_arrays_for_stream_buffers_(
-          feature_info ? feature_info->workarounds(
-              ).use_client_side_arrays_for_stream_buffers : 0) {
+          feature_info
+              ? feature_info->workarounds()
+                    .use_client_side_arrays_for_stream_buffers
+              : 0) {
+  // When created from InProcessCommandBuffer, we won't have a |memory_tracker_|
+  // so don't register a dump provider.
+  if (memory_tracker_) {
+    base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
+        this, "gpu::BufferManager", base::ThreadTaskRunnerHandle::Get());
+  }
 }
 
 BufferManager::~BufferManager() {
   DCHECK(buffers_.empty());
   CHECK_EQ(buffer_count_, 0u);
+
+  base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
+      this);
 }
 
 void BufferManager::Destroy(bool have_context) {
   have_context_ = have_context;
   buffers_.clear();
-  DCHECK_EQ(0u, memory_tracker_->GetMemRepresented());
+  DCHECK_EQ(0u, memory_type_tracker_->GetMemRepresented());
 }
 
 void BufferManager::CreateBuffer(GLuint client_id, GLuint service_id) {
@@ -70,7 +89,7 @@ void BufferManager::StartTracking(Buffer* /* buffer */) {
 }
 
 void BufferManager::StopTracking(Buffer* buffer) {
-  memory_tracker_->TrackMemFree(buffer->size());
+  memory_type_tracker_->TrackMemFree(buffer->size());
   --buffer_count_;
 }
 
@@ -128,7 +147,7 @@ void Buffer::SetInfo(
     shadowed_ = shadow;
     size_ = size;
     if (shadowed_) {
-      shadow_.reset(new int8[size]);
+      shadow_.reset(new int8_t[size]);
     } else {
       shadow_.reset();
     }
@@ -145,10 +164,10 @@ void Buffer::SetInfo(
 
 bool Buffer::CheckRange(
     GLintptr offset, GLsizeiptr size) const {
-  int32 end = 0;
+  int32_t end = 0;
   return offset >= 0 && size >= 0 &&
-         offset <= std::numeric_limits<int32>::max() &&
-         size <= std::numeric_limits<int32>::max() &&
+         offset <= std::numeric_limits<int32_t>::max() &&
+         size <= std::numeric_limits<int32_t>::max() &&
          SafeAddInt32(offset, size, &end) && end <= size_;
 }
 
@@ -182,8 +201,8 @@ void Buffer::ClearCache() {
 template <typename T>
 GLuint GetMaxValue(const void* data, GLuint offset, GLsizei count) {
   GLuint max_value = 0;
-  const T* element = reinterpret_cast<const T*>(
-      static_cast<const int8*>(data) + offset);
+  const T* element =
+      reinterpret_cast<const T*>(static_cast<const int8_t*>(data) + offset);
   const T* end = element + count;
   for (; element < end; ++element) {
     if (*element > max_value) {
@@ -202,7 +221,7 @@ bool Buffer::GetMaxValueForRange(
     return true;
   }
 
-  uint32 size;
+  uint32_t size;
   if (!SafeMultiplyUint32(
       count, GLES2Util::GetGLTypeSizeForTexturesAndBuffers(type), &size)) {
     return false;
@@ -212,7 +231,7 @@ bool Buffer::GetMaxValueForRange(
     return false;
   }
 
-  if (size > static_cast<uint32>(size_)) {
+  if (size > static_cast<uint32_t>(size_)) {
     return false;
   }
 
@@ -224,21 +243,21 @@ bool Buffer::GetMaxValueForRange(
   GLuint max_v = 0;
   switch (type) {
     case GL_UNSIGNED_BYTE:
-      max_v = GetMaxValue<uint8>(shadow_.get(), offset, count);
+      max_v = GetMaxValue<uint8_t>(shadow_.get(), offset, count);
       break;
     case GL_UNSIGNED_SHORT:
       // Check we are not accessing an odd byte for a 2 byte value.
       if ((offset & 1) != 0) {
         return false;
       }
-      max_v = GetMaxValue<uint16>(shadow_.get(), offset, count);
+      max_v = GetMaxValue<uint16_t>(shadow_.get(), offset, count);
       break;
     case GL_UNSIGNED_INT:
       // Check we are not accessing a non aligned address for a 4 byte value.
       if ((offset & 3) != 0) {
         return false;
       }
-      max_v = GetMaxValue<uint32>(shadow_.get(), offset, count);
+      max_v = GetMaxValue<uint32_t>(shadow_.get(), offset, count);
       break;
     default:
       NOTREACHED();  // should never get here by validation.
@@ -274,7 +293,7 @@ bool BufferManager::UseNonZeroSizeForClientSideArrayBuffer() {
 void BufferManager::SetInfo(Buffer* buffer, GLenum target, GLsizeiptr size,
                             GLenum usage, const GLvoid* data) {
   DCHECK(buffer);
-  memory_tracker_->TrackMemFree(buffer->size());
+  memory_type_tracker_->TrackMemFree(buffer->size());
   const bool is_client_side_array = IsUsageClientSideArray(usage);
   const bool support_fixed_attribs =
     gfx::GetGLImplementation() == gfx::kGLImplementationEGLGLES2;
@@ -284,7 +303,7 @@ void BufferManager::SetInfo(Buffer* buffer, GLenum target, GLsizeiptr size,
                       (allow_fixed_attribs_ && !support_fixed_attribs) ||
                       is_client_side_array;
   buffer->SetInfo(size, usage, shadow, data, is_client_side_array);
-  memory_tracker_->TrackMemAlloc(buffer->size());
+  memory_type_tracker_->TrackMemAlloc(buffer->size());
 }
 
 void BufferManager::ValidateAndDoBufferData(
@@ -314,7 +333,7 @@ void BufferManager::ValidateAndDoBufferData(
     return;
   }
 
-  if (!memory_tracker_->EnsureGPUMemoryAvailable(size)) {
+  if (!memory_type_tracker_->EnsureGPUMemoryAvailable(size)) {
     ERRORSTATE_SET_GL_ERROR(
         error_state, GL_OUT_OF_MEMORY, "glBufferData", "out of memory");
     return;
@@ -332,9 +351,9 @@ void BufferManager::DoBufferData(
     GLenum usage,
     const GLvoid* data) {
   // Clear the buffer to 0 if no initial data was passed in.
-  scoped_ptr<int8[]> zero;
+  scoped_ptr<int8_t[]> zero;
   if (!data) {
-    zero.reset(new int8[size]);
+    zero.reset(new int8_t[size]);
     memset(zero.get(), 0, size);
     data = zero.get();
   }
@@ -386,6 +405,36 @@ void BufferManager::DoBufferSubData(
   }
 }
 
+void BufferManager::ValidateAndDoGetBufferParameteri64v(
+    ContextState* context_state, GLenum target, GLenum pname, GLint64* params) {
+  Buffer* buffer = GetBufferInfoForTarget(context_state, target);
+  if (!buffer) {
+    ERRORSTATE_SET_GL_ERROR(
+        context_state->GetErrorState(), GL_INVALID_OPERATION,
+        "glGetBufferParameteri64v", "no buffer bound for target");
+    return;
+  }
+  switch (pname) {
+    case GL_BUFFER_SIZE:
+      *params = buffer->size();
+      break;
+    case GL_BUFFER_MAP_LENGTH:
+      {
+        const Buffer::MappedRange* mapped_range = buffer->GetMappedRange();
+        *params = mapped_range ? mapped_range->size : 0;
+        break;
+      }
+    case GL_BUFFER_MAP_OFFSET:
+      {
+        const Buffer::MappedRange* mapped_range = buffer->GetMappedRange();
+        *params = mapped_range ? mapped_range->offset : 0;
+        break;
+      }
+    default:
+      NOTREACHED();
+  }
+}
+
 void BufferManager::ValidateAndDoGetBufferParameteriv(
     ContextState* context_state, GLenum target, GLenum pname, GLint* params) {
   Buffer* buffer = GetBufferInfoForTarget(context_state, target);
@@ -401,6 +450,15 @@ void BufferManager::ValidateAndDoGetBufferParameteriv(
       break;
     case GL_BUFFER_USAGE:
       *params = buffer->usage();
+      break;
+    case GL_BUFFER_ACCESS_FLAGS:
+      {
+        const Buffer::MappedRange* mapped_range = buffer->GetMappedRange();
+        *params = mapped_range ? mapped_range->access : 0;
+        break;
+      }
+    case GL_BUFFER_MAPPED:
+      *params = buffer->GetMappedRange() == nullptr ? false : true;
       break;
     default:
       NOTREACHED();
@@ -478,7 +536,28 @@ Buffer* BufferManager::GetBufferInfoForTarget(
   }
 }
 
+bool BufferManager::OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
+                                 base::trace_event::ProcessMemoryDump* pmd) {
+  const int client_id = memory_tracker_->ClientId();
+  for (const auto& buffer_entry : buffers_) {
+    const auto& client_buffer_id = buffer_entry.first;
+    const auto& buffer = buffer_entry.second;
+
+    std::string dump_name = base::StringPrintf(
+        "gpu/gl/buffers/client_%d/buffer_%d", client_id, client_buffer_id);
+    base::trace_event::MemoryAllocatorDump* dump =
+        pmd->CreateAllocatorDump(dump_name);
+    dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
+                    base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+                    static_cast<uint64_t>(buffer->size()));
+
+    auto guid = gfx::GetGLBufferGUIDForTracing(
+        memory_tracker_->ShareGroupTracingGUID(), client_buffer_id);
+    pmd->CreateSharedGlobalAllocatorDump(guid);
+    pmd->AddOwnershipEdge(dump->guid(), guid);
+  }
+  return true;
+}
+
 }  // namespace gles2
 }  // namespace gpu
-
-

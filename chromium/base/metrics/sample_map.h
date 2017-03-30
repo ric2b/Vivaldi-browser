@@ -8,18 +8,22 @@
 #ifndef BASE_METRICS_SAMPLE_MAP_H_
 #define BASE_METRICS_SAMPLE_MAP_H_
 
+#include <stdint.h>
+
 #include <map>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_samples.h"
 
 namespace base {
 
-class BASE_EXPORT_PRIVATE SampleMap : public HistogramSamples {
+class BASE_EXPORT SampleMap : public HistogramSamples {
  public:
   SampleMap();
+  explicit SampleMap(uint64_t id);
   ~SampleMap() override;
 
   // HistogramSamples implementation:
@@ -40,7 +44,7 @@ class BASE_EXPORT_PRIVATE SampleMap : public HistogramSamples {
   DISALLOW_COPY_AND_ASSIGN(SampleMap);
 };
 
-class BASE_EXPORT_PRIVATE SampleMapIterator : public SampleCountIterator {
+class BASE_EXPORT SampleMapIterator : public SampleCountIterator {
  public:
   typedef std::map<HistogramBase::Sample, HistogramBase::Count>
       SampleToCountMap;

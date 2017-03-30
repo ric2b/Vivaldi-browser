@@ -8,6 +8,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.Process;
 
+import org.chromium.base.annotations.CalledByNative;
+
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
@@ -81,6 +83,7 @@ public class ThreadUtils {
      * @param c The Callable to run
      * @return The result of the callable
      */
+    @VisibleForTesting
     public static <T> T runOnUiThreadBlockingNoException(Callable<T> c) {
         try {
             return runOnUiThreadBlocking(c);
@@ -206,5 +209,15 @@ public class ThreadUtils {
     @CalledByNative
     public static void setThreadPriorityAudio(int tid) {
         Process.setThreadPriority(tid, Process.THREAD_PRIORITY_AUDIO);
+    }
+
+    /**
+     * Checks whether Thread priority is THREAD_PRIORITY_AUDIO or not.
+     * @param tid Thread id.
+     * @return true for THREAD_PRIORITY_AUDIO and false otherwise.
+     */
+    @CalledByNative
+    private static boolean isThreadPriorityAudio(int tid) {
+        return Process.getThreadPriority(tid) == Process.THREAD_PRIORITY_AUDIO;
     }
 }

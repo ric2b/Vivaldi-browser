@@ -7,21 +7,27 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/containers/hash_tables.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "gpu/gpu_export.h"
 #include "third_party/angle/include/GLSLANG/ShaderLang.h"
 
+namespace gfx {
+struct GLVersionInfo;
+}
+
 namespace gpu {
 namespace gles2 {
 
 // Mapping between variable name and info.
 typedef base::hash_map<std::string, sh::Attribute> AttributeMap;
+typedef std::vector<sh::OutputVariable> OutputVariableList;
 typedef base::hash_map<std::string, sh::Uniform> UniformMap;
 typedef base::hash_map<std::string, sh::Varying> VaryingMap;
+typedef base::hash_map<std::string, sh::InterfaceBlock> InterfaceBlockMap;
 // Mapping between hashed name and original name.
 typedef base::hash_map<std::string, std::string> NameMap;
 
@@ -31,19 +37,14 @@ class ShaderTranslatorInterface
     : public base::RefCounted<ShaderTranslatorInterface> {
  public:
   ShaderTranslatorInterface() {}
-  enum GlslImplementationType {
-    kGlsl,
-    kGlslES
-  };
 
   // Initializes the translator.
   // Must be called once before using the translator object.
-  virtual bool Init(
-      sh::GLenum shader_type,
-      ShShaderSpec shader_spec,
-      const ShBuiltInResources* resources,
-      GlslImplementationType glsl_implementation_type,
-      ShCompileOptions driver_bug_workarounds) = 0;
+  virtual bool Init(sh::GLenum shader_type,
+                    ShShaderSpec shader_spec,
+                    const ShBuiltInResources* resources,
+                    ShShaderOutput shader_output_language,
+                    ShCompileOptions driver_bug_workarounds) = 0;
 
   // Translates the given shader source.
   // Returns true if translation is successful, false otherwise.
@@ -57,6 +58,8 @@ class ShaderTranslatorInterface
                          AttributeMap* attrib_map,
                          UniformMap* uniform_map,
                          VaryingMap* varying_map,
+                         InterfaceBlockMap* interface_block_map,
+                         OutputVariableList* output_variable_list,
                          NameMap* name_map) const = 0;
 
   // Return a string that is unique for a specfic set of options that would
@@ -88,11 +91,15 @@ class GPU_EXPORT ShaderTranslator
 
   ShaderTranslator();
 
+  // Return shader output lanaguage type based on the context version.
+  static ShShaderOutput GetShaderOutputLanguageForContext(
+      const gfx::GLVersionInfo& context_version);
+
   // Overridden from ShaderTranslatorInterface.
   bool Init(sh::GLenum shader_type,
             ShShaderSpec shader_spec,
             const ShBuiltInResources* resources,
-            GlslImplementationType glsl_implementation_type,
+            ShShaderOutput shader_output_language,
             ShCompileOptions driver_bug_workarounds) override;
 
   // Overridden from ShaderTranslatorInterface.
@@ -103,6 +110,8 @@ class GPU_EXPORT ShaderTranslator
                  AttributeMap* attrib_map,
                  UniformMap* uniform_map,
                  VaryingMap* varying_map,
+                 InterfaceBlockMap* interface_block_map,
+                 OutputVariableList* output_variable_list,
                  NameMap* name_map) const override;
 
   std::string GetStringForOptionsThatWouldAffectCompilation() const override;
@@ -116,7 +125,6 @@ class GPU_EXPORT ShaderTranslator
   int GetCompileOptions() const;
 
   ShHandle compiler_;
-  bool implementation_is_glsl_es_;
   ShCompileOptions driver_bug_workarounds_;
   base::ObserverList<DestructionObserver> destruction_observers_;
 };

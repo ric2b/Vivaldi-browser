@@ -6,9 +6,10 @@
 -->
 
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     package="{{package|default('com.android.webview')}}">
     <uses-sdk android:minSdkVersion="{{minsdk|default(21)}}"
-              android:targetSdkVersion="{{targetsdk|default(21)}}">
+              android:targetSdkVersion="{{targetsdk|default(23)}}">
     </uses-sdk>
 
     <uses-feature android:name="android.hardware.touchscreen"
@@ -32,5 +33,15 @@
                   android:authorities="{{package|default('com.android.webview')}}.LicenseContentProvider" />
         <meta-data android:name="com.android.webview.WebViewLibrary"
                    android:value="libwebviewchromium.so" />
+        <meta-data android:name="org.chromium.content.browser.NUM_SANDBOXED_SERVICES"
+                   android:value="1"/>
+        <service android:name="org.chromium.content.app.SandboxedProcessService0"
+                 android:process=":sandboxed_process0"
+                 android:isolatedProcess="true"
+                 android:exported="true"
+                 tools:ignore="ExportedService"
+                 {{sandboxed_service_extra_flags|default('')}} />
+        <meta-data android:name="org.chromium.content.browser.NUM_PRIVILEGED_SERVICES"
+                   android:value="0"/>
     </application>
 </manifest>

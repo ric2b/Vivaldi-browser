@@ -5,11 +5,13 @@
 #include "chrome/browser/chromeos/policy/cloud_external_data_policy_observer.h"
 
 #include <set>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/values.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -310,7 +312,7 @@ void CloudExternalDataPolicyObserver::OnExternalDataFetched(
   FetchWeakPtrMap::iterator it = fetch_weak_ptrs_.find(user_id);
   DCHECK(it != fetch_weak_ptrs_.end());
   fetch_weak_ptrs_.erase(it);
-  delegate_->OnExternalDataFetched(policy_, user_id, data.Pass());
+  delegate_->OnExternalDataFetched(policy_, user_id, std::move(data));
 }
 
 }  // namespace policy

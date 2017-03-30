@@ -15,9 +15,8 @@ import android.view.View.OnClickListener;
 import android.widget.TextView;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.BookmarksBridge.BookmarkItem;
-import org.chromium.chrome.browser.BookmarksBridge.BookmarkModelObserver;
-import org.chromium.chrome.browser.enhanced_bookmarks.EnhancedBookmarksModel;
+import org.chromium.chrome.browser.bookmark.BookmarksBridge.BookmarkItem;
+import org.chromium.chrome.browser.bookmark.BookmarksBridge.BookmarkModelObserver;
 import org.chromium.chrome.browser.widget.EmptyAlertEditText;
 import org.chromium.chrome.browser.widget.TintedDrawable;
 import org.chromium.components.bookmarks.BookmarkId;
@@ -120,7 +119,7 @@ public class EnhancedBookmarkAddEditFolderActivity extends EnhancedBookmarkActiv
         EnhancedBookmarkUtils.setTaskDescriptionInDocumentMode(this,
                 getString(R.string.enhanced_bookmark_action_bar_edit_folder));
         mModel = new EnhancedBookmarksModel();
-        mModel.addModelObserver(mBookmarkModelObserver);
+        mModel.addObserver(mBookmarkModelObserver);
         mIsAddMode = getIntent().getBooleanExtra(INTENT_IS_ADD_MODE, false);
         if (mIsAddMode) {
             List<String> stringList = getIntent().getStringArrayListExtra(
@@ -191,11 +190,23 @@ public class EnhancedBookmarkAddEditFolderActivity extends EnhancedBookmarkActiv
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         if (item.getItemId() == android.R.id.home) {
-            onBackPressed();
+            finish();
             return true;
         } else if (item == mSaveButton) {
             assert mIsAddMode;
-            if (save()) finish();
+
+            if (mFolderTitle.isEmpty()) {
+                mFolderTitle.validate();
+                mFolderTitle.requestFocus();
+                return true;
+            }
+
+            BookmarkId newFolder = mModel.addFolder(mParentId, 0, mFolderTitle.getTrimmedText());
+            Intent intent = new Intent();
+            intent.putExtra(INTENT_CREATED_BOOKMARK, newFolder.toString());
+            setResult(RESULT_OK, intent);
+            finish();
+
             return true;
         } else if (item == mDeleteButton) {
             assert !mIsAddMode;
@@ -209,14 +220,12 @@ public class EnhancedBookmarkAddEditFolderActivity extends EnhancedBookmarkActiv
     }
 
     @Override
-    public void onBackPressed() {
-        if (isFinishing()) return;
-
-        if (!mIsAddMode) {
-            if (save()) finish();
-        } else {
-            super.onBackPressed();
+    protected void onStop() {
+        if (!mIsAddMode && mModel.doesBookmarkExist(mFolderId) && !mFolderTitle.isEmpty()) {
+            mModel.setBookmarkTitle(mFolderId, mFolderTitle.getTrimmedText());
         }
+
+        super.onStop();
     }
 
     @Override
@@ -233,28 +242,9 @@ public class EnhancedBookmarkAddEditFolderActivity extends EnhancedBookmarkActiv
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        mModel.removeModelObserver(mBookmarkModelObserver);
+        mModel.removeObserver(mBookmarkModelObserver);
         mModel.destroy();
         mModel = null;
-    }
-
-    private boolean save() {
-        if (!mFolderTitle.validate()) {
-            mFolderTitle.requestFocus();
-            return false;
-        }
-
-        String folderTitle = mFolderTitle.getTrimmedText();
-        if (mIsAddMode) {
-            BookmarkId newFolder = mModel.addFolder(mParentId, 0, folderTitle);
-            Intent intent = new Intent();
-            intent.putExtra(INTENT_CREATED_BOOKMARK, newFolder.toString());
-            setResult(RESULT_OK, intent);
-        } else {
-            mModel.setBookmarkTitle(mFolderId, folderTitle);
-        }
-
-        return true;
     }
 
     private void updateParent(BookmarkId newParent) {

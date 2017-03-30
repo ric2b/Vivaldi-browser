@@ -2,7 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_piece.h"
@@ -10,9 +14,9 @@
 #include "device/serial/data_receiver.h"
 #include "device/serial/data_source_sender.h"
 #include "device/serial/data_stream.mojom.h"
+#include "mojo/public/cpp/bindings/interface_ptr.h"
+#include "mojo/public/cpp/environment/async_waiter.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/mojo/src/mojo/public/cpp/bindings/interface_ptr.h"
-#include "third_party/mojo/src/mojo/public/cpp/environment/async_waiter.h"
 
 namespace device {
 
@@ -37,12 +41,12 @@ class DataSourceTest : public testing::Test {
             mojo::GetProxy(&source_sender_client_handle);
     source_sender_ = new DataSourceSender(
         mojo::GetProxy(&source_sender_handle),
-        source_sender_client_handle.Pass(),
+        std::move(source_sender_client_handle),
         base::Bind(&DataSourceTest::CanWriteData, base::Unretained(this)),
         base::Bind(&DataSourceTest::OnError, base::Unretained(this)));
-    receiver_ =
-        new DataReceiver(source_sender_handle.Pass(),
-                         source_sender_client_request.Pass(), 100, kFatalError);
+    receiver_ = new DataReceiver(std::move(source_sender_handle),
+                                 std::move(source_sender_client_request), 100,
+                                 kFatalError);
   }
 
   void TearDown() override {
@@ -98,7 +102,7 @@ class DataSourceTest : public testing::Test {
   void OnDataReceived(scoped_ptr<ReadOnlyBuffer> buffer) {
     ASSERT_TRUE(buffer);
     error_ = 0;
-    buffer_ = buffer.Pass();
+    buffer_ = std::move(buffer);
     buffer_contents_ = std::string(buffer_->GetData(), buffer_->GetSize());
     EventReceived(EVENT_RECEIVE_COMPLETE);
   }
@@ -110,7 +114,7 @@ class DataSourceTest : public testing::Test {
   }
 
   void CanWriteData(scoped_ptr<WritableBuffer> buffer) {
-    write_buffer_ = buffer.Pass();
+    write_buffer_ = std::move(buffer);
     EventReceived(EVENT_WRITE_BUFFER_READY);
   }
 

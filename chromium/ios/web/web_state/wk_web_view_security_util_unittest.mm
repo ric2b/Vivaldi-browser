@@ -16,12 +16,15 @@
 #include "net/cert/x509_util.h"
 #include "net/ssl/ssl_info.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "testing/gtest_mac.h"
 #include "testing/platform_test.h"
 
 namespace web {
 namespace {
 // Subject for testing self-signed certificate.
 const char kTestSubject[] = "self-signed";
+// Hostname for testing SecTrustRef objects.
+NSString* const kTestHost = @"www.example.com";
 
 // Returns an autoreleased certificate chain for testing. Chain will contain a
 // single self-signed cert with |subject| as a subject.
@@ -38,6 +41,14 @@ NSArray* MakeTestCertChain(const std::string& subject) {
                                                         der_cert.size()));
   NSArray* result = @[ reinterpret_cast<id>(cert.get()) ];
   return result;
+}
+
+// Returns an autoreleased dictionary, which represents NSError's user info for
+// testing.
+NSDictionary* MakeTestSSLCertErrorUserInfo() {
+  return @{
+    web::kNSErrorPeerCertificateChainKey : MakeTestCertChain(kTestSubject),
+  };
 }
 
 // Returns SecTrustRef object for testing.
@@ -100,111 +111,172 @@ TEST_F(WKWebViewSecurityUtilTest, CreationCertFromNilTrust) {
   EXPECT_FALSE(CreateCertFromTrust(nil));
 }
 
-// Tests that IsWKWebViewSSLError returns true for NSError with NSURLErrorDomain
-// domain and NSURLErrorSecureConnectionFailed error code.
-TEST_F(WKWebViewSecurityUtilTest, CheckSecureConnectionFailedError) {
-  CR_TEST_REQUIRES_WK_WEB_VIEW();
+// Tests CreateServerTrustFromChain with valid input.
+TEST_F(WKWebViewSecurityUtilTest, CreationServerTrust) {
+  // Create server trust.
+  NSArray* chain = MakeTestCertChain(kTestSubject);
+  base::ScopedCFTypeRef<SecTrustRef> server_trust(
+      CreateServerTrustFromChain(chain, kTestHost));
+  EXPECT_TRUE(server_trust);
 
-  EXPECT_TRUE(IsWKWebViewSSLError(
-      [NSError errorWithDomain:NSURLErrorDomain
-                          code:NSURLErrorSecureConnectionFailed
-                      userInfo:nil]));
+  // Verify chain.
+  EXPECT_EQ(static_cast<CFIndex>(chain.count),
+            SecTrustGetCertificateCount(server_trust));
+  [chain enumerateObjectsUsingBlock:^(id expected_cert, NSUInteger i, BOOL*) {
+    id actual_cert = static_cast<id>(SecTrustGetCertificateAtIndex(
+        server_trust.get(), static_cast<CFIndex>(i)));
+    EXPECT_EQ(expected_cert, actual_cert);
+  }];
+
+  // Verify policies.
+  CFArrayRef policies = nullptr;
+  EXPECT_EQ(errSecSuccess, SecTrustCopyPolicies(server_trust.get(), &policies));
+  EXPECT_EQ(1, CFArrayGetCount(policies));
+  SecPolicyRef policy = (SecPolicyRef)CFArrayGetValueAtIndex(policies, 0);
+  base::ScopedCFTypeRef<CFDictionaryRef> properties(
+      SecPolicyCopyProperties(policy));
+  NSString* name = static_cast<NSString*>(
+      CFDictionaryGetValue(properties.get(), kSecPolicyName));
+  EXPECT_NSEQ(kTestHost, name);
+  CFRelease(policies);
 }
 
-// Tests that IsWKWebViewSSLError returns true for NSError with NSURLErrorDomain
-// domain and NSURLErrorClientCertificateRequired error code.
-TEST_F(WKWebViewSecurityUtilTest, CheckCannotLoadFromNetworkError) {
-  CR_TEST_REQUIRES_WK_WEB_VIEW();
-
-  EXPECT_TRUE(IsWKWebViewSSLError(
-      [NSError errorWithDomain:NSURLErrorDomain
-                          code:NSURLErrorClientCertificateRequired
-                      userInfo:nil]));
+// Tests CreateServerTrustFromChain with nil chain.
+TEST_F(WKWebViewSecurityUtilTest, CreationServerTrustFromNilChain) {
+  EXPECT_FALSE(CreateServerTrustFromChain(nil, kTestHost));
 }
 
-// Tests that IsWKWebViewSSLError returns false for NSError with empty domain
-// and NSURLErrorClientCertificateRequired error code.
-TEST_F(WKWebViewSecurityUtilTest, CheckCannotLoadFromNetworkErrorWithNoDomain) {
-  CR_TEST_REQUIRES_WK_WEB_VIEW();
-
-  EXPECT_FALSE(IsWKWebViewSSLError(
-      [NSError errorWithDomain:@""
-                          code:NSURLErrorClientCertificateRequired
-                      userInfo:nil]));
+// Tests CreateServerTrustFromChain with empty chain.
+TEST_F(WKWebViewSecurityUtilTest, CreationServerTrustFromEmptyChain) {
+  EXPECT_FALSE(CreateServerTrustFromChain(@[], kTestHost));
 }
 
-// Tests that IsWKWebViewSSLError returns false for NSError with
+// Tests that IsWKWebViewSSLCertError returns YES for NSError with
+// NSURLErrorDomain domain, NSURLErrorSecureConnectionFailed error code and
+// certificate chain.
+TEST_F(WKWebViewSecurityUtilTest, CheckSecureConnectionFailedWithCertError) {
+  CR_TEST_REQUIRES_WK_WEB_VIEW();
+
+  EXPECT_TRUE(IsWKWebViewSSLCertError([NSError
+      errorWithDomain:NSURLErrorDomain
+                 code:NSURLErrorSecureConnectionFailed
+             userInfo:MakeTestSSLCertErrorUserInfo()]));
+}
+
+// Tests that IsWKWebViewSSLCertError returns NO for NSError with
+// NSURLErrorDomain domain, NSURLErrorSecureConnectionFailed error code and no
+// certificate chain.
+TEST_F(WKWebViewSecurityUtilTest, CheckSecureConnectionFailedWithoutCertError) {
+  CR_TEST_REQUIRES_WK_WEB_VIEW();
+
+  EXPECT_FALSE(IsWKWebViewSSLCertError([NSError
+      errorWithDomain:NSURLErrorDomain
+                 code:NSURLErrorSecureConnectionFailed
+             userInfo:nil]));
+}
+
+// Tests that IsWKWebViewSSLCertError returns YES for NSError with
+// NSURLErrorDomain domain and certificates error codes.
+TEST_F(WKWebViewSecurityUtilTest, CheckCertificateSSLError) {
+  CR_TEST_REQUIRES_WK_WEB_VIEW();
+
+  EXPECT_TRUE(IsWKWebViewSSLCertError([NSError
+      errorWithDomain:NSURLErrorDomain
+                 code:NSURLErrorServerCertificateHasBadDate
+             userInfo:nil]));
+  EXPECT_TRUE(IsWKWebViewSSLCertError([NSError
+      errorWithDomain:NSURLErrorDomain
+                 code:NSURLErrorServerCertificateUntrusted
+             userInfo:nil]));
+  EXPECT_TRUE(IsWKWebViewSSLCertError([NSError
+      errorWithDomain:NSURLErrorDomain
+                 code:NSURLErrorServerCertificateHasUnknownRoot
+             userInfo:nil]));
+  EXPECT_TRUE(IsWKWebViewSSLCertError([NSError
+      errorWithDomain:NSURLErrorDomain
+                 code:NSURLErrorServerCertificateNotYetValid
+             userInfo:nil]));
+}
+
+// Tests that IsWKWebViewSSLCertError returns NO for NSError with
+// NSURLErrorDomain domain and non cert SSL error codes.
+TEST_F(WKWebViewSecurityUtilTest, CheckNonCertificateSSLError) {
+  CR_TEST_REQUIRES_WK_WEB_VIEW();
+
+  EXPECT_FALSE(IsWKWebViewSSLCertError([NSError
+      errorWithDomain:NSURLErrorDomain
+                 code:NSURLErrorClientCertificateRejected
+             userInfo:nil]));
+  EXPECT_FALSE(IsWKWebViewSSLCertError([NSError
+      errorWithDomain:NSURLErrorDomain
+                 code:NSURLErrorClientCertificateRequired
+             userInfo:nil]));
+}
+
+// Tests that IsWKWebViewSSLCertError returns NO for NSError with
 // NSURLErrorDomain domain and NSURLErrorDataLengthExceedsMaximum error code.
 TEST_F(WKWebViewSecurityUtilTest, CheckDataLengthExceedsMaximumError) {
   CR_TEST_REQUIRES_WK_WEB_VIEW();
 
-  EXPECT_FALSE(IsWKWebViewSSLError(
-      [NSError errorWithDomain:NSURLErrorDomain
-                          code:NSURLErrorDataLengthExceedsMaximum
-                      userInfo:nil]));
-}
-
-// Tests that IsWKWebViewSSLError returns false for NSError with
-// NSURLErrorDomain domain and NSURLErrorCannotLoadFromNetwork error code.
-TEST_F(WKWebViewSecurityUtilTest, CheckCannotCreateFileError) {
-  CR_TEST_REQUIRES_WK_WEB_VIEW();
-
-  EXPECT_FALSE(IsWKWebViewSSLError(
-      [NSError errorWithDomain:NSURLErrorDomain
-                          code:NSURLErrorCannotLoadFromNetwork
-                      userInfo:nil]));
-}
-
-// Tests GetSSLInfoFromWKWebViewSSLError with NSError without user info.
-TEST_F(WKWebViewSecurityUtilTest, SSLInfoFromErrorWithoutUserInfo) {
-  CR_TEST_REQUIRES_WK_WEB_VIEW();
-
-  NSError* badDateError =
-      [NSError errorWithDomain:NSURLErrorDomain
-                          code:NSURLErrorServerCertificateHasBadDate
-                      userInfo:nil];
-  net::SSLInfo info;
-  GetSSLInfoFromWKWebViewSSLError(badDateError, &info);
-  EXPECT_TRUE(info.is_valid());
-  EXPECT_EQ(net::CERT_STATUS_DATE_INVALID, info.cert_status);
-  info.cert->subject();
-  EXPECT_EQ("", info.cert->subject().GetDisplayName());
-}
-
-// Tests GetSSLInfoFromWKWebViewSSLError with NSError without cert.
-TEST_F(WKWebViewSecurityUtilTest, SSLInfoFromErrorWithoutCert) {
-  CR_TEST_REQUIRES_WK_WEB_VIEW();
-
-  NSError* untrustedCertError = [NSError
+  EXPECT_FALSE(IsWKWebViewSSLCertError([NSError
       errorWithDomain:NSURLErrorDomain
-                 code:NSURLErrorServerCertificateUntrusted
-             userInfo:@{
-               NSURLErrorFailingURLStringErrorKey : @"https://www.google.com/",
-             }];
-  net::SSLInfo info;
-  GetSSLInfoFromWKWebViewSSLError(untrustedCertError, &info);
-  EXPECT_TRUE(info.is_valid());
-  EXPECT_EQ(net::CERT_STATUS_INVALID, info.cert_status);
-  EXPECT_EQ("https://www.google.com/", info.cert->subject().GetDisplayName());
+                 code:NSURLErrorDataLengthExceedsMaximum
+             userInfo:nil]));
 }
 
-// Tests GetSSLInfoFromWKWebViewSSLError with NSError and self-signed cert.
+// Tests that IsWKWebViewSSLCertError returns NO for NSError with
+// NSURLErrorDomain domain and NSURLErrorCannotLoadFromNetwork error code.
+TEST_F(WKWebViewSecurityUtilTest, CheckCannotLoadFromNetworkError) {
+  CR_TEST_REQUIRES_WK_WEB_VIEW();
+
+  EXPECT_FALSE(IsWKWebViewSSLCertError([NSError
+      errorWithDomain:NSURLErrorDomain
+                 code:NSURLErrorCannotLoadFromNetwork
+             userInfo:nil]));
+}
+
+// Tests GetSSLInfoFromWKWebViewSSLCertError with NSError and self-signed cert.
 TEST_F(WKWebViewSecurityUtilTest, SSLInfoFromErrorWithCert) {
   CR_TEST_REQUIRES_WK_WEB_VIEW();
 
   NSError* unknownCertError =
       [NSError errorWithDomain:NSURLErrorDomain
                           code:NSURLErrorServerCertificateHasUnknownRoot
-                      userInfo:@{
-                        kNSErrorPeerCertificateChainKey :
-                            MakeTestCertChain(kTestSubject),
-                      }];
+                      userInfo:MakeTestSSLCertErrorUserInfo()];
 
   net::SSLInfo info;
-  GetSSLInfoFromWKWebViewSSLError(unknownCertError, &info);
+  GetSSLInfoFromWKWebViewSSLCertError(unknownCertError, &info);
   EXPECT_TRUE(info.is_valid());
   EXPECT_EQ(net::CERT_STATUS_INVALID, info.cert_status);
   EXPECT_TRUE(info.cert->subject().GetDisplayName() == kTestSubject);
+  EXPECT_TRUE(info.unverified_cert->subject().GetDisplayName() == kTestSubject);
+}
+
+// Tests GetSecurityStyleFromTrustResult with bad SecTrustResultType result.
+TEST_F(WKWebViewSecurityUtilTest, GetSecurityStyleFromBadResult) {
+  EXPECT_EQ(SECURITY_STYLE_AUTHENTICATION_BROKEN,
+            GetSecurityStyleFromTrustResult(kSecTrustResultDeny));
+  EXPECT_EQ(
+      SECURITY_STYLE_AUTHENTICATION_BROKEN,
+      GetSecurityStyleFromTrustResult(kSecTrustResultRecoverableTrustFailure));
+  EXPECT_EQ(SECURITY_STYLE_AUTHENTICATION_BROKEN,
+            GetSecurityStyleFromTrustResult(kSecTrustResultFatalTrustFailure));
+  EXPECT_EQ(SECURITY_STYLE_AUTHENTICATION_BROKEN,
+            GetSecurityStyleFromTrustResult(kSecTrustResultOtherError));
+}
+
+// Tests GetSecurityStyleFromTrustResult with good SecTrustResultType result.
+TEST_F(WKWebViewSecurityUtilTest, GetSecurityStyleFromGoodResult) {
+  EXPECT_EQ(SECURITY_STYLE_AUTHENTICATED,
+            GetSecurityStyleFromTrustResult(kSecTrustResultProceed));
+  EXPECT_EQ(SECURITY_STYLE_AUTHENTICATED,
+            GetSecurityStyleFromTrustResult(kSecTrustResultUnspecified));
+}
+
+// Tests GetSecurityStyleFromTrustResult with invalid SecTrustResultType result.
+TEST_F(WKWebViewSecurityUtilTest, GetSecurityStyleFromInvalidResult) {
+  EXPECT_EQ(SECURITY_STYLE_UNKNOWN,
+            GetSecurityStyleFromTrustResult(kSecTrustResultInvalid));
 }
 
 }  // namespace web

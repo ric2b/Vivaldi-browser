@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.preferences.website;
 
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.res.Resources;
 import android.graphics.PorterDuff;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
@@ -24,7 +25,10 @@ import android.widget.ListView;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ContentSettingsType;
-import org.chromium.chrome.browser.UrlUtilities;
+import org.chromium.chrome.browser.omnibox.geo.GeolocationHeader;
+import org.chromium.chrome.browser.search_engines.TemplateUrlService;
+import org.chromium.chrome.browser.util.UrlUtilities;
+import org.chromium.content_public.browser.WebContents;
 
 import java.net.URI;
 import java.util.ArrayList;
@@ -33,7 +37,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Shows a list of HTML5 settings for a single website.
+ * Shows the permissions and other settings for a particular website.
  */
 public class SingleWebsitePreferences extends PreferenceFragment
         implements DialogInterface.OnClickListener, OnPreferenceChangeListener,
@@ -48,6 +52,8 @@ public class SingleWebsitePreferences extends PreferenceFragment
     public static final String EXTRA_SITE = "org.chromium.chrome.preferences.site";
     public static final String EXTRA_ORIGIN = "org.chromium.chrome.preferences.origin";
     public static final String EXTRA_LOCATION = "org.chromium.chrome.preferences.location";
+
+    public static final String EXTRA_WEB_CONTENTS = "org.chromium.chrome.preferences.web_contents";
 
     // Preference keys, see single_website_preferences.xml
     // Headings:
@@ -67,6 +73,7 @@ public class SingleWebsitePreferences extends PreferenceFragment
     public static final String PREF_COOKIES_PERMISSION = "cookies_permission_list";
     public static final String PREF_FULLSCREEN_PERMISSION = "fullscreen_permission_list";
     public static final String PREF_JAVASCRIPT_PERMISSION = "javascript_permission_list";
+    public static final String PREF_KEYGEN_PERMISSION = "keygen_permission_list";
     public static final String PREF_LOCATION_ACCESS = "location_access_list";
     public static final String PREF_MIC_CAPTURE_PERMISSION = "microphone_permission_list";
     public static final String PREF_MIDI_SYSEX_PERMISSION = "midi_sysex_permission_list";
@@ -83,6 +90,7 @@ public class SingleWebsitePreferences extends PreferenceFragment
         PREF_COOKIES_PERMISSION,
         PREF_FULLSCREEN_PERMISSION,
         PREF_JAVASCRIPT_PERMISSION,
+        PREF_KEYGEN_PERMISSION,
         PREF_LOCATION_ACCESS,
         PREF_MIC_CAPTURE_PERMISSION,
         PREF_MIDI_SYSEX_PERMISSION,
@@ -97,11 +105,14 @@ public class SingleWebsitePreferences extends PreferenceFragment
     // The address of the site we want to display. Used only if EXTRA_ADDRESS is provided.
     private WebsiteAddress mSiteAddress;
 
-    // A list of possible options for each list preference summary.
-    private String[] mListPreferenceSummaries;
-
     private class SingleWebsitePermissionsPopulator
             implements WebsitePermissionsFetcher.WebsitePermissionsCallback {
+        private final WebContents mWebContents;
+
+        public SingleWebsitePermissionsPopulator(WebContents webContents) {
+            mWebContents = webContents;
+        }
+
         @Override
         public void onWebsitePermissionsAvailable(
                 Map<String, Set<Website>> sitesByOrigin, Map<String, Set<Website>> sitesByHost) {
@@ -115,6 +126,14 @@ public class SingleWebsitePreferences extends PreferenceFragment
             allSites.addAll(sitesByHost.values());
             // TODO(mvanouwerkerk): Avoid modifying the outer class from this inner class.
             mSite = mergePermissionInfoForTopLevelOrigin(mSiteAddress, allSites);
+
+            // Display Keygen Content Setting if Keygen is blocked.
+            if (mSite.getKeygenInfo() == null && mWebContents != null
+                    && WebsitePreferenceBridge.getKeygenBlocked(mWebContents)) {
+                String origin = mSiteAddress.getOrigin();
+                mSite.setKeygenInfo(new KeygenInfo(origin, origin, false));
+            }
+
             displaySitePermissions();
         }
     }
@@ -131,27 +150,31 @@ public class SingleWebsitePreferences extends PreferenceFragment
         Bundle fragmentArgs = new Bundle();
         // TODO(mvanouwerkerk): Define a pure getOrigin method in UrlUtilities that is the
         // equivalent of the call below, because this is perfectly fine for non-display purposes.
-        String origin = UrlUtilities.getOriginForDisplay(URI.create(url), true /*  schowScheme */);
+        String origin =
+                UrlUtilities.formatUrlForSecurityDisplay(URI.create(url), true /* showScheme */);
         fragmentArgs.putString(SingleWebsitePreferences.EXTRA_ORIGIN, origin);
         return fragmentArgs;
     }
 
     @Override
     public void onActivityCreated(Bundle savedInstanceState) {
-        getActivity().setTitle(R.string.prefs_content_settings);
+        getActivity().setTitle(R.string.prefs_site_settings);
         ListView listView = (ListView) getView().findViewById(android.R.id.list);
         listView.setDivider(null);
 
         Object extraSite = getArguments().getSerializable(EXTRA_SITE);
         Object extraOrigin = getArguments().getSerializable(EXTRA_ORIGIN);
+        getArguments().setClassLoader(WebContents.class.getClassLoader());
+        Object webContents = getArguments().get(EXTRA_WEB_CONTENTS);
 
         if (extraSite != null && extraOrigin == null) {
             mSite = (Website) extraSite;
             displaySitePermissions();
         } else if (extraOrigin != null && extraSite == null) {
             mSiteAddress = WebsiteAddress.create((String) extraOrigin);
-            WebsitePermissionsFetcher fetcher =
-                    new WebsitePermissionsFetcher(new SingleWebsitePermissionsPopulator());
+            WebsitePermissionsFetcher fetcher;
+            fetcher = new WebsitePermissionsFetcher(
+                new SingleWebsitePermissionsPopulator((WebContents) webContents));
             fetcher.fetchAllPreferences();
         } else {
             assert false : "Exactly one of EXTRA_SITE or EXTRA_SITE_ADDRESS must be provided.";
@@ -191,6 +214,10 @@ public class SingleWebsitePreferences extends PreferenceFragment
                 if (merged.getGeolocationInfo() == null && other.getGeolocationInfo() != null
                         && permissionInfoIsForTopLevelOrigin(other.getGeolocationInfo(), origin)) {
                     merged.setGeolocationInfo(other.getGeolocationInfo());
+                }
+                if (merged.getKeygenInfo() == null && other.getKeygenInfo() != null
+                        && permissionInfoIsForTopLevelOrigin(other.getKeygenInfo(), origin)) {
+                    merged.setKeygenInfo(other.getKeygenInfo());
                 }
                 if (merged.getMidiInfo() == null && other.getMidiInfo() != null
                         && permissionInfoIsForTopLevelOrigin(other.getMidiInfo(), origin)) {
@@ -255,8 +282,6 @@ public class SingleWebsitePreferences extends PreferenceFragment
      */
     private void displaySitePermissions() {
         addPreferencesFromResource(R.xml.single_website_preferences);
-        mListPreferenceSummaries = getActivity().getResources().getStringArray(
-                R.array.website_settings_permission_options);
 
         ListAdapter preferences = getPreferenceScreen().getRootAdapter();
         for (int i = 0; i < preferences.getCount(); ++i) {
@@ -285,16 +310,10 @@ public class SingleWebsitePreferences extends PreferenceFragment
                 setUpListPreference(preference, mSite.getFullscreenPermission());
             } else if (PREF_JAVASCRIPT_PERMISSION.equals(preference.getKey())) {
                 setUpListPreference(preference, mSite.getJavaScriptPermission());
+            } else if (PREF_KEYGEN_PERMISSION.equals(preference.getKey())) {
+                setUpListPreference(preference, mSite.getKeygenPermission());
             } else if (PREF_LOCATION_ACCESS.equals(preference.getKey())) {
-                Object locationAllowed = getArguments().getSerializable(EXTRA_LOCATION);
-                if (mSite.getGeolocationPermission() == null && locationAllowed != null) {
-                    String origin = mSite.getAddress().getOrigin();
-                    mSite.setGeolocationInfo(new GeolocationInfo(origin, origin));
-                    setUpListPreference(preference, (boolean) locationAllowed
-                            ? ContentSetting.ALLOW : ContentSetting.BLOCK);
-                } else {
-                    setUpListPreference(preference, mSite.getGeolocationPermission());
-                }
+                setUpLocationPreference(preference);
             } else if (PREF_MIC_CAPTURE_PERMISSION.equals(preference.getKey())) {
                 setUpListPreference(preference, mSite.getMicrophonePermission());
             } else if (PREF_MIDI_SYSEX_PERMISSION.equals(preference.getKey())) {
@@ -366,19 +385,19 @@ public class SingleWebsitePreferences extends PreferenceFragment
     }
 
     private boolean showWarningFor(int type) {
-        switch (type) {
-            case ContentSettingsType.CONTENT_SETTINGS_TYPE_GEOLOCATION:
-                if (mSite.getGeolocationPermission() == null) return false;
-                break;
-            case ContentSettingsType.CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA:
-                if (mSite.getCameraPermission() == null) return false;
-                break;
-            case ContentSettingsType.CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC:
-                if (mSite.getMicrophonePermission() == null) return false;
-                break;
-            default:
-                return false;
+        ContentSetting setting = null;
+        if (type == ContentSettingsType.CONTENT_SETTINGS_TYPE_GEOLOCATION) {
+            setting = mSite.getGeolocationPermission();
+        } else if (type == ContentSettingsType.CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA) {
+            setting = mSite.getCameraPermission();
+        } else if (type == ContentSettingsType.CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC) {
+            setting = mSite.getMicrophonePermission();
         }
+
+        if (setting == null) {
+            return false;
+        }
+
         SiteSettingsCategory category = SiteSettingsCategory.fromContentSettingsType(type);
         return category.showPermissionBlockedMessage(getActivity());
     }
@@ -441,8 +460,57 @@ public class SingleWebsitePreferences extends PreferenceFragment
             listPreference.setIcon(getDisabledInChromeIcon(contentType));
         }
 
-        preference.setSummary(mListPreferenceSummaries[index]);
+        preference.setSummary("%s");
         listPreference.setOnPreferenceChangeListener(this);
+    }
+
+    private void setUpLocationPreference(Preference preference) {
+        ContentSetting permission = mSite.getGeolocationPermission();
+        Context context = preference.getContext();
+        Object locationAllowed = getArguments().getSerializable(EXTRA_LOCATION);
+        if (permission == null && hasXGeoLocationPermission(context)) {
+            String origin = mSite.getAddress().getOrigin();
+            mSite.setGeolocationInfo(new GeolocationInfo(origin, origin, false));
+            setUpListPreference(preference, ContentSetting.ALLOW);
+            updateLocationPreferenceForXGeo(preference);
+        } else if (permission == null && locationAllowed != null) {
+            String origin = mSite.getAddress().getOrigin();
+            mSite.setGeolocationInfo(new GeolocationInfo(origin, origin, false));
+            setUpListPreference(preference, (boolean) locationAllowed
+                    ? ContentSetting.ALLOW : ContentSetting.BLOCK);
+        } else {
+            setUpListPreference(preference, permission);
+        }
+    }
+
+    /**
+     * Returns true if the current host matches the default search engine host and location for the
+     * default search engine is being granted via x-geo.
+     * @param context The current context.
+     */
+    private boolean hasXGeoLocationPermission(Context context) {
+        String searchUrl = TemplateUrlService.getInstance().getUrlForSearchQuery("foo");
+        return mSite.getAddress().matches(searchUrl)
+                && GeolocationHeader.isGeoHeaderEnabledForUrl(context, searchUrl, false);
+    }
+
+    /**
+     * Updates the location preference to indicate that the site has access to location (via X-Geo)
+     * for searches that happen from the omnibox.
+     * @param preference The Location preference to modify.
+     */
+    private void updateLocationPreferenceForXGeo(Preference preference) {
+        ListPreference listPreference = (ListPreference) preference;
+        Resources res = getResources();
+        listPreference.setEntries(new String[] {
+                res.getString(R.string.website_settings_permissions_allow_dse),
+                res.getString(ContentSettingsResources.getSiteSummary(ContentSetting.BLOCK)),
+        });
+        listPreference.setEntryValues(new String[] {
+                ContentSetting.DEFAULT.toString(),
+                ContentSetting.BLOCK.toString(),
+        });
+        listPreference.setValueIndex(0);
     }
 
     /**
@@ -452,7 +520,7 @@ public class SingleWebsitePreferences extends PreferenceFragment
         Drawable icon = ApiCompatibilityUtils.getDrawable(getResources(),
                 ContentSettingsResources.getIcon(contentType));
         icon.mutate();
-        int disabledColor = getResources().getColor(
+        int disabledColor = ApiCompatibilityUtils.getColor(getResources(),
                 R.color.primary_text_disabled_material_light);
         icon.setColorFilter(disabledColor, PorterDuff.Mode.SRC_IN);
         return icon;
@@ -468,6 +536,8 @@ public class SingleWebsitePreferences extends PreferenceFragment
                 return ContentSettingsType.CONTENT_SETTINGS_TYPE_FULLSCREEN;
             case PREF_JAVASCRIPT_PERMISSION:
                 return ContentSettingsType.CONTENT_SETTINGS_TYPE_JAVASCRIPT;
+            case PREF_KEYGEN_PERMISSION:
+                return ContentSettingsType.CONTENT_SETTINGS_TYPE_KEYGEN;
             case PREF_LOCATION_ACCESS:
                 return ContentSettingsType.CONTENT_SETTINGS_TYPE_GEOLOCATION;
             case PREF_MIC_CAPTURE_PERMISSION:
@@ -509,14 +579,15 @@ public class SingleWebsitePreferences extends PreferenceFragment
 
     private void popBackIfNoSettings() {
         if (!hasPermissionsPreferences() && !hasUsagePreferences()) {
-            getActivity().finish();
+            if (getActivity() != null) {
+                getActivity().finish();
+            }
         }
     }
 
     @Override
     public boolean onPreferenceChange(Preference preference, Object newValue) {
-        ContentSetting permission =
-                ContentSetting.fromString((String) newValue);
+        ContentSetting permission = ContentSetting.fromString((String) newValue);
         if (PREF_CAMERA_CAPTURE_PERMISSION.equals(preference.getKey())) {
             mSite.setCameraPermission(permission);
         } else if (PREF_COOKIES_PERMISSION.equals(preference.getKey())) {
@@ -525,6 +596,8 @@ public class SingleWebsitePreferences extends PreferenceFragment
             mSite.setFullscreenPermission(permission);
         } else if (PREF_JAVASCRIPT_PERMISSION.equals(preference.getKey())) {
             mSite.setJavaScriptPermission(permission);
+        } else if (PREF_KEYGEN_PERMISSION.equals(preference.getKey())) {
+            mSite.setKeygenPermission(permission);
         } else if (PREF_LOCATION_ACCESS.equals(preference.getKey())) {
             mSite.setGeolocationPermission(permission);
         } else if (PREF_MIC_CAPTURE_PERMISSION.equals(preference.getKey())) {
@@ -537,12 +610,8 @@ public class SingleWebsitePreferences extends PreferenceFragment
             mSite.setProtectedMediaIdentifierPermission(permission);
         } else if (PREF_PUSH_NOTIFICATIONS_PERMISSION.equals(preference.getKey())) {
             mSite.setPushNotificationPermission(permission);
-        } else {
-            return true;
         }
 
-        int index = permission == ContentSetting.ALLOW ? 0 : 1;
-        preference.setSummary(mListPreferenceSummaries[index]);
         return true;
     }
 
@@ -575,17 +644,18 @@ public class SingleWebsitePreferences extends PreferenceFragment
         }
 
         // Clear the permissions.
-        mSite.setCameraPermission(null);
-        mSite.setCookiePermission(null);
+        mSite.setCameraPermission(ContentSetting.DEFAULT);
+        mSite.setCookiePermission(ContentSetting.DEFAULT);
         WebsitePreferenceBridge.nativeClearCookieData(mSite.getAddress().getOrigin());
-        mSite.setFullscreenPermission(null);
-        mSite.setGeolocationPermission(null);
-        mSite.setJavaScriptPermission(null);
-        mSite.setMicrophonePermission(null);
-        mSite.setMidiPermission(null);
-        mSite.setPopupPermission(null);
-        mSite.setProtectedMediaIdentifierPermission(null);
-        mSite.setPushNotificationPermission(null);
+        mSite.setFullscreenPermission(ContentSetting.DEFAULT);
+        mSite.setGeolocationPermission(ContentSetting.DEFAULT);
+        mSite.setJavaScriptPermission(ContentSetting.DEFAULT);
+        mSite.setKeygenPermission(ContentSetting.DEFAULT);
+        mSite.setMicrophonePermission(ContentSetting.DEFAULT);
+        mSite.setMidiPermission(ContentSetting.DEFAULT);
+        mSite.setPopupPermission(ContentSetting.DEFAULT);
+        mSite.setProtectedMediaIdentifierPermission(ContentSetting.DEFAULT);
+        mSite.setPushNotificationPermission(ContentSetting.DEFAULT);
 
         // Clear the storage and finish the activity if necessary.
         if (mSite.getTotalUsage() > 0) {

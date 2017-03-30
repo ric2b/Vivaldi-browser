@@ -4,66 +4,72 @@
 
 /**
  * @fileoverview
- * 'cr-settings-internet-page' is the settings page containing internet
+ * 'settings-internet-page' is the settings page containing internet
  * settings.
  *
  * Example:
  *
  *    <core-animated-pages>
- *      <cr-settings-internet-page prefs='{{prefs}}'>
- *      </cr-settings-internet-page>
+ *      <settings-internet-page prefs='{{prefs}}'>
+ *      </settings-internet-page>
  *      ... other pages ...
  *    </core-animated-pages>
  *
  * @group Chrome Settings Elements
- * @element cr-settings-internet-page
+ * @element settings-internet-page
  */
 Polymer({
-  is: 'cr-settings-internet-page',
+  is: 'settings-internet-page',
 
   properties: {
     /**
-     * ID of the page.
+     * The current active route.
      */
-    PAGE_ID: {
-      type: String,
-      value: 'internet',
-      readOnly: true
+    currentRoute: {
+      type: Object,
+      notify: true,
     },
 
     /**
-     * Route for the page.
+     * The network GUID for the detail subpage.
      */
-    route: {
+    detailGuid: {
       type: String,
-      value: ''
     },
 
     /**
-     * Whether the page is a subpage.
+     * The network type for the known networks subpage.
      */
-    subpage: {
-      type: Boolean,
-      value: false,
-      readOnly: true
+    knownNetworksType: {
+      type: String,
     },
 
     /**
-     * Title for the page header and navigation menu.
+     * Interface for networkingPrivate calls. May be overriden by tests.
+     * @type {NetworkingPrivate}
      */
-    pageTitle: {
-      type: String,
-      value: function() { return loadTimeData.getString('internetPageTitle'); }
-    },
-
-    /**
-     * Name of the 'core-icon' to show. TODO(stevenjb): Update this with the
-     * icon for the active internet connection.
-     */
-    icon: {
-      type: String,
-      value: 'settings-ethernet',
-      readOnly: true
+    networkingPrivate: {
+      type: Object,
+      value: chrome.networkingPrivate,
     },
   },
+
+  /**
+   * @param {!{detail: !CrOnc.NetworkStateProperties}} event
+   * @private
+   */
+  onShowDetail_: function(event) {
+    this.detailGuid = event.detail.GUID;
+    this.$.pages.setSubpageChain(['network-detail']);
+  },
+
+  /**
+   * @param {!{detail: {type: string}}} event
+   * @private
+   */
+  onShowKnownNetworks_: function(event) {
+    this.knownNetworksType = event.detail.type;
+    this.$.pages.setSubpageChain(['known-networks']);
+  },
+
 });

@@ -1,0 +1,42 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# LibFuzzer is a LLVM tool for coverage-guided fuzz testing.
+# See http://www.chromium.org/developers/testing/libfuzzer
+#
+# To enable libfuzzer, 'use_libfuzzer' GN option should be set to true.
+
+import("//build/config/features.gni")
+import("//build/config/sanitizers/sanitizers.gni")
+
+static_library("libfuzzer_main") {
+  # libfuzzer should be compiled without coverage (infinite loop in trace_cmp).
+  configs -= [ "//build/config/sanitizers:default_sanitizer_coverage_flags" ]
+
+  sources = []
+  if (use_libfuzzer) {
+    sources += [
+      "../../third_party/llvm/lib/Fuzzer/FuzzerCrossOver.cpp",
+      "../../third_party/llvm/lib/Fuzzer/FuzzerDriver.cpp",
+      "../../third_party/llvm/lib/Fuzzer/FuzzerFlags.def",
+      "../../third_party/llvm/lib/Fuzzer/FuzzerIO.cpp",
+      "../../third_party/llvm/lib/Fuzzer/FuzzerInterface.cpp",
+      "../../third_party/llvm/lib/Fuzzer/FuzzerLoop.cpp",
+      "../../third_party/llvm/lib/Fuzzer/FuzzerMain.cpp",
+      "../../third_party/llvm/lib/Fuzzer/FuzzerMutate.cpp",
+      "../../third_party/llvm/lib/Fuzzer/FuzzerSHA1.cpp",
+      "../../third_party/llvm/lib/Fuzzer/FuzzerSanitizerOptions.cpp",
+      "../../third_party/llvm/lib/Fuzzer/FuzzerTraceState.cpp",
+      "../../third_party/llvm/lib/Fuzzer/FuzzerUtil.cpp",
+    ]
+  } else if (use_drfuzz) {
+    sources += [ "drfuzz_main.cc" ]
+  }
+}
+
+# Noop config used to tag fuzzer tests excluded from clusterfuzz.
+# Libfuzzer build bot uses this to filter out targets while
+# building an archive for clusterfuzz.
+config("no_clusterfuzz") {
+}

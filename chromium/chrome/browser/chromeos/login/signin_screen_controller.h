@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_CHROMEOS_LOGIN_SIGNIN_SCREEN_CONTROLLER_H_
 #define CHROME_BROWSER_CHROMEOS_LOGIN_SIGNIN_SCREEN_CONTROLLER_H_
 
+#include "base/macros.h"
 #include "chrome/browser/chromeos/login/screens/gaia_screen.h"
 #include "chrome/browser/chromeos/login/screens/user_selection_screen.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
@@ -13,6 +14,8 @@
 #include "components/user_manager/user.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
+
+class AccountId;
 
 namespace chromeos {
 
@@ -42,26 +45,23 @@ class SignInScreenController : public user_manager::RemoveUserDelegate,
   // Query to send list of users to user selection screen.
   void SendUserList();
 
-  // Provide current list of users on user selection screen.
-  const user_manager::UserList& GetUsers();
-
   // Runs OAauth token validity check.
-  void CheckUserStatus(const std::string& user_id);
+  void CheckUserStatus(const AccountId& account_id);
 
   // Query to remove user with specified id.
   // TODO(antrim): move to user selection screen handler.
-  void RemoveUser(const std::string& user_id);
+  void RemoveUser(const AccountId& account_id);
 
+ private:
   // user_manager::RemoveUserDelegate implementation:
-  void OnBeforeUserRemoved(const std::string& username) override;
-  void OnUserRemoved(const std::string& username) override;
+  void OnBeforeUserRemoved(const AccountId& account_id) override;
+  void OnUserRemoved(const AccountId& account_id) override;
 
   // content::NotificationObserver implementation.
   void Observe(int type,
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override;
 
- private:
   static SignInScreenController* instance_;
 
   OobeDisplay* oobe_display_;

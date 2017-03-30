@@ -3,10 +3,14 @@
 # found in the LICENSE file.
 {
   'variables': {
+    # Apply Chrome-specific grit settings to all of this file.
+    # The advantage is that one entry here applies to the entire file.
+    # The caveat is these variables cannot be merged with other variable
+    # dictionaries in more inner scopes. If the variable should be merged,
+    # consider putting them in a gypi file and including it at the right scope
+    # instead. e.g. with chrome_grit_action.gypi.
     'grit_out_dir': '<(SHARED_INTERMEDIATE_DIR)/chrome',
-    'about_credits_file': '<(SHARED_INTERMEDIATE_DIR)/about_credits.html',
     'additional_modules_list_file': '<(SHARED_INTERMEDIATE_DIR)/chrome/browser/internal/additional_modules_list.txt',
-    'omnibox_mojom_file': '<(SHARED_INTERMEDIATE_DIR)/chrome/browser/ui/webui/omnibox/omnibox.mojom.js',
   },
   'targets': [
     {
@@ -23,7 +27,7 @@
           'variables': {
             'grit_grd_file': 'browser/resources/memory_internals_resources.grd',
           },
-          'includes': [ '../build/grit_action.gypi' ],
+          'includes': [ 'chrome_grit_action.gypi' ],
         },
         {
           # GN version: //chrome/browser/resources:net_internals_resources
@@ -31,7 +35,7 @@
           'variables': {
             'grit_grd_file': 'browser/resources/net_internals_resources.grd',
           },
-          'includes': [ '../build/grit_action.gypi' ],
+          'includes': [ 'chrome_grit_action.gypi' ],
         },
         {
           # GN version: //chrome/browser/resources:invalidations_resources
@@ -39,7 +43,7 @@
           'variables': {
             'grit_grd_file': 'browser/resources/invalidations_resources.grd',
             },
-          'includes': ['../build/grit_action.gypi' ],
+          'includes': ['chrome_grit_action.gypi' ],
         },
         {
           # GN version: //chrome/browser/resources:password_manager_internals_resources
@@ -47,7 +51,15 @@
           'variables': {
             'grit_grd_file': 'browser/resources/password_manager_internals_resources.grd',
           },
-          'includes': [ '../build/grit_action.gypi' ],
+          'includes': [ 'chrome_grit_action.gypi' ],
+        },
+        {
+          # GN version: //chrome/browser/resources:policy_resources
+          'action_name': 'generate_policy_resources',
+          'variables': {
+            'grit_grd_file': 'browser/resources/md_policy/policy_resources.grd',
+          },
+          'includes': [ 'chrome_grit_action.gypi' ],
         },
         {
           # GN version: //chrome/browser/resources:signin_internals_resources
@@ -55,15 +67,7 @@
           'variables': {
             'grit_grd_file': 'browser/resources/signin_internals_resources.grd',
             },
-          'includes': ['../build/grit_action.gypi' ],
-        },
-        {
-          # GN version: //chrome/browser/resources:sync_internals_resources
-          'action_name': 'generate_sync_internals_resources',
-          'variables': {
-            'grit_grd_file': 'browser/resources/sync_internals_resources.grd',
-          },
-          'includes': [ '../build/grit_action.gypi' ],
+          'includes': ['chrome_grit_action.gypi' ],
         },
         {
           # GN version: //chrome/browser/resources:translate_internals_resources
@@ -71,7 +75,7 @@
           'variables': {
             'grit_grd_file': 'browser/resources/translate_internals_resources.grd',
           },
-          'includes': [ '../build/grit_action.gypi' ],
+          'includes': [ 'chrome_grit_action.gypi' ],
         },
       ],
       'includes': [ '../build/grit_target.gypi' ],
@@ -81,7 +85,6 @@
             '../components/components_resources.gyp:components_resources',
             '../content/browser/devtools/devtools_resources.gyp:devtools_resources',
             '../content/browser/tracing/tracing_resources.gyp:tracing_resources',
-            'browser/devtools/webrtc_device_provider_resources.gyp:webrtc_device_provider_resources',
           ],
           'actions': [
             {
@@ -90,7 +93,7 @@
               'variables': {
                 'grit_grd_file': 'browser/resources/component_extension_resources.grd',
               },
-              'includes': [ '../build/grit_action.gypi' ],
+              'includes': [ 'chrome_grit_action.gypi' ],
             },
             {
               # GN version: //chrome/browser/resources:options_resources
@@ -98,7 +101,7 @@
               'variables': {
                 'grit_grd_file': 'browser/resources/options_resources.grd',
               },
-              'includes': [ '../build/grit_action.gypi' ],
+              'includes': [ 'chrome_grit_action.gypi' ],
             },
             {
               # GN version: //chrome/browser/resources:settings_resources
@@ -106,7 +109,7 @@
               'variables': {
                 'grit_grd_file': 'browser/resources/settings/settings_resources.grd',
               },
-              'includes': [ '../build/grit_action.gypi' ],
+              'includes': [ 'chrome_grit_action.gypi' ],
             },
           ],
           'copies': [
@@ -132,7 +135,7 @@
               'variables': {
                 'grit_grd_file': 'browser/resources/quota_internals_resources.grd',
               },
-              'includes': [ '../build/grit_action.gypi' ],
+              'includes': [ 'chrome_grit_action.gypi' ],
             },
             {
               # GN version: //chrome/browser/resources:sync_file_system_internals_resources
@@ -140,7 +143,7 @@
               'variables': {
                 'grit_grd_file': 'browser/resources/sync_file_system_internals_resources.grd',
               },
-              'includes': [ '../build/grit_action.gypi' ],
+              'includes': [ 'chrome_grit_action.gypi' ],
             },
           ],
         }],
@@ -189,9 +192,9 @@
       'target_name': 'chrome_resources',
       'type': 'none',
       'dependencies': [
-        'about_credits',
         'chrome_internal_resources_gen',
         'chrome_web_ui_mojo_bindings.gyp:web_ui_mojo_bindings',
+        '<(VIVALDI)/app/vivaldi_resources.gyp:vivaldi_combined_resources',
       ],
       'actions': [
         {
@@ -200,12 +203,11 @@
           'variables': {
             'grit_grd_file': 'browser/browser_resources.grd',
             'grit_additional_defines': [
-              '-E', 'about_credits_file=<(about_credits_file)',
               '-E', 'additional_modules_list_file=<(additional_modules_list_file)',
-              '-E', 'omnibox_mojom_file=<(omnibox_mojom_file)',
+              '-E', 'root_gen_dir=<(SHARED_INTERMEDIATE_DIR)',
             ],
           },
-          'includes': [ '../build/grit_action.gypi' ],
+          'includes': [ 'chrome_grit_action.gypi' ],
         },
         {
           # GN version: //chrome/common:resources
@@ -213,15 +215,16 @@
           'variables': {
             'grit_grd_file': 'common/common_resources.grd',
           },
-          'includes': [ '../build/grit_action.gypi' ],
+          'includes': [ 'chrome_grit_action.gypi' ],
         },
         {
           # GN version: //chrome/renderer:resources
           'action_name': 'generate_renderer_resources',
+          'disabled':1,
           'variables': {
             'grit_grd_file': 'renderer/resources/renderer_resources.grd',
           },
-          'includes': [ '../build/grit_action.gypi' ],
+          'includes': [ 'chrome_grit_action.gypi' ],
         },
       ],
       'conditions': [
@@ -233,7 +236,7 @@
               'variables': {
                 'grit_grd_file': 'common/extensions_api_resources.grd',
               },
-              'includes': [ '../build/grit_action.gypi' ],
+              'includes': [ 'chrome_grit_action.gypi' ],
             }
           ],
         }],
@@ -249,85 +252,139 @@
       # GN version: //chrome:strings
       'target_name': 'chrome_strings',
       'type': 'none',
+      'dependencies': [
+        '<(VIVALDI)/app/vivaldi_resources.gyp:vivaldi_combined_resources',
+      ],
       'actions': [
         {
           # GN version: //chrome/app/resources:locale_settings
           'action_name': 'generate_locale_settings',
+          'disabled': 1,
           'variables': {
             'grit_grd_file': 'app/resources/locale_settings.grd',
           },
-          'includes': [ '../build/grit_action.gypi' ],
+          'includes': [ 'chrome_grit_action.gypi' ],
         },
         {
           # GN version: //chrome/app:chromium_strings
           'action_name': 'generate_chromium_strings',
+          'disabled': 1,
           'variables': {
             'grit_grd_file': 'app/chromium_strings.grd',
           },
-          'includes': [ '../build/grit_action.gypi' ],
+          'includes': [ 'chrome_grit_action.gypi' ],
         },
         {
           # GN version: //chrome/app:generated_resources
           'action_name': 'generate_generated_resources',
+          'disabled':1,
           'variables': {
             'grit_grd_file': 'app/generated_resources.grd',
           },
-          'includes': [ '../build/grit_action.gypi' ],
+          'includes': [ 'chrome_grit_action.gypi' ],
         },
-      ],
-      'conditions': [
-        ['branding=="vivaldi"', {
-          'actions': [
-            {
-              # GN version: //chrome/app:google_chrome_strings
-              'action_name': 'generate_google_chrome_strings',
-              'variables': {
-                'grit_grd_file': 'app/vivaldi_strings.grd',
-              },
-              'includes': [ '../build/grit_action.gypi' ],
-            },
-          ]
-        }, {  # branding!="vivaldi"
-          'actions': {
-            # GN version: //chrome/app:google_chrome_strings
-            'action_name': 'generate_google_chrome_strings',
-            'variables': {
-              'grit_grd_file': 'app/google_chrome_strings.grd',
-            },
-            'includes': [ '../build/grit_action.gypi' ],
+        {
+          # GN version: //chrome/app:google_chrome_strings
+          'action_name': 'generate_google_chrome_strings',
+          'disabled':1,
+          'variables': {
+            'grit_grd_file': 'app/google_chrome_strings.grd',
           },
-        }],
+          'includes': [ 'chrome_grit_action.gypi' ],
+        },
+        {
+          # GN version: //chrome/app:settings_strings
+          'action_name': 'generate_settings_strings',
+          'variables': {
+            'grit_grd_file': 'app/settings_strings.grd',
+          },
+          'includes': [ 'chrome_grit_action.gypi' ],
+        },
+        {
+          # GN version: //chrome/app:settings_chromium_strings
+          'action_name': 'generate_settings_chromium_strings',
+          'variables': {
+            'grit_grd_file': 'app/settings_chromium_strings.grd',
+          },
+          'includes': [ 'chrome_grit_action.gypi' ],
+        },
+        {
+          # GN version: //chrome/app:settings_google_chrome_strings
+          'action_name': 'generate_settings_google_chrome_strings',
+          'variables': {
+            'grit_grd_file': 'app/settings_google_chrome_strings.grd',
+          },
+          'includes': [ 'chrome_grit_action.gypi' ],
+        },
       ],
     },
     {
-      # GN version: //chrome/app:make_generated_resources_map
-      'target_name': 'chrome_strings_map',
+      # GN version: //chrome/browser/metrics/variations:chrome_ui_string_overrider_factory_gen_sources
+      'target_name': 'make_chrome_ui_string_overrider_factory',
       'type': 'none',
-      'dependencies': [ 'chrome_strings', ],
+      'hard_dependency': 1,
+      'dependencies': [
+        'chrome_strings',
+        '../components/components_strings.gyp:components_strings',
+      ],
       'actions': [
         {
-          'action_name': 'generate_resources_map',
+          'action_name': 'generate_ui_string_overrider',
           'inputs': [
-            'browser/metrics/variations/generate_resources_map.py',
-            '<(grit_out_dir)/grit/generated_resources.h'
+            '../components/variations/service/generate_ui_string_overrider.py',
+            '<(grit_out_dir)/grit/chromium_strings.h',
+	    '<(grit_out_dir)/grit/generated_resources.h',
+            '<(grit_out_dir)/grit/google_chrome_strings.h',
+            '<(grit_out_dir)/grit/settings_chromium_strings.h',
+            '<(grit_out_dir)/grit/settings_google_chrome_strings.h',
+            '<(grit_out_dir)/grit/settings_strings.h',
+            '<(SHARED_INTERMEDIATE_DIR)/components/strings/grit/components_chromium_strings.h',
+            '<(SHARED_INTERMEDIATE_DIR)/components/strings/grit/components_google_chrome_strings.h',
+	    '<(SHARED_INTERMEDIATE_DIR)/components/strings/grit/components_strings.h'
           ],
           'outputs': [
-            '<(SHARED_INTERMEDIATE_DIR)/chrome/browser/metrics/variations/generated_resources_map.cc',
+            '<(SHARED_INTERMEDIATE_DIR)/chrome/browser/metrics/variations/ui_string_overrider_factory.cc',
+            '<(SHARED_INTERMEDIATE_DIR)/chrome/browser/metrics/variations/ui_string_overrider_factory.h',
           ],
           'action': [
             'python',
-            'browser/metrics/variations/generate_resources_map.py',
-            '<(grit_out_dir)/grit/generated_resources.h',
-            '<(SHARED_INTERMEDIATE_DIR)/chrome/browser/metrics/variations/generated_resources_map.cc'
+            '../components/variations/service/generate_ui_string_overrider.py',
+            '-N', 'chrome_variations',
+            '-o', '<(SHARED_INTERMEDIATE_DIR)',
+            '-S', 'chrome/browser/metrics/variations/ui_string_overrider_factory.cc',
+            '-H', 'chrome/browser/metrics/variations/ui_string_overrider_factory.h',
+            '<(grit_out_dir)/grit/chromium_strings.h',
+	    '<(grit_out_dir)/grit/generated_resources.h',
+            '<(grit_out_dir)/grit/google_chrome_strings.h',
+            '<(grit_out_dir)/grit/settings_chromium_strings.h',
+            '<(grit_out_dir)/grit/settings_google_chrome_strings.h',
+            '<(grit_out_dir)/grit/settings_strings.h',
+            '<(SHARED_INTERMEDIATE_DIR)/components/strings/grit/components_chromium_strings.h',
+            '<(SHARED_INTERMEDIATE_DIR)/components/strings/grit/components_google_chrome_strings.h',
+	    '<(SHARED_INTERMEDIATE_DIR)/components/strings/grit/components_strings.h'
           ],
           'message': 'Generating generated resources map.',
         }
       ],
     },
     {
+      # GN version: //chrome/browser/metrics/variations:chrome_ui_string_overrider_factory
+      'target_name': 'chrome_ui_string_overrider_factory',
+      'type': 'static_library',
+      'dependencies': [
+        '../components/components.gyp:variations_service',
+        'make_chrome_ui_string_overrider_factory',
+      ],
+      'sources': [
+        '<(SHARED_INTERMEDIATE_DIR)/chrome/browser/metrics/variations/ui_string_overrider_factory.cc',
+        '<(SHARED_INTERMEDIATE_DIR)/chrome/browser/metrics/variations/ui_string_overrider_factory.h',
+      ],
+    },
+    {
       # GN version: //chrome/app/resources:platform_locale_settings
       'target_name': 'platform_locale_settings',
       'type': 'none',
+      'dependencies': [ '<(VIVALDI)/app/vivaldi_resources.gyp:content_strings' ],
       'variables': {
         'conditions': [
           ['OS=="win"', {
@@ -358,10 +415,11 @@
       'actions': [
         {
           'action_name': 'generate_platform_locale_settings',
+          'disabled': 1,
           'variables': {
             'grit_grd_file': '<(platform_locale_settings_grd)',
           },
-          'includes': [ '../build/grit_action.gypi' ],
+          'includes': [ 'chrome_grit_action.gypi' ],
         },
       ],
       'includes': [ '../build/grit_target.gypi' ],
@@ -373,14 +431,16 @@
       'dependencies': [
         '../ui/resources/ui_resources.gyp:ui_resources',
         'chrome_unscaled_resources',
+        '<(VIVALDI)/app/vivaldi_resources.gyp:vivaldi_combined_resources',
       ],
       'actions': [
         {
           'action_name': 'generate_theme_resources',
+          'disabled':1,
           'variables': {
-            'grit_grd_file': 'app/theme/vivaldi_theme_resources.grd',
+            'grit_grd_file': 'app/theme/theme_resources.grd',
           },
-          'includes': [ '../build/grit_action.gypi' ],
+          'includes': [ 'chrome_grit_action.gypi' ],
         },
       ],
       'includes': [ '../build/grit_target.gypi' ],
@@ -392,6 +452,7 @@
       'dependencies': [
         'chrome_extra_resources',
         'packed_resources',
+        '<@(packed_extra_resources_deps)'
       ],
       'actions': [
         {
@@ -417,7 +478,7 @@
       # GN version: //chrome:packed_resources
       'target_name': 'packed_resources',
       'type': 'none',
-      'dependencies': [
+      'dependencies': [  # Update duplicate logic in repack_locales.py
         # MSVS needs the dependencies explictly named, Make is able to
         # derive the dependencies from the output files.
         'chrome_resources',
@@ -428,6 +489,7 @@
         '<(DEPTH)/net/net.gyp:net_resources',
         '<(DEPTH)/ui/resources/ui_resources.gyp:ui_resources',
         '<(DEPTH)/ui/strings/ui_strings.gyp:ui_strings',
+        '<@(packed_extra_strings_deps)',
       ],
       'actions': [
         {
@@ -435,6 +497,7 @@
           'action_name': 'repack_locales_pack',
           'variables': {
             'pak_locales': '<(locales)',
+            'repack_extra_flags': [ '<@(repack_extra_strings)' ],
           },
           'includes': ['chrome_repack_locales.gypi']
         },
@@ -443,6 +506,7 @@
           'action_name': 'repack_pseudo_locales_pack',
           'variables': {
             'pak_locales': '<(pseudo_locales)',
+            'repack_extra_flags': [ '<@(repack_extra_strings)' ],
           },
           'includes': ['chrome_repack_locales.gypi']
         },
@@ -459,16 +523,17 @@
           'includes': ['chrome_repack_chrome_material_200_percent.gypi']
         },
       ],
-      'conditions': [
+      'conditions': [  # GN version: chrome_repack_locales.gni template("_repack_one_locale")
         ['OS != "ios"', {
-          'dependencies': [
+          'dependencies': [  # Update duplicate logic in repack_locales.py
             '<(DEPTH)/content/app/resources/content_resources.gyp:content_resources',
             '<(DEPTH)/content/app/strings/content_strings.gyp:content_strings',
+            '<(DEPTH)/device/bluetooth/bluetooth_strings.gyp:bluetooth_strings',
             '<(DEPTH)/third_party/WebKit/public/blink_resources.gyp:blink_resources',
           ],
         }, {  # else
-          'dependencies': [
-            '<(DEPTH)/ios/chrome/ios_chrome_resources.gyp:ios_strings_resources_gen',
+          'dependencies': [  # Update duplicate logic in repack_locales.py
+            '<(DEPTH)/ios/chrome/ios_chrome_resources.gyp:ios_strings_gen',
           ],
           'actions': [
             {
@@ -477,7 +542,7 @@
           ],
         }],
         ['use_ash==1', {
-          'dependencies': [
+          'dependencies': [  # Update duplicate logic in repack_locales.py
              '<(DEPTH)/ash/ash_resources.gyp:ash_resources',
              '<(DEPTH)/ash/ash_strings.gyp:ash_strings',
           ],
@@ -488,21 +553,25 @@
           ],
         }],
         ['chromeos==1', {
-          'dependencies': [
+          'dependencies': [  # Update duplicate logic in repack_locales.py
             '<(DEPTH)/remoting/remoting.gyp:remoting_resources',
             '<(DEPTH)/ui/chromeos/ui_chromeos.gyp:ui_chromeos_resources',
             '<(DEPTH)/ui/chromeos/ui_chromeos.gyp:ui_chromeos_strings',
           ],
         }],
         ['enable_autofill_dialog==1 and OS!="android"', {
-          'dependencies': [
+          'dependencies': [  # Update duplicate logic in repack_locales.py
             '<(DEPTH)/third_party/libaddressinput/libaddressinput.gyp:libaddressinput_strings',
           ],
         }],
         ['enable_extensions==1', {
-          'dependencies': [
-            '<(DEPTH)/device/bluetooth/bluetooth_strings.gyp:device_bluetooth_strings',
+          'dependencies': [  # Update duplicate logic in repack_locales.py
             '<(DEPTH)/extensions/extensions_strings.gyp:extensions_strings',
+          ],
+        }],
+        ['enable_app_list==1', {
+          'dependencies': [
+             '<(DEPTH)/ui/app_list/resources/app_list_resources.gyp:app_list_resources',
           ],
         }],
         ['OS != "mac" and OS != "ios"', {
@@ -549,19 +618,6 @@
                 },
               ],
             }],
-#            ['branding=="vivaldi"', {
-#              'copies': [
-#                {
-#                  # This location is for the Windows and Linux builds. For
-#                  # Windows, the chrome.release file ensures that these files
-#                  # are copied into the installer. Note that we have a separate
-#                  # section in chrome_dll.gyp to copy these files for Mac, as it
-#                  # needs to be dropped inside the framework.
-#                  'destination': '<(PRODUCT_DIR)/default_apps',
-#                  'files': ['<@(default_apps_list)']
-#                },
-#              ],
-#            }],
             ['enable_hidpi == 1', {
               'copies': [
                 {
@@ -577,7 +633,7 @@
                 {
                   'destination': '<(PRODUCT_DIR)',
                   'files': [
-                    '<(SHARED_INTERMEDIATE_DIR)/repack/chrome_material_100_percent.pak',
+                    '<(SHARED_INTERMEDIATE_DIR)/repack/vivaldi_material_100_percent.pak',
                   ],
                 },
               ],
@@ -587,7 +643,7 @@
                 {
                   'destination': '<(PRODUCT_DIR)',
                   'files': [
-                    '<(SHARED_INTERMEDIATE_DIR)/repack/chrome_material_200_percent.pak',
+                    '<(SHARED_INTERMEDIATE_DIR)/repack/vivaldi_material_200_percent.pak',
                   ],
                 },
               ],
@@ -599,14 +655,15 @@
     {
       # GN version: //chrome/app/theme:chrome_unscaled_resources
       'target_name': 'chrome_unscaled_resources',
+      'disabled':1,
       'type': 'none',
       'actions': [
         {
           'action_name': 'generate_chrome_unscaled_resources',
           'variables': {
-            'grit_grd_file': 'app/theme/vivaldi_unscaled_resources.grd',
+            'grit_grd_file': 'app/theme/chrome_unscaled_resources.grd',
           },
-          'includes': [ '../build/grit_action.gypi' ],
+          'includes': [ 'chrome_grit_action.gypi' ],
         },
       ],
       'includes': [ '../build/grit_target.gypi' ],
@@ -621,7 +678,22 @@
           'variables': {
             'grit_grd_file': 'browser/resources/options_test_resources.grd',
           },
-          'includes': [ '../build/grit_action.gypi' ],
+          'includes': [ 'chrome_grit_action.gypi' ],
+        },
+      ],
+      'includes': [ '../build/grit_target.gypi' ],
+    },
+    {
+      # GN version: //chrome/test/data/resources:webui_test_resources
+      'target_name': 'webui_test_resources',
+      'type': 'none',
+      'actions': [
+        {
+          'action_name': 'generate_webui_test_resources',
+          'variables': {
+            'grit_grd_file': 'test/data/webui_test_resources.grd',
+          },
+          'includes': [ 'chrome_grit_action.gypi' ],
         },
       ],
       'includes': [ '../build/grit_target.gypi' ],
@@ -632,6 +704,7 @@
       'type': 'none',
       'dependencies': [
         'options_test_resources',
+        'webui_test_resources',
       ],
       'actions': [
         {
@@ -639,42 +712,11 @@
           'variables': {
             'pak_inputs': [
               '<(SHARED_INTERMEDIATE_DIR)/chrome/options_test_resources.pak',
+              '<(SHARED_INTERMEDIATE_DIR)/chrome/webui_test_resources.pak',
             ],
             'pak_output': '<(PRODUCT_DIR)/browser_tests.pak',
           },
           'includes': [ '../build/repack_action.gypi' ],
-        },
-      ],
-    },
-    {
-      # GN version: //chrome/browser:about_credits
-      'target_name': 'about_credits',
-      'type': 'none',
-      'actions': [
-        {
-          'variables': {
-            'generator_path': '../tools/licenses.py',
-          },
-          'action_name': 'generate_about_credits',
-          'inputs': [
-            # TODO(phajdan.jr): make licenses.py print license input files so
-            # about:credits gets rebuilt when one changes.
-            '<(generator_path)',
-            '../tools/licenses_vivaldi.py',
-            '../tools/licenses_vivaldi_texts.py',
-            'browser/resources/about_credits.tmpl',
-            'browser/resources/about_credits_entry.tmpl',
-          ],
-          'outputs': [
-            '<(about_credits_file)',
-          ],
-          'hard_dependency': 1,
-          'action': ['python',
-                     '<(generator_path)',
-                     'credits',
-                     '<(about_credits_file)',
-          ],
-          'message': 'Generating about:credits',
         },
       ],
     },

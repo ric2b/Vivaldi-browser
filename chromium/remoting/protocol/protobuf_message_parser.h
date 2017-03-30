@@ -5,6 +5,8 @@
 #ifndef REMOTING_PROTOCOL_PROTOBUF_MESSAGE_PARSER_H_
 #define REMOTING_PROTOCOL_PROTOBUF_MESSAGE_PARSER_H_
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/memory/scoped_ptr.h"
@@ -48,7 +50,7 @@ class ProtobufMessageParser {
       LOG(WARNING) << "Received message that is not a valid protocol buffer.";
     } else {
       DCHECK_EQ(stream.position(), buffer->total_bytes());
-      message_received_callback_.Run(message.Pass(), done_task);
+      message_received_callback_.Run(std::move(message), done_task);
     }
   }
 

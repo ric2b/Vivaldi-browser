@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <windows.h>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "sandbox/win/src/interception_internal.h"
 #include "sandbox/win/src/internal_types.h"
 #include "sandbox/win/src/sandbox_utils.h"
@@ -24,6 +24,7 @@ enum Version {
   VERSION_WIN_LAST,  // Indicates error condition.
 };
 
+#if !defined(_WIN64)
 // Whether a process is running under WOW64 (the wrapper that allows 32-bit
 // processes to run on 64-bit versions of Windows).  This will return
 // WOW64_DISABLED for both "32-bit Chrome on 32-bit Windows" and "64-bit
@@ -42,6 +43,7 @@ WOW64Status GetWOW64StatusForCurrentProcess() {
     return WOW64_UNKNOWN;
   return is_wow64 ? WOW64_ENABLED : WOW64_DISABLED;
 }
+#endif  // !defined(_WIN64)
 
 class OSInfo {
  public:
@@ -130,7 +132,9 @@ sandbox::ServiceResolverThunk* GetThunk(bool relaxed) {
   thunk = new sandbox::ServiceResolverThunk(current_process, relaxed);
 #else
   if (GetWOW64StatusForCurrentProcess() == WOW64_ENABLED) {
-    if (os_info.version() >= VERSION_WIN8)
+    if (os_info.version() >= VERSION_WIN10)
+      thunk = new sandbox::Wow64W10ResolverThunk(current_process, relaxed);
+    else if (os_info.version() >= VERSION_WIN8)
       thunk = new sandbox::Wow64W8ResolverThunk(current_process, relaxed);
     else
       thunk = new sandbox::Wow64ResolverThunk(current_process, relaxed);

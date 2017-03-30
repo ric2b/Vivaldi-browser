@@ -4,9 +4,13 @@
 
 #include "components/omnibox/browser/builtin_provider.h"
 
+#include <stddef.h>
+
 #include "base/format_macros.h"
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/autocomplete/chrome_autocomplete_provider_client.h"
 #include "chrome/browser/autocomplete/chrome_autocomplete_scheme_classifier.h"
 #include "chrome/common/url_constants.h"
@@ -26,7 +30,7 @@ class BuiltinProviderTest : public testing::Test {
   struct TestData {
     const base::string16 input;
     const size_t num_results;
-    const GURL output[4];
+    const GURL output[3];
   };
 
   BuiltinProviderTest() : provider_(NULL) {}
@@ -84,7 +88,6 @@ TEST_F(BuiltinProviderTest, TypingScheme) {
   const GURL kURL1 = GURL(chrome::kChromeUIChromeURLsURL);
   const GURL kURL2 = GURL(chrome::kChromeUISettingsURL);
   const GURL kURL3 = GURL(chrome::kChromeUIVersionURL);
-  const GURL kURL4 = GURL(chrome::kChromeUIVivaldSettingsURL);
 
   TestData typing_scheme_cases[] = {
     // Typing an unrelated scheme should give nothing.
@@ -99,22 +102,22 @@ TEST_F(BuiltinProviderTest, TypingScheme) {
     {ASCIIToUTF16("chromee:"), 0, {}},
 
     // Typing a portion of about:// should give the default urls.
-	{kAbout.substr(0, 1),      4, {kURL1, kURL2, kURL4, kURL3} },
-    {ASCIIToUTF16("A"),        4, {kURL1, kURL2, kURL4, kURL3}},
-    {kAbout,                   4, {kURL1, kURL2, kURL4, kURL3}},
-    {kAbout + kSeparator1,     4, {kURL1, kURL2, kURL4, kURL3}},
-    {kAbout + kSeparator2,     4, {kURL1, kURL2, kURL4, kURL3}},
-    {kAbout + kSeparator3,     4, {kURL1, kURL2, kURL4, kURL3}},
-    {ASCIIToUTF16("aBoUT://"), 4, {kURL1, kURL2, kURL4, kURL3}},
+    {kAbout.substr(0, 1),      3, {kURL1, kURL2, kURL3}},
+    {ASCIIToUTF16("A"),        3, {kURL1, kURL2, kURL3}},
+    {kAbout,                   3, {kURL1, kURL2, kURL3}},
+    {kAbout + kSeparator1,     3, {kURL1, kURL2, kURL3}},
+    {kAbout + kSeparator2,     3, {kURL1, kURL2, kURL3}},
+    {kAbout + kSeparator3,     3, {kURL1, kURL2, kURL3}},
+    {ASCIIToUTF16("aBoUT://"), 3, {kURL1, kURL2, kURL3}},
 
     // Typing a portion of chrome:// should give the default urls.
-    {kChrome.substr(0, 1),      4, {kURL1, kURL2, kURL4, kURL3}},
-    {ASCIIToUTF16("C"),         4, {kURL1, kURL2, kURL4, kURL3}},
-    {kChrome,                   4, {kURL1, kURL2, kURL4, kURL3}},
-    {kChrome + kSeparator1,     4, {kURL1, kURL2, kURL4, kURL3}},
-    {kChrome + kSeparator2,     4, {kURL1, kURL2, kURL4, kURL3}},
-    {kChrome + kSeparator3,     4, {kURL1, kURL2, kURL4, kURL3}},
-	{ASCIIToUTF16("ChRoMe://"), 4, {kURL1, kURL2, kURL4, kURL3} },
+    {kChrome.substr(0, 1),      3, {kURL1, kURL2, kURL3}},
+    {ASCIIToUTF16("C"),         3, {kURL1, kURL2, kURL3}},
+    {kChrome,                   3, {kURL1, kURL2, kURL3}},
+    {kChrome + kSeparator1,     3, {kURL1, kURL2, kURL3}},
+    {kChrome + kSeparator2,     3, {kURL1, kURL2, kURL3}},
+    {kChrome + kSeparator3,     3, {kURL1, kURL2, kURL3}},
+    {ASCIIToUTF16("ChRoMe://"), 3, {kURL1, kURL2, kURL3}},
   };
 
   RunTest(typing_scheme_cases, arraysize(typing_scheme_cases));

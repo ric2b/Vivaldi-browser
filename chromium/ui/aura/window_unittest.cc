@@ -4,15 +4,18 @@
 
 #include "ui/aura/window.h"
 
+#include <limits.h>
+
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/focus_change_observer.h"
@@ -1673,10 +1676,11 @@ TEST_F(WindowTest, Property) {
 TEST_F(WindowTest, OwnedProperty) {
   scoped_ptr<Window> w(CreateTestWindowWithId(0, root_window()));
   EXPECT_EQ(NULL, w->GetProperty(kOwnedKey));
+  TestProperty* last_deleted = TestProperty::last_deleted();
   TestProperty* p1 = new TestProperty();
   w->SetProperty(kOwnedKey, p1);
   EXPECT_EQ(p1, w->GetProperty(kOwnedKey));
-  EXPECT_EQ(NULL, TestProperty::last_deleted());
+  EXPECT_EQ(last_deleted, TestProperty::last_deleted());
 
   TestProperty* p2 = new TestProperty();
   w->SetProperty(kOwnedKey, p2);

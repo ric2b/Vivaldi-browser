@@ -5,6 +5,7 @@
 #include "ui/app_list/app_list_switches.h"
 
 #include "base/command_line.h"
+#include "build/build_config.h"
 
 namespace app_list {
 namespace switches {
@@ -17,9 +18,6 @@ const char kCustomLauncherPage[] = "custom-launcher-page";
 // useful when testing the app list or a custom launcher page. It can still be
 // dismissed via the other methods (like the Esc key).
 const char kDisableAppListDismissOnBlur[] = "disable-app-list-dismiss-on-blur";
-
-// If set, Drive apps will not be shown side-by-side with Chrome apps.
-const char kDisableDriveAppsInAppList[] = "disable-drive-apps-in-app-list";
 
 // If set, the app list will be enabled as if enabled from CWS.
 const char kEnableAppList[] = "enable-app-list";
@@ -113,8 +111,7 @@ bool ShouldNotDismissOnBlur() {
 
 bool IsDriveAppsInAppListEnabled() {
 #if defined(OS_CHROMEOS)
-  return !base::CommandLine::ForCurrentProcess()->HasSwitch(
-      kDisableDriveAppsInAppList);
+  return true;
 #else
   return false;
 #endif
@@ -130,7 +127,7 @@ bool IsDriveSearchInChromeLauncherEnabled() {
           kDisableDriveSearchInChromeLauncher))
     return false;
 
-  return false;
+  return true;
 #else
   return false;
 #endif

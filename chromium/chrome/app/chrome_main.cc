@@ -4,7 +4,12 @@
 
 #include "chrome/app/chrome_main_delegate.h"
 
+#include "build/build_config.h"
 #include "content/public/app/content_main.h"
+
+#if defined(VIVALDI_BUILD)
+#include "extraparts/vivaldi_main_delegate.h"
+#endif
 
 #if defined(OS_WIN)
 #include "base/debug/dump_without_crashing.h"
@@ -40,7 +45,11 @@ int ChromeMain(int argc, const char** argv) {
   _set_FMA3_enable(0);
 #endif  // WIN && ARCH_CPU_X86_64
 
+#if defined(VIVALDI_BUILD)
+  VivaldiMainDelegate chrome_main_delegate;
+#else
   ChromeMainDelegate chrome_main_delegate;
+#endif
   content::ContentMainParams params(&chrome_main_delegate);
 
 #if defined(OS_WIN)

@@ -1,0 +1,95 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+
+source_set("browser") {
+  sources = [
+    "profile_sync_components_factory_impl.cc",
+    "profile_sync_components_factory_impl.h",
+    "profile_sync_service.cc",
+    "profile_sync_service.h",
+    "signin_confirmation_helper.cc",
+    "signin_confirmation_helper.h",
+  ]
+
+  deps = [
+    "//base",
+    "//base:prefs",
+    "//components/autofill/core/browser",
+    "//components/autofill/core/common",
+    "//components/browser_sync/common",
+    "//components/dom_distiller/core",
+    "//components/history/core/browser",
+    "//components/invalidation/impl",
+    "//components/invalidation/public",
+    "//components/keyed_service/core",
+    "//components/password_manager/core/browser",
+    "//components/password_manager/sync/browser",
+    "//components/pref_registry",
+    "//components/signin/core/browser",
+    "//components/strings",
+    "//components/sync_bookmarks",
+    "//components/sync_driver",
+    "//components/sync_sessions",
+    "//components/syncable_prefs",
+    "//components/variations",
+    "//components/version_info",
+    "//components/version_info:generate_version_info",
+    "//google_apis",
+    "//net",
+    "//sync",
+    "//ui/base",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [
+    "profile_sync_service_unittest.cc",
+  ]
+
+  deps = [
+    ":browser",
+    "//base",
+    "//base/test:test_support",
+    "//components/browser_sync/common",
+    "//components/dom_distiller/core",
+    "//components/invalidation/impl",
+    "//components/invalidation/public",
+    "//components/signin/core/browser",
+    "//components/signin/core/browser:test_support",
+    "//components/strings",
+    "//components/sync_driver",
+    "//components/sync_driver:test_support",
+    "//components/sync_sessions",
+    "//components/sync_sessions:test_support",
+    "//components/syncable_prefs",
+    "//components/syncable_prefs:test_support",
+    "//components/version_info",
+    "//components/version_info:generate_version_info",
+    "//google_apis",
+    "//net",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//ui/base",
+  ]
+}
+
+source_set("test_support") {
+  testonly = true
+  sources = [
+    "profile_sync_service_mock.cc",
+    "profile_sync_service_mock.h",
+  ]
+
+  deps = [
+    ":browser",
+    "//base",
+    "//components/sync_driver:test_support",
+    "//google_apis",
+    "//testing/gmock",
+  ]
+}

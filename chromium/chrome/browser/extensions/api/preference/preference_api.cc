@@ -4,15 +4,19 @@
 
 #include "chrome/browser/extensions/api/preference/preference_api.h"
 
+#include <stddef.h>
+
 #include <map>
 #include <utility>
 
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/prefs/pref_service.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/api/content_settings/content_settings_service.h"
 #include "chrome/browser/extensions/api/preference/preference_api_constants.h"
@@ -22,7 +26,11 @@
 #include "chrome/browser/net/prediction_options.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
+#include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/content_settings/core/common/pref_names.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
+#include "components/password_manager/core/common/password_manager_pref_names.h"
+#include "components/proxy_config/proxy_config_pref_names.h"
 #include "components/translate/core/common/translate_pref_names.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_source.h"
@@ -71,13 +79,16 @@ const char kConversionErrorMessage[] =
 
 PrefMappingEntry kPrefMapping[] = {
     {"spdy_proxy.enabled",
-     data_reduction_proxy::prefs::kDataReductionProxyEnabled,
+     prefs::kDataSaverEnabled,
      APIPermission::kDataReductionProxy, APIPermission::kDataReductionProxy},
     {"data_reduction.daily_original_length",
      data_reduction_proxy::prefs::kDailyHttpOriginalContentLength,
      APIPermission::kDataReductionProxy, APIPermission::kDataReductionProxy},
     {"data_reduction.daily_received_length",
      data_reduction_proxy::prefs::kDailyHttpReceivedContentLength,
+     APIPermission::kDataReductionProxy, APIPermission::kDataReductionProxy},
+    {"data_usage_reporting.enabled",
+     data_reduction_proxy::prefs::kDataUsageReportingEnabled,
      APIPermission::kDataReductionProxy, APIPermission::kDataReductionProxy},
     {"alternateErrorPagesEnabled", prefs::kAlternateErrorPagesEnabled,
      APIPermission::kPrivacy, APIPermission::kPrivacy},
@@ -94,7 +105,8 @@ PrefMappingEntry kPrefMapping[] = {
      APIPermission::kPrivacy, APIPermission::kPrivacy},
     {"protectedContentEnabled", prefs::kEnableDRM, APIPermission::kPrivacy,
      APIPermission::kPrivacy},
-    {"proxy", prefs::kProxy, APIPermission::kProxy, APIPermission::kProxy},
+    {"proxy", proxy_config::prefs::kProxy, APIPermission::kProxy,
+     APIPermission::kProxy},
     {"referrersEnabled", prefs::kEnableReferrers, APIPermission::kPrivacy,
      APIPermission::kPrivacy},
     {"safeBrowsingEnabled", prefs::kSafeBrowsingEnabled,
@@ -111,7 +123,14 @@ PrefMappingEntry kPrefMapping[] = {
     {"translationServiceEnabled", prefs::kEnableTranslate,
      APIPermission::kPrivacy, APIPermission::kPrivacy},
 #if defined(ENABLE_WEBRTC)
+    // webRTCMultipleRoutesEnabled and webRTCNonProxiedUdpEnabled have been
+    // replaced by webRTCIPHandlingPolicy. Leaving it for backward
+    // compatibility. TODO(guoweis): Remove this in M50.
     {"webRTCMultipleRoutesEnabled", prefs::kWebRTCMultipleRoutesEnabled,
+     APIPermission::kPrivacy, APIPermission::kPrivacy},
+    {"webRTCNonProxiedUdpEnabled", prefs::kWebRTCNonProxiedUdpEnabled,
+     APIPermission::kPrivacy, APIPermission::kPrivacy},
+    {"webRTCIPHandlingPolicy", prefs::kWebRTCIPHandlingPolicy,
      APIPermission::kPrivacy, APIPermission::kPrivacy},
 #endif
     // accessibilityFeatures.animationPolicy is available for
@@ -211,7 +230,7 @@ class NetworkPredictionTransformer : public PrefTransformerInterface {
 class PrefMapping {
  public:
   static PrefMapping* GetInstance() {
-    return Singleton<PrefMapping>::get();
+    return base::Singleton<PrefMapping>::get();
   }
 
   bool FindBrowserPrefForExtensionPref(const std::string& extension_pref,
@@ -251,7 +270,7 @@ class PrefMapping {
   }
 
  private:
-  friend struct DefaultSingletonTraits<PrefMapping>;
+  friend struct base::DefaultSingletonTraits<PrefMapping>;
 
   PrefMapping() {
     identity_transformer_.reset(new IdentityPrefTransformer());
@@ -270,7 +289,8 @@ class PrefMapping {
     }
     DCHECK_EQ(arraysize(kPrefMapping), mapping_.size());
     DCHECK_EQ(arraysize(kPrefMapping), event_mapping_.size());
-    RegisterPrefTransformer(prefs::kProxy, new ProxyPrefTransformer());
+    RegisterPrefTransformer(proxy_config::prefs::kProxy,
+                            new ProxyPrefTransformer());
     RegisterPrefTransformer(prefs::kBlockThirdPartyCookies,
                             new InvertBooleanTransformer());
     RegisterPrefTransformer(prefs::kNetworkPredictionOptions,
@@ -380,11 +400,19 @@ void PreferenceEventRouter::OnPrefChanged(PrefService* pref_service,
                      ep->HasIncognitoPrefValue(browser_pref));
   }
 
-  helpers::DispatchEventToExtensions(profile_,
-                                     event_name,
-                                     &args,
-                                     permission,
-                                     incognito,
+  // TODO(kalman): Have a histogram value for each pref type.
+  // This isn't so important for the current use case of these
+  // histograms, which is to track which event types are waking up event
+  // pages, or which are delivered to persistent background pages. Simply
+  // "a setting changed" is enough detail for that. However if we try to
+  // use these histograms for any fine-grained logic (like removing the
+  // string event name altogether), or if we discover this event is
+  // firing a lot and want to understand that better, then this will need
+  // to change.
+  events::HistogramValue histogram_value =
+      events::TYPES_CHROME_SETTING_ON_CHANGE;
+  helpers::DispatchEventToExtensions(profile_, histogram_value, event_name,
+                                     &args, permission, incognito,
                                      browser_pref);
 }
 

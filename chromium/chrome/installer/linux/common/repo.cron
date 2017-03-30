@@ -19,6 +19,9 @@
 
 @@include@@apt.include
 
+# Check for presence of future key and add if missing
+install_future_key
+
 ## MAIN ##
 DEFAULTS_FILE="/etc/default/@@PACKAGE@@"
 if [ -r "$DEFAULTS_FILE" ]; then

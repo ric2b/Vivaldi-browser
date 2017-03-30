@@ -4,12 +4,16 @@
 
 #include "remoting/host/native_messaging/native_messaging_reader.h"
 
+#include <stdint.h>
+
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/files/file.h"
 #include "base/json/json_reader.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
@@ -19,8 +23,8 @@
 
 namespace {
 
-// uint32 is specified in the protocol as the type for the message header.
-typedef uint32 MessageLengthType;
+// uint32_t is specified in the protocol as the type for the message header.
+typedef uint32_t MessageLengthType;
 
 const int kMessageHeaderSize = sizeof(MessageLengthType);
 
@@ -67,7 +71,7 @@ NativeMessagingReader::Core::Core(
     scoped_refptr<base::SingleThreadTaskRunner> caller_task_runner,
     scoped_refptr<base::SequencedTaskRunner> read_task_runner,
     base::WeakPtr<NativeMessagingReader> reader)
-    : read_stream_(file.Pass()),
+    : read_stream_(std::move(file)),
       reader_(reader),
       caller_task_runner_(caller_task_runner),
       read_task_runner_(read_task_runner) {
@@ -135,7 +139,7 @@ NativeMessagingReader::NativeMessagingReader(base::File file)
       weak_factory_(this) {
   reader_thread_.Start();
   read_task_runner_ = reader_thread_.task_runner();
-  core_.reset(new Core(file.Pass(), base::ThreadTaskRunnerHandle::Get(),
+  core_.reset(new Core(std::move(file), base::ThreadTaskRunnerHandle::Get(),
                        read_task_runner_, weak_factory_.GetWeakPtr()));
 }
 
@@ -157,7 +161,7 @@ void NativeMessagingReader::Start(MessageCallback message_callback,
 
 void NativeMessagingReader::InvokeMessageCallback(
     scoped_ptr<base::Value> message) {
-  message_callback_.Run(message.Pass());
+  message_callback_.Run(std::move(message));
 }
 
 void NativeMessagingReader::InvokeEofCallback() {

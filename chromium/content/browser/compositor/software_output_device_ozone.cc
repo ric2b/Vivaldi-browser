@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "content/browser/compositor/software_output_device_ozone.h"
-#include "third_party/skia/include/core/SkDevice.h"
 #include "ui/compositor/compositor.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/gfx/vsync_provider.h"
@@ -13,6 +12,16 @@
 
 namespace content {
 
+// static
+scoped_ptr<SoftwareOutputDeviceOzone> SoftwareOutputDeviceOzone::Create(
+    ui::Compositor* compositor) {
+  scoped_ptr<SoftwareOutputDeviceOzone> result(
+      new SoftwareOutputDeviceOzone(compositor));
+  if (!result->surface_ozone_)
+    return nullptr;
+  return result;
+}
+
 SoftwareOutputDeviceOzone::SoftwareOutputDeviceOzone(ui::Compositor* compositor)
     : compositor_(compositor) {
   ui::SurfaceFactoryOzone* factory =
@@ -20,8 +29,10 @@ SoftwareOutputDeviceOzone::SoftwareOutputDeviceOzone(ui::Compositor* compositor)
 
   surface_ozone_ = factory->CreateCanvasForWidget(compositor_->widget());
 
-  if (!surface_ozone_)
-    LOG(FATAL) << "Failed to initialize canvas";
+  if (!surface_ozone_) {
+    LOG(ERROR) << "Failed to initialize canvas";
+    return;
+  }
 
   vsync_provider_ = surface_ozone_->CreateVSyncProvider();
 }
@@ -50,8 +61,8 @@ SkCanvas* SoftwareOutputDeviceOzone::BeginPaint(const gfx::Rect& damage_rect) {
   return SoftwareOutputDevice::BeginPaint(damage_rect);
 }
 
-void SoftwareOutputDeviceOzone::EndPaint(cc::SoftwareFrameData* frame_data) {
-  SoftwareOutputDevice::EndPaint(frame_data);
+void SoftwareOutputDeviceOzone::EndPaint() {
+  SoftwareOutputDevice::EndPaint();
 
   surface_ozone_->PresentCanvas(damage_rect_);
 }

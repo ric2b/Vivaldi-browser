@@ -6,25 +6,16 @@
 #include "base/message_loop/message_loop.h"
 #include "chrome/browser/chromeos/login/user_flow.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
+#include "components/signin/core/account_id/account_id.h"
 
 namespace chromeos {
-
-namespace {
-
-void UnregisterFlow(const std::string& user_id) {
-  ChromeUserManager::Get()->ResetUserFlow(user_id);
-}
-
-} // namespace
-
 
 UserFlow::UserFlow() : host_(NULL) {}
 
 UserFlow::~UserFlow() {}
 
 void UserFlow::SetHost(LoginDisplayHost* host) {
-  // TODO(antrim): remove this output once crash reason is found.
-  LOG(ERROR) << "Flow " << this << " got host " << host;
+  VLOG(1) << "Flow " << this << " got host " << host;
   host_ = host;
 }
 
@@ -70,9 +61,8 @@ void DefaultUserFlow::HandleOAuthTokenStatusChange(
 void DefaultUserFlow::LaunchExtraSteps(Profile* profile) {
 }
 
-ExtendedUserFlow::ExtendedUserFlow(const std::string& user_id)
-    : user_id_(user_id) {
-}
+ExtendedUserFlow::ExtendedUserFlow(const AccountId& account_id)
+    : account_id_(account_id) {}
 
 ExtendedUserFlow::~ExtendedUserFlow() {
 }
@@ -89,10 +79,10 @@ void ExtendedUserFlow::HandleOAuthTokenStatusChange(
 }
 
 void ExtendedUserFlow::UnregisterFlowSoon() {
-  std::string id_copy(user_id());
-  base::MessageLoop::current()->PostTask(FROM_HERE,
-      base::Bind(&UnregisterFlow,
-                 id_copy));
+  base::MessageLoop::current()->PostTask(
+      FROM_HERE,
+      base::Bind(&ChromeUserManager::ResetUserFlow,
+                 base::Unretained(ChromeUserManager::Get()), account_id()));
 }
 
 }  // namespace chromeos

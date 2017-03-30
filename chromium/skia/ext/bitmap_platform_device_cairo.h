@@ -5,8 +5,10 @@
 #ifndef SKIA_EXT_BITMAP_PLATFORM_DEVICE_CAIRO_H_
 #define SKIA_EXT_BITMAP_PLATFORM_DEVICE_CAIRO_H_
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "skia/ext/platform_device.h"
 
@@ -71,12 +73,6 @@ class BitmapPlatformDevice : public SkBitmapDevice, public PlatformDevice {
   // to zero. |is_opaque| should be set if the caller knows the bitmap will be
   // completely opaque and allows some optimizations.
   static BitmapPlatformDevice* Create(int width, int height, bool is_opaque);
-
-  // Performs the same construction as Create.
-  // Other ports require a separate construction routine because Create does not
-  // initialize the bitmap to 0.
-  static BitmapPlatformDevice* CreateAndClear(int width, int height,
-                                              bool is_opaque);
 
   // This doesn't take ownership of |data|. If |data| is NULL, the contents
   // of the device are initialized to 0.

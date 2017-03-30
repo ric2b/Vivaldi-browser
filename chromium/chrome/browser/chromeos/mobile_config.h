@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/time/time.h"
@@ -160,7 +161,7 @@ class MobileConfig : public CustomizationDocument  {
   FRIEND_TEST_ALL_PREFIXES(MobileConfigTest, OldDeal);
   FRIEND_TEST_ALL_PREFIXES(MobileConfigTest, LocalConfigNoDeals);
   FRIEND_TEST_ALL_PREFIXES(MobileConfigTest, LocalConfig);
-  friend struct DefaultSingletonTraits<MobileConfig>;
+  friend struct base::DefaultSingletonTraits<MobileConfig>;
 
   // C-tor for singleton construction.
   MobileConfig();

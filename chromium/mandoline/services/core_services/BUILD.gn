@@ -6,32 +6,43 @@
 # we ship with.
 
 import("//build/config/ui.gni")
+import("//build/toolchain/toolchain.gni")
 import("//mojo/public/mojo_application.gni")
 
 mojo_native_application("core_services") {
   deps = [
     ":sources",
-    "//third_party/icu:icudata",
-    "//third_party/angle:libEGL",
-    "//third_party/angle:libGLESv2",
   ]
   if (is_win) {
-    copy("copy_files") {
-      sources = [
-        "$root_out_dir/icudtl.dat",
-        "$root_out_dir/libEGL.dll",
-        "$root_out_dir/libGLESv2.dll",
-      ]
-      outputs = [
-        "$root_out_dir/core_services/{{source_file_part}}",
-      ]
-    }
-    deps += [ ":copy_files" ]
+    deps += [
+      ":copy_files",
+      "//third_party/angle:libEGL",
+      "//third_party/angle:libGLESv2",
+    ]
+  }
+}
+
+if (is_win) {
+  copy("copy_files") {
+    sources = [
+      "$root_shlib_dir/libEGL.dll",
+      "$root_shlib_dir/libGLESv2.dll",
+    ]
+    outputs = [
+      "$root_out_dir/core_services/{{source_file_part}}",
+    ]
+
+    deps = [
+      "//third_party/angle:libEGL",
+      "//third_party/angle:libGLESv2",
+    ]
   }
 }
 
 source_set("sources") {
   sources = [
+    "application_delegate_factory.h",
+    "application_delegate_factory_linux.cc",
     "core_services_application_delegate.cc",
     "main.cc",
   ]
@@ -40,26 +51,29 @@ source_set("sources") {
     "//base",
     "//components/clipboard:lib",
     "//components/filesystem:lib",
-    "//components/view_manager/surfaces:lib",
-    "//mandoline/ui/browser:lib",
-    "//mojo/application/public/cpp",
-    "//mojo/common:tracing_impl",
+    "//components/web_view:lib",
+    "//mojo/logging",
+    "//mojo/message_pump",
+    "//mojo/public/cpp/bindings",
     "//mojo/services/tracing:lib",
-    "//third_party/mojo/src/mojo/public/cpp/bindings",
+    "//mojo/services/tracing/public/cpp",
+    "//mojo/shell/public/cpp",
+    "//third_party/icu",
+    "//url",
   ]
 
   if (!is_android) {
+    sources += [ "application_delegate_factory_notandroid.cc" ]
     deps += [
+      "//components/mus:lib",
       "//components/resource_provider:lib",
-      "//components/view_manager:lib",
       "//mojo/services/network:lib",
     ]
   }
 
-  if (use_aura) {
-    deps += [
-      "//components/view_manager/public/cpp",
-      "//mandoline/ui/omnibox:lib",
-    ]
+  if (is_linux) {
+    deps += [ "//components/font_service:lib" ]
+  } else {
+    sources += [ "application_delegate_factory_default.cc" ]
   }
 }

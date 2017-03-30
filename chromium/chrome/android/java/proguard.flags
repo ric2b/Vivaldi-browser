@@ -113,6 +113,19 @@
   *;
 }
 
+-keepnames class com.google.android.gms.gcm.** {
+  *;
+}
+
+-keepnames class jp.tomorrowkey.android.gifplayer.** {
+  public *;
+}
+
+# Used in tests.
+-keep class android.support.v4.view.ViewCompat {
+  public static int getLayoutDirection(android.view.View);
+}
+
 # flingViewport is used by Android WebView and a Chrome test.
 -keepclassmembers class org.chromium.content.browser.ContentViewCore {
   public void flingViewport(long, int, int);
@@ -120,8 +133,7 @@
 
 # TODO(aurimas): remove this when Google Play Services no longer uses setLatestEventInfo call
 # that was deprecated in Android M. It is save to suppress this according to b/18510449.
--dontwarn com.google.android.gms.common.GooglePlayServicesUtil
--dontwarn com.google.android.gms.gcm.zza
+-dontwarn android.app.Notification
 
 # IntentUtils uses reflection to access a method that is hidden until API level 18.
 -dontnote org.chromium.chrome.browser.util.IntentUtils
@@ -130,3 +142,15 @@
 -keep class android.support.customtabs.ICustomTabsCallback** {
   *;
 }
+
+#-keep public class android.net.http.SslCertificate
+#-keep public class android.webkit.WebVie
+
+#-dontwarn android.webkit.WebView
+-dontwarn android.net.http.SslCertificate
+
+# Needed for assertions in BaseChromiumApplication.
+# TODO(twellington): Remove these two lines when support for detecting a debug
+# build lands (https://codereview.chromium.org/1597273005/).
+-keep class android.support.v7.app.ToolbarActionBar$ToolbarCallbackWrapper {*;}
+-keep class android.support.v7.internal.app.ToolbarActionBar$ToolbarCallbackWrapper {*;}

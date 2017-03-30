@@ -5,6 +5,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -45,7 +46,13 @@ IN_PROC_BROWSER_TEST_F(FtpBrowserTest, BasicFtpUrlAuthentication) {
                "Index of /");
 }
 
-IN_PROC_BROWSER_TEST_F(FtpBrowserTest, DirectoryListingNavigation) {
+// http://crbug.com/521409
+#if defined(OS_WIN)
+#define MAYBE_DirectoryListingNavigation DISABLED_DirectoryListingNavigation
+#else
+#define MAYBE_DirectoryListingNavigation DirectoryListingNavigation
+#endif
+IN_PROC_BROWSER_TEST_F(FtpBrowserTest, MAYBE_DirectoryListingNavigation) {
   ftp_server_.set_no_anonymous_ftp_user(true);
   ASSERT_TRUE(ftp_server_.Start());
 

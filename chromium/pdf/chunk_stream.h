@@ -8,6 +8,7 @@
 #include <stddef.h>
 
 #include <map>
+#include <utility>
 #include <vector>
 
 namespace chrome_pdf {
@@ -22,7 +23,7 @@ class ChunkStream {
   void Clear();
 
   void Preallocate(size_t stream_size);
-  size_t GetSize();
+  size_t GetSize() const;
 
   bool WriteData(size_t offset, void* buffer, size_t size);
   bool ReadData(size_t offset, size_t size, void* buffer) const;
@@ -33,16 +34,20 @@ class ChunkStream {
   bool IsRangeAvailable(size_t offset, size_t size) const;
   size_t GetFirstMissingByte() const;
 
-  size_t GetLastByteBefore(size_t offset) const;
-  size_t GetFirstByteAfter(size_t offset) const;
+  // Finds the first byte of the missing byte interval that offset belongs to.
+  size_t GetFirstMissingByteInInterval(size_t offset) const;
+  // Returns the last byte of the missing byte interval that offset belongs to.
+  size_t GetLastMissingByteInInterval(size_t offset) const;
 
  private:
   std::vector<unsigned char> data_;
 
   // Pair, first - begining of the chunk, second - size of the chunk.
   std::map<size_t, size_t> chunks_;
+
+  size_t stream_size_;
 };
 
 };  // namespace chrome_pdf
 
-#endif
+#endif  // PDF_CHUNK_STREAM_H_

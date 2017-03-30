@@ -4,17 +4,13 @@
 
 #include "net/quic/quic_flow_controller.h"
 
-#include "base/basictypes.h"
+#include "base/strings/stringprintf.h"
+#include "net/quic/quic_bug_tracker.h"
 #include "net/quic/quic_connection.h"
 #include "net/quic/quic_flags.h"
 #include "net/quic/quic_protocol.h"
 
 namespace net {
-
-namespace {
-const QuicByteCount kStreamReceiveWindowLimit = 16 * 1024 * 1024;   // 16 MB
-const QuicByteCount kSessionReceiveWindowLimit = 24 * 1024 * 1024;  // 24 MB
-}
 
 #define ENDPOINT \
   (perspective_ == Perspective::IS_SERVER ? "Server: " : "Client: ")
@@ -78,7 +74,13 @@ void QuicFlowController::AddBytesSent(QuicByteCount bytes_sent) {
     bytes_sent_ = send_window_offset_;
 
     // This is an error on our side, close the connection as soon as possible.
-    connection_->SendConnectionClose(QUIC_FLOW_CONTROL_SENT_TOO_MUCH_DATA);
+    connection_->SendConnectionCloseWithDetails(
+        QUIC_FLOW_CONTROL_SENT_TOO_MUCH_DATA,
+        base::StringPrintf(
+            "%llu bytes over send window offset",
+            static_cast<unsigned long long>(send_window_offset_ -
+                                            (bytes_sent_ + bytes_sent)))
+            .c_str());
     return;
   }
 
@@ -88,9 +90,8 @@ void QuicFlowController::AddBytesSent(QuicByteCount bytes_sent) {
 
 bool QuicFlowController::FlowControlViolation() {
   if (highest_received_byte_offset_ > receive_window_offset_) {
-    LOG(ERROR) << ENDPOINT << "Flow control violation on stream "
-               << id_ << ", receive window offset: "
-               << receive_window_offset_
+    LOG(ERROR) << ENDPOINT << "Flow control violation on stream " << id_
+               << ", receive window offset: " << receive_window_offset_
                << ", highest received byte offset: "
                << highest_received_byte_offset_;
     return true;
@@ -176,7 +177,7 @@ void QuicFlowController::MaybeSendWindowUpdate() {
   if (available_window >= threshold) {
     DVLOG(1) << ENDPOINT << "Not sending WindowUpdate for stream " << id_
              << ", available window: " << available_window
-             << ">= threshold: " << threshold;
+             << " >= threshold: " << threshold;
     return;
   }
 
@@ -234,11 +235,23 @@ bool QuicFlowController::IsBlocked() const {
   return SendWindowSize() == 0;
 }
 
-uint64 QuicFlowController::SendWindowSize() const {
+uint64_t QuicFlowController::SendWindowSize() const {
   if (bytes_sent_ > send_window_offset_) {
     return 0;
   }
   return send_window_offset_ - bytes_sent_;
+}
+
+void QuicFlowController::UpdateReceiveWindowSize(QuicStreamOffset size) {
+  DVLOG(1) << ENDPOINT << "UpdateReceiveWindowSize for stream " << id_ << ": "
+           << size;
+  if (receive_window_size_ != receive_window_offset_) {
+    QUIC_BUG << "receive_window_size_:" << receive_window_size_
+             << " != receive_window_offset:" << receive_window_offset_;
+    return;
+  }
+  receive_window_size_ = size;
+  receive_window_offset_ = size;
 }
 
 }  // namespace net

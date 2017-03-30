@@ -8,8 +8,8 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/public/common/sandbox_linux.h"
 
@@ -20,8 +20,9 @@
 #define ANY_OF_AMTLU_SANITIZER 1
 #endif
 
-template <typename T> struct DefaultSingletonTraits;
 namespace base {
+template <typename T>
+struct DefaultSingletonTraits;
 class Thread;
 }
 namespace sandbox { class SetuidSandboxClient; }
@@ -133,7 +134,7 @@ class LinuxSandbox {
 #endif
 
  private:
-  friend struct DefaultSingletonTraits<LinuxSandbox>;
+  friend struct base::DefaultSingletonTraits<LinuxSandbox>;
 
   LinuxSandbox();
   ~LinuxSandbox();

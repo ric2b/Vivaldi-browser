@@ -39,7 +39,8 @@ WebResourceService::WebResourceService(
     int start_fetch_delay_ms,
     int cache_update_delay_ms,
     net::URLRequestContextGetter* request_context,
-    const char* disable_network_switch)
+    const char* disable_network_switch,
+    const ParseJSONCallback& parse_json_callback)
     : prefs_(prefs),
       resource_request_allowed_notifier_(prefs, disable_network_switch),
       in_fetch_(false),
@@ -49,6 +50,7 @@ WebResourceService::WebResourceService(
       start_fetch_delay_ms_(start_fetch_delay_ms),
       cache_update_delay_ms_(cache_update_delay_ms),
       request_context_(request_context),
+      parse_json_callback_(parse_json_callback),
       weak_ptr_factory_(this) {
   resource_request_allowed_notifier_.Init(this);
   DCHECK(prefs);
@@ -76,24 +78,26 @@ void WebResourceService::OnURLFetchComplete(const net::URLFetcher* source) {
     // (on Android in particular) we short-cut the full parsing in the case of
     // trivially "empty" JSONs.
     if (data.empty() || data == "{}") {
-      OnUnpackFinished(make_scoped_ptr(new base::DictionaryValue()).Pass());
+      OnUnpackFinished(make_scoped_ptr(new base::DictionaryValue()));
     } else {
-      ParseJSON(data, base::Bind(&WebResourceService::OnUnpackFinished,
-                                 weak_ptr_factory_.GetWeakPtr()),
-                base::Bind(&WebResourceService::OnUnpackError,
-                           weak_ptr_factory_.GetWeakPtr()));
+      parse_json_callback_.Run(data,
+                               base::Bind(&WebResourceService::OnUnpackFinished,
+                                          weak_ptr_factory_.GetWeakPtr()),
+                               base::Bind(&WebResourceService::OnUnpackError,
+                                          weak_ptr_factory_.GetWeakPtr()));
     }
   } else {
     // Don't parse data if attempt to download was unsuccessful.
     // Stop loading new web resource data, and silently exit.
-    // We do not call ParseJSON(), so we need to call EndFetch() ourselves.
+    // We do not call parse_json_callback_, so we need to call EndFetch()
+    // ourselves.
     EndFetch();
   }
 }
 
 // Delay initial load of resource data into cache so as not to interfere
 // with startup time.
-void WebResourceService::ScheduleFetch(int64 delay_ms) {
+void WebResourceService::ScheduleFetch(int64_t delay_ms) {
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::Bind(&WebResourceService::StartFetch,
                             weak_ptr_factory_.GetWeakPtr()),
@@ -159,7 +163,7 @@ void WebResourceService::OnUnpackError(const std::string& error_message) {
 }
 
 void WebResourceService::OnResourceRequestsAllowed() {
-  int64 delay = start_fetch_delay_ms_;
+  int64_t delay = start_fetch_delay_ms_;
   // Check whether we have ever put a value in the web resource cache;
   // if so, pull it out and see if it's time to update again.
   if (prefs_->HasPrefPath(last_update_time_pref_name_)) {
@@ -168,9 +172,9 @@ void WebResourceService::OnResourceRequestsAllowed() {
     if (!last_update_pref.empty()) {
       double last_update_value;
       base::StringToDouble(last_update_pref, &last_update_value);
-      int64 ms_until_update =
+      int64_t ms_until_update =
           cache_update_delay_ms_ -
-          static_cast<int64>(
+          static_cast<int64_t>(
               (base::Time::Now() - base::Time::FromDoubleT(last_update_value))
                   .InMilliseconds());
       // Wait at least |start_fetch_delay_ms_|.

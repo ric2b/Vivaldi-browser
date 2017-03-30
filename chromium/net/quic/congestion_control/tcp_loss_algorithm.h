@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <map>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "net/quic/congestion_control/loss_detection_interface.h"
 #include "net/quic/quic_protocol.h"
 #include "net/quic/quic_time.h"
@@ -29,11 +29,16 @@ class NET_EXPORT_PRIVATE TCPLossAlgorithm : public LossDetectionInterface {
   LossDetectionType GetLossDetectionType() const override;
 
   // Uses nack counts to decide when packets are lost.
-  SequenceNumberSet DetectLostPackets(
+  PacketNumberSet DetectLostPackets(const QuicUnackedPacketMap& unacked_packets,
+                                    const QuicTime& time,
+                                    QuicPacketNumber largest_observed,
+                                    const RttStats& rtt_stats) override;
+  // Unsupported.
+  void DetectLosses(
       const QuicUnackedPacketMap& unacked_packets,
       const QuicTime& time,
-      QuicPacketSequenceNumber largest_observed,
-      const RttStats& rtt_stats) override;
+      const RttStats& rtt_stats,
+      SendAlgorithmInterface::CongestionVector* packets_lost) override;
 
   // Returns a non-zero value when the early retransmit timer is active.
   QuicTime GetLossTimeout() const override;

@@ -5,21 +5,26 @@
 #ifndef CC_INPUT_INPUT_HANDLER_H_
 #define CC_INPUT_INPUT_HANDLER_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/time/time.h"
 #include "cc/base/cc_export.h"
+#include "cc/input/scroll_state.h"
 #include "cc/input/scrollbar.h"
 #include "cc/trees/swap_promise_monitor.h"
 
 namespace gfx {
 class Point;
 class PointF;
+class ScrollOffset;
+class SizeF;
 class Vector2d;
 class Vector2dF;
 }
 
-namespace ui { struct LatencyInfo; }
+namespace ui {
+class LatencyInfo;
+}
 
 namespace cc {
 
@@ -49,6 +54,13 @@ class CC_EXPORT InputHandlerClient {
   virtual void Animate(base::TimeTicks time) = 0;
   virtual void MainThreadHasStoppedFlinging() = 0;
   virtual void ReconcileElasticOverscrollAndRootScroll() = 0;
+  virtual void UpdateRootLayerStateForSynchronousInputHandler(
+      const gfx::ScrollOffset& total_scroll_offset,
+      const gfx::ScrollOffset& max_scroll_offset,
+      const gfx::SizeF& scrollable_size,
+      float page_scale_factor,
+      float min_page_scale_factor,
+      float max_page_scale_factor) = 0;
 
  protected:
   InputHandlerClient() {}
@@ -73,42 +85,40 @@ class CC_EXPORT InputHandler {
     // This must be the last entry.
     ScrollStatusCount
   };
-  enum ScrollInputType { GESTURE, WHEEL, NON_BUBBLING_GESTURE };
+  enum ScrollInputType { GESTURE, WHEEL, ANIMATED_WHEEL, NON_BUBBLING_GESTURE };
 
   // Binds a client to this handler to receive notifications. Only one client
   // can be bound to an InputHandler. The client must live at least until the
   // handler calls WillShutdown() on the client.
   virtual void BindToClient(InputHandlerClient* client) = 0;
 
-  // Selects a layer to be scrolled at a given point in viewport (logical
-  // pixel) coordinates. Returns SCROLL_STARTED if the layer at the coordinates
-  // can be scrolled, SCROLL_ON_MAIN_THREAD if the scroll event should instead
-  // be delegated to the main thread, or SCROLL_IGNORED if there is nothing to
-  // be scrolled at the given coordinates.
-  virtual ScrollStatus ScrollBegin(const gfx::Point& viewport_point,
+  // Selects a layer to be scrolled using the |scroll_state| start position.
+  // Returns SCROLL_STARTED if the layer at the coordinates can be scrolled,
+  // SCROLL_ON_MAIN_THREAD if the scroll event should instead be delegated to
+  // the main thread, or SCROLL_IGNORED if there is nothing to be scrolled at
+  // the given coordinates.
+  virtual ScrollStatus ScrollBegin(ScrollState* scroll_state,
                                    ScrollInputType type) = 0;
 
   // Similar to ScrollBegin, except the hit test is skipped and scroll always
   // targets at the root layer.
-  virtual ScrollStatus RootScrollBegin(ScrollInputType type) = 0;
+  virtual ScrollStatus RootScrollBegin(ScrollState* scroll_state,
+                                       ScrollInputType type) = 0;
   virtual ScrollStatus ScrollAnimated(const gfx::Point& viewport_point,
                                       const gfx::Vector2dF& scroll_delta) = 0;
 
-  // Scroll the selected layer starting at the given position. If the scroll
-  // type given to ScrollBegin was a gesture, then the scroll point and delta
-  // should be in viewport (logical pixel) coordinates. Otherwise they are in
-  // scrolling layer's (logical pixel) space. If there is no room to move the
-  // layer in the requested direction, its first ancestor layer that can be
-  // scrolled will be moved instead. The return value's |did_scroll| field is
-  // set to false if no layer can be moved in the requested direction at all,
-  // and set to true if any layer is moved.
-  // If the scroll delta hits the root layer, and the layer can no longer move,
-  // the root overscroll accumulated within this ScrollBegin() scope is reported
-  // in the return value's |accumulated_overscroll| field.
-  // Should only be called if ScrollBegin() returned SCROLL_STARTED.
-  virtual InputHandlerScrollResult ScrollBy(
-      const gfx::Point& viewport_point,
-      const gfx::Vector2dF& scroll_delta) = 0;
+  // Scroll the layer selected by |ScrollBegin| by given |scroll_state| delta.
+  // Internally, the delta is transformed to local layer's coordinate space for
+  // scrolls gestures that are direct manipulation (e.g. touch). If there is no
+  // room to move the layer in the requested direction, its first ancestor layer
+  // that can be scrolled will be moved instead. The return value's |did_scroll|
+  // field is set to false if no layer can be moved in the requested direction
+  // at all, and set to true if any layer is moved. If the scroll delta hits the
+  // root layer, and the layer can no longer move, the root overscroll
+  // accumulated within this ScrollBegin() scope is reported in the return
+  // value's |accumulated_overscroll| field. Should only be called if
+  // ScrollBegin() returned SCROLL_STARTED.
+  virtual InputHandlerScrollResult ScrollBy(ScrollState* scroll_state) = 0;
 
   virtual bool ScrollVerticallyByPage(const gfx::Point& viewport_point,
                                       ScrollDirection direction) = 0;
@@ -121,17 +131,16 @@ class CC_EXPORT InputHandler {
 
   // Stop scrolling the selected layer. Should only be called if ScrollBegin()
   // returned SCROLL_STARTED.
-  virtual void ScrollEnd() = 0;
+  virtual void ScrollEnd(ScrollState* scroll_state) = 0;
 
-  virtual void SetRootLayerScrollOffsetDelegate(
-      LayerScrollOffsetDelegate* root_layer_scroll_offset_delegate) = 0;
+  // Requests a callback to UpdateRootLayerStateForSynchronousInputHandler()
+  // giving the current root scroll and page scale information.
+  virtual void RequestUpdateForSynchronousInputHandler() = 0;
 
-  // Called when the value returned by
-  // LayerScrollOffsetDelegate.GetTotalScrollOffset has changed for reasons
-  // other than a SetTotalScrollOffset call.
-  // NOTE: This should only called after a valid delegate was set via a call to
-  // SetRootLayerScrollOffsetDelegate.
-  virtual void OnRootLayerDelegatedScrollOffsetChanged() = 0;
+  // Called when the root scroll offset has been changed in the synchronous
+  // input handler by the application (outside of input event handling).
+  virtual void SetSynchronousInputHandlerRootScrollOffset(
+      const gfx::ScrollOffset& root_offset) = 0;
 
   virtual void PinchGestureBegin() = 0;
   virtual void PinchGestureUpdate(float magnify_delta,
@@ -141,9 +150,12 @@ class CC_EXPORT InputHandler {
   // Request another callback to InputHandlerClient::Animate().
   virtual void SetNeedsAnimateInput() = 0;
 
+  // Returns true if there is an active scroll on the inner viewport layer.
+  virtual bool IsCurrentlyScrollingInnerViewport() const = 0;
+
   // Whether the layer under |viewport_point| is the currently scrolling layer.
   virtual bool IsCurrentlyScrollingLayerAt(const gfx::Point& viewport_point,
-                                           ScrollInputType type) = 0;
+                                           ScrollInputType type) const = 0;
 
   virtual bool HaveWheelEventHandlersAt(const gfx::Point& viewport_point) = 0;
 

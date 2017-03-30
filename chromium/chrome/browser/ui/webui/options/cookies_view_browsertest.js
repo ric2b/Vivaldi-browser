@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+GEN_INCLUDE(['options_browsertest_base.js']);
+
 /**
  * TestFixture for cookies view WebUI testing.
  * @extends {testing.Test}
@@ -10,28 +12,31 @@
 function CookiesViewWebUITest() {}
 
 CookiesViewWebUITest.prototype = {
-  __proto__: testing.Test.prototype,
+  __proto__: OptionsBrowsertestBase.prototype,
 
   /**
    * Browse to the cookies view.
    */
   browsePreload: 'chrome://settings-frame/cookies',
+
+  /** @override */
+  setUp: function() {
+    OptionsBrowsertestBase.prototype.setUp.call(this);
+
+    // Enable when failure is resolved.
+    // AX_TEXT_01: http://crbug.com/570560
+    this.accessibilityAuditConfig.ignoreSelectors(
+        'controlsWithoutLabel',
+        '#cookies-view-page > .content-area.cookies-list-content-area > *');
+  },
 };
 
 // Test opening the cookies view has correct location.
-TEST_F('CookiesViewWebUITest', 'DISABLED_testOpenCookiesView', function() {
+TEST_F('CookiesViewWebUITest', 'testOpenCookiesView', function() {
   assertEquals(this.browsePreload, document.location.href);
 });
 
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_testNoCloseOnSearchEnter ' +
-    'DISABLED_testNoCloseOnSearchEnter');
-GEN('#else');
-GEN('#define MAYBE_testNoCloseOnSearchEnter ' +
-    'testNoCloseOnSearchEnter');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('CookiesViewWebUITest', 'MAYBE_testNoCloseOnSearchEnter', function () {
+TEST_F('CookiesViewWebUITest', 'testNoCloseOnSearchEnter', function() {
   var cookiesView = CookiesView.getInstance();
   assertTrue(cookiesView.visible);
   var searchBox = cookiesView.pageDiv.querySelector('.cookies-search-box');

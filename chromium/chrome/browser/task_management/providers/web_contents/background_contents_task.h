@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_TASK_MANAGEMENT_PROVIDERS_WEB_CONTENTS_BACKGROUND_CONTENTS_TASK_H_
 #define CHROME_BROWSER_TASK_MANAGEMENT_PROVIDERS_WEB_CONTENTS_BACKGROUND_CONTENTS_TASK_H_
 
+#include "base/macros.h"
 #include "chrome/browser/background/background_contents.h"
 #include "chrome/browser/task_management/providers/web_contents/renderer_task.h"
 
@@ -18,8 +19,8 @@ class BackgroundContentsTask : public RendererTask {
   ~BackgroundContentsTask() override;
 
   // task_management::RendererTask:
-  void OnTitleChanged(content::NavigationEntry* entry) override;
-  void OnFaviconChanged() override;
+  void UpdateTitle() override;
+  void UpdateFavicon() override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(BackgroundContentsTask);

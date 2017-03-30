@@ -18,7 +18,14 @@ scoped_refptr<HeadsUpDisplayLayer> HeadsUpDisplayLayer::Create(
 }
 
 HeadsUpDisplayLayer::HeadsUpDisplayLayer(const LayerSettings& settings)
-    : Layer(settings) {
+    : Layer(settings),
+      typeface_(skia::AdoptRef(
+          SkTypeface::CreateFromName("times new roman", SkTypeface::kNormal))) {
+  if (!typeface_) {
+    typeface_ = skia::AdoptRef(
+        SkTypeface::CreateFromName("monospace", SkTypeface::kBold));
+  }
+  DCHECK(typeface_.get());
   SetIsDrawable(true);
   UpdateDrawsContent(HasDrawableContent());
 }
@@ -59,6 +66,15 @@ bool HeadsUpDisplayLayer::HasDrawableContent() const {
 scoped_ptr<LayerImpl> HeadsUpDisplayLayer::CreateLayerImpl(
     LayerTreeImpl* tree_impl) {
   return HeadsUpDisplayLayerImpl::Create(tree_impl, layer_id_);
+}
+
+void HeadsUpDisplayLayer::PushPropertiesTo(LayerImpl* layer) {
+  Layer::PushPropertiesTo(layer);
+  TRACE_EVENT0("cc", "HeadsUpDisplayLayer::PushPropertiesTo");
+  HeadsUpDisplayLayerImpl* layer_impl =
+      static_cast<HeadsUpDisplayLayerImpl*>(layer);
+
+  layer_impl->SetHUDTypeface(typeface_);
 }
 
 }  // namespace cc

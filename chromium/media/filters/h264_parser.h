@@ -7,12 +7,14 @@
 #ifndef MEDIA_FILTERS_H264_PARSER_H_
 #define MEDIA_FILTERS_H264_PARSER_H_
 
+#include <stddef.h>
+#include <stdint.h>
 #include <sys/types.h>
 
 #include <map>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "media/base/media_export.h"
 #include "media/base/ranges.h"
 #include "media/filters/h264_bit_reader.h"
@@ -52,7 +54,7 @@ struct MEDIA_EXPORT H264NALU {
 
   // After (without) start code; we don't own the underlying memory
   // and a shallow copy should be made when copying this struct.
-  const uint8* data;
+  const uint8_t* data;
   off_t size;  // From after start code to start code of next NALU (or EOS).
 
   int nal_ref_idc;
@@ -235,7 +237,7 @@ struct MEDIA_EXPORT H264SliceHeader {
 
   bool idr_pic_flag;       // from NAL header
   int nal_ref_idc;         // from NAL header
-  const uint8* nalu_data;  // from NAL header
+  const uint8_t* nalu_data;  // from NAL header
   off_t nalu_size;         // from NAL header
   off_t header_bit_size;   // calculated
 
@@ -338,9 +340,19 @@ class MEDIA_EXPORT H264Parser {
   // - |*offset| is between 0 and |data_size| included.
   //   It is strictly less than |data_size| if |data_size| > 0.
   // - |*start_code_size| is either 0, 3 or 4.
-  static bool FindStartCode(const uint8* data, off_t data_size,
-                            off_t* offset, off_t* start_code_size);
+  static bool FindStartCode(const uint8_t* data,
+                            off_t data_size,
+                            off_t* offset,
+                            off_t* start_code_size);
 
+  // Wrapper for FindStartCode() that skips over start codes that
+  // may appear inside of |encrypted_ranges_|.
+  // Returns true if a start code was found. Otherwise returns false.
+  static bool FindStartCodeInClearRanges(const uint8_t* data,
+                                         off_t data_size,
+                                         const Ranges<const uint8_t*>& ranges,
+                                         off_t* offset,
+                                         off_t* start_code_size);
   H264Parser();
   ~H264Parser();
 
@@ -349,8 +361,9 @@ class MEDIA_EXPORT H264Parser {
   // |stream| owned by caller.
   // |subsamples| contains information about what parts of |stream| are
   // encrypted.
-  void SetStream(const uint8* stream, off_t stream_size);
-  void SetEncryptedStream(const uint8* stream, off_t stream_size,
+  void SetStream(const uint8_t* stream, off_t stream_size);
+  void SetEncryptedStream(const uint8_t* stream,
+                          off_t stream_size,
                           const std::vector<SubsampleEntry>& subsamples);
 
   // Read the stream to find the next NALU, identify it and return
@@ -380,8 +393,8 @@ class MEDIA_EXPORT H264Parser {
 
   // Return a pointer to SPS/PPS with given |sps_id|/|pps_id| or NULL if not
   // present.
-  const H264SPS* GetSPS(int sps_id);
-  const H264PPS* GetPPS(int pps_id);
+  const H264SPS* GetSPS(int sps_id) const;
+  const H264PPS* GetPPS(int pps_id) const;
 
   // Slice headers and SEI messages are not used across NALUs by the parser
   // and can be discarded after current NALU, so the parser does not store
@@ -405,12 +418,6 @@ class MEDIA_EXPORT H264Parser {
   //   the start code as well as the trailing zero bits.
   // - the size in bytes of the start code is returned in |*start_code_size|.
   bool LocateNALU(off_t* nalu_size, off_t* start_code_size);
-
-  // Wrapper for FindStartCode() that skips over start codes that
-  // may appear inside of |encrypted_ranges_|.
-  // Returns true if a start code was found. Otherwise returns false.
-  bool FindStartCodeInClearRanges(const uint8* data, off_t data_size,
-                                  off_t* offset, off_t* start_code_size);
 
   // Exp-Golomb code parsing as specified in chapter 9.1 of the spec.
   // Read one unsigned exp-Golomb code from the stream and return in |*val|.
@@ -448,7 +455,7 @@ class MEDIA_EXPORT H264Parser {
   Result ParseDecRefPicMarking(H264SliceHeader* shdr);
 
   // Pointer to the current NALU in the stream.
-  const uint8* stream_;
+  const uint8_t* stream_;
 
   // Bytes left in the stream after the current NALU.
   off_t bytes_left_;
@@ -463,7 +470,7 @@ class MEDIA_EXPORT H264Parser {
 
   // Ranges of encrypted bytes in the buffer passed to
   // SetEncryptedStream().
-  Ranges<const uint8*> encrypted_ranges_;
+  Ranges<const uint8_t*> encrypted_ranges_;
 
   DISALLOW_COPY_AND_ASSIGN(H264Parser);
 };

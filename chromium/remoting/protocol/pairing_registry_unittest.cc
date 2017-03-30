@@ -7,9 +7,11 @@
 #include <stdlib.h>
 
 #include <algorithm>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -65,7 +67,7 @@ class PairingRegistryTest : public testing::Test {
   void SetUp() override { callback_count_ = 0; }
 
   void set_pairings(scoped_ptr<base::ListValue> pairings) {
-    pairings_ = pairings.Pass();
+    pairings_ = std::move(pairings);
   }
 
   void ExpectSecret(const std::string& expected,

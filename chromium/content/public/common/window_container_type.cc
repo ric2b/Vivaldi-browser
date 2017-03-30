@@ -4,6 +4,8 @@
 
 #include "content/public/common/window_container_type.h"
 
+#include <stddef.h>
+
 #include "base/strings/string_util.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
@@ -22,11 +24,10 @@ WindowContainerType WindowFeaturesToContainerType(
   bool persistent = false;
 
   for (size_t i = 0; i < window_features.additionalFeatures.size(); ++i) {
-    if (base::LowerCaseEqualsASCII(window_features.additionalFeatures[i],
-                                   kBackground))
+    base::string16 feature = window_features.additionalFeatures[i];
+    if (base::LowerCaseEqualsASCII(feature, kBackground))
       background = true;
-    else if (base::LowerCaseEqualsASCII(window_features.additionalFeatures[i],
-                                        kPersistent))
+    else if (base::LowerCaseEqualsASCII(feature, kPersistent))
       persistent = true;
   }
 

@@ -5,8 +5,11 @@
 #ifndef CONTENT_BROWSER_APPCACHE_APPCACHE_HOST_H_
 #define CONTENT_BROWSER_APPCACHE_APPCACHE_HOST_H_
 
+#include <stdint.h>
+
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "content/browser/appcache/appcache_group.h"
@@ -33,6 +36,7 @@ FORWARD_DECLARE_TEST(AppCacheHostTest, SetSwappableCache);
 FORWARD_DECLARE_TEST(AppCacheHostTest, ForDedicatedWorker);
 FORWARD_DECLARE_TEST(AppCacheHostTest, SelectCacheAllowed);
 FORWARD_DECLARE_TEST(AppCacheHostTest, SelectCacheBlocked);
+FORWARD_DECLARE_TEST(AppCacheHostTest, SelectCacheTwice);
 FORWARD_DECLARE_TEST(AppCacheTest, CleanupUnusedCache);
 class AppCache;
 class AppCacheFrontend;
@@ -76,14 +80,14 @@ class CONTENT_EXPORT AppCacheHost
   void RemoveObserver(Observer* observer);
 
   // Support for cache selection and scriptable method calls.
-  void SelectCache(const GURL& document_url,
-                   const int64 cache_document_was_loaded_from,
+  bool SelectCache(const GURL& document_url,
+                   const int64_t cache_document_was_loaded_from,
                    const GURL& manifest_url);
-  void SelectCacheForWorker(int parent_process_id,
+  bool SelectCacheForWorker(int parent_process_id,
                             int parent_host_id);
-  void SelectCacheForSharedWorker(int64 appcache_id);
-  void MarkAsForeignEntry(const GURL& document_url,
-                          int64 cache_document_was_loaded_from);
+  bool SelectCacheForSharedWorker(int64_t appcache_id);
+  bool MarkAsForeignEntry(const GURL& document_url,
+                          int64_t cache_document_was_loaded_from);
   void GetStatusWithCallback(const GetStatusCallback& callback,
                              void* callback_param);
   void StartUpdateWithCallback(const StartUpdateCallback& callback,
@@ -142,7 +146,7 @@ class CONTENT_EXPORT AppCacheHost
   void SetSwappableCache(AppCacheGroup* group);
 
   // Used to ensure that a loaded appcache survives a frame navigation.
-  void LoadMainResourceCache(int64 cache_id);
+  void LoadMainResourceCache(int64_t cache_id);
 
   // Used to notify the host that a namespace resource is being delivered as
   // the main resource of the page and to provide its url.
@@ -163,7 +167,6 @@ class CONTENT_EXPORT AppCacheHost
   AppCacheStorage* storage() const { return storage_; }
   AppCacheFrontend* frontend() const { return frontend_; }
   AppCache* associated_cache() const { return associated_cache_.get(); }
-  bool was_select_cache_called() const { return was_select_cache_called_; }
 
   void enable_cache_selection(bool enable) {
     is_cache_selection_enabled_ = enable;
@@ -187,14 +190,14 @@ class CONTENT_EXPORT AppCacheHost
   friend class content::AppCacheUpdateJobTest;
 
   AppCacheStatus GetStatus();
-  void LoadSelectedCache(int64 cache_id);
+  void LoadSelectedCache(int64_t cache_id);
   void LoadOrCreateGroup(const GURL& manifest_url);
 
   // See public Associate*Host() methods above.
   void AssociateCacheHelper(AppCache* cache, const GURL& manifest_url);
 
   // AppCacheStorage::Delegate impl
-  void OnCacheLoaded(AppCache* cache, int64 cache_id) override;
+  void OnCacheLoaded(AppCache* cache, int64_t cache_id) override;
   void OnGroupLoaded(AppCacheGroup* group, const GURL& manifest_url) override;
   // AppCacheServiceImpl::Observer impl
   void OnServiceReinitialized(
@@ -262,12 +265,12 @@ class CONTENT_EXPORT AppCacheHost
   // Keep a reference to the cache of the main resource so it survives frame
   // navigations.
   scoped_refptr<AppCache> main_resource_cache_;
-  int64 pending_main_resource_cache_id_;
+  int64_t pending_main_resource_cache_id_;
 
   // Cache loading is async, if we're loading a specific cache or group
   // for the purposes of cache selection, one or the other of these will
   // indicate which cache or group is being loaded.
-  int64 pending_selected_cache_id_;
+  int64_t pending_selected_cache_id_;
   GURL pending_selected_manifest_url_;
 
   // Used to defend against bad IPC messages.
@@ -336,6 +339,7 @@ class CONTENT_EXPORT AppCacheHost
   FRIEND_TEST_ALL_PREFIXES(content::AppCacheHostTest, ForDedicatedWorker);
   FRIEND_TEST_ALL_PREFIXES(content::AppCacheHostTest, SelectCacheAllowed);
   FRIEND_TEST_ALL_PREFIXES(content::AppCacheHostTest, SelectCacheBlocked);
+  FRIEND_TEST_ALL_PREFIXES(content::AppCacheHostTest, SelectCacheTwice);
   FRIEND_TEST_ALL_PREFIXES(content::AppCacheTest, CleanupUnusedCache);
 
   DISALLOW_COPY_AND_ASSIGN(AppCacheHost);

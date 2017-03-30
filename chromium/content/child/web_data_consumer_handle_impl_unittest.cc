@@ -4,8 +4,12 @@
 
 #include "content/child/web_data_consumer_handle_impl.h"
 
+#include <stddef.h>
+#include <stdint.h>
 #include <algorithm>
 #include <string>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/memory/scoped_ptr.h"
@@ -14,8 +18,8 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/thread.h"
+#include "mojo/public/cpp/system/data_pipe.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/mojo/src/mojo/public/cpp/system/data_pipe.h"
 
 namespace content {
 
@@ -58,7 +62,7 @@ class ReadDataOperation : public ReadDataOperationBase {
   ReadDataOperation(mojo::ScopedDataPipeConsumerHandle handle,
                     base::MessageLoop* main_message_loop,
                     const base::Closure& on_done)
-      : handle_(new WebDataConsumerHandleImpl(handle.Pass())),
+      : handle_(new WebDataConsumerHandleImpl(std::move(handle))),
         main_message_loop_(main_message_loop),
         on_done_(on_done) {}
 
@@ -113,8 +117,9 @@ class TwoPhaseReadDataOperation : public ReadDataOperationBase {
   TwoPhaseReadDataOperation(mojo::ScopedDataPipeConsumerHandle handle,
                             base::MessageLoop* main_message_loop,
                             const base::Closure& on_done)
-      : handle_(new WebDataConsumerHandleImpl(handle.Pass())),
-        main_message_loop_(main_message_loop), on_done_(on_done) {}
+      : handle_(new WebDataConsumerHandleImpl(std::move(handle))),
+        main_message_loop_(main_message_loop),
+        on_done_(on_done) {}
 
   const std::string& result() const { return result_; }
 
@@ -225,9 +230,7 @@ class WebDataConsumerHandleImplTest : public ::testing::Test {
 TEST_F(WebDataConsumerHandleImplTest, ReadData) {
   base::RunLoop run_loop;
   auto operation = make_scoped_ptr(new ReadDataOperation(
-      consumer_.Pass(),
-      &message_loop_,
-      run_loop.QuitClosure()));
+      std::move(consumer_), &message_loop_, run_loop.QuitClosure()));
 
   base::Thread t("DataConsumerHandle test thread");
   ASSERT_TRUE(t.Start());
@@ -248,9 +251,7 @@ TEST_F(WebDataConsumerHandleImplTest, ReadData) {
 TEST_F(WebDataConsumerHandleImplTest, TwoPhaseReadData) {
   base::RunLoop run_loop;
   auto operation = make_scoped_ptr(new TwoPhaseReadDataOperation(
-      consumer_.Pass(),
-      &message_loop_,
-      run_loop.QuitClosure()));
+      std::move(consumer_), &message_loop_, run_loop.QuitClosure()));
 
   base::Thread t("DataConsumerHandle test thread");
   ASSERT_TRUE(t.Start());

@@ -4,6 +4,11 @@
 
 #include "content/common/host_discardable_shared_memory_manager.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
+
+#include "base/threading/simple_thread.h"
 #include "content/public/common/child_process_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -59,12 +64,14 @@ class HostDiscardableSharedMemoryManagerTest : public testing::Test {
     manager_.reset(new TestHostDiscardableSharedMemoryManager);
   }
 
+  // HostDiscardableSharedMemoryManager requires a message loop.
+  base::MessageLoop message_loop_;
   scoped_ptr<TestHostDiscardableSharedMemoryManager> manager_;
 };
 
 TEST_F(HostDiscardableSharedMemoryManagerTest, AllocateForChild) {
   const int kDataSize = 1024;
-  uint8 data[kDataSize];
+  uint8_t data[kDataSize];
   memset(data, 0x80, kDataSize);
 
   base::SharedMemoryHandle shared_handle;
@@ -188,6 +195,93 @@ TEST_F(HostDiscardableSharedMemoryManagerTest, EnforceMemoryPolicy) {
   EXPECT_FALSE(manager_->enforce_memory_policy_pending());
 
   EXPECT_EQ(base::DiscardableSharedMemory::FAILED, memory.Lock(0, 0));
+}
+
+TEST_F(HostDiscardableSharedMemoryManagerTest,
+       ReduceMemoryAfterSegmentHasBeenDeleted) {
+  const int kDataSize = 1024;
+
+  base::SharedMemoryHandle shared_handle1;
+  manager_->AllocateLockedDiscardableSharedMemoryForChild(
+      base::GetCurrentProcessHandle(), ChildProcessHost::kInvalidUniqueID,
+      kDataSize, 1, &shared_handle1);
+  ASSERT_TRUE(base::SharedMemory::IsHandleValid(shared_handle1));
+
+  TestDiscardableSharedMemory memory1(shared_handle1);
+  bool rv = memory1.Map(kDataSize);
+  ASSERT_TRUE(rv);
+
+  base::SharedMemoryHandle shared_handle2;
+  manager_->AllocateLockedDiscardableSharedMemoryForChild(
+      base::GetCurrentProcessHandle(), ChildProcessHost::kInvalidUniqueID,
+      kDataSize, 2, &shared_handle2);
+  ASSERT_TRUE(base::SharedMemory::IsHandleValid(shared_handle2));
+
+  TestDiscardableSharedMemory memory2(shared_handle2);
+  rv = memory2.Map(kDataSize);
+  ASSERT_TRUE(rv);
+
+  // Unlock and delete segment 1.
+  memory1.SetNow(base::Time::FromDoubleT(1));
+  memory1.Unlock(0, 0);
+  memory1.Unmap();
+  memory1.Close();
+  manager_->ChildDeletedDiscardableSharedMemory(
+      1, ChildProcessHost::kInvalidUniqueID);
+
+  // Make sure the manager is able to reduce memory after the segment 1 was
+  // deleted.
+  manager_->SetNow(base::Time::FromDoubleT(2));
+  manager_->SetMemoryLimit(0);
+
+  // Unlock segment 2.
+  memory2.SetNow(base::Time::FromDoubleT(3));
+  memory2.Unlock(0, 0);
+}
+
+class HostDiscardableSharedMemoryManagerScheduleEnforceMemoryPolicyTest
+    : public testing::Test {
+ protected:
+  // Overridden from testing::Test:
+  void SetUp() override {
+    manager_.reset(new HostDiscardableSharedMemoryManager);
+  }
+
+  // HostDiscardableSharedMemoryManager requires a message loop.
+  base::MessageLoop message_loop_;
+  scoped_ptr<HostDiscardableSharedMemoryManager> manager_;
+};
+
+class SetMemoryLimitRunner : public base::DelegateSimpleThread::Delegate {
+ public:
+  SetMemoryLimitRunner(HostDiscardableSharedMemoryManager* manager,
+                       size_t limit)
+      : manager_(manager), limit_(limit) {}
+  ~SetMemoryLimitRunner() override {}
+
+  void Run() override { manager_->SetMemoryLimit(limit_); }
+
+ private:
+  HostDiscardableSharedMemoryManager* const manager_;
+  const size_t limit_;
+};
+
+TEST_F(HostDiscardableSharedMemoryManagerScheduleEnforceMemoryPolicyTest,
+       SetMemoryLimitOnSimpleThread) {
+  const int kDataSize = 1024;
+
+  base::SharedMemoryHandle shared_handle;
+  manager_->AllocateLockedDiscardableSharedMemoryForChild(
+      base::GetCurrentProcessHandle(), ChildProcessHost::kInvalidUniqueID,
+      kDataSize, 0, &shared_handle);
+  ASSERT_TRUE(base::SharedMemory::IsHandleValid(shared_handle));
+
+  // Set the memory limit to a value that will require EnforceMemoryPolicy()
+  // to be schedule on a thread without a message loop.
+  SetMemoryLimitRunner runner(manager_.get(), kDataSize - 1);
+  base::DelegateSimpleThread thread(&runner, "memory_limit_setter");
+  thread.Start();
+  thread.Join();
 }
 
 }  // namespace

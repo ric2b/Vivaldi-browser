@@ -4,6 +4,9 @@
 
 #include "google_apis/drive/drive_api_requests.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/json/json_writer.h"
@@ -75,7 +78,7 @@ void ParseFileResourceWithUploadRangeAndRun(const UploadRangeCallback& callback,
     }
   }
 
-  callback.Run(response, file_resource.Pass());
+  callback.Run(response, std::move(file_resource));
 }
 
 // Attaches |properties| to the |request_body| if |properties| is not empty.
@@ -385,7 +388,8 @@ FilesInsertRequest::FilesInsertRequest(
     const DriveApiUrlGenerator& url_generator,
     const FileResourceCallback& callback)
     : DriveApiDataRequest<FileResource>(sender, callback),
-      url_generator_(url_generator) {
+      url_generator_(url_generator),
+      visibility_(FILE_VISIBILITY_DEFAULT) {
   DCHECK(!callback.is_null());
 }
 
@@ -434,7 +438,8 @@ bool FilesInsertRequest::GetContentData(std::string* upload_content_type,
 }
 
 GURL FilesInsertRequest::GetURLInternal() const {
-  return url_generator_.GetFilesInsertUrl();
+  return url_generator_.GetFilesInsertUrl(
+      visibility_ == FILE_VISIBILITY_PRIVATE ? "PRIVATE" : "");
 }
 
 //============================== FilesPatchRequest ============================
@@ -514,7 +519,8 @@ FilesCopyRequest::FilesCopyRequest(
     const DriveApiUrlGenerator& url_generator,
     const FileResourceCallback& callback)
     : DriveApiDataRequest<FileResource>(sender, callback),
-      url_generator_(url_generator) {
+      url_generator_(url_generator),
+      visibility_(FILE_VISIBILITY_DEFAULT) {
   DCHECK(!callback.is_null());
 }
 
@@ -526,7 +532,8 @@ net::URLFetcher::RequestType FilesCopyRequest::GetRequestType() const {
 }
 
 GURL FilesCopyRequest::GetURLInternal() const {
-  return url_generator_.GetFilesCopyUrl(file_id_);
+  return url_generator_.GetFilesCopyUrl(
+      file_id_, visibility_ == FILE_VISIBILITY_PRIVATE ? "PRIVATE" : "");
 }
 
 bool FilesCopyRequest::GetContentData(std::string* upload_content_type,
@@ -797,18 +804,14 @@ InitiateUploadNewFileRequest::InitiateUploadNewFileRequest(
     RequestSender* sender,
     const DriveApiUrlGenerator& url_generator,
     const std::string& content_type,
-    int64 content_length,
+    int64_t content_length,
     const std::string& parent_resource_id,
     const std::string& title,
     const InitiateUploadCallback& callback)
-    : InitiateUploadRequestBase(sender,
-                                callback,
-                                content_type,
-                                content_length),
+    : InitiateUploadRequestBase(sender, callback, content_type, content_length),
       url_generator_(url_generator),
       parent_resource_id_(parent_resource_id),
-      title_(title) {
-}
+      title_(title) {}
 
 InitiateUploadNewFileRequest::~InitiateUploadNewFileRequest() {}
 
@@ -856,18 +859,14 @@ InitiateUploadExistingFileRequest::InitiateUploadExistingFileRequest(
     RequestSender* sender,
     const DriveApiUrlGenerator& url_generator,
     const std::string& content_type,
-    int64 content_length,
+    int64_t content_length,
     const std::string& resource_id,
     const std::string& etag,
     const InitiateUploadCallback& callback)
-    : InitiateUploadRequestBase(sender,
-                                callback,
-                                content_type,
-                                content_length),
+    : InitiateUploadRequestBase(sender, callback, content_type, content_length),
       url_generator_(url_generator),
       resource_id_(resource_id),
-      etag_(etag) {
-}
+      etag_(etag) {}
 
 InitiateUploadExistingFileRequest::~InitiateUploadExistingFileRequest() {}
 
@@ -926,9 +925,9 @@ bool InitiateUploadExistingFileRequest::GetContentData(
 ResumeUploadRequest::ResumeUploadRequest(
     RequestSender* sender,
     const GURL& upload_location,
-    int64 start_position,
-    int64 end_position,
-    int64 content_length,
+    int64_t start_position,
+    int64_t end_position,
+    int64_t content_length,
     const std::string& content_type,
     const base::FilePath& local_file_path,
     const UploadRangeCallback& callback,
@@ -951,11 +950,13 @@ void ResumeUploadRequest::OnRangeRequestComplete(
     const UploadRangeResponse& response,
     scoped_ptr<base::Value> value) {
   DCHECK(CalledOnValidThread());
-  ParseFileResourceWithUploadRangeAndRun(callback_, response, value.Pass());
+  ParseFileResourceWithUploadRangeAndRun(callback_, response, std::move(value));
 }
 
 void ResumeUploadRequest::OnURLFetchUploadProgress(
-    const net::URLFetcher* source, int64 current, int64 total) {
+    const net::URLFetcher* source,
+    int64_t current,
+    int64_t total) {
   if (!progress_callback_.is_null())
     progress_callback_.Run(current, total);
 }
@@ -965,11 +966,9 @@ void ResumeUploadRequest::OnURLFetchUploadProgress(
 GetUploadStatusRequest::GetUploadStatusRequest(
     RequestSender* sender,
     const GURL& upload_url,
-    int64 content_length,
+    int64_t content_length,
     const UploadRangeCallback& callback)
-    : GetUploadStatusRequestBase(sender,
-                                 upload_url,
-                                 content_length),
+    : GetUploadStatusRequestBase(sender, upload_url, content_length),
       callback_(callback) {
   DCHECK(!callback.is_null());
 }
@@ -980,7 +979,7 @@ void GetUploadStatusRequest::OnRangeRequestComplete(
     const UploadRangeResponse& response,
     scoped_ptr<base::Value> value) {
   DCHECK(CalledOnValidThread());
-  ParseFileResourceWithUploadRangeAndRun(callback_, response, value.Pass());
+  ParseFileResourceWithUploadRangeAndRun(callback_, response, std::move(value));
 }
 
 //======================= MultipartUploadNewFileDelegate =======================
@@ -990,7 +989,7 @@ MultipartUploadNewFileDelegate::MultipartUploadNewFileDelegate(
     const std::string& title,
     const std::string& parent_resource_id,
     const std::string& content_type,
-    int64 content_length,
+    int64_t content_length,
     const base::Time& modified_date,
     const base::Time& last_viewed_by_me_date,
     const base::FilePath& local_file_path,
@@ -1011,8 +1010,7 @@ MultipartUploadNewFileDelegate::MultipartUploadNewFileDelegate(
           callback,
           progress_callback),
       has_modified_date_(!modified_date.is_null()),
-      url_generator_(url_generator) {
-}
+      url_generator_(url_generator) {}
 
 MultipartUploadNewFileDelegate::~MultipartUploadNewFileDelegate() {
 }
@@ -1034,7 +1032,7 @@ MultipartUploadExistingFileDelegate::MultipartUploadExistingFileDelegate(
     const std::string& resource_id,
     const std::string& parent_resource_id,
     const std::string& content_type,
-    int64 content_length,
+    int64_t content_length,
     const base::Time& modified_date,
     const base::Time& last_viewed_by_me_date,
     const base::FilePath& local_file_path,
@@ -1058,8 +1056,7 @@ MultipartUploadExistingFileDelegate::MultipartUploadExistingFileDelegate(
       resource_id_(resource_id),
       etag_(etag),
       has_modified_date_(!modified_date.is_null()),
-      url_generator_(url_generator) {
-}
+      url_generator_(url_generator) {}
 
 MultipartUploadExistingFileDelegate::~MultipartUploadExistingFileDelegate() {
 }
@@ -1224,8 +1221,8 @@ void SingleBatchableDelegateRequest::RunCallbackOnPrematureFailure(
 
 void SingleBatchableDelegateRequest::OnURLFetchUploadProgress(
     const net::URLFetcher* source,
-    int64 current,
-    int64 total) {
+    int64_t current,
+    int64_t total) {
   delegate_->NotifyUploadProgress(source, current, total);
 }
 
@@ -1323,7 +1320,7 @@ void BatchUploadRequest::MayCompletePrepare() {
   }
 
   // Build multipart body here.
-  int64 total_size = 0;
+  int64_t total_size = 0;
   std::vector<ContentTypeAndData> parts;
   for (auto& child : child_requests_) {
     std::string type;
@@ -1363,7 +1360,7 @@ void BatchUploadRequest::MayCompletePrepare() {
   UMA_HISTOGRAM_MEMORY_KB(kUMADriveTotalFileSizeInBatchUpload,
                           total_size / 1024);
 
-  std::vector<uint64> part_data_offset;
+  std::vector<uint64_t> part_data_offset;
   GenerateMultipartBody(MULTIPART_MIXED, boundary_, parts, &upload_content_,
                         &part_data_offset);
   DCHECK(part_data_offset.size() == child_requests_.size());
@@ -1400,7 +1397,12 @@ std::vector<std::string> BatchUploadRequest::GetExtraRequestHeaders() const {
 }
 
 void BatchUploadRequest::ProcessURLFetchResults(const net::URLFetcher* source) {
-  UMA_HISTOGRAM_SPARSE_SLOWLY(kUMADriveBatchUploadResponseCode, GetErrorCode());
+  // Return the detailed raw HTTP code if the error code is abstracted
+  // DRIVE_OTHER_ERROR.
+  UMA_HISTOGRAM_SPARSE_SLOWLY(kUMADriveBatchUploadResponseCode,
+                              GetErrorCode() != DRIVE_OTHER_ERROR
+                                  ? GetErrorCode()
+                                  : source->GetResponseCode());
 
   if (!IsSuccessfulDriveApiErrorCode(GetErrorCode())) {
     RunCallbackOnPrematureFailure(GetErrorCode());
@@ -1442,8 +1444,8 @@ void BatchUploadRequest::RunCallbackOnPrematureFailure(DriveApiErrorCode code) {
 }
 
 void BatchUploadRequest::OnURLFetchUploadProgress(const net::URLFetcher* source,
-                                                  int64 current,
-                                                  int64 total) {
+                                                  int64_t current,
+                                                  int64_t total) {
   for (auto child : child_requests_) {
     if (child->data_offset <= current &&
         current <= child->data_offset + child->data_size) {

@@ -11,7 +11,6 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Debug;
 
-import org.chromium.net.urlconnection.CronetHttpURLStreamHandler;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -111,7 +110,7 @@ public class CronetPerfTestActivity extends Activity {
         private final Protocol mProtocol;
         private final URL mUrl;
         private final String mName;
-        private final UrlRequestContext mCronetContext;
+        private final CronetEngine mCronetEngine;
         // Size in bytes of content being uploaded or downloaded.
         private final int mLength;
         // How many requests to execute.
@@ -178,13 +177,14 @@ public class CronetPerfTestActivity extends Activity {
                 throw new IllegalArgumentException("Bad URL: " + getConfigString("HOST") + ":"
                         + port + "/" + resource);
             }
-            final UrlRequestContextConfig cronetConfig = new UrlRequestContextConfig();
+            final CronetEngine.Builder cronetEngineBuilder =
+                    new CronetEngine.Builder(CronetPerfTestActivity.this);
             if (mProtocol == Protocol.QUIC) {
-                cronetConfig.enableQUIC(true);
-                cronetConfig.addQuicHint(getConfigString("HOST"), getConfigInt("QUIC_PORT"),
+                cronetEngineBuilder.enableQUIC(true);
+                cronetEngineBuilder.addQuicHint(getConfigString("HOST"), getConfigInt("QUIC_PORT"),
                         getConfigInt("QUIC_PORT"));
             }
-            mCronetContext = new CronetUrlRequestContext(CronetPerfTestActivity.this, cronetConfig);
+            mCronetEngine = cronetEngineBuilder.build();
             mName = buildBenchmarkName(mode, direction, protocol, concurrency, mIterations);
             mConcurrency = concurrency;
             mResults = results;
@@ -216,8 +216,8 @@ public class CronetPerfTestActivity extends Activity {
         @SuppressLint("NewApi")
         private void startLogging() {
             if (getConfigBoolean("CAPTURE_NETLOG")) {
-                mCronetContext.startNetLogToFile(getFilesDir().getPath() + "/" + mName + ".json",
-                        false);
+                mCronetEngine.startNetLogToFile(
+                        getFilesDir().getPath() + "/" + mName + ".json", false);
             }
             if (getConfigBoolean("CAPTURE_TRACE")) {
                 Debug.startMethodTracing(getFilesDir().getPath() + "/" + mName + ".trace");
@@ -229,7 +229,7 @@ public class CronetPerfTestActivity extends Activity {
 
         private void stopLogging() {
             if (getConfigBoolean("CAPTURE_NETLOG")) {
-                mCronetContext.stopNetLog();
+                mCronetEngine.stopNetLog();
             }
             if (getConfigBoolean("CAPTURE_TRACE") || getConfigBoolean("CAPTURE_SAMPLED_TRACE")) {
                 Debug.stopMethodTracing();
@@ -240,7 +240,7 @@ public class CronetPerfTestActivity extends Activity {
          * Transfer {@code mLength} bytes through HttpURLConnection in {@code mDirection} direction.
          * @param connection The HttpURLConnection to use for transfer.
          * @param buffer A buffer of length |mBufferSize| to use for transfer.
-         * @return true if transfer completed successfully.
+         * @return {@code true} if transfer completed successfully.
          */
         private boolean exerciseHttpURLConnection(URLConnection urlConnection, byte[] buffer)
                 throws IOException {
@@ -291,17 +291,11 @@ public class CronetPerfTestActivity extends Activity {
         // GET or POST to one particular URL using Cronet HttpURLConnection API
         private class CronetHttpURLConnectionFetchTask implements Callable<Boolean> {
             private final byte[] mBuffer = new byte[mBufferSize];
-            private final CronetHttpURLStreamHandler mStreamHandler;
-
-            public CronetHttpURLConnectionFetchTask(
-                    CronetHttpURLStreamHandler cronetStreamHandler) {
-                mStreamHandler = cronetStreamHandler;
-            }
 
             @Override
             public Boolean call() {
                 try {
-                    return exerciseHttpURLConnection(mStreamHandler.openConnection(mUrl), mBuffer);
+                    return exerciseHttpURLConnection(mCronetEngine.openConnection(mUrl), mBuffer);
                 } catch (IOException e) {
                     System.out.println("Cronet HttpURLConnection failed with " + e);
                     return false;
@@ -343,16 +337,17 @@ public class CronetPerfTestActivity extends Activity {
                         initiateRequest(buffer);
                     }
                 };
-                final UrlRequest request = mCronetContext.createRequest(mUrl.toString(),
-                        new Listener(buffer, completionCallback), mWorkQueueExecutor);
+                final UrlRequest.Builder builder = new UrlRequest.Builder(mUrl.toString(),
+                        new Callback(buffer, completionCallback), mWorkQueueExecutor,
+                        mCronetEngine);
                 if (mDirection == Direction.UP) {
-                    request.setUploadDataProvider(new Uploader(buffer), mWorkQueueExecutor);
-                    request.addHeader("Content-Type", "application/octet-stream");
+                    builder.setUploadDataProvider(new Uploader(buffer), mWorkQueueExecutor);
+                    builder.addHeader("Content-Type", "application/octet-stream");
                 }
-                request.start();
+                builder.build().start();
             }
 
-            private class Uploader implements UploadDataProvider {
+            private class Uploader extends UploadDataProvider {
                 private final ByteBuffer mBuffer;
                 private int mRemainingBytes;
 
@@ -385,41 +380,42 @@ public class CronetPerfTestActivity extends Activity {
                 }
             }
 
-            private class Listener implements UrlRequestListener {
+            private class Callback extends UrlRequest.Callback {
                 private final ByteBuffer mBuffer;
                 private final Runnable mCompletionCallback;
 
-                Listener(ByteBuffer buffer, Runnable completionCallback) {
+                Callback(ByteBuffer buffer, Runnable completionCallback) {
                     mBuffer = buffer;
                     mCompletionCallback = completionCallback;
                 }
 
                 @Override
-                public void onResponseStarted(UrlRequest request, ResponseInfo info) {
+                public void onResponseStarted(UrlRequest request, UrlResponseInfo info) {
                     mBuffer.clear();
-                    request.read(mBuffer);
+                    request.readNew(mBuffer);
                 }
 
                 @Override
-                public void onReceivedRedirect(
-                        UrlRequest request, ResponseInfo info, String newLocationUrl) {
+                public void onRedirectReceived(
+                        UrlRequest request, UrlResponseInfo info, String newLocationUrl) {
                     request.followRedirect();
                 }
 
                 @Override
                 public void onReadCompleted(
-                        UrlRequest request, ResponseInfo info, ByteBuffer byteBuffer) {
+                        UrlRequest request, UrlResponseInfo info, ByteBuffer byteBuffer) {
                     mBuffer.clear();
-                    request.read(mBuffer);
+                    request.readNew(mBuffer);
                 }
 
                 @Override
-                public void onSucceeded(UrlRequest request, ExtendedResponseInfo info) {
+                public void onSucceeded(UrlRequest request, UrlResponseInfo info) {
                     mCompletionCallback.run();
                 }
 
                 @Override
-                public void onFailed(UrlRequest request, ResponseInfo info, UrlRequestException e) {
+                public void onFailed(
+                        UrlRequest request, UrlResponseInfo info, UrlRequestException e) {
                     System.out.println("Async request failed with " + e);
                     mFailed = true;
                 }
@@ -478,10 +474,8 @@ public class CronetPerfTestActivity extends Activity {
                     }
                     break;
                 case CRONET_HUC: {
-                    final CronetHttpURLStreamHandler cronetStreamHandler =
-                            new CronetHttpURLStreamHandler(mCronetContext);
                     for (int i = 0; i < mIterations; i++) {
-                        tasks.add(new CronetHttpURLConnectionFetchTask(cronetStreamHandler));
+                        tasks.add(new CronetHttpURLConnectionFetchTask());
                     }
                     break;
                 }

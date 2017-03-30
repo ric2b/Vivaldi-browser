@@ -4,9 +4,13 @@
 
 #include "components/variations/study_filtering.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <set>
 
 #include "base/stl_util.h"
+#include "build/build_config.h"
 
 namespace variations {
 
@@ -33,7 +37,7 @@ Study_Platform GetCurrentPlatform() {
 }
 
 // Converts |date_time| in Study date format to base::Time.
-base::Time ConvertStudyDateToBaseTime(int64 date_time) {
+base::Time ConvertStudyDateToBaseTime(int64_t date_time) {
   return base::Time::UnixEpoch() + base::TimeDelta::FromSeconds(date_time);
 }
 
@@ -236,16 +240,16 @@ bool ShouldAddStudy(
 
 }  // namespace internal
 
-void FilterAndValidateStudies(
-    const VariationsSeed& seed,
-    const std::string& locale,
-    const base::Time& reference_date,
-    const base::Version& version,
-    Study_Channel channel,
-    Study_FormFactor form_factor,
-    const std::string& hardware_class,
-    const std::string& permanent_consistency_country,
-    std::vector<ProcessedStudy>* filtered_studies) {
+void FilterAndValidateStudies(const VariationsSeed& seed,
+                              const std::string& locale,
+                              const base::Time& reference_date,
+                              const base::Version& version,
+                              Study_Channel channel,
+                              Study_FormFactor form_factor,
+                              const std::string& hardware_class,
+                              const std::string& session_consistency_country,
+                              const std::string& permanent_consistency_country,
+                              std::vector<ProcessedStudy>* filtered_studies) {
   DCHECK(version.IsValid());
 
   // Add expired studies (in a disabled state) only after all the non-expired
@@ -264,8 +268,7 @@ void FilterAndValidateStudies(
     std::string country;
     switch (study.consistency()) {
       case Study_Consistency_SESSION:
-        if (seed.has_country_code())
-          country = seed.country_code();
+        country = session_consistency_country;
         break;
       case Study_Consistency_PERMANENT:
         // Use the saved |permanent_consistency_country| for permanent

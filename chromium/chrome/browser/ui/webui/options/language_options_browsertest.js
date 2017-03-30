@@ -16,18 +16,27 @@ LanguageOptionsWebUITest.prototype = {
 
   /** @override */
   browsePreload: 'chrome://settings-frame/languages',
+
+  /** @override */
+  setUp: function() {
+    OptionsBrowsertestBase.prototype.setUp.call(this);
+
+    // Enable when failure is resolved.
+    // AX_ARIA_10: http://crbug.com/559266
+    this.accessibilityAuditConfig.ignoreSelectors(
+        'unsupportedAriaAttribute',
+        '#language-options-list');
+
+    // Enable when failure is resolved.
+    // AX_TEXT_04: http://crbug.com/559271
+    this.accessibilityAuditConfig.ignoreSelectors(
+        'linkWithUnclearPurpose',
+        '#languagePage > .content-area > .language-options-header > A');
+  }
 };
 
 // Test opening language options has correct location.
-// TODO(vivaldi) Reenable for Vivaldi
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_testOpenLanguageOptions ' +
-    'DISABLED_testOpenLanguageOptions');
-GEN('#else');
-GEN('#define MAYBE_testOpenLanguageOptions ' +
-    'testOpenLanguageOptions');
-GEN('#endif  // defined(OS_MACOSX)');
-TEST_F('LanguageOptionsWebUITest', 'MAYBE_testOpenLanguageOptions', function () {
+TEST_F('LanguageOptionsWebUITest', 'testOpenLanguageOptions', function() {
   assertEquals(this.browsePreload, document.location.href);
 });
 

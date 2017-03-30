@@ -4,6 +4,7 @@
 
 #include "media/blink/encrypted_media_player_support.h"
 
+#include <stddef.h>
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
@@ -16,12 +17,12 @@
 #include "media/base/key_systems.h"
 #include "media/blink/webcontentdecryptionmodule_impl.h"
 #include "third_party/WebKit/public/platform/WebContentDecryptionModule.h"
-#include "third_party/WebKit/public/platform/WebMediaPlayerClient.h"
+#include "third_party/WebKit/public/platform/WebMediaPlayerEncryptedMediaClient.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 
 using blink::WebMediaPlayer;
-using blink::WebMediaPlayerClient;
+using blink::WebMediaPlayerEncryptedMediaClient;
 using blink::WebString;
 
 namespace media {
@@ -38,8 +39,9 @@ static const char* kMediaEme = "Media.EME.";
 // Convert a WebString to ASCII, falling back on an empty string in the case
 // of a non-ASCII string.
 static std::string ToASCIIOrEmpty(const WebString& string) {
-  return base::IsStringASCII(string) ? base::UTF16ToASCII(string)
-                                     : std::string();
+  return base::IsStringASCII(string)
+      ? base::UTF16ToASCII(base::StringPiece16(string))
+      : std::string();
 }
 
 // Helper functions to report media EME related stats to UMA. They follow the
@@ -115,7 +117,7 @@ static EmeInitDataType GuessInitDataType(const unsigned char* init_data,
 
 EncryptedMediaPlayerSupport::EncryptedMediaPlayerSupport(
     CdmFactory* cdm_factory,
-    blink::WebMediaPlayerClient* client,
+    WebMediaPlayerEncryptedMediaClient* client,
     MediaPermission* media_permission,
     const CdmContextReadyCB& cdm_context_ready_cb)
     : cdm_factory_(cdm_factory),
@@ -290,28 +292,29 @@ void EncryptedMediaPlayerSupport::OnKeyAdded(const std::string& session_id) {
 
 void EncryptedMediaPlayerSupport::OnKeyError(const std::string& session_id,
                                              MediaKeys::KeyError error_code,
-                                             uint32 system_code) {
+                                             uint32_t system_code) {
   EmeUMAHistogramEnumeration(current_key_system_, "KeyError",
                              error_code, MediaKeys::kMaxKeyError);
 
-  uint16 short_system_code = 0;
-  if (system_code > std::numeric_limits<uint16>::max()) {
+  uint16_t short_system_code = 0;
+  if (system_code > std::numeric_limits<uint16_t>::max()) {
     LOG(WARNING) << "system_code exceeds unsigned short limit.";
-    short_system_code = std::numeric_limits<uint16>::max();
+    short_system_code = std::numeric_limits<uint16_t>::max();
   } else {
-    short_system_code = static_cast<uint16>(system_code);
+    short_system_code = static_cast<uint16_t>(system_code);
   }
 
   client_->keyError(
       WebString::fromUTF8(GetPrefixedKeySystemName(current_key_system_)),
       WebString::fromUTF8(session_id),
-      static_cast<WebMediaPlayerClient::MediaKeyErrorCode>(error_code),
+      static_cast<WebMediaPlayerEncryptedMediaClient::MediaKeyErrorCode>(
+          error_code),
       short_system_code);
 }
 
 void EncryptedMediaPlayerSupport::OnKeyMessage(
     const std::string& session_id,
-    const std::vector<uint8>& message,
+    const std::vector<uint8_t>& message,
     const GURL& destination_url) {
   DCHECK(destination_url.is_empty() || destination_url.is_valid());
 

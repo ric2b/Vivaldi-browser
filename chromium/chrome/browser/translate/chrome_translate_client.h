@@ -7,9 +7,9 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/ui/translate/translate_bubble_model.h"
-#include "components/translate/content/browser/browser_cld_data_provider.h"
 #include "components/translate/content/browser/content_translate_driver.h"
 #include "components/translate/core/browser/translate_client.h"
 #include "components/translate/core/browser/translate_step.h"
@@ -84,11 +84,13 @@ class ChromeTranslateClient
   scoped_ptr<translate::TranslatePrefs> GetTranslatePrefs() override;
   translate::TranslateAcceptLanguages* GetTranslateAcceptLanguages() override;
   int GetInfobarIconID() const override;
+#if !defined(USE_AURA)
   scoped_ptr<infobars::InfoBar> CreateInfoBar(
       scoped_ptr<translate::TranslateInfoBarDelegate> delegate) const override;
+#endif
   void ShowTranslateUI(translate::TranslateStep step,
-                       const std::string source_language,
-                       const std::string target_language,
+                       const std::string& source_language,
+                       const std::string& target_language,
                        translate::TranslateErrors::Type error_type,
                        bool triggered_from_menu) override;
   bool IsTranslatableURL(const GURL& url) override;
@@ -106,7 +108,6 @@ class ChromeTranslateClient
   friend class content::WebContentsUserData<ChromeTranslateClient>;
 
   // content::WebContentsObserver implementation.
-  bool OnMessageReceived(const IPC::Message& message) override;
   void WebContentsDestroyed() override;
 
   // Shows the translate bubble.
@@ -115,9 +116,6 @@ class ChromeTranslateClient
 
   translate::ContentTranslateDriver translate_driver_;
   scoped_ptr<translate::TranslateManager> translate_manager_;
-
-  // Provides CLD data for this process.
-  scoped_ptr<translate::BrowserCldDataProvider> cld_data_provider_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeTranslateClient);
 };

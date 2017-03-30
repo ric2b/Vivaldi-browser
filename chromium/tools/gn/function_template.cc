@@ -28,7 +28,7 @@ const char kTemplate_Help[] =
     "  other files will import (see \"gn help import\") so your template\n"
     "  rule can be shared across build files.\n"
     "\n"
-    "More details:\n"
+    "Variables and templates:\n"
     "\n"
     "  When you call template() it creates a closure around all variables\n"
     "  currently in scope with the code in the template block. When the\n"
@@ -43,6 +43,19 @@ const char kTemplate_Help[] =
     "  current directory will be that of the invoking code, since typically\n"
     "  that code specifies the file names. This means all files internal\n"
     "  to the template should use absolute names.\n"
+    "\n"
+    "  A template will typically forward some or all variables from the\n"
+    "  invoking scope to a target that it defines. Often, such variables\n"
+    "  might be optional. Use the pattern:\n"
+    "\n"
+    "    if (defined(invoker.deps)) {\n"
+    "      deps = invoker.deps\n"
+    "    }\n"
+    "\n"
+    "  The function forward_variables_from() provides a shortcut to forward\n"
+    "  one or more or possibly all variables in this manner:\n"
+    "\n"
+    "    forward_variables_from(invoker, [\"deps\", \"public_deps\"])\n"
     "\n"
     "Target naming:\n"
     "\n"
@@ -59,8 +72,8 @@ const char kTemplate_Help[] =
     "  have globally unique names, or you will get collisions.\n"
     "\n"
     "  Access the invoking name in your template via the implicit\n"
-    "  \"target_name\" variable. This should also be the basis of how other\n"
-    "  targets that a template expands to to ensure uniquness.\n"
+    "  \"target_name\" variable. This should also be the basis for how other\n"
+    "  targets that a template expands to ensure uniqueness.\n"
     "\n"
     "  A typical example would be a template that defines an action to\n"
     "  generate some source files, and a source_set to compile that source.\n"
@@ -150,6 +163,14 @@ Value RunTemplate(Scope* scope,
                   const std::vector<Value>& args,
                   BlockNode* block,
                   Err* err) {
+  // Of course you can have configs and targets in a template. But here, we're
+  // not actually executing the block, only declaring it. Marking the template
+  // declaration as non-nestable means that you can't put it inside a target,
+  // for example.
+  NonNestableBlock non_nestable(scope, function, "template");
+  if (!non_nestable.Enter(err))
+    return Value();
+
   // TODO(brettw) determine if the function is built-in and throw an error if
   // it is.
   if (args.size() != 1) {

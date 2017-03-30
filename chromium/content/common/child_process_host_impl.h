@@ -5,12 +5,15 @@
 #ifndef CONTENT_COMMON_CHILD_PROCESS_HOST_IMPL_H_
 #define CONTENT_COMMON_CHILD_PROCESS_HOST_IMPL_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
 #include "build/build_config.h"
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
 #include "base/memory/singleton.h"
@@ -26,6 +29,10 @@ class FilePath;
 
 namespace IPC {
 class MessageFilter;
+}
+
+namespace gpu {
+struct SyncToken;
 }
 
 namespace content {
@@ -55,6 +62,20 @@ class CONTENT_EXPORT ChildProcessHostImpl : public ChildProcessHost,
   // This will never return ChildProcessHost::kInvalidUniqueID.
   static int GenerateChildProcessUniqueId();
 
+  // Derives a tracing process id from a child process id. Child process ids
+  // cannot be used directly in child process for tracing due to security
+  // reasons (see: discussion in crrev.com/1173263004). This method is meant to
+  // be used when tracing for identifying cross-process shared memory from a
+  // process which knows the child process id of its endpoints. The value
+  // returned by this method is guaranteed to be equal to the value returned by
+  // MemoryDumpManager::GetTracingProcessId() in the corresponding child
+  // process.
+  //
+  // Never returns MemoryDumpManager::kInvalidTracingProcessId.
+  // Returns only ChildProcessHost::kBrowserTracingProcessId in single-process
+  // mode.
+  static uint64_t ChildProcessUniqueIdToTracingProcessId(int child_process_id);
+
   // ChildProcessHost implementation
   bool Send(IPC::Message* message) override;
   void ForceShutdown() override;
@@ -72,21 +93,22 @@ class CONTENT_EXPORT ChildProcessHostImpl : public ChildProcessHost,
 
   // IPC::Listener methods:
   bool OnMessageReceived(const IPC::Message& msg) override;
-  void OnChannelConnected(int32 peer_pid) override;
+  void OnChannelConnected(int32_t peer_pid) override;
   void OnChannelError() override;
   void OnBadMessageReceived(const IPC::Message& message) override;
 
   // Message handlers:
   void OnShutdownRequest();
-  void OnAllocateSharedMemory(uint32 buffer_size,
+  void OnAllocateSharedMemory(uint32_t buffer_size,
                               base::SharedMemoryHandle* handle);
-  void OnAllocateGpuMemoryBuffer(uint32 width,
-                                 uint32 height,
-                                 gfx::GpuMemoryBuffer::Format format,
-                                 gfx::GpuMemoryBuffer::Usage usage,
+  void OnAllocateGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
+                                 uint32_t width,
+                                 uint32_t height,
+                                 gfx::BufferFormat format,
+                                 gfx::BufferUsage usage,
                                  gfx::GpuMemoryBufferHandle* handle);
   void OnDeletedGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
-                                uint32 sync_point);
+                                const gpu::SyncToken& sync_token);
 
   ChildProcessHostDelegate* delegate_;
   base::Process peer_process_;

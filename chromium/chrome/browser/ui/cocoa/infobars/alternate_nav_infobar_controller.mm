@@ -4,6 +4,10 @@
 
 #import "chrome/browser/ui/cocoa/infobars/alternate_nav_infobar_controller.h"
 
+#include <stddef.h>
+
+#include <utility>
+
 #include "base/logging.h"
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/browser/ui/cocoa/infobars/infobar_cocoa.h"
@@ -38,7 +42,7 @@
           withFont:font
       messageColor:[NSColor blackColor]];
   [view addLinkRange:NSMakeRange(offset, link.length())
-            withName:@""
+             withURL:base::SysUTF8ToNSString(delegate->GetLinkURL().spec())
            linkColor:[NSColor blueColor]];
 }
 
@@ -61,9 +65,9 @@
 // static
 scoped_ptr<infobars::InfoBar> AlternateNavInfoBarDelegate::CreateInfoBar(
     scoped_ptr<AlternateNavInfoBarDelegate> delegate) {
-  scoped_ptr<InfoBarCocoa> infobar(new InfoBarCocoa(delegate.Pass()));
+  scoped_ptr<InfoBarCocoa> infobar(new InfoBarCocoa(std::move(delegate)));
   base::scoped_nsobject<AlternateNavInfoBarController> controller(
       [[AlternateNavInfoBarController alloc] initWithInfoBar:infobar.get()]);
   infobar->set_controller(controller);
-  return infobar.Pass();
+  return std::move(infobar);
 }

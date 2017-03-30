@@ -5,6 +5,9 @@
 #ifndef CC_RESOURCES_TEXTURE_MAILBOX_H_
 #define CC_RESOURCES_TEXTURE_MAILBOX_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 
 #include "base/memory/shared_memory.h"
@@ -21,12 +24,14 @@ class CC_EXPORT TextureMailbox {
  public:
   TextureMailbox();
   explicit TextureMailbox(const gpu::MailboxHolder& mailbox_holder);
-  TextureMailbox(const gpu::Mailbox& mailbox, uint32 target, uint32 sync_point);
   TextureMailbox(const gpu::Mailbox& mailbox,
-                 uint32 target,
-                 uint32 sync_point,
+                 const gpu::SyncToken& sync_token,
+                 uint32_t target);
+  TextureMailbox(const gpu::Mailbox& mailbox,
+                 const gpu::SyncToken& sync_token,
+                 uint32_t target,
                  const gfx::Size& size_in_pixels,
-                 bool allow_overlay);
+                 bool is_overlay_candidate);
   TextureMailbox(SharedBitmap* shared_bitmap, const gfx::Size& size_in_pixels);
 
   ~TextureMailbox();
@@ -38,14 +43,16 @@ class CC_EXPORT TextureMailbox {
   bool Equals(const TextureMailbox&) const;
 
   const gpu::Mailbox& mailbox() const { return mailbox_holder_.mailbox; }
-  const int8* name() const { return mailbox().name; }
-  uint32 target() const { return mailbox_holder_.texture_target; }
-  uint32 sync_point() const { return mailbox_holder_.sync_point; }
-  void set_sync_point(int32 sync_point) {
-    mailbox_holder_.sync_point = sync_point;
+  const int8_t* name() const { return mailbox().name; }
+  uint32_t target() const { return mailbox_holder_.texture_target; }
+  const gpu::SyncToken& sync_token() const {
+    return mailbox_holder_.sync_token;
+  }
+  void set_sync_token(const gpu::SyncToken& sync_token) {
+    mailbox_holder_.sync_token = sync_token;
   }
 
-  bool allow_overlay() const { return allow_overlay_; }
+  bool is_overlay_candidate() const { return is_overlay_candidate_; }
   bool nearest_neighbor() const { return nearest_neighbor_; }
   void set_nearest_neighbor(bool nearest_neighbor) {
     nearest_neighbor_ = nearest_neighbor;
@@ -61,7 +68,7 @@ class CC_EXPORT TextureMailbox {
   gpu::MailboxHolder mailbox_holder_;
   SharedBitmap* shared_bitmap_;
   gfx::Size size_in_pixels_;
-  bool allow_overlay_;
+  bool is_overlay_candidate_;
   bool nearest_neighbor_;
 };
 

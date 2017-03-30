@@ -5,16 +5,21 @@
 // Disable everything on windows only. http://crbug.com/306144
 #ifndef OS_WIN
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_reader.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/prefs/pref_service.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
+#include "build/build_config.h"
 #include "chrome/browser/download/download_file_icon_extractor.h"
 #include "chrome/browser/download/download_service.h"
 #include "chrome/browser/download/download_service_factory.h"
@@ -37,12 +42,13 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/content_switches.h"
+#include "content/public/common/content_features.h"
 #include "content/public/test/download_test_observer.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/notification_types.h"
 #include "net/base/data_url.h"
 #include "net/base/net_util.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/url_request/url_request_slow_download_job.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
@@ -103,7 +109,7 @@ class DownloadsEventsListener : public content::NotificationObserver {
         : profile_(profile),
           event_name_(event_name),
           json_args_(json_args),
-          args_(base::JSONReader::DeprecatedRead(json_args)),
+          args_(base::JSONReader::Read(json_args).release()),
           caught_(caught) {}
 
     const base::Time& caught() { return caught_; }
@@ -185,7 +191,7 @@ class DownloadsEventsListener : public content::NotificationObserver {
               waiting_for_.get() &&
               new_event->Satisfies(*waiting_for_)) {
             waiting_ = false;
-            base::MessageLoopForUI::current()->Quit();
+            base::MessageLoopForUI::current()->QuitWhenIdle();
           }
           break;
         }
@@ -308,6 +314,12 @@ class DownloadExtensionTest : public ExtensionApiTest {
 
   // InProcessBrowserTest
   void SetUpOnMainThread() override {
+    base::FeatureList::ClearInstanceForTesting();
+    scoped_ptr<base::FeatureList> feature_list(new base::FeatureList);
+    feature_list->InitializeFromCommandLine(
+        features::kDownloadResumption.name, std::string());
+    base::FeatureList::SetInstance(std::move(feature_list));
+
     ExtensionApiTest::SetUpOnMainThread();
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
@@ -424,7 +436,9 @@ class DownloadExtensionTest : public ExtensionApiTest {
           1, 1,              // received_bytes, total_bytes
           history_info[i].state,  // state
           content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
-          content::DOWNLOAD_INTERRUPT_REASON_NONE,
+          (history_info[i].state != content::DownloadItem::CANCELLED ?
+              content::DOWNLOAD_INTERRUPT_REASON_NONE :
+              content::DOWNLOAD_INTERRUPT_REASON_USER_CANCELED),
           false);                 // opened
       items->push_back(item);
     }
@@ -1105,11 +1119,19 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
   ASSERT_TRUE(result_list->GetDictionary(0, &item_value));
   int item_id = -1;
   ASSERT_TRUE(item_value->GetInteger("id", &item_id));
-  ASSERT_EQ(all_downloads[0]->GetId(), static_cast<uint32>(item_id));
+  ASSERT_EQ(all_downloads[0]->GetId(), static_cast<uint32_t>(item_id));
 }
 
 // Test the |id| parameter for search().
-IN_PROC_BROWSER_TEST_F(DownloadExtensionTest, DownloadExtensionTest_SearchId) {
+//
+// http://crbug.com/508949
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_DownloadExtensionTest_SearchId DISABLED_DownloadExtensionTest_SearchId
+#else
+#define MAYBE_DownloadExtensionTest_SearchId DownloadExtensionTest_SearchId
+#endif
+IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
+                       MAYBE_DownloadExtensionTest_SearchId) {
   DownloadManager::DownloadVector items;
   CreateSlowTestDownloads(2, &items);
   ScopedItemVectorCanceller delete_items(&items);
@@ -1125,12 +1147,19 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest, DownloadExtensionTest_SearchId) {
   ASSERT_TRUE(result_list->GetDictionary(0, &item_value));
   int item_id = -1;
   ASSERT_TRUE(item_value->GetInteger("id", &item_id));
-  ASSERT_EQ(items[0]->GetId(), static_cast<uint32>(item_id));
+  ASSERT_EQ(items[0]->GetId(), static_cast<uint32_t>(item_id));
 }
 
 // Test specifying both the |id| and |filename| parameters for search().
+//
+// http://crbug.com/508949
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_DownloadExtensionTest_SearchIdAndFilename DISABLED_DownloadExtensionTest_SearchIdAndFilename
+#else
+#define MAYBE_DownloadExtensionTest_SearchIdAndFilename DownloadExtensionTest_SearchIdAndFilename
+#endif
 IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
-    DownloadExtensionTest_SearchIdAndFilename) {
+                       MAYBE_DownloadExtensionTest_SearchIdAndFilename) {
   DownloadManager::DownloadVector items;
   CreateSlowTestDownloads(2, &items);
   ScopedItemVectorCanceller delete_items(&items);
@@ -1209,7 +1238,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
             items[1]->GetTargetFilePath().value());
   // The order of results when orderBy is empty is unspecified. When there are
   // no sorters, DownloadQuery does not call sort(), so the order of the results
-  // depends on the order of the items in base::hash_map<uint32,...>
+  // depends on the order of the items in base::hash_map<uint32_t,...>
   // DownloadManagerImpl::downloads_, which is unspecified and differs between
   // libc++ and libstdc++. http://crbug.com/365334
 }
@@ -1238,8 +1267,15 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
 }
 
 // Test the |state| option for search().
+//
+// http://crbug.com/508949
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_DownloadExtensionTest_SearchState DISABLED_DownloadExtensionTest_SearchState
+#else
+#define MAYBE_DownloadExtensionTest_SearchState DownloadExtensionTest_SearchState
+#endif
 IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
-    DownloadExtensionTest_SearchState) {
+                       MAYBE_DownloadExtensionTest_SearchState) {
   DownloadManager::DownloadVector items;
   CreateSlowTestDownloads(2, &items);
   ScopedItemVectorCanceller delete_items(&items);
@@ -1255,8 +1291,15 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
 }
 
 // Test the |limit| option for search().
+//
+// http://crbug.com/508949
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_DownloadExtensionTest_SearchLimit DISABLED_DownloadExtensionTest_SearchLimit
+#else
+#define MAYBE_DownloadExtensionTest_SearchLimit DownloadExtensionTest_SearchLimit
+#endif
 IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
-                       DownloadExtensionTest_SearchLimit) {
+                       MAYBE_DownloadExtensionTest_SearchLimit) {
   DownloadManager::DownloadVector items;
   CreateSlowTestDownloads(2, &items);
   ScopedItemVectorCanceller delete_items(&items);
@@ -1459,8 +1502,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                        DownloadExtensionTest_Download_Basic) {
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
-  std::string download_url = test_server()->GetURL("slow?0").spec();
+  std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
   GoOnTheRecord();
 
   // Start downloading a file.
@@ -1483,14 +1525,13 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                           "  \"paused\": false,"
                           "  \"url\": \"%s\"}]",
                           download_url.c_str())));
-  ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
-                      base::StringPrintf(
-                          "[{\"id\": %d,"
-                          "  \"filename\": {"
-                          "    \"previous\": \"\","
-                          "    \"current\": \"%s\"}}]",
-                          result_id,
-                          GetFilename("slow.txt").c_str())));
+  ASSERT_TRUE(
+      WaitFor(downloads::OnChanged::kEventName,
+              base::StringPrintf("[{\"id\": %d,"
+                                 "  \"filename\": {"
+                                 "    \"previous\": \"\","
+                                 "    \"current\": \"%s\"}}]",
+                                 result_id, GetFilename("slow.txt").c_str())));
   ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
                       base::StringPrintf(
                           "[{\"id\": %d,"
@@ -1506,9 +1547,8 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                        DownloadExtensionTest_Download_Incognito) {
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
   GoOffTheRecord();
-  std::string download_url = test_server()->GetURL("slow?0").spec();
+  std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
 
   // Start downloading a file.
   scoped_ptr<base::Value> result(RunFunctionAndReturnResult(
@@ -1530,14 +1570,13 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                           "  \"paused\": false,"
                           "  \"url\": \"%s\"}]",
                           download_url.c_str())));
-  ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
-                      base::StringPrintf(
-                          "[{\"id\":%d,"
-                          "  \"filename\": {"
-                          "    \"previous\": \"\","
-                          "    \"current\": \"%s\"}}]",
-                          result_id,
-                          GetFilename("slow.txt").c_str())));
+  ASSERT_TRUE(
+      WaitFor(downloads::OnChanged::kEventName,
+              base::StringPrintf("[{\"id\":%d,"
+                                 "  \"filename\": {"
+                                 "    \"previous\": \"\","
+                                 "    \"current\": \"%s\"}}]",
+                                 result_id, GetFilename("slow.txt").c_str())));
   ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
                       base::StringPrintf(
                           "[{\"id\":%d,"
@@ -1561,7 +1600,6 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                        MAYBE_DownloadExtensionTest_Download_UnsafeHeaders) {
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
   GoOnTheRecord();
 
   static const char* const kUnsafeHeaders[] = {
@@ -1593,7 +1631,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
   };
 
   for (size_t index = 0; index < arraysize(kUnsafeHeaders); ++index) {
-    std::string download_url = test_server()->GetURL("slow?0").spec();
+    std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
     EXPECT_STREQ(errors::kInvalidHeaderUnsafe,
                   RunFunctionAndReturnError(new DownloadsDownloadFunction(),
                                             base::StringPrintf(
@@ -1613,9 +1651,8 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                        DownloadExtensionTest_Download_InvalidHeaders) {
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
   GoOnTheRecord();
-  std::string download_url = test_server()->GetURL("slow?0").spec();
+  std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
   EXPECT_STREQ(errors::kInvalidHeaderName,
                RunFunctionAndReturnError(new DownloadsDownloadFunction(),
                                          base::StringPrintf(
@@ -1648,8 +1685,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                        MAYBE_DownloadExtensionTest_Download_Subdirectory) {
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
-  std::string download_url = test_server()->GetURL("slow?0").spec();
+  std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
   GoOnTheRecord();
 
   scoped_ptr<base::Value> result(RunFunctionAndReturnResult(
@@ -1695,8 +1731,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                        DownloadExtensionTest_Download_InvalidFilename) {
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
-  std::string download_url = test_server()->GetURL("slow?0").spec();
+  std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
   GoOnTheRecord();
 
   EXPECT_STREQ(errors::kInvalidFilename,
@@ -1759,8 +1794,8 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                        DownloadExtensionTest_Download_URLFragment) {
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
-  std::string download_url = test_server()->GetURL("slow?0#fragment").spec();
+  std::string download_url =
+      embedded_test_server()->GetURL("/slow?0#fragment").spec();
   GoOnTheRecord();
 
   scoped_ptr<base::Value> result(RunFunctionAndReturnResult(
@@ -1782,14 +1817,13 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                           "  \"paused\": false,"
                           "  \"url\": \"%s\"}]",
                           download_url.c_str())));
-  ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
-                      base::StringPrintf(
-                          "[{\"id\": %d,"
-                          "  \"filename\": {"
-                          "    \"previous\": \"\","
-                          "    \"current\": \"%s\"}}]",
-                          result_id,
-                          GetFilename("slow.txt").c_str())));
+  ASSERT_TRUE(
+      WaitFor(downloads::OnChanged::kEventName,
+              base::StringPrintf("[{\"id\": %d,"
+                                 "  \"filename\": {"
+                                 "    \"previous\": \"\","
+                                 "    \"current\": \"%s\"}}]",
+                                 result_id, GetFilename("slow.txt").c_str())));
   ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
                       base::StringPrintf(
                           "[{\"id\": %d,"
@@ -1986,8 +2020,8 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                        DownloadExtensionTest_Download_AuthBasic_Fail) {
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
-  std::string download_url = test_server()->GetURL("auth-basic").spec();
+  std::string download_url =
+      embedded_test_server()->GetURL("/auth-basic").spec();
   GoOnTheRecord();
 
   scoped_ptr<base::Value> result(RunFunctionAndReturnResult(
@@ -2019,9 +2053,12 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                        DownloadExtensionTest_Download_Headers) {
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
-  std::string download_url = test_server()->GetURL("files/downloads/"
-      "a_zip_file.zip?expected_headers=Foo:bar&expected_headers=Qx:yo").spec();
+  std::string download_url =
+      embedded_test_server()
+          ->GetURL(
+              "/downloads/"
+              "a_zip_file.zip?expected_headers=Foo:bar&expected_headers=Qx:yo")
+          .spec();
   GoOnTheRecord();
 
   scoped_ptr<base::Value> result(RunFunctionAndReturnResult(
@@ -2073,9 +2110,12 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                        DownloadExtensionTest_Download_Headers_Fail) {
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
-  std::string download_url = test_server()->GetURL("files/downloads/"
-      "a_zip_file.zip?expected_headers=Foo:bar&expected_headers=Qx:yo").spec();
+  std::string download_url =
+      embedded_test_server()
+          ->GetURL(
+              "/downloads/"
+              "a_zip_file.zip?expected_headers=Foo:bar&expected_headers=Qx:yo")
+          .spec();
   GoOnTheRecord();
 
   scoped_ptr<base::Value> result(RunFunctionAndReturnResult(
@@ -2110,8 +2150,8 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                        DownloadExtensionTest_Download_AuthBasic) {
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
-  std::string download_url = test_server()->GetURL("auth-basic").spec();
+  std::string download_url =
+      embedded_test_server()->GetURL("/auth-basic").spec();
   // This is just base64 of 'username:secret'.
   static const char kAuthorization[] = "dXNlcm5hbWU6c2VjcmV0";
   GoOnTheRecord();
@@ -2137,7 +2177,6 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                           "[{\"danger\": \"safe\","
                           "  \"incognito\": false,"
                           "  \"bytesReceived\": 0.0,"
-                          "  \"fileSize\": 0.0,"
                           "  \"mime\": \"text/html\","
                           "  \"paused\": false,"
                           "  \"url\": \"%s\"}]",
@@ -2157,9 +2196,11 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                        DownloadExtensionTest_Download_Post) {
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
-  std::string download_url = test_server()->GetURL("files/post/downloads/"
-      "a_zip_file.zip?expected_body=BODY").spec();
+  std::string download_url = embedded_test_server()
+                                 ->GetURL(
+                                     "/post/downloads/"
+                                     "a_zip_file.zip?expected_body=BODY")
+                                 .spec();
   GoOnTheRecord();
 
   scoped_ptr<base::Value> result(RunFunctionAndReturnResult(
@@ -2211,9 +2252,11 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                        DownloadExtensionTest_Download_Post_Get) {
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
-  std::string download_url = test_server()->GetURL("files/post/downloads/"
-      "a_zip_file.zip?expected_body=BODY").spec();
+  std::string download_url = embedded_test_server()
+                                 ->GetURL(
+                                     "/post/downloads/"
+                                     "a_zip_file.zip?expected_body=BODY")
+                                 .spec();
   GoOnTheRecord();
 
   scoped_ptr<base::Value> result(RunFunctionAndReturnResult(
@@ -2252,9 +2295,11 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                        DownloadExtensionTest_Download_Post_NoBody) {
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
-  std::string download_url = test_server()->GetURL("files/post/downloads/"
-      "a_zip_file.zip?expected_body=BODY").spec();
+  std::string download_url = embedded_test_server()
+                                 ->GetURL(
+                                     "/post/downloads/"
+                                     "a_zip_file.zip?expected_body=BODY")
+                                 .spec();
   GoOnTheRecord();
 
   scoped_ptr<base::Value> result(RunFunctionAndReturnResult(
@@ -2292,9 +2337,9 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                        DownloadExtensionTest_Download_Cancel) {
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
-  std::string download_url = test_server()->GetURL(
-      "download-known-size").spec();
+  ASSERT_TRUE(spawned_test_server()->Start());
+  std::string download_url =
+      spawned_test_server()->GetURL("download-known-size").spec();
   GoOnTheRecord();
 
   scoped_ptr<base::Value> result(RunFunctionAndReturnResult(
@@ -2404,8 +2449,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
   LoadExtension("downloads_split");
   AddFilenameDeterminer();
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
-  std::string download_url = test_server()->GetURL("slow?0").spec();
+  std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
 
   // Start downloading a file.
   scoped_ptr<base::Value> result(RunFunctionAndReturnResult(
@@ -2451,14 +2495,13 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
   EXPECT_EQ("", error);
 
   // The download should complete successfully.
-  ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
-                      base::StringPrintf(
-                          "[{\"id\": %d,"
-                          "  \"filename\": {"
-                          "    \"previous\": \"\","
-                          "    \"current\": \"%s\"}}]",
-                          result_id,
-                          GetFilename("slow.txt").c_str())));
+  ASSERT_TRUE(
+      WaitFor(downloads::OnChanged::kEventName,
+              base::StringPrintf("[{\"id\": %d,"
+                                 "  \"filename\": {"
+                                 "    \"previous\": \"\","
+                                 "    \"current\": \"%s\"}}]",
+                                 result_id, GetFilename("slow.txt").c_str())));
   ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
                       base::StringPrintf(
                           "[{\"id\": %d,"
@@ -2476,8 +2519,7 @@ IN_PROC_BROWSER_TEST_F(
   LoadExtension("downloads_split");
   AddFilenameDeterminer();
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
-  std::string download_url = test_server()->GetURL("slow?0").spec();
+  std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
 
   ExtensionDownloadsEventRouter::SetDetermineFilenameTimeoutSecondsForTesting(
       0);
@@ -2515,13 +2557,13 @@ IN_PROC_BROWSER_TEST_F(
   // Do not respond to the onDeterminingFilename.
 
   // The download should complete successfully.
-  ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
-      base::StringPrintf("[{\"id\": %d,"
-                         "  \"filename\": {"
-                         "    \"previous\": \"\","
-                         "    \"current\": \"%s\"}}]",
-                         result_id,
-                         GetFilename("slow.txt").c_str())));
+  ASSERT_TRUE(
+      WaitFor(downloads::OnChanged::kEventName,
+              base::StringPrintf("[{\"id\": %d,"
+                                 "  \"filename\": {"
+                                 "    \"previous\": \"\","
+                                 "    \"current\": \"%s\"}}]",
+                                 result_id, GetFilename("slow.txt").c_str())));
   ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
       base::StringPrintf("[{\"id\": %d,"
                          "  \"state\": {"
@@ -2536,8 +2578,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
   LoadExtension("downloads_split");
   AddFilenameDeterminer();
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
-  std::string download_url = test_server()->GetURL("slow?0").spec();
+  std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
 
   // Start downloading a file.
   scoped_ptr<base::Value> result(RunFunctionAndReturnResult(
@@ -2594,13 +2635,13 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
   EXPECT_EQ(errors::kTooManyListeners, error);
 
   // The download should complete successfully.
-  ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
-      base::StringPrintf("[{\"id\": %d,"
-                         "  \"filename\": {"
-                         "    \"previous\": \"\","
-                         "    \"current\": \"%s\"}}]",
-                         result_id,
-                         GetFilename("slow.txt").c_str())));
+  ASSERT_TRUE(
+      WaitFor(downloads::OnChanged::kEventName,
+              base::StringPrintf("[{\"id\": %d,"
+                                 "  \"filename\": {"
+                                 "    \"previous\": \"\","
+                                 "    \"current\": \"%s\"}}]",
+                                 result_id, GetFilename("slow.txt").c_str())));
   ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
       base::StringPrintf("[{\"id\": %d,"
                          "  \"state\": {"
@@ -2616,8 +2657,7 @@ IN_PROC_BROWSER_TEST_F(
   LoadExtension("downloads_split");
   AddFilenameDeterminer();
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
-  std::string download_url = test_server()->GetURL("slow?0").spec();
+  std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
 
   // Start downloading a file.
   scoped_ptr<base::Value> result(RunFunctionAndReturnResult(
@@ -2695,8 +2735,7 @@ IN_PROC_BROWSER_TEST_F(
   LoadExtension("downloads_split");
   AddFilenameDeterminer();
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
-  std::string download_url = test_server()->GetURL("slow?0").spec();
+  std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
 
   // Start downloading a file.
   scoped_ptr<base::Value> result(RunFunctionAndReturnResult(
@@ -2739,14 +2778,13 @@ IN_PROC_BROWSER_TEST_F(
       downloads::FILENAME_CONFLICT_ACTION_UNIQUIFY,
       &error));
   EXPECT_STREQ(errors::kInvalidFilename, error.c_str());
-  ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
-                      base::StringPrintf(
-                          "[{\"id\": %d,"
-                          "  \"filename\": {"
-                          "    \"previous\": \"\","
-                          "    \"current\": \"%s\"}}]",
-                          result_id,
-                          GetFilename("slow.txt").c_str())));
+  ASSERT_TRUE(
+      WaitFor(downloads::OnChanged::kEventName,
+              base::StringPrintf("[{\"id\": %d,"
+                                 "  \"filename\": {"
+                                 "    \"previous\": \"\","
+                                 "    \"current\": \"%s\"}}]",
+                                 result_id, GetFilename("slow.txt").c_str())));
   ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
                       base::StringPrintf(
                           "[{\"id\": %d,"
@@ -2763,8 +2801,7 @@ IN_PROC_BROWSER_TEST_F(
   LoadExtension("downloads_split");
   AddFilenameDeterminer();
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
-  std::string download_url = test_server()->GetURL("slow?0").spec();
+  std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
 
   // Start downloading a file.
   scoped_ptr<base::Value> result(RunFunctionAndReturnResult(
@@ -2807,14 +2844,13 @@ IN_PROC_BROWSER_TEST_F(
       downloads::FILENAME_CONFLICT_ACTION_UNIQUIFY,
       &error));
   EXPECT_STREQ(errors::kInvalidFilename, error.c_str());
-  ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
-                      base::StringPrintf(
-                          "[{\"id\": %d,"
-                          "  \"filename\": {"
-                          "    \"previous\": \"\","
-                          "    \"current\": \"%s\"}}]",
-                          result_id,
-                          GetFilename("slow.txt").c_str())));
+  ASSERT_TRUE(
+      WaitFor(downloads::OnChanged::kEventName,
+              base::StringPrintf("[{\"id\": %d,"
+                                 "  \"filename\": {"
+                                 "    \"previous\": \"\","
+                                 "    \"current\": \"%s\"}}]",
+                                 result_id, GetFilename("slow.txt").c_str())));
   ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
                       base::StringPrintf(
                           "[{\"id\": %d,"
@@ -2831,8 +2867,7 @@ IN_PROC_BROWSER_TEST_F(
   LoadExtension("downloads_split");
   AddFilenameDeterminer();
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
-  std::string download_url = test_server()->GetURL("slow?0").spec();
+  std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
 
   // Start downloading a file.
   scoped_ptr<base::Value> result(RunFunctionAndReturnResult(
@@ -2876,14 +2911,13 @@ IN_PROC_BROWSER_TEST_F(
       downloads::FILENAME_CONFLICT_ACTION_UNIQUIFY,
       &error));
   EXPECT_STREQ(errors::kInvalidFilename, error.c_str());
-  ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
-                      base::StringPrintf(
-                          "[{\"id\": %d,"
-                          "  \"filename\": {"
-                          "    \"previous\": \"\","
-                          "    \"current\": \"%s\"}}]",
-                          result_id,
-                          GetFilename("slow.txt").c_str())));
+  ASSERT_TRUE(
+      WaitFor(downloads::OnChanged::kEventName,
+              base::StringPrintf("[{\"id\": %d,"
+                                 "  \"filename\": {"
+                                 "    \"previous\": \"\","
+                                 "    \"current\": \"%s\"}}]",
+                                 result_id, GetFilename("slow.txt").c_str())));
   ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
                       base::StringPrintf(
                           "[{\"id\": %d,"
@@ -2906,8 +2940,7 @@ IN_PROC_BROWSER_TEST_F(
   LoadExtension("downloads_split");
   AddFilenameDeterminer();
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
-  std::string download_url = test_server()->GetURL("slow?0").spec();
+  std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
 
   // Start downloading a file.
   scoped_ptr<base::Value> result(RunFunctionAndReturnResult(
@@ -2950,14 +2983,13 @@ IN_PROC_BROWSER_TEST_F(
       downloads::FILENAME_CONFLICT_ACTION_UNIQUIFY,
       &error));
   EXPECT_STREQ(errors::kInvalidFilename, error.c_str());
-  ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
-                      base::StringPrintf(
-                          "[{\"id\": %d,"
-                          "  \"filename\": {"
-                          "    \"previous\": \"\","
-                          "    \"current\": \"%s\"}}]",
-                          result_id,
-                          GetFilename("slow.txt").c_str())));
+  ASSERT_TRUE(
+      WaitFor(downloads::OnChanged::kEventName,
+              base::StringPrintf("[{\"id\": %d,"
+                                 "  \"filename\": {"
+                                 "    \"previous\": \"\","
+                                 "    \"current\": \"%s\"}}]",
+                                 result_id, GetFilename("slow.txt").c_str())));
   ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
                       base::StringPrintf(
                           "[{\"id\": %d,"
@@ -2974,8 +3006,7 @@ IN_PROC_BROWSER_TEST_F(
   LoadExtension("downloads_split");
   AddFilenameDeterminer();
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
-  std::string download_url = test_server()->GetURL("slow?0").spec();
+  std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
 
   // Start downloading a file.
   scoped_ptr<base::Value> result(RunFunctionAndReturnResult(
@@ -3018,14 +3049,13 @@ IN_PROC_BROWSER_TEST_F(
       downloads::FILENAME_CONFLICT_ACTION_UNIQUIFY,
       &error));
   EXPECT_STREQ(errors::kInvalidFilename, error.c_str());
-  ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
-                      base::StringPrintf(
-                          "[{\"id\": %d,"
-                          "  \"filename\": {"
-                          "    \"previous\": \"\","
-                          "    \"current\": \"%s\"}}]",
-                          result_id,
-                          GetFilename("slow.txt").c_str())));
+  ASSERT_TRUE(
+      WaitFor(downloads::OnChanged::kEventName,
+              base::StringPrintf("[{\"id\": %d,"
+                                 "  \"filename\": {"
+                                 "    \"previous\": \"\","
+                                 "    \"current\": \"%s\"}}]",
+                                 result_id, GetFilename("slow.txt").c_str())));
   ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
                       base::StringPrintf(
                           "[{\"id\": %d,"
@@ -3039,11 +3069,10 @@ IN_PROC_BROWSER_TEST_F(
     DownloadExtensionTest,
     DownloadExtensionTest_OnDeterminingFilename_ParentDirInvalid) {
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
   GoOnTheRecord();
   LoadExtension("downloads_split");
   AddFilenameDeterminer();
-  std::string download_url = test_server()->GetURL("slow?0").spec();
+  std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
 
   // Start downloading a file.
   scoped_ptr<base::Value> result(RunFunctionAndReturnResult(
@@ -3086,14 +3115,13 @@ IN_PROC_BROWSER_TEST_F(
       downloads::FILENAME_CONFLICT_ACTION_UNIQUIFY,
       &error));
   EXPECT_STREQ(errors::kInvalidFilename, error.c_str());
-  ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
-                      base::StringPrintf(
-                          "[{\"id\": %d,"
-                          "  \"filename\": {"
-                          "    \"previous\": \"\","
-                          "    \"current\": \"%s\"}}]",
-                          result_id,
-                          GetFilename("slow.txt").c_str())));
+  ASSERT_TRUE(
+      WaitFor(downloads::OnChanged::kEventName,
+              base::StringPrintf("[{\"id\": %d,"
+                                 "  \"filename\": {"
+                                 "    \"previous\": \"\","
+                                 "    \"current\": \"%s\"}}]",
+                                 result_id, GetFilename("slow.txt").c_str())));
   ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
                       base::StringPrintf(
                           "[{\"id\": %d,"
@@ -3110,8 +3138,7 @@ IN_PROC_BROWSER_TEST_F(
   LoadExtension("downloads_split");
   AddFilenameDeterminer();
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
-  std::string download_url = test_server()->GetURL("slow?0").spec();
+  std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
 
   // Start downloading a file.
   scoped_ptr<base::Value> result(RunFunctionAndReturnResult(
@@ -3155,14 +3182,13 @@ IN_PROC_BROWSER_TEST_F(
       &error));
   EXPECT_STREQ(errors::kInvalidFilename, error.c_str());
 
-  ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
-                      base::StringPrintf(
-                          "[{\"id\": %d,"
-                          "  \"filename\": {"
-                          "    \"previous\": \"\","
-                          "    \"current\": \"%s\"}}]",
-                          result_id,
-                          GetFilename("slow.txt").c_str())));
+  ASSERT_TRUE(
+      WaitFor(downloads::OnChanged::kEventName,
+              base::StringPrintf("[{\"id\": %d,"
+                                 "  \"filename\": {"
+                                 "    \"previous\": \"\","
+                                 "    \"current\": \"%s\"}}]",
+                                 result_id, GetFilename("slow.txt").c_str())));
   ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
                       base::StringPrintf(
                           "[{\"id\": %d,"
@@ -3179,8 +3205,7 @@ IN_PROC_BROWSER_TEST_F(
   LoadExtension("downloads_split");
   AddFilenameDeterminer();
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
-  std::string download_url = test_server()->GetURL("slow?0").spec();
+  std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
 
   // Start downloading a file.
   scoped_ptr<base::Value> result(RunFunctionAndReturnResult(
@@ -3224,14 +3249,13 @@ IN_PROC_BROWSER_TEST_F(
       &error));
   EXPECT_STREQ(errors::kInvalidFilename, error.c_str());
 
-  ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
-                      base::StringPrintf(
-                          "[{\"id\": %d,"
-                          "  \"filename\": {"
-                          "    \"previous\": \"\","
-                          "    \"current\": \"%s\"}}]",
-                          result_id,
-                          GetFilename("slow.txt").c_str())));
+  ASSERT_TRUE(
+      WaitFor(downloads::OnChanged::kEventName,
+              base::StringPrintf("[{\"id\": %d,"
+                                 "  \"filename\": {"
+                                 "    \"previous\": \"\","
+                                 "    \"current\": \"%s\"}}]",
+                                 result_id, GetFilename("slow.txt").c_str())));
   ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
                       base::StringPrintf(
                           "[{\"id\": %d,"
@@ -3249,8 +3273,7 @@ IN_PROC_BROWSER_TEST_F(
   LoadExtension("downloads_split");
   AddFilenameDeterminer();
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
-  std::string download_url = test_server()->GetURL("slow?0").spec();
+  std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
 
   // Start downloading a file.
   scoped_ptr<base::Value> result(RunFunctionAndReturnResult(
@@ -3293,14 +3316,13 @@ IN_PROC_BROWSER_TEST_F(
       &error));
   EXPECT_EQ("", error);
 
-  ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
-                      base::StringPrintf(
-                          "[{\"id\": %d,"
-                          "  \"filename\": {"
-                          "    \"previous\": \"\","
-                          "    \"current\": \"%s\"}}]",
-                          result_id,
-                          GetFilename("slow.txt").c_str())));
+  ASSERT_TRUE(
+      WaitFor(downloads::OnChanged::kEventName,
+              base::StringPrintf("[{\"id\": %d,"
+                                 "  \"filename\": {"
+                                 "    \"previous\": \"\","
+                                 "    \"current\": \"%s\"}}]",
+                                 result_id, GetFilename("slow.txt").c_str())));
   ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
                       base::StringPrintf(
                           "[{\"id\": %d,"
@@ -3354,14 +3376,13 @@ IN_PROC_BROWSER_TEST_F(
       &error));
   EXPECT_EQ("", error);
 
-  ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
-                      base::StringPrintf(
-                          "[{\"id\": %d,"
-                          "  \"filename\": {"
-                          "    \"previous\": \"\","
-                          "    \"current\": \"%s\"}}]",
-                          result_id,
-                          GetFilename("slow.txt").c_str())));
+  ASSERT_TRUE(
+      WaitFor(downloads::OnChanged::kEventName,
+              base::StringPrintf("[{\"id\": %d,"
+                                 "  \"filename\": {"
+                                 "    \"previous\": \"\","
+                                 "    \"current\": \"%s\"}}]",
+                                 result_id, GetFilename("slow.txt").c_str())));
   ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
                       base::StringPrintf(
                           "[{\"id\": %d,"
@@ -3378,8 +3399,7 @@ IN_PROC_BROWSER_TEST_F(
   LoadExtension("downloads_split");
   AddFilenameDeterminer();
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
-  std::string download_url = test_server()->GetURL("slow?0").spec();
+  std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
 
   // Start downloading a file.
   scoped_ptr<base::Value> result(RunFunctionAndReturnResult(
@@ -3422,14 +3442,13 @@ IN_PROC_BROWSER_TEST_F(
       &error));
   EXPECT_EQ("", error);
 
-  ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
-                      base::StringPrintf(
-                          "[{\"id\": %d,"
-                          "  \"filename\": {"
-                          "    \"previous\": \"\","
-                          "    \"current\": \"%s\"}}]",
-                          result_id,
-                          GetFilename("slow.txt").c_str())));
+  ASSERT_TRUE(
+      WaitFor(downloads::OnChanged::kEventName,
+              base::StringPrintf("[{\"id\": %d,"
+                                 "  \"filename\": {"
+                                 "    \"previous\": \"\","
+                                 "    \"current\": \"%s\"}}]",
+                                 result_id, GetFilename("slow.txt").c_str())));
   ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
                       base::StringPrintf(
                           "[{\"id\": %d,"
@@ -3513,11 +3532,10 @@ IN_PROC_BROWSER_TEST_F(
     DownloadExtensionTest,
     MAYBE_DownloadExtensionTest_OnDeterminingFilename_RemoveFilenameDeterminer) {
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
   GoOnTheRecord();
   LoadExtension("downloads_split");
   content::RenderProcessHost* host = AddFilenameDeterminer();
-  std::string download_url = test_server()->GetURL("slow?0").spec();
+  std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
 
   // Start downloading a file.
   scoped_ptr<base::Value> result(RunFunctionAndReturnResult(
@@ -3566,8 +3584,7 @@ IN_PROC_BROWSER_TEST_F(
     DownloadExtensionTest_OnDeterminingFilename_IncognitoSplit) {
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
-  std::string download_url = test_server()->GetURL("slow?0").spec();
+  std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
 
   GoOnTheRecord();
   AddFilenameDeterminer();
@@ -3705,8 +3722,7 @@ IN_PROC_BROWSER_TEST_F(
     DownloadExtensionTest_OnDeterminingFilename_IncognitoSpanning) {
   LoadExtension("downloads_spanning");
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
-  std::string download_url = test_server()->GetURL("slow?0").spec();
+  std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
 
   GoOnTheRecord();
   AddFilenameDeterminer();
@@ -3853,11 +3869,8 @@ IN_PROC_BROWSER_TEST_F(
 IN_PROC_BROWSER_TEST_F(
     DownloadExtensionTest,
     MAYBE_DownloadExtensionTest_OnDeterminingFilename_InterruptedResume) {
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kEnableDownloadResumption);
   LoadExtension("downloads_split");
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(test_server()->Start());
   GoOnTheRecord();
   content::RenderProcessHost* host = AddFilenameDeterminer();
 
@@ -4153,4 +4166,4 @@ TEST(ExtensionDetermineDownloadFilenameInternal,
 
 }  // namespace extensions
 
-#endif  // http://crbug.com/3061144
+#endif  // http://crbug.com/306144

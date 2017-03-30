@@ -4,7 +4,6 @@
 
 package org.chromium.android_webview.test;
 
-import android.os.Build;
 import android.test.suitebuilder.annotation.MediumTest;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.webkit.GeolocationPermissions;
@@ -12,7 +11,6 @@ import android.webkit.GeolocationPermissions;
 import org.chromium.android_webview.AwContents;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.content.browser.LocationProviderFactory;
 import org.chromium.content.browser.test.util.MockLocationProvider;
 
@@ -23,7 +21,6 @@ import java.util.concurrent.Callable;
  * basic functionality, and tests to ensure the AwContents.onPause
  * and onResume APIs affect Geolocation as expected.
  */
-@MinAndroidSdkLevel(Build.VERSION_CODES.KITKAT)
 public class GeolocationTest extends AwTestBase {
     private TestAwContentsClient mContentsClient;
     private AwContents mAwContents;
@@ -129,7 +126,7 @@ public class GeolocationTest extends AwTestBase {
         loadDataSync(mAwContents, mContentsClient.getOnPageFinishedHelper(),
                 RAW_HTML, "text/html", false);
 
-        mAwContents.evaluateJavaScript("initiate_getCurrentPosition();", null);
+        mAwContents.evaluateJavaScriptForTests("initiate_getCurrentPosition();", null);
 
         poll(new Callable<Boolean>() {
             @Override
@@ -138,7 +135,7 @@ public class GeolocationTest extends AwTestBase {
             }
         });
 
-        mAwContents.evaluateJavaScript("initiate_getCurrentPosition();", null);
+        mAwContents.evaluateJavaScriptForTests("initiate_getCurrentPosition();", null);
         poll(new Callable<Boolean>() {
             @Override
             public Boolean call() throws Exception {
@@ -157,7 +154,7 @@ public class GeolocationTest extends AwTestBase {
         loadDataSync(mAwContents, mContentsClient.getOnPageFinishedHelper(),
                 RAW_HTML, "text/html", false);
 
-        mAwContents.evaluateJavaScript("initiate_watchPosition();", null);
+        mAwContents.evaluateJavaScriptForTests("initiate_watchPosition();", null);
 
         poll(new Callable<Boolean>() {
             @Override
@@ -175,7 +172,7 @@ public class GeolocationTest extends AwTestBase {
         loadDataSync(mAwContents, mContentsClient.getOnPageFinishedHelper(),
                 RAW_HTML, "text/html", false);
 
-        mAwContents.evaluateJavaScript("initiate_watchPosition();", null);
+        mAwContents.evaluateJavaScriptForTests("initiate_watchPosition();", null);
 
         poll(new Callable<Boolean>() {
             @Override
@@ -234,7 +231,7 @@ public class GeolocationTest extends AwTestBase {
         loadDataSync(mAwContents, mContentsClient.getOnPageFinishedHelper(),
                 RAW_HTML, "text/html", false);
 
-        mAwContents.evaluateJavaScript("initiate_watchPosition();", null);
+        mAwContents.evaluateJavaScriptForTests("initiate_watchPosition();", null);
 
         assertEquals(0, getPositionCountFromJS());
 
@@ -288,7 +285,7 @@ public class GeolocationTest extends AwTestBase {
         loadDataSync(mAwContents, mContentsClient.getOnPageFinishedHelper(),
                 RAW_HTML, "text/html", false);
 
-        mAwContents.evaluateJavaScript("initiate_getCurrentPosition();", null);
+        mAwContents.evaluateJavaScriptForTests("initiate_getCurrentPosition();", null);
 
         poll(new Callable<Boolean>() {
             @SuppressFBWarnings("DM_GC")

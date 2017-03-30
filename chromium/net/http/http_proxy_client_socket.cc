@@ -32,8 +32,7 @@ HttpProxyClientSocket::HttpProxyClientSocket(
     const std::string& user_agent,
     const HostPortPair& endpoint,
     const HostPortPair& proxy_server,
-    HttpAuthCache* http_auth_cache,
-    HttpAuthHandlerFactory* http_auth_handler_factory,
+    HttpAuthController* http_auth_controller,
     bool tunnel,
     bool using_spdy,
     NextProto protocol_negotiated,
@@ -44,13 +43,7 @@ HttpProxyClientSocket::HttpProxyClientSocket(
       next_state_(STATE_NONE),
       transport_(transport_socket),
       endpoint_(endpoint),
-      auth_(tunnel ?
-          new HttpAuthController(HttpAuth::AUTH_PROXY,
-                                 GURL((is_https_proxy ? "https://" : "http://")
-                                      + proxy_server.ToString()),
-                                 http_auth_cache,
-                                 http_auth_handler_factory)
-          : NULL),
+      auth_(http_auth_controller),
       tunnel_(tunnel),
       using_spdy_(using_spdy),
       protocol_negotiated_(protocol_negotiated),
@@ -219,6 +212,10 @@ void HttpProxyClientSocket::GetConnectionAttempts(
   out->clear();
 }
 
+int64_t HttpProxyClientSocket::GetTotalReceivedBytes() const {
+  return transport_->socket()->GetTotalReceivedBytes();
+}
+
 int HttpProxyClientSocket::Read(IOBuffer* buf, int buf_len,
                                 const CompletionCallback& callback) {
   DCHECK(user_callback_.is_null());
@@ -247,11 +244,11 @@ int HttpProxyClientSocket::Write(IOBuffer* buf, int buf_len,
   return transport_->socket()->Write(buf, buf_len, callback);
 }
 
-int HttpProxyClientSocket::SetReceiveBufferSize(int32 size) {
+int HttpProxyClientSocket::SetReceiveBufferSize(int32_t size) {
   return transport_->socket()->SetReceiveBufferSize(size);
 }
 
-int HttpProxyClientSocket::SetSendBufferSize(int32 size) {
+int HttpProxyClientSocket::SetSendBufferSize(int32_t size) {
   return transport_->socket()->SetSendBufferSize(size);
 }
 
@@ -267,36 +264,36 @@ int HttpProxyClientSocket::PrepareForAuthRestart() {
   if (!response_.headers.get())
     return ERR_CONNECTION_RESET;
 
-  bool keep_alive = false;
-  if (response_.headers->IsKeepAlive() &&
-      http_stream_parser_->CanFindEndOfResponse()) {
-    if (!http_stream_parser_->IsResponseBodyComplete()) {
-      next_state_ = STATE_DRAIN_BODY;
-      drain_buf_ = new IOBuffer(kDrainBodyBufferSize);
-      return OK;
-    }
-    keep_alive = true;
+  // If the connection can't be reused, just return ERR_CONNECTION_CLOSED.
+  // The request should be retried at a higher layer.
+  if (!response_.headers->IsKeepAlive() ||
+      !http_stream_parser_->CanFindEndOfResponse() ||
+      !transport_->socket()->IsConnected()) {
+    transport_->socket()->Disconnect();
+    return ERR_UNABLE_TO_REUSE_CONNECTION_FOR_PROXY_AUTH;
   }
 
-  // We don't need to drain the response body, so we act as if we had drained
-  // the response body.
-  return DidDrainBodyForAuthRestart(keep_alive);
+  // If the auth request had a body, need to drain it before reusing the socket.
+  if (!http_stream_parser_->IsResponseBodyComplete()) {
+    next_state_ = STATE_DRAIN_BODY;
+    drain_buf_ = new IOBuffer(kDrainBodyBufferSize);
+    return OK;
+  }
+
+  return DidDrainBodyForAuthRestart();
 }
 
-int HttpProxyClientSocket::DidDrainBodyForAuthRestart(bool keep_alive) {
-  if (keep_alive && transport_->socket()->IsConnectedAndIdle()) {
-    next_state_ = STATE_GENERATE_AUTH_TOKEN;
-    transport_->set_reuse_type(ClientSocketHandle::REUSED_IDLE);
-  } else {
-    // This assumes that the underlying transport socket is a TCP socket,
-    // since only TCP sockets are restartable.
-    next_state_ = STATE_TCP_RESTART;
-    transport_->socket()->Disconnect();
-  }
+int HttpProxyClientSocket::DidDrainBodyForAuthRestart() {
+  // Can't reuse the socket if there's still unread data on it.
+  if (!transport_->socket()->IsConnectedAndIdle())
+    return ERR_UNABLE_TO_REUSE_CONNECTION_FOR_PROXY_AUTH;
+
+  next_state_ = STATE_GENERATE_AUTH_TOKEN;
+  transport_->set_reuse_type(ClientSocketHandle::REUSED_IDLE);
 
   // Reset the other member variables.
-  drain_buf_ = NULL;
-  parser_buf_ = NULL;
+  drain_buf_ = nullptr;
+  parser_buf_ = nullptr;
   http_stream_parser_.reset();
   request_line_.clear();
   request_headers_.Clear();
@@ -372,13 +369,6 @@ int HttpProxyClientSocket::DoLoop(int last_io_result) {
         break;
       case STATE_DRAIN_BODY_COMPLETE:
         rv = DoDrainBodyComplete(rv);
-        break;
-      case STATE_TCP_RESTART:
-        DCHECK_EQ(OK, rv);
-        rv = DoTCPRestart();
-        break;
-      case STATE_TCP_RESTART_COMPLETE:
-        rv = DoTCPRestartComplete(rv);
         break;
       case STATE_DONE:
         break;
@@ -458,7 +448,7 @@ int HttpProxyClientSocket::DoReadHeadersComplete(int result) {
     return result;
 
   // Require the "HTTP/1.x" status line for SSL CONNECT.
-  if (response_.headers->GetParsedHttpVersion() < HttpVersion(1, 0))
+  if (response_.headers->GetHttpVersion() < HttpVersion(1, 0))
     return ERR_TUNNEL_CONNECTION_FAILED;
 
   net_log_.AddEvent(
@@ -538,33 +528,17 @@ int HttpProxyClientSocket::DoDrainBody() {
 
 int HttpProxyClientSocket::DoDrainBodyComplete(int result) {
   if (result < 0)
-    return result;
+    return ERR_UNABLE_TO_REUSE_CONNECTION_FOR_PROXY_AUTH;
 
-  if (http_stream_parser_->IsResponseBodyComplete())
-    return DidDrainBodyForAuthRestart(true);
+  if (!http_stream_parser_->IsResponseBodyComplete()) {
+    // Keep draining.
+    next_state_ = STATE_DRAIN_BODY;
+    return OK;
+  }
 
-  // Keep draining.
-  next_state_ = STATE_DRAIN_BODY;
-  return OK;
+  return DidDrainBodyForAuthRestart();
 }
 
-int HttpProxyClientSocket::DoTCPRestart() {
-  next_state_ = STATE_TCP_RESTART_COMPLETE;
-  return transport_->socket()->Connect(
-      base::Bind(&HttpProxyClientSocket::OnIOComplete, base::Unretained(this)));
-}
-
-int HttpProxyClientSocket::DoTCPRestartComplete(int result) {
-  // TODO(rvargas): Remove ScopedTracker below once crbug.com/462784 is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "462784 HttpProxyClientSocket::DoTCPRestartComplete"));
-
-  if (result != OK)
-    return result;
-
-  next_state_ = STATE_GENERATE_AUTH_TOKEN;
-  return result;
-}
+//----------------------------------------------------------------
 
 }  // namespace net

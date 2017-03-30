@@ -6,6 +6,7 @@
 
 #include "base/atomicops.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/threading/simple_thread.h"
 #include "device/usb/usb_error.h"
 #include "third_party/libusb/src/libusb/interrupt.h"
@@ -67,7 +68,6 @@ UsbContext::UsbContext(PlatformUsbContext context) : context_(context) {
 }
 
 UsbContext::~UsbContext() {
-  DCHECK(thread_checker_.CalledOnValidThread());
   event_handler_->Stop();
   event_handler_->Join();
 }

@@ -8,13 +8,16 @@
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
 
 class Profile;
 
 namespace extensions_helper {
+
+// Returns true iff profiles with indices |index1| and |index2| have the same
+// extensions.
+bool HasSameExtensions(int index1, int index2) WARN_UNUSED_RESULT;
 
 // Returns true iff the profile with index |index| has the same extensions
 // as the verifier.
@@ -65,16 +68,9 @@ void IncognitoDisableExtension(Profile* profile, int index);
 // mode on |profile|.
 bool IsIncognitoEnabled(Profile* profile, int index);
 
-// Returns a unique extension name based in the integer |index|.
-std::string CreateFakeExtensionName(int index);
-
-// Converts a fake extension name back into the index used to generate it.
-// Returns true if successful, false on failure.
-bool ExtensionNameToIndex(const std::string& name, int* index);
-
-// Runs the message loop until AllProfilesHaveSameExtensionsAsVerifier()
-// is true.  Returns false on timeout.
-bool AwaitAllProfilesHaveSameExtensionsAsVerifier();
+// Runs the message loop until all profiles have same extensions. Returns false
+// on timeout.
+bool AwaitAllProfilesHaveSameExtensions();
 
 }  // namespace extensions_helper
 

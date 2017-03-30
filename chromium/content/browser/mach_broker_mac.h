@@ -12,10 +12,11 @@
 
 #include "base/mac/dispatch_source_mach.h"
 #include "base/mac/scoped_mach_port.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
+#include "base/process/port_provider_mac.h"
 #include "base/process/process_handle.h"
-#include "base/process/process_metrics.h"
 #include "base/synchronization/lock.h"
 #include "content/public/browser/browser_child_process_observer.h"
 #include "content/public/browser/notification_observer.h"
@@ -23,12 +24,11 @@
 
 namespace content {
 
-// On OS X, the mach_port_t of a process is required to collect metrics about
-// the process. Running |task_for_pid()| is only allowed for privileged code.
-// However, a process has port rights to all its subprocesses, so let the
-// browser's child processes send their Mach port to the browser over IPC.
-// This way, the brower can at least collect metrics of its child processes,
-// which is what it's most interested in anyway.
+// On OS X, the task port of a process is required to collect metrics about the
+// process, and to insert Mach ports into the process. Running |task_for_pid()|
+// is only allowed for privileged code. However, a process has port rights to
+// all its subprocesses, so let the browser's child processes send their Mach
+// port to the browser over IPC.
 //
 // Mach ports can only be sent over Mach IPC, not over the |socketpair()| that
 // the regular IPC system uses. Hence, the child processes open a Mach
@@ -37,7 +37,7 @@ namespace content {
 //
 // Since this data arrives over a separate channel, it is not available
 // immediately after a child process has been started.
-class CONTENT_EXPORT MachBroker : public base::ProcessMetrics::PortProvider,
+class CONTENT_EXPORT MachBroker : public base::PortProvider,
                                   public BrowserChildProcessObserver,
                                   public NotificationObserver {
  public:
@@ -66,7 +66,7 @@ class CONTENT_EXPORT MachBroker : public base::ProcessMetrics::PortProvider,
   // release the lock afterwards).
   void AddPlaceholderForPid(base::ProcessHandle pid, int child_process_id);
 
-  // Implement |ProcessMetrics::PortProvider|.
+  // Implement |base::PortProvider|.
   mach_port_t TaskForPid(base::ProcessHandle process) const override;
 
   // Implement |BrowserChildProcessObserver|.
@@ -80,9 +80,13 @@ class CONTENT_EXPORT MachBroker : public base::ProcessMetrics::PortProvider,
                const NotificationSource& source,
                const NotificationDetails& details) override;
 
+  // Returns the Mach port name to use when sending or receiving messages.
+  // Does the Right Thing in the browser and in child processes.
+  static std::string GetMachPortName();
+
  private:
   friend class MachBrokerTest;
-  friend struct DefaultSingletonTraits<MachBroker>;
+  friend struct base::DefaultSingletonTraits<MachBroker>;
 
   MachBroker();
   ~MachBroker() override;
@@ -102,10 +106,6 @@ class CONTENT_EXPORT MachBroker : public base::ProcessMetrics::PortProvider,
 
   // Removes all mappings belonging to |child_process_id| from the broker.
   void InvalidateChildProcessId(int child_process_id);
-
-  // Returns the Mach port name to use when sending or receiving messages.
-  // Does the Right Thing in the browser and in child processes.
-  static std::string GetMachPortName();
 
   // Callback used to register notifications on the UI thread.
   void RegisterNotifications();

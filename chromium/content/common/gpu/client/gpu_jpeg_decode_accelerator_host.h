@@ -5,6 +5,9 @@
 #ifndef CONTENT_COMMON_GPU_CLIENT_GPU_JPEG_DECODE_ACCELERATOR_HOST_H_
 #define CONTENT_COMMON_GPU_CLIENT_GPU_JPEG_DECODE_ACCELERATOR_HOST_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/non_thread_safe.h"
 #include "media/video/jpeg_decode_accelerator.h"
@@ -31,7 +34,7 @@ class GpuJpegDecodeAcceleratorHost : public media::JpegDecodeAccelerator,
   // guaranteed not to outlive |channel|.
   GpuJpegDecodeAcceleratorHost(
       GpuChannelHost* channel,
-      int32 route_id,
+      int32_t route_id,
       const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner);
   ~GpuJpegDecodeAcceleratorHost() override;
 
@@ -41,6 +44,7 @@ class GpuJpegDecodeAcceleratorHost : public media::JpegDecodeAccelerator,
   bool Initialize(media::JpegDecodeAccelerator::Client* client) override;
   void Decode(const media::BitstreamBuffer& bitstream_buffer,
               const scoped_refptr<media::VideoFrame>& video_frame) override;
+  bool IsSupported() override;
 
   base::WeakPtr<IPC::Listener> GetReceiver();
 
@@ -54,7 +58,7 @@ class GpuJpegDecodeAcceleratorHost : public media::JpegDecodeAccelerator,
   GpuChannelHost* channel_;
 
   // Route ID for the associated decoder in the GPU process.
-  int32 decoder_route_id_;
+  int32_t decoder_route_id_;
 
   // GPU IO task runner.
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;

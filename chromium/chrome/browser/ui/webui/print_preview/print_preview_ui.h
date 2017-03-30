@@ -5,11 +5,15 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_PRINT_PREVIEW_PRINT_PREVIEW_UI_H_
 #define CHROME_BROWSER_UI_WEBUI_PRINT_PREVIEW_PRINT_PREVIEW_UI_H_
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/callback_forward.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "chrome/browser/ui/webui/constrained_web_dialog_ui.h"
 
@@ -74,12 +78,12 @@ class PrintPreviewUI : public ConstrainedWebDialogUI {
   // Determines whether to cancel a print preview request based on
   // |preview_ui_id| and |request_id|.
   // Can be called from any thread.
-  static void GetCurrentPrintPreviewStatus(int32 preview_ui_id,
+  static void GetCurrentPrintPreviewStatus(int32_t preview_ui_id,
                                            int request_id,
                                            bool* cancel);
 
   // Returns an id to uniquely identify this PrintPreviewUI.
-  int32 GetIDForPrintPreviewUI() const;
+  int32_t GetIDForPrintPreviewUI() const;
 
   // Notifies the Web UI of a print preview request with |request_id|.
   void OnPrintPreviewRequest(int request_id);
@@ -108,11 +112,6 @@ class PrintPreviewUI : public ConstrainedWebDialogUI {
   // |preview_request_id| indicates which request resulted in this response.
   void OnPreviewDataIsAvailable(int expected_pages_count,
                                 int preview_request_id);
-
-  // Notifies the Web UI that preview dialog has been destroyed. This is the
-  // last chance to communicate with the initiator before the association is
-  // erased.
-  void OnPrintPreviewDialogDestroyed();
 
   // Notifies the Web UI that the print preview failed to render.
   void OnPrintPreviewFailed();
@@ -166,16 +165,9 @@ class PrintPreviewUI : public ConstrainedWebDialogUI {
   // Passes |closure| to PrintPreviewHandler::SetPdfSavedClosureForTesting().
   void SetPdfSavedClosureForTesting(const base::Closure& closure);
 
+  base::WeakPtr<PrintPreviewUI> GetWeakPtr();
+
  private:
-  friend class PrintPreviewHandlerTest;
-  FRIEND_TEST_ALL_PREFIXES(PrintPreviewHandlerTest, StickyMarginsCustom);
-  FRIEND_TEST_ALL_PREFIXES(PrintPreviewHandlerTest, StickyMarginsDefault);
-  FRIEND_TEST_ALL_PREFIXES(PrintPreviewHandlerTest,
-                           StickyMarginsCustomThenDefault);
-  FRIEND_TEST_ALL_PREFIXES(PrintPreviewHandlerTest,
-                           GetLastUsedMarginSettingsCustom);
-  FRIEND_TEST_ALL_PREFIXES(PrintPreviewHandlerTest,
-                           GetLastUsedMarginSettingsDefault);
   FRIEND_TEST_ALL_PREFIXES(PrintPreviewDialogControllerUnitTest,
                            TitleAfterReload);
 
@@ -186,7 +178,7 @@ class PrintPreviewUI : public ConstrainedWebDialogUI {
 
   // The unique ID for this class instance. Stored here to avoid calling
   // GetIDForPrintPreviewUI() everywhere.
-  const int32 id_;
+  const int32_t id_;
 
   // Weak pointer to the WebUI handler.
   PrintPreviewHandler* handler_;
@@ -206,6 +198,8 @@ class PrintPreviewUI : public ConstrainedWebDialogUI {
 
   // Keeps track of whether OnClosePrintPreviewDialog() has been called or not.
   bool dialog_closed_;
+
+  base::WeakPtrFactory<PrintPreviewUI> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(PrintPreviewUI);
 };

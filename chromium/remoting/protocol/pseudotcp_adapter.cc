@@ -4,8 +4,13 @@
 
 #include "remoting/protocol/pseudotcp_adapter.h"
 
+#include <stddef.h>
+
+#include <utility>
+
 #include "base/compiler_specific.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "net/base/address_list.h"
@@ -13,12 +18,13 @@
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/base/net_util.h"
+#include "remoting/protocol/p2p_datagram_socket.h"
 
 using cricket::PseudoTcp;
 
 namespace {
 const int kReadBufferSize = 65536;  // Maximum size of a packet.
-const uint16 kDefaultMtu = 1280;
+const uint16_t kDefaultMtu = 1280;
 }  // namespace
 
 namespace remoting {
@@ -27,16 +33,14 @@ namespace protocol {
 class PseudoTcpAdapter::Core : public cricket::IPseudoTcpNotify,
                                public base::RefCounted<Core> {
  public:
-  explicit Core(scoped_ptr<net::Socket> socket);
+  explicit Core(scoped_ptr<P2PDatagramSocket> socket);
 
   // Functions used to implement net::StreamSocket.
-  int Read(net::IOBuffer* buffer, int buffer_size,
+  int Read(const scoped_refptr<net::IOBuffer>& buffer, int buffer_size,
            const net::CompletionCallback& callback);
-  int Write(net::IOBuffer* buffer, int buffer_size,
+  int Write(const scoped_refptr<net::IOBuffer>& buffer, int buffer_size,
             const net::CompletionCallback& callback);
   int Connect(const net::CompletionCallback& callback);
-  void Disconnect();
-  bool IsConnected() const;
 
   // cricket::IPseudoTcpNotify interface.
   // These notifications are triggered from NotifyPacket.
@@ -44,7 +48,7 @@ class PseudoTcpAdapter::Core : public cricket::IPseudoTcpNotify,
   void OnTcpReadable(cricket::PseudoTcp* tcp) override;
   void OnTcpWriteable(cricket::PseudoTcp* tcp) override;
   // This is triggered by NotifyClock or NotifyPacket.
-  void OnTcpClosed(cricket::PseudoTcp* tcp, uint32 error) override;
+  void OnTcpClosed(cricket::PseudoTcp* tcp, uint32_t error) override;
   // This is triggered by NotifyClock, NotifyPacket, Recv and Send.
   WriteResult TcpWritePacket(cricket::PseudoTcp* tcp,
                              const char* buffer,
@@ -52,8 +56,8 @@ class PseudoTcpAdapter::Core : public cricket::IPseudoTcpNotify,
 
   void SetAckDelay(int delay_ms);
   void SetNoDelay(bool no_delay);
-  void SetReceiveBufferSize(int32 size);
-  void SetSendBufferSize(int32 size);
+  void SetReceiveBufferSize(int32_t size);
+  void SetSendBufferSize(int32_t size);
   void SetWriteWaitsForSend(bool write_waits_for_send);
 
   void DeleteSocket();
@@ -85,7 +89,7 @@ class PseudoTcpAdapter::Core : public cricket::IPseudoTcpNotify,
   net::CompletionCallback write_callback_;
 
   cricket::PseudoTcp pseudo_tcp_;
-  scoped_ptr<net::Socket> socket_;
+  scoped_ptr<P2PDatagramSocket> socket_;
 
   scoped_refptr<net::IOBuffer> read_buffer_;
   int read_buffer_size_;
@@ -107,15 +111,15 @@ class PseudoTcpAdapter::Core : public cricket::IPseudoTcpNotify,
   bool socket_write_pending_;
   scoped_refptr<net::IOBuffer> socket_read_buffer_;
 
-  base::OneShotTimer<Core> timer_;
+  base::OneShotTimer timer_;
 
   DISALLOW_COPY_AND_ASSIGN(Core);
 };
 
 
-PseudoTcpAdapter::Core::Core(scoped_ptr<net::Socket> socket)
+PseudoTcpAdapter::Core::Core(scoped_ptr<P2PDatagramSocket> socket)
     : pseudo_tcp_(this, 0),
-      socket_(socket.Pass()),
+      socket_(std::move(socket)),
       write_waits_for_send_(false),
       waiting_write_position_(false),
       socket_write_pending_(false) {
@@ -126,7 +130,8 @@ PseudoTcpAdapter::Core::Core(scoped_ptr<net::Socket> socket)
 PseudoTcpAdapter::Core::~Core() {
 }
 
-int PseudoTcpAdapter::Core::Read(net::IOBuffer* buffer, int buffer_size,
+int PseudoTcpAdapter::Core::Read(const scoped_refptr<net::IOBuffer>& buffer,
+                                 int buffer_size,
                                  const net::CompletionCallback& callback) {
   DCHECK(read_callback_.is_null());
 
@@ -150,7 +155,8 @@ int PseudoTcpAdapter::Core::Read(net::IOBuffer* buffer, int buffer_size,
   return result;
 }
 
-int PseudoTcpAdapter::Core::Write(net::IOBuffer* buffer, int buffer_size,
+int PseudoTcpAdapter::Core::Write(const scoped_refptr<net::IOBuffer>& buffer,
+                                  int buffer_size,
                                   const net::CompletionCallback& callback) {
   DCHECK(write_callback_.is_null());
 
@@ -207,28 +213,6 @@ int PseudoTcpAdapter::Core::Connect(const net::CompletionCallback& callback) {
   DoReadFromSocket();
 
   return net::ERR_IO_PENDING;
-}
-
-void PseudoTcpAdapter::Core::Disconnect() {
-  // Don't dispatch outstanding callbacks, as mandated by net::StreamSocket.
-  read_callback_.Reset();
-  read_buffer_ = NULL;
-  write_callback_.Reset();
-  write_buffer_ = NULL;
-  connect_callback_.Reset();
-
-  // TODO(wez): Connect should succeed if called after Disconnect, which
-  // PseudoTcp doesn't support, so we need to teardown the internal PseudoTcp
-  // and create a new one in Connect.
-  // TODO(wez): Close sets a shutdown flag inside PseudoTcp but has no other
-  // effect.  This should be addressed in PseudoTcp, really.
-  // In the meantime we can fake OnTcpClosed notification and tear down the
-  // PseudoTcp.
-  pseudo_tcp_.Close(true);
-}
-
-bool PseudoTcpAdapter::Core::IsConnected() const {
-  return pseudo_tcp_.State() == PseudoTcp::TCP_ESTABLISHED;
 }
 
 void PseudoTcpAdapter::Core::OnTcpOpen(PseudoTcp* tcp) {
@@ -298,7 +282,7 @@ void PseudoTcpAdapter::Core::OnTcpWriteable(PseudoTcp* tcp) {
   callback.Run(result);
 }
 
-void PseudoTcpAdapter::Core::OnTcpClosed(PseudoTcp* tcp, uint32 error) {
+void PseudoTcpAdapter::Core::OnTcpClosed(PseudoTcp* tcp, uint32_t error) {
   DCHECK_EQ(tcp, &pseudo_tcp_);
 
   if (!connect_callback_.is_null()) {
@@ -328,11 +312,11 @@ void PseudoTcpAdapter::Core::SetNoDelay(bool no_delay) {
   pseudo_tcp_.SetOption(cricket::PseudoTcp::OPT_NODELAY, no_delay ? 1 : 0);
 }
 
-void PseudoTcpAdapter::Core::SetReceiveBufferSize(int32 size) {
+void PseudoTcpAdapter::Core::SetReceiveBufferSize(int32_t size) {
   pseudo_tcp_.SetOption(cricket::PseudoTcp::OPT_RCVBUF, size);
 }
 
-void PseudoTcpAdapter::Core::SetSendBufferSize(int32 size) {
+void PseudoTcpAdapter::Core::SetSendBufferSize(int32_t size) {
   pseudo_tcp_.SetOption(cricket::PseudoTcp::OPT_SNDBUF, size);
 }
 
@@ -341,6 +325,13 @@ void PseudoTcpAdapter::Core::SetWriteWaitsForSend(bool write_waits_for_send) {
 }
 
 void PseudoTcpAdapter::Core::DeleteSocket() {
+  // Don't dispatch outstanding callbacks when the socket is deleted.
+  read_callback_.Reset();
+  read_buffer_ = NULL;
+  write_callback_.Reset();
+  write_buffer_ = NULL;
+  connect_callback_.Reset();
+
   socket_.reset();
 }
 
@@ -362,8 +353,8 @@ cricket::IPseudoTcpNotify::WriteResult PseudoTcpAdapter::Core::TcpWritePacket(
   // Our underlying socket is datagram-oriented, which means it should either
   // send exactly as many bytes as we requested, or fail.
   int result;
-  if (socket_.get()) {
-    result = socket_->Write(
+  if (socket_) {
+    result = socket_->Send(
         write_buffer.get(), len,
         base::Bind(&PseudoTcpAdapter::Core::OnWritten, base::Unretained(this)));
   } else {
@@ -386,10 +377,9 @@ void PseudoTcpAdapter::Core::DoReadFromSocket() {
     socket_read_buffer_ = new net::IOBuffer(kReadBufferSize);
 
   int result = 1;
-  while (socket_.get() && result > 0) {
-    result = socket_->Read(
-        socket_read_buffer_.get(),
-        kReadBufferSize,
+  while (socket_ && result > 0) {
+    result = socket_->Recv(
+        socket_read_buffer_.get(), kReadBufferSize,
         base::Bind(&PseudoTcpAdapter::Core::OnRead, base::Unretained(this)));
     if (result != net::ERR_IO_PENDING)
       HandleReadResults(result);
@@ -461,131 +451,46 @@ void PseudoTcpAdapter::Core::CheckWriteComplete() {
   }
 }
 
-// Public interface implemention.
+// Public interface implementation.
 
-PseudoTcpAdapter::PseudoTcpAdapter(scoped_ptr<net::Socket> socket)
-    : core_(new Core(socket.Pass())) {
+PseudoTcpAdapter::PseudoTcpAdapter(scoped_ptr<P2PDatagramSocket> socket)
+    : core_(new Core(std::move(socket))) {
 }
 
 PseudoTcpAdapter::~PseudoTcpAdapter() {
-  Disconnect();
-
   // Make sure that the underlying socket is destroyed before PseudoTcp.
   core_->DeleteSocket();
 }
 
-int PseudoTcpAdapter::Read(net::IOBuffer* buffer, int buffer_size,
+int PseudoTcpAdapter::Read(const scoped_refptr<net::IOBuffer>& buffer,
+                           int buffer_size,
                            const net::CompletionCallback& callback) {
   DCHECK(CalledOnValidThread());
   return core_->Read(buffer, buffer_size, callback);
 }
 
-int PseudoTcpAdapter::Write(net::IOBuffer* buffer, int buffer_size,
+int PseudoTcpAdapter::Write(const scoped_refptr<net::IOBuffer>& buffer,
+                            int buffer_size,
                             const net::CompletionCallback& callback) {
   DCHECK(CalledOnValidThread());
   return core_->Write(buffer, buffer_size, callback);
 }
 
-int PseudoTcpAdapter::SetReceiveBufferSize(int32 size) {
+int PseudoTcpAdapter::SetReceiveBufferSize(int32_t size) {
   DCHECK(CalledOnValidThread());
-
   core_->SetReceiveBufferSize(size);
   return net::OK;
 }
 
-int PseudoTcpAdapter::SetSendBufferSize(int32 size) {
+int PseudoTcpAdapter::SetSendBufferSize(int32_t size) {
   DCHECK(CalledOnValidThread());
-
   core_->SetSendBufferSize(size);
   return net::OK;
 }
 
 int PseudoTcpAdapter::Connect(const net::CompletionCallback& callback) {
   DCHECK(CalledOnValidThread());
-
-  // net::StreamSocket requires that Connect return OK if already connected.
-  if (IsConnected())
-    return net::OK;
-
   return core_->Connect(callback);
-}
-
-void PseudoTcpAdapter::Disconnect() {
-  DCHECK(CalledOnValidThread());
-  core_->Disconnect();
-}
-
-bool PseudoTcpAdapter::IsConnected() const {
-  return core_->IsConnected();
-}
-
-bool PseudoTcpAdapter::IsConnectedAndIdle() const {
-  DCHECK(CalledOnValidThread());
-  NOTIMPLEMENTED();
-  return false;
-}
-
-int PseudoTcpAdapter::GetPeerAddress(net::IPEndPoint* address) const {
-  DCHECK(CalledOnValidThread());
-
-  // We don't have a meaningful peer address, but we can't return an
-  // error, so we return a INADDR_ANY instead.
-  net::IPAddressNumber ip_address(net::kIPv4AddressSize);
-  *address = net::IPEndPoint(ip_address, 0);
-  return net::OK;
-}
-
-int PseudoTcpAdapter::GetLocalAddress(net::IPEndPoint* address) const {
-  DCHECK(CalledOnValidThread());
-  NOTIMPLEMENTED();
-  return net::ERR_FAILED;
-}
-
-const net::BoundNetLog& PseudoTcpAdapter::NetLog() const {
-  DCHECK(CalledOnValidThread());
-  return net_log_;
-}
-
-void PseudoTcpAdapter::SetSubresourceSpeculation() {
-  DCHECK(CalledOnValidThread());
-  NOTIMPLEMENTED();
-}
-
-void PseudoTcpAdapter::SetOmniboxSpeculation() {
-  DCHECK(CalledOnValidThread());
-  NOTIMPLEMENTED();
-}
-
-bool PseudoTcpAdapter::WasEverUsed() const {
-  DCHECK(CalledOnValidThread());
-  NOTIMPLEMENTED();
-  return true;
-}
-
-bool PseudoTcpAdapter::UsingTCPFastOpen() const {
-  DCHECK(CalledOnValidThread());
-  return false;
-}
-
-bool PseudoTcpAdapter::WasNpnNegotiated() const {
-  DCHECK(CalledOnValidThread());
-  return false;
-}
-
-net::NextProto PseudoTcpAdapter::GetNegotiatedProtocol() const {
-  DCHECK(CalledOnValidThread());
-  return net::kProtoUnknown;
-}
-
-bool PseudoTcpAdapter::GetSSLInfo(net::SSLInfo* ssl_info) {
-  DCHECK(CalledOnValidThread());
-  return false;
-}
-
-void PseudoTcpAdapter::GetConnectionAttempts(
-    net::ConnectionAttempts* out) const {
-  DCHECK(CalledOnValidThread());
-  out->clear();
 }
 
 void PseudoTcpAdapter::SetAckDelay(int delay_ms) {

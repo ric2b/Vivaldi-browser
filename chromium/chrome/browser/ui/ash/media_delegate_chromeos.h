@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_ASH_MEDIA_DELEGATE_CHROMEOS_H_
 
 #include "ash/media_delegate.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/media/media_capture_devices_dispatcher.h"
 
@@ -19,8 +20,7 @@ class MediaDelegateChromeOS : public ash::MediaDelegate,
   void HandleMediaNextTrack() override;
   void HandleMediaPlayPause() override;
   void HandleMediaPrevTrack() override;
-  ash::MediaCaptureState GetMediaCaptureState(
-      content::BrowserContext* context) override;
+  ash::MediaCaptureState GetMediaCaptureState(ash::UserIndex index) override;
 
   // MediaCaptureDevicesDispatcher::Observer:
   void OnRequestUpdate(int render_process_id,

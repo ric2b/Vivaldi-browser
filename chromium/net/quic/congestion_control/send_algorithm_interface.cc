@@ -6,7 +6,6 @@
 
 #include "net/quic/congestion_control/tcp_cubic_bytes_sender.h"
 #include "net/quic/congestion_control/tcp_cubic_sender.h"
-#include "net/quic/quic_flags.h"
 #include "net/quic/quic_protocol.h"
 
 namespace net {
@@ -21,7 +20,7 @@ SendAlgorithmInterface* SendAlgorithmInterface::Create(
     QuicConnectionStats* stats,
     QuicPacketCount initial_congestion_window) {
   const QuicPacketCount max_congestion_window =
-      (kDefaultSocketReceiveBuffer * kUsableRecieveBufferFraction) /
+      (kDefaultSocketReceiveBuffer * kConservativeReceiveBufferFraction) /
       kDefaultTCPMSS;
   switch (congestion_control_type) {
     case kCubic:
@@ -41,7 +40,7 @@ SendAlgorithmInterface* SendAlgorithmInterface::Create(
                                      initial_congestion_window,
                                      max_congestion_window, stats);
     case kBBR:
-  // TODO(rtenneti): Enable BbrTcpSender.
+// TODO(rtenneti): Enable BbrTcpSender.
 #if 0
       return new BbrTcpSender(clock, rtt_stats, initial_congestion_window,
                               max_congestion_window, stats, true);

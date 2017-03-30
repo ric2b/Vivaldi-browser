@@ -129,5 +129,31 @@ chrome.test.runTests([
               result);
           }));
     });
+  },
+  function dataUsageReporting() {
+    dataReductionProxy.dataUsageReportingEnabled.set({ 'value': true });
+
+    // Data usage reporting takes some time to initialize before a call to
+    // |getDataUsage| is successful. If |getDataUsage| gives us an empty array,
+    // we retry after some delay. Test will report failure if the expected
+    // data usage is not returned after 20 retries.
+    var verifyDataUsage = function(numRetries) {
+      chrome.test.assertTrue(numRetries != 0);
+
+      setTimeout(chrome.test.callbackPass(function() {
+        dataReductionProxy.getDataUsage(chrome.test.callbackPass(
+          function(data_usage) {
+            chrome.test.assertTrue('data_usage_buckets' in data_usage);
+            if (data_usage['data_usage_buckets'].length == 0) {
+              verifyDataUsage(numRetries - 1);
+            } else {
+              chrome.test.assertEq(5760,
+                                   data_usage['data_usage_buckets'].length);
+            }
+        }));
+      }), 1000);
+    };
+
+    verifyDataUsage(20);
   }
 ]);

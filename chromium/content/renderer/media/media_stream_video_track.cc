@@ -8,9 +8,9 @@
 
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
-#include "third_party/libjingle/source/talk/app/webrtc/mediastreaminterface.h"
 
 namespace content {
 
@@ -55,7 +55,7 @@ class MediaStreamVideoTrack::FrameDeliverer
   // Triggers all registered callbacks with |frame|, |format| and
   // |estimated_capture_time| as parameters. Must be called on the IO-thread.
   void DeliverFrameOnIO(const scoped_refptr<media::VideoFrame>& frame,
-                        const base::TimeTicks& estimated_capture_time);
+                        base::TimeTicks estimated_capture_time);
 
  private:
   friend class base::RefCountedThreadSafe<FrameDeliverer>;
@@ -154,7 +154,7 @@ void MediaStreamVideoTrack::FrameDeliverer::SetEnabledOnIO(bool enabled) {
 
 void MediaStreamVideoTrack::FrameDeliverer::DeliverFrameOnIO(
     const scoped_refptr<media::VideoFrame>& frame,
-    const base::TimeTicks& estimated_capture_time) {
+    base::TimeTicks estimated_capture_time) {
   DCHECK(io_task_runner_->BelongsToCurrentThread());
   const scoped_refptr<media::VideoFrame>& video_frame =
       enabled_ ? frame : GetBlackFrame(frame);
@@ -167,9 +167,10 @@ MediaStreamVideoTrack::FrameDeliverer::GetBlackFrame(
     const scoped_refptr<media::VideoFrame>& reference_frame) {
   DCHECK(io_task_runner_->BelongsToCurrentThread());
   if (!black_frame_.get() ||
-      black_frame_->natural_size() != reference_frame->natural_size())
+      black_frame_->natural_size() != reference_frame->natural_size()) {
     black_frame_ =
         media::VideoFrame::CreateBlackFrame(reference_frame->natural_size());
+  }
 
   // Wrap |black_frame_| so we get a fresh timestamp we can modify. Frames
   // returned from this function may still be in use.
@@ -177,10 +178,19 @@ MediaStreamVideoTrack::FrameDeliverer::GetBlackFrame(
       media::VideoFrame::WrapVideoFrame(
           black_frame_, black_frame_->visible_rect(),
           black_frame_->natural_size());
+  if (!wrapped_black_frame)
+    return nullptr;
   wrapped_black_frame->AddDestructionObserver(
       base::Bind(&ReleaseOriginalFrame, black_frame_));
 
   wrapped_black_frame->set_timestamp(reference_frame->timestamp());
+  base::TimeTicks reference_time;
+  if (reference_frame->metadata()->GetTimeTicks(
+          media::VideoFrameMetadata::REFERENCE_TIME, &reference_time)) {
+    wrapped_black_frame->metadata()->SetTimeTicks(
+        media::VideoFrameMetadata::REFERENCE_TIME, reference_time);
+  }
+
   return wrapped_black_frame;
 }
 

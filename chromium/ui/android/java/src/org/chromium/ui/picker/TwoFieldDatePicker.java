@@ -113,12 +113,7 @@ public abstract class TwoFieldDatePicker extends FrameLayout {
         mYearSpinner.setOnLongPressUpdateInterval(100);
         mYearSpinner.setOnValueChangedListener(onChangeListener);
 
-        // TODO(tobiasjs): reorderSpinners causes a crash on Android versions before JB MR2 because
-        // it calls DateFormat.getBestDateTimePattern() which isn't available before then. Fix this
-        // crash and call reorderSpinners on all devices. http://crbug.com/463719
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
-            reorderSpinners();
-        }
+        reorderSpinners();
     }
 
     /**

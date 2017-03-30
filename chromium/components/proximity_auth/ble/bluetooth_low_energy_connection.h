@@ -2,8 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef COMPONENTS_PROXIMITY_AUTH_BLUETOOTH_LOW_ENERGY_CONNECTION_H
-#define COMPONENTS_PROXIMITY_AUTH_BLUETOOTH_LOW_ENERGY_CONNECTION_H
+#ifndef COMPONENTS_PROXIMITY_AUTH_BLE_BLUETOOTH_LOW_ENERGY_CONNECTION_H_
+#define COMPONENTS_PROXIMITY_AUTH_BLE_BLUETOOTH_LOW_ENERGY_CONNECTION_H_
+
+#include <stddef.h>
+#include <stdint.h>
 
 #include <queue>
 #include <string>
@@ -23,7 +26,13 @@
 #include "device/bluetooth/bluetooth_gatt_notify_session.h"
 #include "device/bluetooth/bluetooth_uuid.h"
 
+namespace base {
+class TaskRunner;
+}
+
 namespace proximity_auth {
+
+class BluetoothThrottler;
 
 // Represents a connection with a remote device over Bluetooth low energy. The
 // connection is a persistent bidirectional channel for sending and receiving
@@ -53,7 +62,7 @@ class BluetoothLowEnergyConnection : public Connection,
                                      public device::BluetoothAdapter::Observer {
  public:
   // Signals sent to the remote device to indicate connection related events.
-  enum class ControlSignal : uint32 {
+  enum class ControlSignal : uint32_t {
     kInviteToConnectSignal = 0,
     kInvitationResponseSignal = 1,
     kSendSignal = 2,
@@ -65,7 +74,6 @@ class BluetoothLowEnergyConnection : public Connection,
   enum class SubStatus {
     DISCONNECTED,
     WAITING_GATT_CONNECTION,
-    GATT_CONNECTION_ESTABLISHED,
     WAITING_CHARACTERISTICS,
     CHARACTERISTICS_FOUND,
     WAITING_NOTIFY_SESSION,
@@ -83,9 +91,7 @@ class BluetoothLowEnergyConnection : public Connection,
       const RemoteDevice& remote_device,
       scoped_refptr<device::BluetoothAdapter> adapter,
       const device::BluetoothUUID remote_service_uuid,
-      const device::BluetoothUUID to_peripheral_char_uuid,
-      const device::BluetoothUUID from_peripheral_char_uuid,
-      scoped_ptr<device::BluetoothGattConnection> gatt_connection,
+      BluetoothThrottler* bluetooth_throttler,
       int max_number_of_write_attempts);
 
   ~BluetoothLowEnergyConnection() override;
@@ -93,11 +99,15 @@ class BluetoothLowEnergyConnection : public Connection,
   // proximity_auth::Connection:
   void Connect() override;
   void Disconnect() override;
+  std::string GetDeviceAddress() override;
 
  protected:
   // Exposed for testing.
   void SetSubStatus(SubStatus status);
   SubStatus sub_status() { return sub_status_; }
+
+  // Sets |task_runner_| for testing.
+  void SetTaskRunnerForTesting(scoped_refptr<base::TaskRunner> task_runner);
 
   // Virtual for testing.
   virtual BluetoothLowEnergyCharacteristicsFinder* CreateCharacteristicsFinder(
@@ -108,8 +118,6 @@ class BluetoothLowEnergyConnection : public Connection,
 
   // proximity_auth::Connection:
   void SendMessageImpl(scoped_ptr<WireMessage> message) override;
-  scoped_ptr<WireMessage> DeserializeWireMessage(
-      bool* is_incomplete_message) override;
 
   // device::BluetoothAdapter::Observer:
   void DeviceChanged(device::BluetoothAdapter* adapter,
@@ -119,7 +127,7 @@ class BluetoothLowEnergyConnection : public Connection,
   void GattCharacteristicValueChanged(
       device::BluetoothAdapter* adapter,
       device::BluetoothGattCharacteristic* characteristic,
-      const std::vector<uint8>& value) override;
+      const std::vector<uint8_t>& value) override;
 
  private:
   // Represents a request to write |value| to a some characteristic.
@@ -129,25 +137,22 @@ class BluetoothLowEnergyConnection : public Connection,
   // a kSendSignal + the size of the WireMessage, and the second containing a
   // SendStatusSignal + the serialized WireMessage.
   struct WriteRequest {
-    WriteRequest(const std::vector<uint8>& val, bool flag);
+    WriteRequest(const std::vector<uint8_t>& val, bool flag);
     ~WriteRequest();
 
-    std::vector<uint8> value;
+    std::vector<uint8_t> value;
     bool is_last_write_for_wire_message;
     int number_of_failed_attempts;
   };
 
-  // Called when the remote device is successfully disconnected.
-  void OnDisconnected();
+  // Creates the GATT connection with |remote_device|.
+  void CreateGattConnection();
 
-  // Called when there is an error disconnecting the remote device.
-  void OnDisconnectError();
-
-  // Called when a GATT connection is created or received by the constructor.
+  // Called when a GATT connection is created.
   void OnGattConnectionCreated(
       scoped_ptr<device::BluetoothGattConnection> gatt_connection);
 
-  // Callback called when there is an error creating the connection.
+  // Callback called when there is an error creating the GATT connection.
   void OnCreateGattConnectionError(
       device::BluetoothDevice::ConnectErrorCode error_code);
 
@@ -202,7 +207,7 @@ class BluetoothLowEnergyConnection : public Connection,
   void ProcessNextWriteRequest();
 
   // Called when the BluetoothGattCharacteristic::RemoteCharacteristicWrite() is
-  // sucessfully complete.
+  // successfully complete.
   void OnRemoteCharacteristicWritten(bool run_did_send_message_callback);
 
   // Called when there is an error writing to the remote characteristic
@@ -213,15 +218,12 @@ class BluetoothLowEnergyConnection : public Connection,
 
   // Builds the value to be written on |to_peripheral_char_|. The value
   // corresponds to |signal| concatenated with |payload|.
-  WriteRequest BuildWriteRequest(const std::vector<uint8>& signal,
-                                 const std::vector<uint8>& bytes,
+  WriteRequest BuildWriteRequest(const std::vector<uint8_t>& signal,
+                                 const std::vector<uint8_t>& bytes,
                                  bool is_last_message_for_wire_message);
 
-  // Clears |write_requests_queue_|.
-  void ClearWriteRequestsQueue();
-
-  // Returns the Bluetooth address of the remote device.
-  const std::string& GetRemoteDeviceAddress();
+  // Prints the time elapsed since |Connect()| was called.
+  void PrintTimeElapsed();
 
   // Returns the device corresponding to |remote_device_address_|.
   device::BluetoothDevice* GetRemoteDevice();
@@ -235,11 +237,11 @@ class BluetoothLowEnergyConnection : public Connection,
   device::BluetoothGattCharacteristic* GetGattCharacteristic(
       const std::string& identifier);
 
-  // Convert the first 4 bytes from a byte vector to a uint32.
-  uint32 ToUint32(const std::vector<uint8>& bytes);
+  // Convert the first 4 bytes from a byte vector to a uint32_t.
+  uint32_t ToUint32(const std::vector<uint8_t>& bytes);
 
-  // Convert an uint32 to a byte vector.
-  const std::vector<uint8> ToByteVector(uint32 value);
+  // Convert an uint32_t to a byte vector.
+  const std::vector<uint8_t> ToByteVector(uint32_t value);
 
   // The Bluetooth adapter over which the Bluetooth connection will be made.
   scoped_refptr<device::BluetoothAdapter> adapter_;
@@ -252,6 +254,12 @@ class BluetoothLowEnergyConnection : public Connection,
 
   // Characteristic used to receive data from the remote device.
   RemoteAttribute from_peripheral_char_;
+
+  // Throttles repeated connection attempts to the same device. This is a
+  // workaround for crbug.com/508919. Not owned, must outlive this instance.
+  BluetoothThrottler* bluetooth_throttler_;
+
+  scoped_refptr<base::TaskRunner> task_runner_;
 
   // The GATT connection with the remote device.
   scoped_ptr<device::BluetoothGattConnection> gatt_connection_;
@@ -301,4 +309,4 @@ class BluetoothLowEnergyConnection : public Connection,
 
 }  // namespace proximity_auth
 
-#endif  // COMPONENTS_PROXIMITY_AUTH_BLUETOOTH_LOW_ENERGY_CONNECTION_H
+#endif  // COMPONENTS_PROXIMITY_AUTH_BLE_BLUETOOTH_LOW_ENERGY_CONNECTION_H_

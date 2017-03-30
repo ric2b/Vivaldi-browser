@@ -8,7 +8,9 @@
 #include <set>
 #include <string>
 
+#include "base/macros.h"
 #include "base/supports_user_data.h"
+#include "content/browser/loader/global_routing_id.h"
 #include "content/public/browser/web_contents_observer.h"
 
 namespace content {
@@ -40,6 +42,10 @@ class WebContentsObserverSanityChecker : public WebContentsObserver,
   void RenderFrameHostChanged(RenderFrameHost* old_host,
                               RenderFrameHost* new_host) override;
   void FrameDeleted(RenderFrameHost* render_frame_host) override;
+  void DidStartNavigation(NavigationHandle* navigation_handle) override;
+  void DidRedirectNavigation(NavigationHandle* navigation_handle) override;
+  void ReadyToCommitNavigation(NavigationHandle* navigation_handle) override;
+  void DidFinishNavigation(NavigationHandle* navigation_handle) override;
   void DidStartProvisionalLoadForFrame(RenderFrameHost* render_frame_host,
                                        const GURL& validated_url,
                                        bool is_error_page,
@@ -77,6 +83,8 @@ class WebContentsObserverSanityChecker : public WebContentsObserver,
                            const Referrer& referrer,
                            WindowOpenDisposition disposition,
                            ui::PageTransition transition) override;
+  void MediaStartedPlaying(const MediaPlayerId& id) override;
+  void MediaStoppedPlaying(const MediaPlayerId& id) override;
   bool OnMessageReceived(const IPC::Message& message,
                          RenderFrameHost* render_frame_host) override;
   void WebContentsDestroyed() override;
@@ -89,9 +97,20 @@ class WebContentsObserverSanityChecker : public WebContentsObserver,
   void AssertRenderFrameExists(RenderFrameHost* render_frame_host);
   void AssertMainFrameExists();
 
-  std::set<std::pair<int, int>> current_hosts_;
-  std::set<std::pair<int, int>> live_routes_;
-  std::set<std::pair<int, int>> deleted_routes_;
+  bool NavigationIsOngoing(NavigationHandle* navigation_handle);
+
+  void EnsureStableParentValue(RenderFrameHost* render_frame_host);
+  bool HasAnyChildren(RenderFrameHost* render_frame_host);
+
+  std::set<GlobalRoutingID> current_hosts_;
+  std::set<GlobalRoutingID> live_routes_;
+  std::set<GlobalRoutingID> deleted_routes_;
+
+  std::set<NavigationHandle*> ongoing_navigations_;
+  std::vector<MediaPlayerId> active_media_players_;
+
+  // Remembers parents to make sure RenderFrameHost::GetParent() never changes.
+  std::map<GlobalRoutingID, GlobalRoutingID> parent_ids_;
 
   bool web_contents_destroyed_;
 

@@ -6,7 +6,6 @@
 #define CONTENT_PUBLIC_BROWSER_LOAD_FROM_MEMORY_CACHE_DETAILS_H_
 
 #include <string>
-#include "base/basictypes.h"
 #include "content/public/common/resource_type.h"
 #include "net/cert/cert_status_flags.h"
 #include "url/gurl.h"
@@ -15,7 +14,6 @@ namespace content {
 
 struct LoadFromMemoryCacheDetails {
   LoadFromMemoryCacheDetails(const GURL& url,
-                             int pid,
                              int cert_id,
                              net::CertStatus cert_status,
                              const std::string& http_method,
@@ -24,7 +22,6 @@ struct LoadFromMemoryCacheDetails {
   ~LoadFromMemoryCacheDetails();
 
   GURL url;
-  int pid;
   int cert_id;
   net::CertStatus cert_status;
   std::string http_method;

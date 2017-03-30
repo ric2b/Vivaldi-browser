@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/json/json_reader.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 #include "google_apis/gaia/gaia_oauth_client.h"
@@ -56,12 +57,12 @@ class MockOAuthFetcher : public net::TestURLFetcher {
       set_response_code(net::HTTP_OK);
     }
 
-    net::URLRequestStatus::Status code = net::URLRequestStatus::SUCCESS;
+    net::Error error = net::OK;
     if (GetResponseCode() != net::HTTP_OK) {
-      code = net::URLRequestStatus::FAILED;
+      error = net::ERR_FAILED;
       current_failure_count_++;
     }
-    set_status(net::URLRequestStatus(code, 0));
+    set_status(net::URLRequestStatus::FromError(error));
 
     if (complete_immediately_)
       delegate()->OnURLFetchComplete(this);
@@ -367,8 +368,8 @@ TEST_F(GaiaOAuthClientTest, GetUserInfo) {
   GaiaOAuthClient auth(GetRequestContext());
   auth.GetUserInfo("access_token", 1, &delegate);
 
-  scoped_ptr<base::Value> value(
-      base::JSONReader::DeprecatedRead(kDummyFullUserInfoResult));
+  scoped_ptr<base::Value> value =
+      base::JSONReader::Read(kDummyFullUserInfoResult);
   DCHECK(value);
   ASSERT_TRUE(value->IsType(base::Value::TYPE_DICTIONARY));
   base::DictionaryValue* expected_result;

@@ -17,6 +17,7 @@
     "input",
     "inputMethodPrivate",
     "metricsPrivate",
+    "system.display",
     "tabs",
     "tts",
     "unlimitedStorage",
@@ -100,6 +101,20 @@
       "input_view": "inputview.html#id=quick&language=zh-TW&passwordLayout=quick&name=inputmethod_quick"
     },
     {
+      "name": "__MSG_inputmethod_cantonese__",
+      "type": "ime",
+      "id": "yue-hant-t-i0-und",
+      "indicator": "\u7CA4",
+      "description": "Cantonese",
+      "language": [
+        "zh-TW"
+      ],
+      "layouts": [
+        "us"
+      ],
+      "input_view": "inputview.html#id=us&language=zh-CN&passwordLayout=us&name=inputmethod_cantonese"
+    },
+    {
       "name": "__MSG_inputmethod_wubi__",
       "type": "ime",
       "id": "zh-t-i0-wubi-1986",
@@ -157,7 +172,7 @@
       "layouts": [
         "us"
       ],
-      "input_view": "inputview.html#id=zhuyin&language=zh-TW&passwordLayout=zhuyin&name=inputmethod_zhuyin",
+      "input_view": "inputview.html#id=zhuyin.compact.qwerty&language=zh-TW&passwordLayout=zhuyin.en.compact.qwerty&name=inputmethod_zhuyin",
       "options_page": "hmm_options.html?code=zh-hant-t-i0-und"
     },
     {
@@ -666,6 +681,19 @@
         "us"
       ],
       "input_view": "inputview.html#id=m17n:vi_viqr&language=vi&passwordLayout=us-ltr&name=keyboard_vietnamese_viqr"
+    },
+    {
+      "name": "__MSG_keyboard_vietnamese_vni__",
+      "type": "ime",
+      "id": "vkd_vi_vni",
+      "description": "",
+      "language": [
+        "vi"
+      ],
+      "layouts": [
+        "us"
+      ],
+      "input_view": "inputview.html#id=m17n:vi_vni&language=vi&passwordLayout=us-ltr&name=keyboard_vietnamese_vni"
     },
     {
       "name": "__MSG_keyboard_arabic__",

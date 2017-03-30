@@ -4,11 +4,14 @@
 
 #include "testing/gtest/include/gtest/gtest.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
-#include "base/thread_task_runner_handle.h"
 #include "chrome/browser/browsing_data/browsing_data_quota_helper_impl.h"
 #include "content/public/test/mock_storage_client.h"
 #include "content/public/test/test_browser_thread.h"
@@ -25,30 +28,23 @@ class BrowsingDataQuotaHelperTest : public testing::Test {
   typedef BrowsingDataQuotaHelper::QuotaInfo QuotaInfo;
   typedef BrowsingDataQuotaHelper::QuotaInfoArray QuotaInfoArray;
 
-  BrowsingDataQuotaHelperTest()
-      : fetching_completed_(true),
-        quota_(-1),
-        weak_factory_(this) {}
+  BrowsingDataQuotaHelperTest() : weak_factory_(this) {}
 
   ~BrowsingDataQuotaHelperTest() override {}
 
   void SetUp() override {
     EXPECT_TRUE(dir_.CreateUniqueTempDir());
     quota_manager_ = new storage::QuotaManager(
-        false,
-        dir_.path(),
+        false, dir_.path(),
         BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO).get(),
         BrowserThread::GetMessageLoopProxyForThread(BrowserThread::DB).get(),
-        NULL);
-    helper_ = new BrowsingDataQuotaHelperImpl(
-        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI).get(),
-        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO).get(),
-        quota_manager_.get());
+        nullptr);
+    helper_ = new BrowsingDataQuotaHelperImpl(quota_manager_.get());
   }
 
   void TearDown() override {
-    helper_ = NULL;
-    quota_manager_ = NULL;
+    helper_ = nullptr;
+    quota_manager_ = nullptr;
     quota_info_.clear();
     base::MessageLoop::current()->RunUntilIdle();
   }
@@ -79,7 +75,7 @@ class BrowsingDataQuotaHelperTest : public testing::Test {
     client->TouchAllOriginsAndNotify();
   }
 
-  void SetPersistentHostQuota(const std::string& host, int64 quota) {
+  void SetPersistentHostQuota(const std::string& host, int64_t quota) {
     quota_ = -1;
     quota_manager_->SetPersistentHostQuota(
         host, quota,
@@ -95,7 +91,7 @@ class BrowsingDataQuotaHelperTest : public testing::Test {
                    weak_factory_.GetWeakPtr()));
   }
 
-  void GotPersistentHostQuota(storage::QuotaStatusCode status, int64 quota) {
+  void GotPersistentHostQuota(storage::QuotaStatusCode status, int64_t quota) {
     EXPECT_EQ(storage::kQuotaStatusOk, status);
     quota_ = quota;
   }
@@ -104,9 +100,7 @@ class BrowsingDataQuotaHelperTest : public testing::Test {
     helper_->RevokeHostQuota(host);
   }
 
-  int64 quota() {
-    return quota_;
-  }
+  int64_t quota() { return quota_; }
 
  private:
   void FetchCompleted(const QuotaInfoArray& quota_info) {
@@ -120,9 +114,9 @@ class BrowsingDataQuotaHelperTest : public testing::Test {
   base::ScopedTempDir dir_;
   scoped_refptr<BrowsingDataQuotaHelper> helper_;
 
-  bool fetching_completed_;
+  bool fetching_completed_ = true;
   QuotaInfoArray quota_info_;
-  int64 quota_;
+  int64_t quota_ = -1;
   base::WeakPtrFactory<BrowsingDataQuotaHelperTest> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(BrowsingDataQuotaHelperTest);

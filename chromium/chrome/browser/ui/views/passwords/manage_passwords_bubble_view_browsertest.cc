@@ -4,24 +4,28 @@
 
 #include "chrome/browser/ui/views/passwords/manage_passwords_bubble_view.h"
 
+#include <utility>
+
 #include "base/command_line.h"
+#include "base/macros.h"
 #include "base/metrics/histogram_samples.h"
+#include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/passwords/manage_passwords_test.h"
-#include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
+#include "chrome/browser/ui/passwords/passwords_model_delegate.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/passwords/manage_passwords_bubble_view.h"
-#include "chrome/browser/ui/views/passwords/manage_passwords_icon_view.h"
+#include "chrome/browser/ui/views/passwords/manage_passwords_icon_views.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/test/base/interactive_test_utils.h"
-#include "components/password_manager/core/browser/password_manager_metrics_util.h"
-#include "components/password_manager/core/browser/stub_password_manager_client.h"
+#include "components/password_manager/core/browser/password_bubble_experiment.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/common/content_switches.h"
 #include "net/url_request/test_url_fetcher_factory.h"
-#include "testing/gtest/include/gtest/gtest.h"
+#include "testing/gmock/include/gmock/gmock.h"
 
 using testing::Eq;
 using testing::Field;
@@ -63,7 +67,7 @@ class ManagePasswordsBubbleViewTest : public ManagePasswordsTest {
   ManagePasswordsBubbleViewTest() {}
   ~ManagePasswordsBubbleViewTest() override {}
 
-  ManagePasswordsIcon* view() override {
+  ManagePasswordsIconView* view() override {
     BrowserView* browser_view = static_cast<BrowserView*>(browser()->window());
     return browser_view->GetToolbarView()
         ->location_bar()
@@ -76,25 +80,24 @@ class ManagePasswordsBubbleViewTest : public ManagePasswordsTest {
 
 IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, BasicOpenAndClose) {
   EXPECT_FALSE(IsBubbleShowing());
-  ManagePasswordsBubbleView::ShowBubble(
-      browser()->tab_strip_model()->GetActiveWebContents(),
-      ManagePasswordsBubble::USER_ACTION);
+  SetupPendingPassword();
   EXPECT_TRUE(IsBubbleShowing());
   const ManagePasswordsBubbleView* bubble =
       ManagePasswordsBubbleView::manage_password_bubble();
   EXPECT_TRUE(bubble->initially_focused_view());
-  EXPECT_EQ(bubble->initially_focused_view(),
-            bubble->GetFocusManager()->GetFocusedView());
+  EXPECT_FALSE(bubble->GetFocusManager()->GetFocusedView());
   ManagePasswordsBubbleView::CloseBubble();
   EXPECT_FALSE(IsBubbleShowing());
 
   // And, just for grins, ensure that we can re-open the bubble.
   ManagePasswordsBubbleView::ShowBubble(
       browser()->tab_strip_model()->GetActiveWebContents(),
-      ManagePasswordsBubble::USER_ACTION);
-  EXPECT_TRUE(ManagePasswordsBubbleView::manage_password_bubble()->
-      GetFocusManager()->GetFocusedView());
+      ManagePasswordsBubbleView::USER_GESTURE);
   EXPECT_TRUE(IsBubbleShowing());
+  bubble = ManagePasswordsBubbleView::manage_password_bubble();
+  EXPECT_TRUE(bubble->initially_focused_view());
+  EXPECT_EQ(bubble->initially_focused_view(),
+            bubble->GetFocusManager()->GetFocusedView());
   ManagePasswordsBubbleView::CloseBubble();
   EXPECT_FALSE(IsBubbleShowing());
 }
@@ -218,14 +221,26 @@ IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest,
                 metrics_util::MANUAL_MANAGE_PASSWORDS));
 }
 
-IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, CloseOnClick) {
-  ManagePasswordsBubbleView::ShowBubble(
-      browser()->tab_strip_model()->GetActiveWebContents(),
-      ManagePasswordsBubble::AUTOMATIC);
+// Flaky on Windows (http://crbug.com/523255).
+#if defined(OS_WIN)
+#define MAYBE_CloseOnClick DISABLED_CloseOnClick
+#else
+#define MAYBE_CloseOnClick CloseOnClick
+#endif
+IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, MAYBE_CloseOnClick) {
+  SetupPendingPassword();
   EXPECT_TRUE(IsBubbleShowing());
   EXPECT_FALSE(ManagePasswordsBubbleView::manage_password_bubble()->
       GetFocusManager()->GetFocusedView());
   ui_test_utils::ClickOnView(browser(), VIEW_ID_TAB_CONTAINER);
+  EXPECT_FALSE(IsBubbleShowing());
+}
+
+IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, CloseOnEsc) {
+  SetupPendingPassword();
+  EXPECT_TRUE(IsBubbleShowing());
+  ASSERT_TRUE(ui_test_utils::SendKeyPressSync(browser(), ui::VKEY_ESCAPE,
+      false, false, false, false));
   EXPECT_FALSE(IsBubbleShowing());
 }
 
@@ -237,14 +252,13 @@ IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, CloseOnKey) {
       browser(),
       GURL("data:text/html;charset=utf-8,<input type=\"text\" autofocus>"));
   focus_observer.Wait();
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  ManagePasswordsBubbleView::ShowBubble(web_contents,
-                                        ManagePasswordsBubble::AUTOMATIC);
+  SetupPendingPassword();
   EXPECT_TRUE(IsBubbleShowing());
   EXPECT_FALSE(ManagePasswordsBubbleView::manage_password_bubble()->
       GetFocusManager()->GetFocusedView());
   EXPECT_TRUE(ui_test_utils::IsViewFocused(browser(), VIEW_ID_TAB_CONTAINER));
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
   EXPECT_TRUE(web_contents->GetRenderViewHost()->IsFocusedElementEditable());
   ASSERT_TRUE(ui_test_utils::SendKeyPressSync(browser(), ui::VKEY_K,
       false, false, false, false));
@@ -264,17 +278,16 @@ IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, TwoTabsWithBubble) {
   // Set up the first tab with the bubble.
   SetupPendingPassword();
   EXPECT_TRUE(IsBubbleShowing());
-  // Set up the second tab.
-  AddTabAtIndex(0, GURL("chrome://newtab"), ui::PAGE_TRANSITION_TYPED);
-  EXPECT_FALSE(IsBubbleShowing());
-  ManagePasswordsBubbleView::ShowBubble(
-      browser()->tab_strip_model()->GetActiveWebContents(),
-      ManagePasswordsBubble::AUTOMATIC);
-  EXPECT_TRUE(IsBubbleShowing());
+  // Set up the second tab and bring the bubble again.
+  AddTabAtIndex(1, GURL("http://example.com/"), ui::PAGE_TRANSITION_TYPED);
   TabStripModel* tab_model = browser()->tab_strip_model();
-  EXPECT_EQ(0, tab_model->active_index());
-  // Back to the first tab.
   tab_model->ActivateTabAt(1, true);
+  EXPECT_FALSE(IsBubbleShowing());
+  EXPECT_EQ(1, tab_model->active_index());
+  SetupPendingPassword();
+  EXPECT_TRUE(IsBubbleShowing());
+  // Back to the first tab.
+  tab_model->ActivateTabAt(0, true);
   EXPECT_FALSE(IsBubbleShowing());
 }
 
@@ -284,11 +297,11 @@ IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, ChooseCredential) {
   test_form()->origin = origin;
   test_form()->display_name = base::ASCIIToUTF16("Peter");
   test_form()->username_value = base::ASCIIToUTF16("pet12@gmail.com");
-  test_form()->avatar_url = GURL("broken url");
+  test_form()->icon_url = GURL("broken url");
   local_credentials.push_back(new autofill::PasswordForm(*test_form()));
   ScopedVector<autofill::PasswordForm> federated_credentials;
-  GURL avatar_url("https://google.com/avatar.png");
-  test_form()->avatar_url = avatar_url;
+  GURL icon_url("https://google.com/icon.png");
+  test_form()->icon_url = icon_url;
   test_form()->display_name = base::ASCIIToUTF16("Peter Pen");
   test_form()->federation_url = GURL("https://google.com/federation");
   federated_credentials.push_back(new autofill::PasswordForm(*test_form()));
@@ -299,12 +312,12 @@ IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, ChooseCredential) {
       NULL,
       base::Bind(&TestURLFetcherCallback::CreateURLFetcher,
                  base::Unretained(&url_callback)));
-  factory.SetFakeResponse(avatar_url, std::string(), net::HTTP_OK,
+  factory.SetFakeResponse(icon_url, std::string(), net::HTTP_OK,
                           net::URLRequestStatus::FAILED);
-  EXPECT_CALL(url_callback, OnRequestDone(avatar_url));
+  EXPECT_CALL(url_callback, OnRequestDone(icon_url));
 
-  SetupChooseCredentials(local_credentials.Pass(), federated_credentials.Pass(),
-                         origin);
+  SetupChooseCredentials(std::move(local_credentials),
+                         std::move(federated_credentials), origin);
   EXPECT_TRUE(IsBubbleShowing());
   EXPECT_CALL(*this, OnChooseCredential(
       Field(&password_manager::CredentialInfo::type,
@@ -327,8 +340,8 @@ IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, ChooseCredentialNoFocus) {
   content::RunAllPendingInMessageLoop();
 
   EXPECT_FALSE(browser()->window()->IsActive());
-  SetupChooseCredentials(local_credentials.Pass(), federated_credentials.Pass(),
-                         origin);
+  SetupChooseCredentials(std::move(local_credentials),
+                         std::move(federated_credentials), origin);
   EXPECT_TRUE(IsBubbleShowing());
 }
 
@@ -340,8 +353,8 @@ IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, AutoSignin) {
   test_form()->origin = GURL("https://example.com");
   test_form()->display_name = base::ASCIIToUTF16("Peter");
   test_form()->username_value = base::ASCIIToUTF16("pet12@gmail.com");
-  GURL avatar_url("https://google.com/avatar.png");
-  test_form()->avatar_url = avatar_url;
+  GURL icon_url("https://google.com/icon.png");
+  test_form()->icon_url = icon_url;
   local_credentials.push_back(new autofill::PasswordForm(*test_form()));
 
   // Prepare to capture the network request.
@@ -350,30 +363,25 @@ IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, AutoSignin) {
       NULL,
       base::Bind(&TestURLFetcherCallback::CreateURLFetcher,
                  base::Unretained(&url_callback)));
-  factory.SetFakeResponse(avatar_url, std::string(), net::HTTP_OK,
+  factory.SetFakeResponse(icon_url, std::string(), net::HTTP_OK,
                           net::URLRequestStatus::FAILED);
-  EXPECT_CALL(url_callback, OnRequestDone(avatar_url));
+  EXPECT_CALL(url_callback, OnRequestDone(icon_url));
 
-  SetupAutoSignin(local_credentials.Pass());
+  SetupAutoSignin(std::move(local_credentials));
   EXPECT_TRUE(IsBubbleShowing());
-  ::testing::Mock::VerifyAndClearExpectations(&url_callback);
 
   ManagePasswordsBubbleView::CloseBubble();
   EXPECT_FALSE(IsBubbleShowing());
   content::RunAllPendingInMessageLoop();
-
-  // Open the bubble to manage accounts.
-  EXPECT_EQ(password_manager::ui::MANAGE_STATE, GetController()->state());
-  EXPECT_CALL(url_callback, OnRequestDone(avatar_url));
-  ManagePasswordsBubbleView::ShowBubble(
-        browser()->tab_strip_model()->GetActiveWebContents(),
-        ManagePasswordsBubble::USER_ACTION);
-  EXPECT_TRUE(IsBubbleShowing());
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  EXPECT_EQ(password_manager::ui::MANAGE_STATE,
+            PasswordsModelDelegateFromWebContents(web_contents)->GetState());
 }
 
 IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, AutoSigninNoFocus) {
   ScopedVector<autofill::PasswordForm> local_credentials;
-  test_form()->origin = GURL("https://example.com");;
+  test_form()->origin = GURL("https://example.com");
   test_form()->display_name = base::ASCIIToUTF16("Peter");
   test_form()->username_value = base::ASCIIToUTF16("pet12@gmail.com");
   local_credentials.push_back(new autofill::PasswordForm(*test_form()));
@@ -385,7 +393,10 @@ IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, AutoSigninNoFocus) {
 
   EXPECT_FALSE(browser()->window()->IsActive());
   ManagePasswordsBubbleView::set_auto_signin_toast_timeout(0);
-  SetupAutoSignin(local_credentials.Pass());
+  // Get rid of the warm welcome which makes the bubble sticky.
+  password_bubble_experiment::RecordAutoSignInPromptFirstRunExperienceWasShown(
+      browser()->profile()->GetPrefs());
+  SetupAutoSignin(std::move(local_credentials));
   content::RunAllPendingInMessageLoop();
   EXPECT_TRUE(IsBubbleShowing());
 

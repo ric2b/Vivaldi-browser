@@ -6,8 +6,8 @@ import logging
 import psutil
 import signal
 
-from pylib.device import device_errors
-from pylib.device import device_utils
+from devil.android import device_errors
+from devil.android import device_utils
 
 
 def _KillWebServers():
@@ -21,27 +21,31 @@ def _KillWebServers():
           logging.info('Killing %s %s %s', s, server, p.pid)
           p.send_signal(s)
           signalled.append(p)
-        except Exception as e:
-          logging.warning('Failed killing %s %s %s', server, p.pid, e)
+        except Exception: # pylint: disable=broad-except
+          logging.exception('Failed killing %s %s', server, p.pid)
     for p in signalled:
       try:
         p.wait(1)
-      except Exception as e:
-        logging.warning('Failed waiting for %s to die. %s', p.pid, e)
+      except Exception: # pylint: disable=broad-except
+        logging.exception('Failed waiting for %s to die.', p.pid)
 
 
-def CleanupLeftoverProcesses():
-  """Clean up the test environment, restarting fresh adb and HTTP daemons."""
+def CleanupLeftoverProcesses(devices):
+  """Clean up the test environment, restarting fresh adb and HTTP daemons.
+
+  Args:
+    devices: The devices to clean.
+  """
   _KillWebServers()
   device_utils.RestartServer()
 
   def cleanup_device(d):
-    d.old_interface.RestartAdbdOnDevice()
+    d.RestartAdbd()
     try:
       d.EnableRoot()
-    except device_errors.CommandFailedError as e:
-      logging.error(str(e))
+    except device_errors.CommandFailedError:
+      logging.exception('Failed to enable root')
     d.WaitUntilFullyBooted()
 
-  device_utils.DeviceUtils.parallel().pMap(cleanup_device)
+  device_utils.DeviceUtils.parallel(devices).pMap(cleanup_device)
 

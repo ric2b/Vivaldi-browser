@@ -4,90 +4,37 @@
 
 #include "content/renderer/media/webmediaplayer_ms.h"
 
+#include <stddef.h>
 #include <limits>
+#include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/message_loop/message_loop.h"
-#include "base/metrics/histogram.h"
+#include "build/build_config.h"
 #include "cc/blink/context_provider_web_context.h"
 #include "cc/blink/web_layer_impl.h"
+#include "cc/layers/video_frame_provider_client_impl.h"
 #include "cc/layers/video_layer.h"
 #include "content/public/renderer/media_stream_audio_renderer.h"
 #include "content/public/renderer/media_stream_renderer_factory.h"
-#include "content/public/renderer/render_view.h"
 #include "content/public/renderer/video_frame_provider.h"
+#include "content/renderer/media/webmediaplayer_ms_compositor.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_thread_impl.h"
 #include "gpu/blink/webgraphicscontext3d_impl.h"
 #include "media/base/media_log.h"
 #include "media/base/video_frame.h"
-#include "media/base/video_rotation.h"
-#include "media/base/video_util.h"
-#include "media/blink/webmediaplayer_delegate.h"
-#include "media/blink/webmediaplayer_util.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayerClient.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/web/WebFrame.h"
-#include "third_party/WebKit/public/web/WebView.h"
-#include "third_party/skia/include/core/SkBitmap.h"
-
-using blink::WebCanvas;
-using blink::WebMediaPlayer;
-using blink::WebRect;
-using blink::WebSize;
 
 namespace content {
 
 namespace {
 
-// This function copies |frame| to a new YV12 media::VideoFrame.
-scoped_refptr<media::VideoFrame> CopyFrameToYV12(
-    const scoped_refptr<media::VideoFrame>& frame,
-    media::SkCanvasVideoRenderer* video_renderer) {
-  scoped_refptr<media::VideoFrame> new_frame =
-      media::VideoFrame::CreateFrame(media::VideoFrame::YV12,
-                                     frame->coded_size(),
-                                     frame->visible_rect(),
-                                     frame->natural_size(),
-                                     frame->timestamp());
-
-  if (frame->HasTextures()) {
-    DCHECK(frame->format() == media::VideoFrame::ARGB ||
-           frame->format() == media::VideoFrame::XRGB);
-    SkBitmap bitmap;
-    bitmap.allocN32Pixels(frame->visible_rect().width(),
-                          frame->visible_rect().height());
-    SkCanvas canvas(bitmap);
-
-    cc::ContextProvider* const provider =
-        RenderThreadImpl::current()->SharedMainThreadContextProvider().get();
-    if (provider) {
-      const media::Context3D context_3d =
-          media::Context3D(provider->ContextGL(), provider->GrContext());
-      DCHECK(context_3d.gl);
-      video_renderer->Copy(frame.get(), &canvas, context_3d);
-    } else {
-      // GPU Process crashed.
-      bitmap.eraseColor(SK_ColorTRANSPARENT);
-    }
-    media::CopyRGBToVideoFrame(reinterpret_cast<uint8*>(bitmap.getPixels()),
-                               bitmap.rowBytes(),
-                               frame->visible_rect(),
-                               new_frame.get());
-  } else {
-    DCHECK(frame->IsMappable());
-    DCHECK(frame->format() == media::VideoFrame::YV12 ||
-           frame->format() == media::VideoFrame::I420);
-    for (size_t i = 0; i < media::VideoFrame::NumPlanes(frame->format()); ++i) {
-      media::CopyPlane(i, frame->data(i), frame->stride(i),
-                       frame->rows(i), new_frame.get());
-    }
-  }
-  return new_frame;
-}
+static const float DEFAULT_AUDIO_VOLUME = 1.0f;
 
 }  // anonymous namespace
 
@@ -96,38 +43,52 @@ WebMediaPlayerMS::WebMediaPlayerMS(
     blink::WebMediaPlayerClient* client,
     base::WeakPtr<media::WebMediaPlayerDelegate> delegate,
     media::MediaLog* media_log,
-    scoped_ptr<MediaStreamRendererFactory> factory)
-    : frame_(frame),
+    scoped_ptr<MediaStreamRendererFactory> factory,
+    const scoped_refptr<base::SingleThreadTaskRunner>& compositor_task_runner,
+    const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
+    const scoped_refptr<base::TaskRunner>& worker_task_runner,
+    media::GpuVideoAcceleratorFactories* gpu_factories,
+    const blink::WebString& sink_id,
+    const blink::WebSecurityOrigin& security_origin)
+    : RenderFrameObserver(RenderFrame::FromWebFrame(frame)),
+      frame_(frame),
       network_state_(WebMediaPlayer::NetworkStateEmpty),
       ready_state_(WebMediaPlayer::ReadyStateHaveNothing),
       buffered_(static_cast<size_t>(0)),
-      volume_(1.0f),
       client_(client),
       delegate_(delegate),
       paused_(true),
-      current_frame_used_(false),
-      video_frame_provider_client_(NULL),
+      render_frame_suspended_(false),
       received_first_frame_(false),
-      total_frame_count_(0),
-      dropped_frame_count_(0),
       media_log_(media_log),
-      renderer_factory_(factory.Pass()) {
-  DVLOG(1) << "WebMediaPlayerMS::ctor";
+      renderer_factory_(std::move(factory)),
+      media_task_runner_(media_task_runner),
+      worker_task_runner_(worker_task_runner),
+      gpu_factories_(gpu_factories),
+      compositor_task_runner_(compositor_task_runner),
+      initial_audio_output_device_id_(sink_id.utf8()),
+      initial_security_origin_(security_origin.isNull()
+                                   ? url::Origin()
+                                   : url::Origin(security_origin)) {
+  DVLOG(1) << __FUNCTION__;
+  DCHECK(client);
   media_log_->AddEvent(
       media_log_->CreateEvent(media::MediaLogEvent::WEBMEDIAPLAYER_CREATED));
 }
 
 WebMediaPlayerMS::~WebMediaPlayerMS() {
-  DVLOG(1) << "WebMediaPlayerMS::dtor";
+  DVLOG(1) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  SetVideoFrameProviderClient(NULL);
-  GetClient()->setWebLayer(NULL);
+  if (compositor_ && !compositor_task_runner_->BelongsToCurrentThread())
+    compositor_task_runner_->DeleteSoon(FROM_HERE, compositor_.release());
 
-  if (video_frame_provider_.get())
+  get_client()->setWebLayer(nullptr);
+
+  if (video_frame_provider_)
     video_frame_provider_->Stop();
 
-  if (audio_renderer_.get())
+  if (audio_renderer_)
     audio_renderer_->Stop();
 
   media_log_->AddEvent(
@@ -139,56 +100,63 @@ WebMediaPlayerMS::~WebMediaPlayerMS() {
 
 void WebMediaPlayerMS::load(LoadType load_type,
                             const blink::WebURL& url,
-                            CORSMode cors_mode) {
-  DVLOG(1) << "WebMediaPlayerMS::load";
+                            CORSMode /*cors_mode*/) {
+  DVLOG(1) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  // TODO(acolwell): Change this to DCHECK_EQ(load_type,
-  // LoadTypeMediaStream) once Blink-side changes land.
+  // TODO(acolwell): Change this to DCHECK_EQ(load_type, LoadTypeMediaStream)
+  // once Blink-side changes land.
   DCHECK_NE(load_type, LoadTypeMediaSource);
 
-  GURL gurl(url);
+  compositor_.reset(new WebMediaPlayerMSCompositor(compositor_task_runner_, url,
+                                                   AsWeakPtr()));
 
   SetNetworkState(WebMediaPlayer::NetworkStateLoading);
   SetReadyState(WebMediaPlayer::ReadyStateHaveNothing);
-  media_log_->AddEvent(media_log_->CreateLoadEvent(url.spec()));
+  media_log_->AddEvent(media_log_->CreateLoadEvent(url.string().utf8()));
 
   video_frame_provider_ = renderer_factory_->GetVideoFrameProvider(
       url,
       base::Bind(&WebMediaPlayerMS::OnSourceError, AsWeakPtr()),
-      base::Bind(&WebMediaPlayerMS::OnFrameAvailable, AsWeakPtr()));
+      base::Bind(&WebMediaPlayerMS::OnFrameAvailable, AsWeakPtr()),
+      media_task_runner_,
+      worker_task_runner_,
+      gpu_factories_);
 
-  RenderFrame* frame = RenderFrame::FromWebFrame(frame_);
-  audio_renderer_ = renderer_factory_->GetAudioRenderer(
-    url,
-    frame->GetRoutingID());
+  RenderFrame* const frame = RenderFrame::FromWebFrame(frame_);
 
-  if (video_frame_provider_.get() || audio_renderer_.get()) {
-    if (audio_renderer_.get()) {
-      audio_renderer_->SetVolume(volume_);
-      audio_renderer_->Start();
-    }
+  if (frame) {
+    audio_renderer_ = renderer_factory_->GetAudioRenderer(
+        url, frame->GetRoutingID(), initial_audio_output_device_id_,
+        initial_security_origin_);
+  }
 
-    if (video_frame_provider_.get()) {
-      video_frame_provider_->Start();
-    } else {
-      // This is audio-only mode.
-      DCHECK(audio_renderer_.get());
-      SetReadyState(WebMediaPlayer::ReadyStateHaveMetadata);
-      SetReadyState(WebMediaPlayer::ReadyStateHaveEnoughData);
-    }
-  } else {
+  if (!video_frame_provider_ && !audio_renderer_) {
     SetNetworkState(WebMediaPlayer::NetworkStateNetworkError);
+    return;
+  }
+
+  if (audio_renderer_) {
+    audio_renderer_->SetVolume(DEFAULT_AUDIO_VOLUME);
+    audio_renderer_->Start();
+  }
+  if (video_frame_provider_)
+    video_frame_provider_->Start();
+  if (audio_renderer_ && !video_frame_provider_) {
+    // This is audio-only mode.
+    SetReadyState(WebMediaPlayer::ReadyStateHaveMetadata);
+    SetReadyState(WebMediaPlayer::ReadyStateHaveEnoughData);
   }
 }
 
 void WebMediaPlayerMS::play() {
-  DVLOG(1) << "WebMediaPlayerMS::play";
+  DVLOG(1) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
-
   if (paused_) {
     if (video_frame_provider_.get())
       video_frame_provider_->Play();
+
+    compositor_->StartRendering();
 
     if (audio_renderer_.get())
       audio_renderer_->Play();
@@ -203,11 +171,14 @@ void WebMediaPlayerMS::play() {
 }
 
 void WebMediaPlayerMS::pause() {
-  DVLOG(1) << "WebMediaPlayerMS::pause";
+  DVLOG(1) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (video_frame_provider_.get())
     video_frame_provider_->Pause();
+
+  compositor_->StopRendering();
+  compositor_->ReplaceCurrentFrameWithACopy();
 
   if (!paused_) {
     if (audio_renderer_.get())
@@ -220,19 +191,6 @@ void WebMediaPlayerMS::pause() {
   paused_ = true;
 
   media_log_->AddEvent(media_log_->CreateEvent(media::MediaLogEvent::PAUSE));
-
-  if (!current_frame_.get())
-    return;
-
-  // Copy the frame so that rendering can show the last received frame.
-  // The original frame must not be referenced when the player is paused since
-  // there might be a finite number of available buffers. E.g, video that
-  // originates from a video camera.
-  scoped_refptr<media::VideoFrame> new_frame =
-      CopyFrameToYV12(current_frame_, &video_renderer_);
-
-  base::AutoLock auto_lock(current_frame_lock_);
-  current_frame_ = new_frame;
 }
 
 bool WebMediaPlayerMS::supportsSave() const {
@@ -249,27 +207,25 @@ void WebMediaPlayerMS::setRate(double rate) {
 }
 
 void WebMediaPlayerMS::setVolume(double volume) {
+  DVLOG(1) << __FUNCTION__ << "(volume=" << volume << ")";
   DCHECK(thread_checker_.CalledOnValidThread());
-  DVLOG(1) << "WebMediaPlayerMS::setVolume(volume=" << volume << ")";
-  volume_ = volume;
   if (audio_renderer_.get())
-    audio_renderer_->SetVolume(volume_);
+    audio_renderer_->SetVolume(volume);
 }
 
-void WebMediaPlayerMS::setSinkId(const blink::WebString& device_id,
-                                 media::WebSetSinkIdCB* web_callback) {
+void WebMediaPlayerMS::setSinkId(
+    const blink::WebString& sink_id,
+    const blink::WebSecurityOrigin& security_origin,
+    blink::WebSetSinkIdCallbacks* web_callback) {
+  DVLOG(1) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
-  std::string device_id_str(device_id.utf8());
-  GURL security_origin(frame_->securityOrigin().toString().utf8());
-  DVLOG(1) << __FUNCTION__
-           << "(" << device_id_str << ", " << security_origin << ")";
-  media::SwitchOutputDeviceCB callback =
+  const media::SwitchOutputDeviceCB callback =
       media::ConvertToSwitchOutputDeviceCB(web_callback);
-  if (audio_renderer_.get()) {
-    audio_renderer_->SwitchOutputDevice(device_id_str, security_origin,
-                                        callback);
+  if (audio_renderer_ && audio_renderer_->GetOutputDevice()) {
+    audio_renderer_->GetOutputDevice()->SwitchOutputDevice(
+        sink_id.utf8(), security_origin, callback);
   } else {
-    callback.Run(media::SWITCH_OUTPUT_DEVICE_RESULT_ERROR_NOT_SUPPORTED);
+    callback.Run(media::OUTPUT_DEVICE_STATUS_ERROR_INTERNAL);
   }
 }
 
@@ -279,22 +235,17 @@ void WebMediaPlayerMS::setPreload(WebMediaPlayer::Preload preload) {
 
 bool WebMediaPlayerMS::hasVideo() const {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return (video_frame_provider_.get() != NULL);
+  return (video_frame_provider_.get() != nullptr);
 }
 
 bool WebMediaPlayerMS::hasAudio() const {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return (audio_renderer_.get() != NULL);
+  return (audio_renderer_.get() != nullptr);
 }
 
 blink::WebSize WebMediaPlayerMS::naturalSize() const {
   DCHECK(thread_checker_.CalledOnValidThread());
-
-  gfx::Size size;
-  if (current_frame_.get())
-    size = current_frame_->natural_size();
-  DVLOG(3) << "WebMediaPlayerMS::naturalSize, " << size.ToString();
-  return blink::WebSize(size);
+  return blink::WebSize(compositor_->GetCurrentSize());
 }
 
 bool WebMediaPlayerMS::paused() const {
@@ -314,23 +265,23 @@ double WebMediaPlayerMS::duration() const {
 
 double WebMediaPlayerMS::currentTime() const {
   DCHECK(thread_checker_.CalledOnValidThread());
-  if (current_time_.ToInternalValue() != 0) {
-    return current_time_.InSecondsF();
-  } else if (audio_renderer_.get()) {
+  const base::TimeDelta current_time = compositor_->GetCurrentTime();
+  if (current_time.ToInternalValue() != 0)
+    return current_time.InSecondsF();
+  else if (audio_renderer_.get())
     return audio_renderer_->GetCurrentRenderTime().InSecondsF();
-  }
   return 0.0;
 }
 
-WebMediaPlayer::NetworkState WebMediaPlayerMS::networkState() const {
+blink::WebMediaPlayer::NetworkState WebMediaPlayerMS::networkState() const {
+  DVLOG(1) << __FUNCTION__ << ", state:" << network_state_;
   DCHECK(thread_checker_.CalledOnValidThread());
-  DVLOG(1) << "WebMediaPlayerMS::networkState, state:" << network_state_;
   return network_state_;
 }
 
-WebMediaPlayer::ReadyState WebMediaPlayerMS::readyState() const {
+blink::WebMediaPlayer::ReadyState WebMediaPlayerMS::readyState() const {
+  DVLOG(1) << __FUNCTION__ << ", state:" << ready_state_;
   DCHECK(thread_checker_.CalledOnValidThread());
-  DVLOG(1) << "WebMediaPlayerMS::readyState, state:" << ready_state_;
   return ready_state_;
 }
 
@@ -353,11 +304,13 @@ void WebMediaPlayerMS::paint(blink::WebCanvas* canvas,
                              const blink::WebRect& rect,
                              unsigned char alpha,
                              SkXfermode::Mode mode) {
-  DVLOG(3) << "WebMediaPlayerMS::paint";
+  DVLOG(3) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
+  const scoped_refptr<media::VideoFrame> frame = compositor_->GetCurrentFrame();
+
   media::Context3D context_3d;
-  if (current_frame_.get() && current_frame_->HasTextures()) {
+  if (frame && frame->HasTextures()) {
     cc::ContextProvider* provider =
         RenderThreadImpl::current()->SharedMainThreadContextProvider().get();
     // GPU Process crashed.
@@ -366,15 +319,9 @@ void WebMediaPlayerMS::paint(blink::WebCanvas* canvas,
     context_3d = media::Context3D(provider->ContextGL(), provider->GrContext());
     DCHECK(context_3d.gl);
   }
-  gfx::RectF dest_rect(rect.x, rect.y, rect.width, rect.height);
-  video_renderer_.Paint(current_frame_, canvas, dest_rect, alpha, mode,
+  const gfx::RectF dest_rect(rect.x, rect.y, rect.width, rect.height);
+  video_renderer_.Paint(frame, canvas, dest_rect, alpha, mode,
                         media::VIDEO_ROTATION_0, context_3d);
-
-  {
-    base::AutoLock auto_lock(current_frame_lock_);
-    if (current_frame_.get())
-      current_frame_used_ = true;
-  }
 }
 
 bool WebMediaPlayerMS::hasSingleSecurityOrigin() const {
@@ -388,19 +335,17 @@ bool WebMediaPlayerMS::didPassCORSAccessCheck() const {
 }
 
 double WebMediaPlayerMS::mediaTimeForTimeValue(double timeValue) const {
-  return media::ConvertSecondsToTimestamp(timeValue).InSecondsF();
+  return base::TimeDelta::FromSecondsD(timeValue).InSecondsF();
 }
 
 unsigned WebMediaPlayerMS::decodedFrameCount() const {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DVLOG(1) << "WebMediaPlayerMS::decodedFrameCount, " << total_frame_count_;
-  return total_frame_count_;
+  return compositor_->total_frame_count();
 }
 
 unsigned WebMediaPlayerMS::droppedFrameCount() const {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DVLOG(1) << "WebMediaPlayerMS::droppedFrameCount, " << dropped_frame_count_;
-  return dropped_frame_count_;
+  return compositor_->dropped_frame_count();
 }
 
 unsigned WebMediaPlayerMS::audioDecodedByteCount() const {
@@ -415,6 +360,28 @@ unsigned WebMediaPlayerMS::videoDecodedByteCount() const {
   return 0;
 }
 
+void WebMediaPlayerMS::WasHidden() {
+#if defined(OS_ANDROID)
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(!render_frame_suspended_);
+
+  // Method called when the RenderFrame is sent to background and suspended
+  // (android). Substitute the displayed VideoFrame with a copy to avoid
+  // holding on to it unnecessarily.
+  render_frame_suspended_=true;
+  if (!paused_)
+    compositor_->ReplaceCurrentFrameWithACopy();
+#endif  // defined(OS_ANDROID)
+}
+
+void WebMediaPlayerMS::WasShown() {
+#if defined(OS_ANDROID)
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  render_frame_suspended_ = false;
+#endif  // defined(OS_ANDROID)
+}
+
 bool WebMediaPlayerMS::copyVideoTextureToPlatformTexture(
     blink::WebGraphicsContext3D* web_graphics_context,
     unsigned int texture,
@@ -425,11 +392,7 @@ bool WebMediaPlayerMS::copyVideoTextureToPlatformTexture(
   TRACE_EVENT0("media", "WebMediaPlayerMS:copyVideoTextureToPlatformTexture");
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  scoped_refptr<media::VideoFrame> video_frame;
-  {
-    base::AutoLock auto_lock(current_frame_lock_);
-    video_frame = current_frame_;
-  }
+  scoped_refptr<media::VideoFrame> video_frame = compositor_->GetCurrentFrame();
 
   if (!video_frame.get() || video_frame->HasTextures() ||
       media::VideoFrame::NumPlanes(video_frame->format()) != 1) {
@@ -438,7 +401,7 @@ bool WebMediaPlayerMS::copyVideoTextureToPlatformTexture(
 
   // TODO(dshwang): need more elegant way to convert WebGraphicsContext3D to
   // GLES2Interface.
-  gpu::gles2::GLES2Interface* gl =
+  gpu::gles2::GLES2Interface* const gl =
       static_cast<gpu_blink::WebGraphicsContext3DImpl*>(web_graphics_context)
           ->GetGLInterface();
   media::SkCanvasVideoRenderer::CopyVideoFrameSingleTextureToGLTexture(
@@ -447,96 +410,56 @@ bool WebMediaPlayerMS::copyVideoTextureToPlatformTexture(
   return true;
 }
 
-void WebMediaPlayerMS::SetVideoFrameProviderClient(
-    cc::VideoFrameProvider::Client* client) {
-  // This is called from both the main renderer thread and the compositor
-  // thread (when the main thread is blocked).
-  if (video_frame_provider_client_)
-    video_frame_provider_client_->StopUsingProvider();
-  video_frame_provider_client_ = client;
-}
-
-bool WebMediaPlayerMS::UpdateCurrentFrame(base::TimeTicks deadline_min,
-                                          base::TimeTicks deadline_max) {
-  // TODO(dalecurtis): This should make use of the deadline interval to ensure
-  // the painted frame is correct for the given interval.
-  NOTREACHED();
-  return false;
-}
-
-bool WebMediaPlayerMS::HasCurrentFrame() {
-  base::AutoLock auto_lock(current_frame_lock_);
-  return current_frame_;
-}
-
-scoped_refptr<media::VideoFrame> WebMediaPlayerMS::GetCurrentFrame() {
-  DVLOG(3) << "WebMediaPlayerMS::GetCurrentFrame";
-  base::AutoLock auto_lock(current_frame_lock_);
-  if (!current_frame_.get())
-    return NULL;
-  current_frame_used_ = true;
-  return current_frame_;
-}
-
-void WebMediaPlayerMS::PutCurrentFrame() {
-  DVLOG(3) << "WebMediaPlayerMS::PutCurrentFrame";
-}
-
 void WebMediaPlayerMS::OnFrameAvailable(
     const scoped_refptr<media::VideoFrame>& frame) {
-  DVLOG(3) << "WebMediaPlayerMS::OnFrameAvailable";
+  DVLOG(3) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
-  ++total_frame_count_;
+
+  if (render_frame_suspended_)
+    return;
+
+  base::TimeTicks render_time;
+  if (frame->metadata()->GetTimeTicks(media::VideoFrameMetadata::REFERENCE_TIME,
+                                      &render_time)) {
+    TRACE_EVENT1("webrtc", "WebMediaPlayerMS::OnFrameAvailable",
+                 "Ideal Render Instant", render_time.ToInternalValue());
+  } else {
+    TRACE_EVENT0("webrtc", "WebMediaPlayerMS::OnFrameAvailable");
+  }
+
   if (!received_first_frame_) {
     received_first_frame_ = true;
-    {
-      base::AutoLock auto_lock(current_frame_lock_);
-      DCHECK(!current_frame_used_);
-      current_frame_ = frame;
-    }
     SetReadyState(WebMediaPlayer::ReadyStateHaveMetadata);
     SetReadyState(WebMediaPlayer::ReadyStateHaveEnoughData);
-    GetClient()->sizeChanged();
 
     if (video_frame_provider_.get()) {
       video_weblayer_.reset(new cc_blink::WebLayerImpl(
-          cc::VideoLayer::Create(cc_blink::WebLayerImpl::LayerSettings(), this,
-                                 media::VIDEO_ROTATION_0)));
-      video_weblayer_->setOpaque(true);
-      GetClient()->setWebLayer(video_weblayer_.get());
+          cc::VideoLayer::Create(cc_blink::WebLayerImpl::LayerSettings(),
+                                 compositor_.get(), media::VIDEO_ROTATION_0)));
+      video_weblayer_->layer()->SetContentsOpaque(true);
+      video_weblayer_->SetContentsOpaqueIsFixed(true);
+      get_client()->setWebLayer(video_weblayer_.get());
     }
   }
 
-  // Do not update |current_frame_| when paused.
-  if (paused_)
-    return;
+  // As EnqueueFrame can potentially change |current_frame_|, we need to do
+  // the size change check before it. Otherwise, we are running the risk of not
+  // detecting a size change event.
+  const bool size_changed =
+      compositor_->GetCurrentSize() != frame->natural_size();
 
-  bool size_changed = !current_frame_.get() ||
-                      current_frame_->natural_size() != frame->natural_size();
-
-  {
-    base::AutoLock auto_lock(current_frame_lock_);
-    if (!current_frame_used_ && current_frame_.get())
-      ++dropped_frame_count_;
-    current_frame_ = frame;
-    current_time_ = frame->timestamp();
-    current_frame_used_ = false;
-  }
-
+  compositor_->EnqueueFrame(frame);
   if (size_changed)
-    GetClient()->sizeChanged();
-
-  GetClient()->repaint();
+    get_client()->sizeChanged();
 }
 
 void WebMediaPlayerMS::RepaintInternal() {
-  DVLOG(1) << "WebMediaPlayerMS::RepaintInternal";
+  DVLOG(1) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
-  GetClient()->repaint();
+  get_client()->repaint();
 }
 
 void WebMediaPlayerMS::OnSourceError() {
-  DVLOG(1) << "WebMediaPlayerMS::OnSourceError";
   DCHECK(thread_checker_.CalledOnValidThread());
   SetNetworkState(WebMediaPlayer::NetworkStateFormatError);
   RepaintInternal();
@@ -546,20 +469,23 @@ void WebMediaPlayerMS::SetNetworkState(WebMediaPlayer::NetworkState state) {
   DCHECK(thread_checker_.CalledOnValidThread());
   network_state_ = state;
   // Always notify to ensure client has the latest value.
-  GetClient()->networkStateChanged();
+  get_client()->networkStateChanged();
 }
 
 void WebMediaPlayerMS::SetReadyState(WebMediaPlayer::ReadyState state) {
   DCHECK(thread_checker_.CalledOnValidThread());
   ready_state_ = state;
   // Always notify to ensure client has the latest value.
-  GetClient()->readyStateChanged();
+  get_client()->readyStateChanged();
 }
 
-blink::WebMediaPlayerClient* WebMediaPlayerMS::GetClient() {
+media::SkCanvasVideoRenderer* WebMediaPlayerMS::GetSkCanvasVideoRenderer() {
+  return &video_renderer_;
+}
+
+void WebMediaPlayerMS::ResetCanvasCache() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(client_);
-  return client_;
+  video_renderer_.ResetCache();
 }
 
 }  // namespace content

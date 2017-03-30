@@ -4,21 +4,41 @@
 
 #include "chrome/browser/devtools/devtools_network_interceptor.h"
 
+#include <stddef.h>
+#include <algorithm>
 #include <limits>
+#include <utility>
 
 #include "base/time/time.h"
 #include "chrome/browser/devtools/devtools_network_conditions.h"
-#include "chrome/browser/devtools/devtools_network_transaction.h"
-#include "net/base/load_timing_info.h"
+#include "net/base/net_errors.h"
 
 namespace {
 
 int64_t kPacketSize = 1500;
 
+base::TimeDelta CalculateTickLength(double throughput) {
+  if (!throughput)
+    return base::TimeDelta();
+  int64_t us_tick_length = (1000000L * kPacketSize) / throughput;
+  DCHECK(us_tick_length != 0);
+  if (us_tick_length == 0)
+    us_tick_length = 1;
+  return base::TimeDelta::FromMicroseconds(us_tick_length);
+}
+
 }  // namespace
+
+DevToolsNetworkInterceptor::ThrottleRecord::ThrottleRecord() {
+}
+
+DevToolsNetworkInterceptor::ThrottleRecord::~ThrottleRecord() {
+}
 
 DevToolsNetworkInterceptor::DevToolsNetworkInterceptor()
     : conditions_(new DevToolsNetworkConditions()),
+      download_last_tick_(0),
+      upload_last_tick_(0),
       weak_ptr_factory_(this) {
 }
 
@@ -30,35 +50,16 @@ DevToolsNetworkInterceptor::GetWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
 }
 
-void DevToolsNetworkInterceptor::AddTransaction(
-    DevToolsNetworkTransaction* transaction) {
-  DCHECK(transactions_.find(transaction) == transactions_.end());
-  transactions_.insert(transaction);
-}
-
-void DevToolsNetworkInterceptor::RemoveTransaction(
-    DevToolsNetworkTransaction* transaction) {
-  DCHECK(transactions_.find(transaction) != transactions_.end());
-  transactions_.erase(transaction);
-
-  if (!conditions_->IsThrottling())
-    return;
-
-  base::TimeTicks now = base::TimeTicks::Now();
-  UpdateThrottledTransactions(now);
-  throttled_transactions_.erase(std::remove(throttled_transactions_.begin(),
-      throttled_transactions_.end(), transaction),
-      throttled_transactions_.end());
-
-  SuspendedTransactions::iterator it = suspended_transactions_.begin();
-  for (; it != suspended_transactions_.end(); ++it) {
-    if (it->first == transaction) {
-      suspended_transactions_.erase(it);
-      break;
-    }
+void DevToolsNetworkInterceptor::FinishRecords(
+    ThrottleRecords* records, bool offline) {
+  ThrottleRecords temp;
+  temp.swap(*records);
+  for (const ThrottleRecord& record : temp) {
+    bool failed = offline && !record.is_upload;
+    record.callback.Run(
+        failed ? net::ERR_INTERNET_DISCONNECTED : record.result,
+        record.bytes);
   }
-
-  ArmTimer(now);
 }
 
 void DevToolsNetworkInterceptor::UpdateConditions(
@@ -66,145 +67,146 @@ void DevToolsNetworkInterceptor::UpdateConditions(
   DCHECK(conditions);
   base::TimeTicks now = base::TimeTicks::Now();
   if (conditions_->IsThrottling())
-    UpdateThrottledTransactions(now);
+    UpdateThrottled(now);
 
-  conditions_ = conditions.Pass();
+  conditions_ = std::move(conditions);
 
-  if (conditions_->offline()) {
+  bool offline = conditions_->offline();
+  if (offline || !conditions_->IsThrottling()) {
     timer_.Stop();
-    throttled_transactions_.clear();
-    suspended_transactions_.clear();
-    Transactions old_transactions(transactions_);
-    Transactions::iterator it = old_transactions.begin();
-    for (;it != old_transactions.end(); ++it) {
-      if (transactions_.find(*it) == transactions_.end())
-        continue;
-      if (!(*it)->request() || (*it)->failed())
-        continue;
-      if (ShouldFail(*it))
-        (*it)->Fail();
-    }
+    FinishRecords(&download_, offline);
+    FinishRecords(&upload_, offline);
+    FinishRecords(&suspended_, offline);
     return;
   }
 
-  if (conditions_->IsThrottling()) {
-    DCHECK(conditions_->download_throughput() != 0);
-    offset_ = now;
-    last_tick_ = 0;
-    int64_t us_tick_length =
-        (1000000L * kPacketSize) / conditions_->download_throughput();
-    DCHECK(us_tick_length != 0);
-    if (us_tick_length == 0)
-      us_tick_length = 1;
-    tick_length_ = base::TimeDelta::FromMicroseconds(us_tick_length);
-    latency_length_ = base::TimeDelta();
-    double latency = conditions_->latency();
-    if (latency > 0)
-      latency_length_ = base::TimeDelta::FromMillisecondsD(latency);
-    ArmTimer(now);
-  } else {
-    timer_.Stop();
+  // Throttling.
+  DCHECK(conditions_->download_throughput() != 0 ||
+         conditions_->upload_throughput() != 0);
+  offset_ = now;
 
-    std::vector<DevToolsNetworkTransaction*> throttled_transactions;
-    throttled_transactions.swap(throttled_transactions_);
-    size_t throttle_count = throttled_transactions.size();
-    for (size_t i = 0; i < throttle_count; ++i)
-      FireThrottledCallback(throttled_transactions[i]);
+  download_last_tick_ = 0;
+  download_tick_length_ = CalculateTickLength(
+      conditions_->download_throughput());
 
-    SuspendedTransactions suspended_transactions;
-    suspended_transactions_.swap(suspended_transactions_);
-    size_t suspend_count = suspended_transactions.size();
-    for (size_t i = 0; i < suspend_count; ++i)
-      FireThrottledCallback(suspended_transactions[i].first);
-  }
+  upload_last_tick_ = 0;
+  upload_tick_length_ = CalculateTickLength(conditions_->upload_throughput());
+
+  latency_length_ = base::TimeDelta();
+  double latency = conditions_->latency();
+  if (latency > 0)
+    latency_length_ = base::TimeDelta::FromMillisecondsD(latency);
+  ArmTimer(now);
 }
 
-void DevToolsNetworkInterceptor::FireThrottledCallback(
-    DevToolsNetworkTransaction* transaction) {
-  if (transactions_.find(transaction) != transactions_.end())
-    transaction->FireThrottledCallback();
-}
-
-void DevToolsNetworkInterceptor::UpdateThrottledTransactions(
-    base::TimeTicks now) {
-  int64_t last_tick = (now - offset_) / tick_length_;
-  int64_t ticks = last_tick - last_tick_;
-  last_tick_ = last_tick;
-
-  int64_t length = throttled_transactions_.size();
-  if (!length) {
-    UpdateSuspendedTransactions(now);
-    return;
+uint64_t DevToolsNetworkInterceptor::UpdateThrottledRecords(
+    base::TimeTicks now,
+    ThrottleRecords* records,
+    uint64_t last_tick,
+    base::TimeDelta tick_length) {
+  if (tick_length.is_zero()) {
+    DCHECK(!records->size());
+    return last_tick;
   }
+
+  int64_t new_tick = (now - offset_) / tick_length;
+  int64_t ticks = new_tick - last_tick;
+
+  int64_t length = records->size();
+  if (!length)
+    return new_tick;
 
   int64_t shift = ticks % length;
   for (int64_t i = 0; i < length; ++i) {
-    throttled_transactions_[i]->DecreaseThrottledByteCount(
-        (ticks / length) * kPacketSize + (i < shift ? kPacketSize : 0));
+    (*records)[i].bytes -=
+        (ticks / length) * kPacketSize + (i < shift ? kPacketSize : 0);
   }
-  std::rotate(throttled_transactions_.begin(),
-      throttled_transactions_.begin() + shift, throttled_transactions_.end());
-
-  UpdateSuspendedTransactions(now);
+  std::rotate(records->begin(), records->begin() + shift, records->end());
+  return new_tick;
 }
 
-void DevToolsNetworkInterceptor::UpdateSuspendedTransactions(
-    base::TimeTicks now) {
+void DevToolsNetworkInterceptor::UpdateThrottled(base::TimeTicks now) {
+  download_last_tick_ = UpdateThrottledRecords(
+      now, &download_, download_last_tick_, download_tick_length_);
+  upload_last_tick_ = UpdateThrottledRecords(
+      now, &upload_, upload_last_tick_, upload_tick_length_);
+  UpdateSuspended(now);
+}
+
+void DevToolsNetworkInterceptor::UpdateSuspended(base::TimeTicks now) {
   int64_t activation_baseline =
       (now - latency_length_ - base::TimeTicks()).InMicroseconds();
-  SuspendedTransactions suspended_transactions;
-  SuspendedTransactions::iterator it = suspended_transactions_.begin();
-  for (; it != suspended_transactions_.end(); ++it) {
-    if (it->second <= activation_baseline)
-      throttled_transactions_.push_back(it->first);
-    else
-      suspended_transactions.push_back(*it);
+  ThrottleRecords suspended;
+  for (const ThrottleRecord& record : suspended_) {
+    if (record.send_end <= activation_baseline) {
+      if (record.is_upload)
+        upload_.push_back(record);
+      else
+        download_.push_back(record);
+    } else {
+      suspended.push_back(record);
+    }
   }
-  suspended_transactions_.swap(suspended_transactions);
+  suspended_.swap(suspended);
+}
+
+void DevToolsNetworkInterceptor::CollectFinished(
+    ThrottleRecords* records, ThrottleRecords* finished) {
+  ThrottleRecords active;
+  for (const ThrottleRecord& record : *records) {
+    if (record.bytes < 0)
+      finished->push_back(record);
+    else
+      active.push_back(record);
+  }
+  records->swap(active);
 }
 
 void DevToolsNetworkInterceptor::OnTimer() {
   base::TimeTicks now = base::TimeTicks::Now();
-  UpdateThrottledTransactions(now);
+  UpdateThrottled(now);
 
-  std::vector<DevToolsNetworkTransaction*> active_transactions;
-  std::vector<DevToolsNetworkTransaction*> finished_transactions;
-  size_t length = throttled_transactions_.size();
-  for (size_t i = 0; i < length; ++i) {
-    if (throttled_transactions_[i]->throttled_byte_count() < 0)
-      finished_transactions.push_back(throttled_transactions_[i]);
-    else
-      active_transactions.push_back(throttled_transactions_[i]);
-  }
-  throttled_transactions_.swap(active_transactions);
-
-  length = finished_transactions.size();
-  for (size_t i = 0; i < length; ++i)
-    FireThrottledCallback(finished_transactions[i]);
+  ThrottleRecords finished;
+  CollectFinished(&download_, &finished);
+  CollectFinished(&upload_, &finished);
+  for (const ThrottleRecord& record : finished)
+    record.callback.Run(record.result, record.bytes);
 
   ArmTimer(now);
 }
 
-void DevToolsNetworkInterceptor::ArmTimer(base::TimeTicks now) {
-  size_t throttle_count = throttled_transactions_.size();
-  size_t suspend_count = suspended_transactions_.size();
-  if (!throttle_count && !suspend_count)
-    return;
+base::TimeTicks DevToolsNetworkInterceptor::CalculateDesiredTime(
+    const ThrottleRecords& records,
+    uint64_t last_tick,
+    base::TimeDelta tick_length) {
   int64_t min_ticks_left = 0x10000L;
-  for (size_t i = 0; i < throttle_count; ++i) {
-    int64_t packets_left = (throttled_transactions_[i]->throttled_byte_count() +
-        kPacketSize - 1) / kPacketSize;
-    int64_t ticks_left = (i + 1) + throttle_count * (packets_left - 1);
+  size_t count = records.size();
+  for (size_t i = 0; i < count; ++i) {
+    int64_t packets_left = (records[i].bytes + kPacketSize - 1) / kPacketSize;
+    int64_t ticks_left = (i + 1) + count * (packets_left - 1);
     if (i == 0 || ticks_left < min_ticks_left)
       min_ticks_left = ticks_left;
   }
-  base::TimeTicks desired_time =
-      offset_ + tick_length_ * (last_tick_ + min_ticks_left);
+  return offset_ + tick_length * (last_tick + min_ticks_left);
+}
 
-  int64_t min_baseline = std::numeric_limits<int64>::max();
+void DevToolsNetworkInterceptor::ArmTimer(base::TimeTicks now) {
+  size_t suspend_count = suspended_.size();
+  if (!download_.size() && !upload_.size() && !suspend_count)
+    return;
+
+  base::TimeTicks desired_time = CalculateDesiredTime(
+      download_, download_last_tick_, download_tick_length_);
+
+  base::TimeTicks upload_time = CalculateDesiredTime(
+      upload_, upload_last_tick_, upload_tick_length_);
+  if (upload_time < desired_time)
+    desired_time = upload_time;
+
+  int64_t min_baseline = std::numeric_limits<int64_t>::max();
   for (size_t i = 0; i < suspend_count; ++i) {
-    if (suspended_transactions_[i].second < min_baseline)
-      min_baseline = suspended_transactions_[i].second;
+    if (suspended_[i].send_end < min_baseline)
+      min_baseline = suspended_[i].send_end;
   }
   if (suspend_count) {
     base::TimeTicks activation_time = base::TimeTicks() +
@@ -221,45 +223,65 @@ void DevToolsNetworkInterceptor::ArmTimer(base::TimeTicks now) {
           base::Unretained(this)));
 }
 
-void DevToolsNetworkInterceptor::ThrottleTransaction(
-    DevToolsNetworkTransaction* transaction, bool start) {
+int DevToolsNetworkInterceptor::StartThrottle(
+    int result,
+    int64_t bytes,
+    base::TimeTicks send_end,
+    bool start,
+    bool is_upload,
+    const ThrottleCallback& callback) {
+  if (result < 0)
+    return result;
+
+  if (conditions_->offline())
+    return is_upload ? result : net::ERR_INTERNET_DISCONNECTED;
+
+  if ((is_upload && !conditions_->upload_throughput()) ||
+      (!is_upload && !conditions_->download_throughput())) {
+    return result;
+  }
+
+  ThrottleRecord record;
+  record.result = result;
+  record.bytes = bytes;
+  record.callback = callback;
+  // TODO(dgozman): use upload throughput.
+  record.is_upload = is_upload;
+
   base::TimeTicks now = base::TimeTicks::Now();
-  UpdateThrottledTransactions(now);
+  UpdateThrottled(now);
   if (start && latency_length_ != base::TimeDelta()) {
-    net::LoadTimingInfo load_timing_info;
-    base::TimeTicks send_end;
-    if (transaction->GetLoadTimingInfo(&load_timing_info))
-      send_end = load_timing_info.send_end;
-    if (send_end.is_null())
-      send_end = now;
-    int64_t us_send_end = (send_end - base::TimeTicks()).InMicroseconds();
-    suspended_transactions_.push_back(
-        SuspendedTransaction(transaction, us_send_end));
-    UpdateSuspendedTransactions(now);
+    record.send_end = (send_end - base::TimeTicks()).InMicroseconds();
+    suspended_.push_back(record);
+    UpdateSuspended(now);
   } else {
-    throttled_transactions_.push_back(transaction);
+    if (is_upload)
+      upload_.push_back(record);
+    else
+      download_.push_back(record);
   }
   ArmTimer(now);
+
+  return net::ERR_IO_PENDING;
 }
 
-bool DevToolsNetworkInterceptor::ShouldFail(
-    const DevToolsNetworkTransaction* transaction) {
-  if (!conditions_->offline())
-    return false;
-
-  if (!transaction->request_initiator().empty())
-    return false;
-
-  return true;
+void DevToolsNetworkInterceptor::StopThrottle(
+    const ThrottleCallback& callback) {
+  RemoveRecord(&download_, callback);
+  RemoveRecord(&upload_, callback);
+  RemoveRecord(&suspended_, callback);
 }
 
-bool DevToolsNetworkInterceptor::ShouldThrottle(
-    const DevToolsNetworkTransaction* transaction) {
-  if (!conditions_->IsThrottling())
-    return false;
+void DevToolsNetworkInterceptor::RemoveRecord(
+    ThrottleRecords* records, const ThrottleCallback& callback) {
+  records->erase(
+      std::remove_if(records->begin(), records->end(),
+                     [&callback](const ThrottleRecord& record){
+                       return record.callback.Equals(callback);
+                     }),
+      records->end());
+}
 
-  if (!transaction->request_initiator().empty())
-    return false;
-
-  return true;
+bool DevToolsNetworkInterceptor::IsOffline() {
+  return conditions_->offline();
 }

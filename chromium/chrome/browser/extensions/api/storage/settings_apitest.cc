@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/json/json_writer.h"
 #include "base/memory/ref_counted.h"
@@ -35,6 +37,7 @@
 #include "components/policy/core/common/policy_bundle.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_namespace.h"
+#include "components/policy/core/common/policy_types.h"
 #include "components/policy/core/common/schema.h"
 #include "components/policy/core/common/schema_map.h"
 #include "components/policy/core/common/schema_registry.h"
@@ -134,9 +137,9 @@ class ExtensionSettingsApiTest : public ExtensionApiTest {
     scoped_ptr<policy::PolicyBundle> bundle(new policy::PolicyBundle());
     policy::PolicyMap& policy_map = bundle->Get(policy::PolicyNamespace(
         policy::POLICY_DOMAIN_EXTENSIONS, kManagedStorageExtensionId));
-    policy_map.LoadFrom(
-        &policies, policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER);
-    policy_provider_.UpdatePolicy(bundle.Pass());
+    policy_map.LoadFrom(&policies, policy::POLICY_LEVEL_MANDATORY,
+                        policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD);
+    policy_provider_.UpdatePolicy(std::move(bundle));
   }
 #endif
 
@@ -490,23 +493,28 @@ IN_PROC_BROWSER_TEST_F(ExtensionSettingsApiTest, ExtensionsSchemas) {
 
 IN_PROC_BROWSER_TEST_F(ExtensionSettingsApiTest, ManagedStorage) {
   // Set policies for the test extension.
-  scoped_ptr<base::DictionaryValue> policy = extensions::DictionaryBuilder()
-      .Set("string-policy", "value")
-      .Set("int-policy", -123)
-      .Set("double-policy", 456e7)
-      .SetBoolean("boolean-policy", true)
-      .Set("list-policy", extensions::ListBuilder()
-          .Append("one")
-          .Append("two")
-          .Append("three"))
-      .Set("dict-policy", extensions::DictionaryBuilder()
-          .Set("list", extensions::ListBuilder()
-              .Append(extensions::DictionaryBuilder()
-                  .Set("one", 1)
-                  .Set("two", 2))
-              .Append(extensions::DictionaryBuilder()
-                  .Set("three", 3))))
-      .Build();
+  scoped_ptr<base::DictionaryValue> policy =
+      extensions::DictionaryBuilder()
+          .Set("string-policy", "value")
+          .Set("int-policy", -123)
+          .Set("double-policy", 456e7)
+          .SetBoolean("boolean-policy", true)
+          .Set("list-policy",
+               std::move(
+                   extensions::ListBuilder().Append("one").Append("two").Append(
+                       "three")))
+          .Set(
+              "dict-policy",
+              std::move(extensions::DictionaryBuilder().Set(
+                  "list",
+                  std::move(
+                      extensions::ListBuilder()
+                          .Append(std::move(
+                              extensions::DictionaryBuilder().Set("one", 1).Set(
+                                  "two", 2)))
+                          .Append(std::move(extensions::DictionaryBuilder().Set(
+                              "three", 3)))))))
+          .Build();
   SetPolicies(*policy);
   // Now run the extension.
   ASSERT_TRUE(RunExtensionTest("settings/managed_storage")) << message_;

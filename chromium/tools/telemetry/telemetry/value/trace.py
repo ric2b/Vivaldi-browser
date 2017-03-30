@@ -12,16 +12,12 @@ import sys
 import tempfile
 
 from catapult_base import cloud_storage
-from telemetry.core import util
 from telemetry.internal.util import file_handle
 from telemetry.timeline import trace_data as trace_data_module
 from telemetry import value as value_module
 
-# Bring in tv module for transforming raw trace to html form.
-util.AddDirToPythonPath(
-    util.GetChromiumSrcDir(), 'third_party', 'trace-viewer')
+from tracing_build import trace2html
 
-from tracing.build import trace2html  # pylint:disable=import-error
 
 class TraceValue(value_module.Value):
   def __init__(self, page, trace_data, important=False, description=None):
@@ -100,9 +96,6 @@ class TraceValue(value_module.Value):
 
   @classmethod
   def MergeLikeValuesFromSamePage(cls, values):
-    # TODO(eakuefner): Implement a MultiTraceValue: a Polymer-based,
-    # componentized, MultiTraceViwer-backed representation of more than one
-    # trace.
     assert len(values) > 0
     return values[0]
 

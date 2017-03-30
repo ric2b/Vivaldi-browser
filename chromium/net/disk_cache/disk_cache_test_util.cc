@@ -58,8 +58,9 @@ bool DeleteCache(const base::FilePath& path) {
   return true;
 }
 
-bool CheckCacheIntegrity(const base::FilePath& path, bool new_eviction,
-                         uint32 mask) {
+bool CheckCacheIntegrity(const base::FilePath& path,
+                         bool new_eviction,
+                         uint32_t mask) {
   scoped_ptr<disk_cache::BackendImpl> cache(new disk_cache::BackendImpl(
       path, mask, base::ThreadTaskRunnerHandle::Get(), NULL));
   if (!cache.get())
@@ -105,7 +106,7 @@ void MessageLoopHelper::TimerExpired() {
   CHECK_LE(callbacks_called_, num_callbacks_);
   if (callbacks_called_ == num_callbacks_) {
     completed_ = true;
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
   } else {
     // Not finished yet. See if we have to abort.
     if (last_ == callbacks_called_)
@@ -113,7 +114,7 @@ void MessageLoopHelper::TimerExpired() {
     else
       last_ = callbacks_called_;
     if (40 == num_iterations_)
-      base::MessageLoop::current()->Quit();
+      base::MessageLoop::current()->QuitWhenIdle();
   }
 }
 

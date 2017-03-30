@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/memory/scoped_vector.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -21,7 +23,7 @@ scoped_ptr<TemplateURLData> CreatePrepopulateTemplateURLData(
   data->prepopulate_id = prepopulate_id;
   data->SetKeyword(base::ASCIIToUTF16(keyword));
   data->id = id;
-  return data.Pass();
+  return data;
 }
 
 // Creates a TemplateURL with default values except for the prepopulate ID,

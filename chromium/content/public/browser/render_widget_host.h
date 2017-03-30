@@ -5,6 +5,8 @@
 #ifndef CONTENT_PUBLIC_BROWSER_RENDER_WIDGET_HOST_H_
 #define CONTENT_PUBLIC_BROWSER_RENDER_WIDGET_HOST_H_
 
+#include <stdint.h>
+
 #include "base/callback.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/native_web_keyboard_event.h"
@@ -13,15 +15,9 @@
 #include "ipc/ipc_sender.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "third_party/WebKit/public/web/WebTextDirection.h"
-#include "third_party/skia/include/core/SkBitmap.h"
+#include "third_party/skia/include/core/SkImageInfo.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/surface/transport_dib.h"
-
-#if defined(OS_MACOSX)
-#include "skia/ext/platform_device.h"
-#endif
-
-class SkBitmap;
 
 namespace gfx {
 class Rect;
@@ -109,7 +105,7 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
  public:
   // Returns the RenderWidgetHost given its ID and the ID of its render process.
   // Returns nullptr if the IDs do not correspond to a live RenderWidgetHost.
-  static RenderWidgetHost* FromID(int32 process_id, int32 routing_id);
+  static RenderWidgetHost* FromID(int32_t process_id, int32_t routing_id);
 
   // Returns an iterator to iterate over the global list of active render widget
   // hosts.
@@ -180,14 +176,12 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
   // asynchronously.
   virtual void CopyFromBackingStore(const gfx::Rect& src_rect,
                                     const gfx::Size& accelerated_dst_size,
-                                    ReadbackRequestCallback& callback,
+                                    const ReadbackRequestCallback& callback,
                                     const SkColorType color_type) = 0;
   // Ensures that the view does not drop the backing store even when hidden.
   virtual bool CanCopyFromBackingStore() = 0;
-#if defined(OS_ANDROID)
   virtual void LockBackingStore() = 0;
   virtual void UnlockBackingStore() = 0;
-#endif
 
   // Forwards the given message to the renderer. These are called by
   // the view when it has received a message.
@@ -197,6 +191,8 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
       const blink::WebMouseWheelEvent& wheel_event) = 0;
   virtual void ForwardKeyboardEvent(
       const NativeWebKeyboardEvent& key_event) = 0;
+  virtual void ForwardGestureEvent(
+      const blink::WebGestureEvent& gesture_event) = 0;
 
   virtual RenderProcessHost* GetProcess() const = 0;
 
@@ -210,9 +206,6 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
 
   // Returns true if the renderer is loading, false if not.
   virtual bool IsLoading() const = 0;
-
-  // Returns true if this is a RenderViewHost, false if not.
-  virtual bool IsRenderView() const = 0; 
 
   // Called to notify the RenderWidget that the resize rect has changed without
   // the size of the RenderWidget itself changing.
@@ -248,16 +241,11 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
 
   // Get the screen info corresponding to this render widget.
   virtual void GetWebScreenInfo(blink::WebScreenInfo* result) = 0;
+  // Get the color profile corresponding to this render widget.
+  virtual bool GetScreenColorProfile(std::vector<char>* color_profile) = 0;
 
- protected:
-  friend class RenderWidgetHostImpl;
-
-  // Retrieves the implementation class.  Intended only for code
-  // within content/.  This method is necessary because
-  // RenderWidgetHost is the root of a diamond inheritance pattern, so
-  // subclasses inherit it virtually, which removes our ability to
-  // static_cast to the subclass.
-  virtual RenderWidgetHostImpl* AsRenderWidgetHostImpl() = 0;
+  // Sends a compositor proto to the render widget.
+  virtual void HandleCompositorProto(const std::vector<uint8_t>& proto) = 0;
 };
 
 }  // namespace content

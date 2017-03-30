@@ -31,8 +31,8 @@ class TouchHudTestBase : public test::AshTestBase {
 
     // Initialize display infos. They should be initialized after Ash
     // environment is set up, i.e., after test::AshTestBase::SetUp().
-    internal_display_id_ = test::DisplayManagerTestApi(GetDisplayManager()).
-        SetFirstDisplayAsInternalDisplay();
+    internal_display_id_ =
+        test::DisplayManagerTestApi().SetFirstDisplayAsInternalDisplay();
     external_display_id_ = 10;
     mirrored_display_id_ = 11;
 
@@ -68,13 +68,13 @@ class TouchHudTestBase : public test::AshTestBase {
   void SetInternalAsPrimary() {
     const gfx::Display& internal_display =
         GetDisplayManager()->GetDisplayForId(internal_display_id_);
-    GetDisplayController()->SetPrimaryDisplay(internal_display);
+    GetWindowTreeHostManager()->SetPrimaryDisplay(internal_display);
   }
 
   void SetExternalAsPrimary() {
     const gfx::Display& external_display =
         GetDisplayManager()->GetDisplayForId(external_display_id_);
-    GetDisplayController()->SetPrimaryDisplay(external_display);
+    GetWindowTreeHostManager()->SetPrimaryDisplay(external_display);
   }
 
   void MirrorDisplays() {
@@ -118,21 +118,17 @@ class TouchHudTestBase : public test::AshTestBase {
     GetDisplayManager()->OnNativeDisplaysChanged(display_info_list_);
   }
 
-  int64 internal_display_id() const {
-    return internal_display_id_;
-  }
+  int64_t internal_display_id() const { return internal_display_id_; }
 
-  int64 external_display_id() const {
-    return external_display_id_;
-  }
+  int64_t external_display_id() const { return external_display_id_; }
 
  protected:
   DisplayManager* GetDisplayManager() {
     return Shell::GetInstance()->display_manager();
   }
 
-  DisplayController* GetDisplayController() {
-    return Shell::GetInstance()->display_controller();
+  WindowTreeHostManager* GetWindowTreeHostManager() {
+    return Shell::GetInstance()->window_tree_host_manager();
   }
 
   const gfx::Display& GetInternalDisplay() {
@@ -144,23 +140,23 @@ class TouchHudTestBase : public test::AshTestBase {
   }
 
   aura::Window* GetInternalRootWindow() {
-    return GetDisplayController()->GetRootWindowForDisplayId(
+    return GetWindowTreeHostManager()->GetRootWindowForDisplayId(
         internal_display_id_);
   }
 
   aura::Window* GetExternalRootWindow() {
-    return GetDisplayController()->GetRootWindowForDisplayId(
+    return GetWindowTreeHostManager()->GetRootWindowForDisplayId(
         external_display_id_);
   }
 
   aura::Window* GetPrimaryRootWindow() {
     const gfx::Display& display = GetPrimaryDisplay();
-    return GetDisplayController()->GetRootWindowForDisplayId(display.id());
+    return GetWindowTreeHostManager()->GetRootWindowForDisplayId(display.id());
   }
 
   aura::Window* GetSecondaryRootWindow() {
     const gfx::Display& display = GetSecondaryDisplay();
-    return GetDisplayController()->GetRootWindowForDisplayId(display.id());
+    return GetWindowTreeHostManager()->GetRootWindowForDisplayId(display.id());
   }
 
   RootWindowController* GetInternalRootController() {
@@ -183,7 +179,7 @@ class TouchHudTestBase : public test::AshTestBase {
     return GetRootWindowController(root);
   }
 
-  DisplayInfo CreateDisplayInfo(int64 id, const gfx::Rect& bounds) {
+  DisplayInfo CreateDisplayInfo(int64_t id, const gfx::Rect& bounds) {
     DisplayInfo info(id, base::StringPrintf("x-%" PRId64, id), false);
     info.SetBounds(bounds);
     return info;
@@ -197,9 +193,9 @@ class TouchHudTestBase : public test::AshTestBase {
     return hud->widget_;
   }
 
-  int64 internal_display_id_;
-  int64 external_display_id_;
-  int64 mirrored_display_id_;
+  int64_t internal_display_id_;
+  int64_t external_display_id_;
+  int64_t mirrored_display_id_;
   DisplayInfo internal_display_info_;
   DisplayInfo external_display_info_;
   DisplayInfo mirrored_display_info_;

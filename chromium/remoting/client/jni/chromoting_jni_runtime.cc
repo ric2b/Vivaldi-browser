@@ -9,16 +9,14 @@
 #include "base/android/jni_string.h"
 #include "base/android/library_loader/library_loader_hooks.h"
 #include "base/android/scoped_java_ref.h"
-#include "base/basictypes.h"
 #include "base/command_line.h"
 #include "base/memory/singleton.h"
 #include "base/stl_util.h"
 #include "base/synchronization/waitable_event.h"
 #include "google_apis/google_api_keys.h"
 #include "jni/JniInterface_jni.h"
-#include "media/base/yuv_convert.h"
 #include "remoting/base/url_request_context_getter.h"
-#include "third_party/webrtc/modules/desktop_capture/desktop_frame.h"
+#include "remoting/client/jni/jni_touch_event_data.h"
 
 using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertUTF8ToJavaString;
@@ -32,17 +30,14 @@ const int kBytesPerPixel = 4;
 
 namespace remoting {
 
-bool RegisterJni(JNIEnv* env) {
+bool RegisterChromotingJniRuntime(JNIEnv* env) {
   return remoting::RegisterNativesImpl(env);
 }
 
 // Implementation of stubs defined in JniInterface_jni.h. These are the entry
 // points for JNI calls from Java into C++.
 
-static void LoadNative(JNIEnv* env, jclass clazz, jobject context) {
-  base::android::ScopedJavaLocalRef<jobject> context_activity(env, context);
-  base::android::InitApplicationContext(env, context_activity);
-
+static void LoadNative(JNIEnv* env, const JavaParamRef<jclass>& clazz) {
   // The google_apis functions check the command-line arguments to make sure no
   // runtime API keys have been specified by the environment. Unfortunately, we
   // neither launch Chromium nor have a command line, so we need to prevent
@@ -53,33 +48,38 @@ static void LoadNative(JNIEnv* env, jclass clazz, jobject context) {
   remoting::ChromotingJniRuntime::GetInstance();
 }
 
-static jstring GetApiKey(JNIEnv* env, jclass clazz) {
-  return ConvertUTF8ToJavaString(
-      env, google_apis::GetAPIKey().c_str()).Release();
+static ScopedJavaLocalRef<jstring> GetApiKey(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz) {
+  return ConvertUTF8ToJavaString(env, google_apis::GetAPIKey().c_str());
 }
 
-static jstring GetClientId(JNIEnv* env, jclass clazz) {
+static ScopedJavaLocalRef<jstring> GetClientId(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz) {
   return ConvertUTF8ToJavaString(
-      env, google_apis::GetOAuth2ClientID(
-          google_apis::CLIENT_REMOTING).c_str()).Release();
+      env,
+      google_apis::GetOAuth2ClientID(google_apis::CLIENT_REMOTING).c_str());
 }
 
-static jstring GetClientSecret(JNIEnv* env, jclass clazz) {
+static ScopedJavaLocalRef<jstring> GetClientSecret(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz) {
   return ConvertUTF8ToJavaString(
-      env, google_apis::GetOAuth2ClientSecret(
-          google_apis::CLIENT_REMOTING).c_str()).Release();
+      env,
+      google_apis::GetOAuth2ClientSecret(google_apis::CLIENT_REMOTING).c_str());
 }
 
 static void Connect(JNIEnv* env,
-                    jclass clazz,
-                    jstring username,
-                    jstring authToken,
-                    jstring hostJid,
-                    jstring hostId,
-                    jstring hostPubkey,
-                    jstring pairId,
-                    jstring pairSecret,
-                    jstring capabilities) {
+                    const JavaParamRef<jclass>& clazz,
+                    const JavaParamRef<jstring>& username,
+                    const JavaParamRef<jstring>& authToken,
+                    const JavaParamRef<jstring>& hostJid,
+                    const JavaParamRef<jstring>& hostId,
+                    const JavaParamRef<jstring>& hostPubkey,
+                    const JavaParamRef<jstring>& pairId,
+                    const JavaParamRef<jstring>& pairSecret,
+                    const JavaParamRef<jstring>& capabilities) {
   remoting::ChromotingJniRuntime::GetInstance()->ConnectToHost(
       ConvertJavaStringToUTF8(env, username).c_str(),
       ConvertJavaStringToUTF8(env, authToken).c_str(),
@@ -91,26 +91,26 @@ static void Connect(JNIEnv* env,
       ConvertJavaStringToUTF8(env, capabilities).c_str());
 }
 
-static void Disconnect(JNIEnv* env, jclass clazz) {
+static void Disconnect(JNIEnv* env, const JavaParamRef<jclass>& clazz) {
   remoting::ChromotingJniRuntime::GetInstance()->DisconnectFromHost();
 }
 
 static void AuthenticationResponse(JNIEnv* env,
-                                   jclass clazz,
-                                   jstring pin,
+                                   const JavaParamRef<jclass>& clazz,
+                                   const JavaParamRef<jstring>& pin,
                                    jboolean createPair,
-                                   jstring deviceName) {
+                                   const JavaParamRef<jstring>& deviceName) {
   remoting::ChromotingJniRuntime::GetInstance()->session()->ProvideSecret(
       ConvertJavaStringToUTF8(env, pin).c_str(), createPair,
       ConvertJavaStringToUTF8(env, deviceName));
 }
 
-static void ScheduleRedraw(JNIEnv* env, jclass clazz) {
+static void ScheduleRedraw(JNIEnv* env, const JavaParamRef<jclass>& clazz) {
   remoting::ChromotingJniRuntime::GetInstance()->session()->RedrawDesktop();
 }
 
 static void SendMouseEvent(JNIEnv* env,
-                           jclass clazz,
+                           const JavaParamRef<jclass>& clazz,
                            jint x,
                            jint y,
                            jint whichButton,
@@ -125,7 +125,7 @@ static void SendMouseEvent(JNIEnv* env,
 }
 
 static void SendMouseWheelEvent(JNIEnv* env,
-                                jclass clazz,
+                                const JavaParamRef<jclass>& clazz,
                                 jint delta_x,
                                 jint delta_y) {
   remoting::ChromotingJniRuntime::GetInstance()->session()->SendMouseWheelEvent(
@@ -133,31 +133,59 @@ static void SendMouseWheelEvent(JNIEnv* env,
 }
 
 static jboolean SendKeyEvent(JNIEnv* env,
-                         jclass clazz,
-                         jint keyCode,
-                         jboolean keyDown) {
+                             const JavaParamRef<jclass>& clazz,
+                             jint scanCode,
+                             jint keyCode,
+                             jboolean keyDown) {
   return remoting::ChromotingJniRuntime::GetInstance()->session()->SendKeyEvent(
-      keyCode, keyDown);
+      scanCode, keyCode, keyDown);
 }
 
 static void SendTextEvent(JNIEnv* env,
-                          jclass clazz,
-                          jstring text) {
+                          const JavaParamRef<jclass>& clazz,
+                          const JavaParamRef<jstring>& text) {
   remoting::ChromotingJniRuntime::GetInstance()->session()->SendTextEvent(
       ConvertJavaStringToUTF8(env, text));
 }
 
+static void SendTouchEvent(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    jint eventType,
+    const JavaParamRef<jobjectArray>& touchEventObjectArray) {
+  protocol::TouchEvent touch_event;
+  touch_event.set_event_type(
+      static_cast<protocol::TouchEvent::TouchEventType>(eventType));
+
+  // Iterate over the elements in the object array and transfer the data from
+  // the java object to a native event object.
+  jsize length = env->GetArrayLength(touchEventObjectArray);
+  DCHECK_GE(length, 0);
+  for (jsize i = 0; i < length; ++i) {
+    protocol::TouchEventPoint* touch_point = touch_event.add_touch_points();
+
+    ScopedJavaLocalRef<jobject> java_touch_event(
+        env, env->GetObjectArrayElement(touchEventObjectArray, i));
+
+    JniTouchEventData::CopyTouchPointData(env, java_touch_event, touch_point);
+  }
+
+  remoting::ChromotingJniRuntime::GetInstance()->session()->SendTouchEvent(
+      touch_event);
+}
+
 static void EnableVideoChannel(JNIEnv* env,
-                               jclass clazz,
+                               const JavaParamRef<jclass>& clazz,
                                jboolean enable) {
   remoting::ChromotingJniRuntime::GetInstance()->session()->EnableVideoChannel(
       enable);
 }
 
-static void OnThirdPartyTokenFetched(JNIEnv* env,
-                                     jclass clazz,
-                                     jstring token,
-                                     jstring shared_secret) {
+static void OnThirdPartyTokenFetched(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& token,
+    const JavaParamRef<jstring>& shared_secret) {
   ChromotingJniRuntime* runtime = remoting::ChromotingJniRuntime::GetInstance();
   runtime->network_task_runner()->PostTask(FROM_HERE, base::Bind(
       &ChromotingJniInstance::HandleOnThirdPartyTokenFetched,
@@ -167,9 +195,9 @@ static void OnThirdPartyTokenFetched(JNIEnv* env,
 }
 
 static void SendExtensionMessage(JNIEnv* env,
-                                 jclass clazz,
-                                 jstring type,
-                                 jstring data) {
+                                 const JavaParamRef<jclass>& clazz,
+                                 const JavaParamRef<jstring>& type,
+                                 const JavaParamRef<jstring>& data) {
   remoting::ChromotingJniRuntime::GetInstance()->session()->SendClientMessage(
       ConvertJavaStringToUTF8(env, type),
       ConvertJavaStringToUTF8(env, data));
@@ -179,7 +207,7 @@ static void SendExtensionMessage(JNIEnv* env,
 
 // static
 ChromotingJniRuntime* ChromotingJniRuntime::GetInstance() {
-  return Singleton<ChromotingJniRuntime>::get();
+  return base::Singleton<ChromotingJniRuntime>::get();
 }
 
 ChromotingJniRuntime::ChromotingJniRuntime() {
@@ -189,8 +217,8 @@ ChromotingJniRuntime::ChromotingJniRuntime() {
   ui_loop_->Start();
 
   // TODO(solb) Stop pretending to control the managed UI thread's lifetime.
-  ui_task_runner_ = new AutoThreadTaskRunner(ui_loop_->task_runner(),
-                                             base::MessageLoop::QuitClosure());
+  ui_task_runner_ = new AutoThreadTaskRunner(
+      ui_loop_->task_runner(), base::MessageLoop::QuitWhenIdleClosure());
   network_task_runner_ = AutoThread::CreateWithType("native_net",
                                                     ui_task_runner_,
                                                     base::MessageLoop::TYPE_IO);
@@ -199,9 +227,6 @@ ChromotingJniRuntime::ChromotingJniRuntime() {
 
   url_requester_ =
       new URLRequestContextGetter(network_task_runner_, network_task_runner_);
-
-  // Allows later decoding of video frames.
-  media::InitializeCPUSpecificYUVConversions();
 }
 
 ChromotingJniRuntime::~ChromotingJniRuntime() {
@@ -324,9 +349,9 @@ void ChromotingJniRuntime::HandleExtensionMessage(const std::string& type,
 }
 
 base::android::ScopedJavaLocalRef<jobject> ChromotingJniRuntime::NewBitmap(
-    webrtc::DesktopSize size) {
+    int width, int height) {
   JNIEnv* env = base::android::AttachCurrentThread();
-  return Java_JniInterface_newBitmap(env, size.width(), size.height());
+  return Java_JniInterface_newBitmap(env, width, height);
 }
 
 void ChromotingJniRuntime::UpdateFrameBitmap(jobject bitmap) {

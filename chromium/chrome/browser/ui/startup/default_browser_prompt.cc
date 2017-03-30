@@ -4,79 +4,71 @@
 
 #include "chrome/browser/ui/startup/default_browser_prompt.h"
 
+#include <string>
+
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics_action.h"
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/pref_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/version.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/shell_integration.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/chrome_version_info.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/installer/util/master_preferences.h"
-#include "chrome/installer/util/master_preferences_constants.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "components/infobars/core/infobar.h"
-#include "content/public/browser/browser_thread.h"
+#include "components/version_info/version_info.h"
 #include "content/public/browser/navigation_details.h"
+#include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
 #include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
-
+#include "ui/gfx/vector_icons_public.h"
 
 namespace {
-
-// Calls the appropriate function for setting Chrome as the default browser.
-// This requires IO access (registry) and may result in interaction with a
-// modal system UI.
-void SetChromeAsDefaultBrowser(bool interactive_flow, PrefService* prefs) {
-  if (interactive_flow) {
-    UMA_HISTOGRAM_BOOLEAN("DefaultBrowserWarning.SetAsDefaultUI", true);
-    if (!ShellIntegration::SetAsDefaultBrowserInteractive()) {
-      UMA_HISTOGRAM_BOOLEAN("DefaultBrowserWarning.SetAsDefaultUIFailed", true);
-    } else if (ShellIntegration::GetDefaultBrowser() ==
-               ShellIntegration::NOT_DEFAULT) {
-      // If the interaction succeeded but we are still not the default browser
-      // it likely means the user simply selected another browser from the
-      // panel. We will respect this choice and write it down as 'no, thanks'.
-      UMA_HISTOGRAM_BOOLEAN("DefaultBrowserWarning.DontSetAsDefault", true);
-    }
-  } else {
-    UMA_HISTOGRAM_BOOLEAN("DefaultBrowserWarning.SetAsDefault", true);
-    ShellIntegration::SetAsDefaultBrowser();
-  }
-}
 
 // The delegate for the infobar shown when Chrome is not the default browser.
 class DefaultBrowserInfoBarDelegate : public ConfirmInfoBarDelegate {
  public:
   // Creates a default browser infobar and delegate and adds the infobar to
   // |infobar_service|.
-  static void Create(InfoBarService* infobar_service,
-                     PrefService* prefs,
-                     bool interactive_flow_required);
+  static void Create(InfoBarService* infobar_service, PrefService* prefs);
 
  private:
-  DefaultBrowserInfoBarDelegate(PrefService* prefs,
-                                bool interactive_flow_required);
+  // Possible user interactions with the default browser info bar.
+  // Do not modify the ordering as it is important for UMA.
+  enum InfoBarUserInteraction {
+    // The user clicked the "Set as default" button.
+    START_SET_AS_DEFAULT,
+    // The user doesn't want to be reminded again.
+    DONT_ASK_AGAIN,
+    // The user did not interact with the info bar.
+    IGNORE_INFO_BAR,
+    NUM_INFO_BAR_USER_INTERACTION_TYPES
+  };
+
+  explicit DefaultBrowserInfoBarDelegate(PrefService* prefs);
   ~DefaultBrowserInfoBarDelegate() override;
 
   void AllowExpiry() { should_expire_ = true; }
 
   // ConfirmInfoBarDelegate:
-  int GetIconID() const override;
+  Type GetInfoBarType() const override;
+  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
+  int GetIconId() const override;
+  gfx::VectorIconId GetVectorIconId() const override;
   bool ShouldExpire(const NavigationDetails& details) const override;
   base::string16 GetMessageText() const override;
   base::string16 GetButtonLabel(InfoBarButton button) const override;
@@ -93,10 +85,6 @@ class DefaultBrowserInfoBarDelegate : public ConfirmInfoBarDelegate {
   // Whether the info-bar should be dismissed on the next navigation.
   bool should_expire_;
 
-  // Whether changing the default application will require entering the
-  // modal-UI flow.
-  const bool interactive_flow_required_;
-
   // Used to delay the expiration of the info-bar.
   base::WeakPtrFactory<DefaultBrowserInfoBarDelegate> weak_factory_;
 
@@ -105,21 +93,17 @@ class DefaultBrowserInfoBarDelegate : public ConfirmInfoBarDelegate {
 
 // static
 void DefaultBrowserInfoBarDelegate::Create(InfoBarService* infobar_service,
-                                           PrefService* prefs,
-                                           bool interactive_flow_required) {
-  infobar_service->AddInfoBar(infobar_service->CreateConfirmInfoBar(
-      scoped_ptr<ConfirmInfoBarDelegate>(new DefaultBrowserInfoBarDelegate(
-          prefs, interactive_flow_required))));
+                                           PrefService* prefs) {
+  infobar_service->AddInfoBar(
+      infobar_service->CreateConfirmInfoBar(scoped_ptr<ConfirmInfoBarDelegate>(
+          new DefaultBrowserInfoBarDelegate(prefs))));
 }
 
-DefaultBrowserInfoBarDelegate::DefaultBrowserInfoBarDelegate(
-    PrefService* prefs,
-    bool interactive_flow_required)
+DefaultBrowserInfoBarDelegate::DefaultBrowserInfoBarDelegate(PrefService* prefs)
     : ConfirmInfoBarDelegate(),
       prefs_(prefs),
       action_taken_(false),
       should_expire_(false),
-      interactive_flow_required_(interactive_flow_required),
       weak_factory_(this) {
   // We want the info-bar to stick-around for few seconds and then be hidden
   // on the next navigation after that.
@@ -131,11 +115,35 @@ DefaultBrowserInfoBarDelegate::DefaultBrowserInfoBarDelegate(
 
 DefaultBrowserInfoBarDelegate::~DefaultBrowserInfoBarDelegate() {
   if (!action_taken_)
-    UMA_HISTOGRAM_BOOLEAN("DefaultBrowserWarning.Ignored", true);
+    UMA_HISTOGRAM_ENUMERATION("DefaultBrowser.InfoBar.UserInteraction",
+                              InfoBarUserInteraction::IGNORE_INFO_BAR,
+                              NUM_INFO_BAR_USER_INTERACTION_TYPES);
 }
 
-int DefaultBrowserInfoBarDelegate::GetIconID() const {
+infobars::InfoBarDelegate::Type DefaultBrowserInfoBarDelegate::GetInfoBarType()
+    const {
+#if defined(OS_WIN)
+  return WARNING_TYPE;
+#else
+  return PAGE_ACTION_TYPE;
+#endif
+}
+
+infobars::InfoBarDelegate::InfoBarIdentifier
+DefaultBrowserInfoBarDelegate::GetIdentifier() const {
+  return DEFAULT_BROWSER_INFOBAR_DELEGATE;
+}
+
+int DefaultBrowserInfoBarDelegate::GetIconId() const {
   return IDR_PRODUCT_LOGO_32;
+}
+
+gfx::VectorIconId DefaultBrowserInfoBarDelegate::GetVectorIconId() const {
+#if defined(OS_MACOSX) || defined(OS_ANDROID) || defined(OS_IOS)
+  return gfx::VectorIconId::VECTOR_ICON_NONE;
+#else
+  return gfx::VectorIconId::CHROME_PRODUCT;
+#endif
 }
 
 bool DefaultBrowserInfoBarDelegate::ShouldExpire(
@@ -154,30 +162,105 @@ base::string16 DefaultBrowserInfoBarDelegate::GetButtonLabel(
       IDS_DONT_ASK_AGAIN_INFOBAR_BUTTON_LABEL);
 }
 
+// Setting an app as the default browser doesn't require elevation directly, but
+// it does require registering it as the protocol handler for "http", so if
+// protocol registration in general requires elevation, this does as well.
 bool DefaultBrowserInfoBarDelegate::OKButtonTriggersUACPrompt() const {
-  return true;
+  return ShellIntegration::IsElevationNeededForSettingDefaultProtocolClient();
 }
 
 bool DefaultBrowserInfoBarDelegate::Accept() {
   action_taken_ = true;
-  content::BrowserThread::PostTask(
-      content::BrowserThread::FILE, FROM_HERE,
-      base::Bind(&SetChromeAsDefaultBrowser, interactive_flow_required_,
-                 prefs_));
-
+  content::RecordAction(
+      base::UserMetricsAction("DefaultBrowserInfoBar_Accept"));
+  UMA_HISTOGRAM_ENUMERATION("DefaultBrowser.InfoBar.UserInteraction",
+                            InfoBarUserInteraction::START_SET_AS_DEFAULT,
+                            NUM_INFO_BAR_USER_INTERACTION_TYPES);
+  scoped_refptr<ShellIntegration::DefaultBrowserWorker>(
+      new ShellIntegration::DefaultBrowserWorker(nullptr))
+      ->StartSetAsDefault();
   return true;
 }
 
 bool DefaultBrowserInfoBarDelegate::Cancel() {
   action_taken_ = true;
-  UMA_HISTOGRAM_BOOLEAN("DefaultBrowserWarning.DontSetAsDefault", true);
+  content::RecordAction(
+      base::UserMetricsAction("DefaultBrowserInfoBar_DontAskAgain"));
+  UMA_HISTOGRAM_ENUMERATION("DefaultBrowser.InfoBar.UserInteraction",
+                            InfoBarUserInteraction::DONT_ASK_AGAIN,
+                            NUM_INFO_BAR_USER_INTERACTION_TYPES);
   // User clicked "Don't ask me again", remember that.
   prefs_->SetBoolean(prefs::kCheckDefaultBrowser, false);
   return true;
 }
 
-void NotifyNotDefaultBrowserCallback(chrome::HostDesktopType desktop_type) {
-  Browser* browser = chrome::FindLastActiveWithHostDesktopType(desktop_type);
+// A ShellIntegration::DefaultWebClientObserver that handles the check to
+// determine whether or not to show the default browser prompt. If Chrome is the
+// default browser, then the kCheckDefaultBrowser pref is reset.  Otherwise, the
+// prompt is shown.
+class CheckDefaultBrowserObserver
+    : public ShellIntegration::DefaultWebClientObserver {
+ public:
+  CheckDefaultBrowserObserver(const base::FilePath& profile_path,
+                              bool show_prompt,
+                              chrome::HostDesktopType desktop_type);
+  ~CheckDefaultBrowserObserver() override;
+
+ private:
+  void SetDefaultWebClientUIState(
+      ShellIntegration::DefaultWebClientUIState state) override;
+  bool IsOwnedByWorker() override;
+
+  void ResetCheckDefaultBrowserPref();
+  void ShowPrompt();
+
+  // The path to the profile for which the prompt is to be shown.
+  base::FilePath profile_path_;
+
+  // True if the prompt is to be shown if Chrome is not the default browser.
+  bool show_prompt_;
+  chrome::HostDesktopType desktop_type_;
+
+  DISALLOW_COPY_AND_ASSIGN(CheckDefaultBrowserObserver);
+};
+
+CheckDefaultBrowserObserver::CheckDefaultBrowserObserver(
+    const base::FilePath& profile_path,
+    bool show_prompt,
+    chrome::HostDesktopType desktop_type)
+    : profile_path_(profile_path),
+      show_prompt_(show_prompt),
+      desktop_type_(desktop_type) {}
+
+CheckDefaultBrowserObserver::~CheckDefaultBrowserObserver() {}
+
+void CheckDefaultBrowserObserver::SetDefaultWebClientUIState(
+    ShellIntegration::DefaultWebClientUIState state) {
+  if (state == ShellIntegration::STATE_IS_DEFAULT) {
+    // Notify the user in the future if Chrome ceases to be the user's chosen
+    // default browser.
+    ResetCheckDefaultBrowserPref();
+  } else if (show_prompt_ && state == ShellIntegration::STATE_NOT_DEFAULT &&
+             ShellIntegration::CanSetAsDefaultBrowser() !=
+                 ShellIntegration::SET_DEFAULT_NOT_ALLOWED) {
+    ShowPrompt();
+  }
+}
+
+bool CheckDefaultBrowserObserver::IsOwnedByWorker() {
+  // Instruct the DefaultBrowserWorker to delete this instance when it is done.
+  return true;
+}
+
+void CheckDefaultBrowserObserver::ResetCheckDefaultBrowserPref() {
+  Profile* profile =
+      g_browser_process->profile_manager()->GetProfileByPath(profile_path_);
+  if (profile)
+    profile->GetPrefs()->SetBoolean(prefs::kCheckDefaultBrowser, true);
+}
+
+void CheckDefaultBrowserObserver::ShowPrompt() {
+  Browser* browser = chrome::FindLastActiveWithHostDesktopType(desktop_type_);
   if (!browser)
     return;  // Reached during ui tests.
 
@@ -190,43 +273,8 @@ void NotifyNotDefaultBrowserCallback(chrome::HostDesktopType desktop_type) {
 
   DefaultBrowserInfoBarDelegate::Create(
       InfoBarService::FromWebContents(web_contents),
-      Profile::FromBrowserContext(
-          web_contents->GetBrowserContext())->GetPrefs(),
-      (ShellIntegration::CanSetAsDefaultBrowser() ==
-          ShellIntegration::SET_DEFAULT_INTERACTIVE));
-}
-
-void ResetCheckDefaultBrowserPrefOnUIThread(
-    const base::FilePath& profile_path) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  Profile* profile =
-      g_browser_process->profile_manager()->GetProfileByPath(profile_path);
-  if (profile)
-    profile->GetPrefs()->SetBoolean(prefs::kCheckDefaultBrowser, true);
-}
-
-void CheckDefaultBrowserOnFileThread(const base::FilePath& profile_path,
-                                     bool show_prompt,
-                                     chrome::HostDesktopType desktop_type) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::FILE);
-  ShellIntegration::DefaultWebClientState state =
-      ShellIntegration::GetDefaultBrowser();
-  if (state == ShellIntegration::IS_DEFAULT) {
-    // Notify the user in the future if Chrome ceases to be the user's chosen
-    // default browser.
-    content::BrowserThread::PostTask(
-        content::BrowserThread::UI, FROM_HERE,
-        base::Bind(&ResetCheckDefaultBrowserPrefOnUIThread, profile_path));
-  } else if (show_prompt && state == ShellIntegration::NOT_DEFAULT) {
-    ShellIntegration::DefaultWebClientSetPermission default_change_mode =
-        ShellIntegration::CanSetAsDefaultBrowser();
-
-    if (default_change_mode != ShellIntegration::SET_DEFAULT_NOT_ALLOWED) {
-      content::BrowserThread::PostTask(
-          content::BrowserThread::UI, FROM_HERE,
-          base::Bind(&NotifyNotDefaultBrowserCallback, desktop_type));
-    }
-  }
+      Profile::FromBrowserContext(web_contents->GetBrowserContext())
+          ->GetPrefs());
 }
 
 }  // namespace
@@ -239,30 +287,27 @@ void RegisterDefaultBrowserPromptPrefs(PrefRegistrySimple* registry) {
 }
 
 void ShowDefaultBrowserPrompt(Profile* profile, HostDesktopType desktop_type) {
-  // We do not check if we are the default browser if:
-  // - There is a policy in control of this setting.
-  // We check if we are the default browser but do not prompt if:
-  // - The user said "don't ask me again" on the infobar earlier.
-  // - The "suppress_default_browser_prompt_for_version" master preference is
-  //     set to the current version.
-  bool show_prompt =
-      profile->GetPrefs()->GetBoolean(prefs::kCheckDefaultBrowser);
-
+  // Do not check if Chrome is the default browser if there is a policy in
+  // control of this setting.
   if (g_browser_process->local_state()->IsManagedPreference(
       prefs::kDefaultBrowserSettingEnabled)) {
-    if (g_browser_process->local_state()->GetBoolean(
-        prefs::kDefaultBrowserSettingEnabled)) {
-      content::BrowserThread::PostTask(
-          content::BrowserThread::FILE, FROM_HERE,
-          base::Bind(
-              base::IgnoreResult(&ShellIntegration::SetAsDefaultBrowser)));
-    } else {
-      // TODO(pastarmovj): We can't really do anything meaningful here yet but
-      // just prevent showing the infobar.
-    }
+    // Handling of the browser.default_browser_setting_enabled policy setting is
+    // taken care of in BrowserProcessImpl.
     return;
   }
 
+  PrefService* prefs = profile->GetPrefs();
+  // Reset preferences if kResetCheckDefaultBrowser is true.
+  if (prefs->GetBoolean(prefs::kResetCheckDefaultBrowser)) {
+    prefs->SetBoolean(prefs::kResetCheckDefaultBrowser, false);
+    prefs->SetBoolean(prefs::kCheckDefaultBrowser, true);
+  }
+
+  // Check if Chrome is the default browser but do not prompt if:
+  // - The user said "don't ask me again" on the infobar earlier.
+  // - The "suppress_default_browser_prompt_for_version" master preference is
+  //     set to the current version.
+  bool show_prompt = prefs->GetBoolean(prefs::kCheckDefaultBrowser);
   if (show_prompt) {
     const std::string disable_version_string =
         g_browser_process->local_state()->GetString(
@@ -270,16 +315,16 @@ void ShowDefaultBrowserPrompt(Profile* profile, HostDesktopType desktop_type) {
     const Version disable_version(disable_version_string);
     DCHECK(disable_version_string.empty() || disable_version.IsValid());
     if (disable_version.IsValid()) {
-      const chrome::VersionInfo version_info;
-      if (disable_version.Equals(Version(version_info.Version())))
+      if (disable_version.Equals(Version(version_info::GetVersionNumber())))
         show_prompt = false;
     }
   }
 
-  content::BrowserThread::PostTask(
-      content::BrowserThread::FILE, FROM_HERE,
-      base::Bind(&CheckDefaultBrowserOnFileThread, profile->GetPath(),
-                 show_prompt, desktop_type));
+  scoped_refptr<ShellIntegration::DefaultBrowserWorker>(
+      new ShellIntegration::DefaultBrowserWorker(
+          new CheckDefaultBrowserObserver(profile->GetPath(), show_prompt,
+                                          desktop_type)))
+      ->StartCheckIsDefault();
 }
 
 #if !defined(OS_WIN)

@@ -6,9 +6,16 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/location.h"
+#include "base/thread_task_runner_handle.h"
 #include "base/time/time.h"
 
 namespace chromeos {
+
+namespace {
+// Minimum power for a USB power source to be classified as AC.
+const double kUsbMinAcWatts = 24;
+}
 
 FakePowerManagerClient::FakePowerManagerClient()
     : num_request_restart_calls_(0),
@@ -16,13 +23,22 @@ FakePowerManagerClient::FakePowerManagerClient()
       num_set_policy_calls_(0),
       num_set_is_projecting_calls_(0),
       num_pending_suspend_readiness_callbacks_(0),
-      is_projecting_(false) {
+      is_projecting_(false),
+      weak_ptr_factory_(this) {
 }
 
 FakePowerManagerClient::~FakePowerManagerClient() {
 }
 
 void FakePowerManagerClient::Init(dbus::Bus* bus) {
+  props_.set_battery_percent(50);
+  props_.set_is_calculating_battery_time(false);
+  props_.set_battery_state(
+      power_manager::PowerSupplyProperties_BatteryState_DISCHARGING);
+  props_.set_external_power(
+      power_manager::PowerSupplyProperties_ExternalPower_DISCONNECTED);
+  props_.set_battery_time_to_full_sec(0);
+  props_.set_battery_time_to_empty_sec(18000);
 }
 
 void FakePowerManagerClient::AddObserver(Observer* observer) {
@@ -34,7 +50,7 @@ void FakePowerManagerClient::RemoveObserver(Observer* observer) {
 }
 
 bool FakePowerManagerClient::HasObserver(const Observer* observer) const {
-  return false;
+  return observers_.HasObserver(observer);
 }
 
 void FakePowerManagerClient::SetRenderProcessManagerDelegate(
@@ -63,6 +79,12 @@ void FakePowerManagerClient::IncreaseKeyboardBrightness() {
 }
 
 void FakePowerManagerClient::RequestStatusUpdate() {
+  // RequestStatusUpdate() calls and notifies the observers
+  // asynchronously on a real device. On the fake implementation, we call
+  // observers in a posted task to emulate the same behavior.
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(&FakePowerManagerClient::NotifyObservers,
+                            weak_ptr_factory_.GetWeakPtr()));
 }
 
 void FakePowerManagerClient::RequestSuspend() {
@@ -92,6 +114,23 @@ void FakePowerManagerClient::SetPolicy(
 void FakePowerManagerClient::SetIsProjecting(bool is_projecting) {
   ++num_set_is_projecting_calls_;
   is_projecting_ = is_projecting;
+}
+
+void FakePowerManagerClient::SetPowerSource(const std::string& id) {
+  props_.set_external_power_source_id(id);
+  props_.set_external_power(
+      power_manager::PowerSupplyProperties_ExternalPower_DISCONNECTED);
+  for (const auto& source : props_.available_external_power_source()) {
+    if (source.id() == id) {
+      props_.set_external_power(
+          !source.active_by_default() || source.max_power() < kUsbMinAcWatts
+              ? power_manager::PowerSupplyProperties_ExternalPower_USB
+              : power_manager::PowerSupplyProperties_ExternalPower_AC);
+      break;
+    }
+  }
+
+  NotifyObservers();
 }
 
 base::Closure FakePowerManagerClient::GetSuspendReadinessCallback() {
@@ -129,10 +168,20 @@ void FakePowerManagerClient::SendPowerButtonEvent(
                     PowerButtonEventReceived(down, timestamp));
 }
 
+void FakePowerManagerClient::UpdatePowerProperties(
+    const power_manager::PowerSupplyProperties& power_props) {
+  props_ = power_props;
+  NotifyObservers();
+}
+
+void FakePowerManagerClient::NotifyObservers() {
+  FOR_EACH_OBSERVER(Observer, observers_, PowerChanged(props_));
+}
+
 void FakePowerManagerClient::HandleSuspendReadiness() {
   CHECK(num_pending_suspend_readiness_callbacks_ > 0);
 
   --num_pending_suspend_readiness_callbacks_;
 }
 
-} // namespace chromeos
+}  // namespace chromeos

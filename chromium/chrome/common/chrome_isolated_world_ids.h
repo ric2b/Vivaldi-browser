@@ -5,6 +5,7 @@
 #ifndef CHROME_COMMON_CHROME_ISOLATED_WORLD_IDS_H_
 #define CHROME_COMMON_CHROME_ISOLATED_WORLD_IDS_H_
 
+#include "build/build_config.h"
 #include "content/public/common/isolated_world_ids.h"
 
 namespace chrome {
@@ -15,6 +16,11 @@ enum ChromeIsolatedWorldIDs {
 
   // Isolated world ID for internal Chrome features.
   ISOLATED_WORLD_ID_CHROME_INTERNAL,
+
+#if defined(OS_MACOSX)
+  // Isolated world ID for AppleScript.
+  ISOLATED_WORLD_ID_APPLESCRIPT,
+#endif  // defined(OS_MACOSX)
 
   // Numbers for isolated worlds for extensions are set in
   // extensions/renderer/script_injection.cc, and are are greater than or equal

@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/files/file.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/win/object_watcher.h"
@@ -81,7 +82,7 @@ void PendingHidTransfer::TakeResultFromWindowsAPI(BOOL result) {
   } else if (GetLastError() == ERROR_IO_PENDING) {
     base::MessageLoop::current()->AddDestructionObserver(this);
     AddRef();
-    watcher_.StartWatching(event_.Get(), this);
+    watcher_.StartWatchingOnce(event_.Get(), this);
   } else {
     HID_PLOG(EVENT) << "HID transfer failed";
     callback_.Run(this, false);

@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef SYNC_SYNCABLE_TEST_FAKE_SYNC_ENCRYPTION_HANDLER_H_
-#define SYNC_SYNCABLE_TEST_FAKE_SYNC_ENCRYPTION_HANDLER_H_
+#ifndef SYNC_TEST_FAKE_SYNC_ENCRYPTION_HANDLER_H_
+#define SYNC_TEST_FAKE_SYNC_ENCRYPTION_HANDLER_H_
 
 #include <string>
 
@@ -36,7 +36,7 @@ class FakeSyncEncryptionHandler : public SyncEncryptionHandler,
                                bool is_explicit) override;
   void SetDecryptionPassphrase(const std::string& passphrase) override;
   void EnableEncryptEverything() override;
-  bool EncryptEverythingEnabled() const override;
+  bool IsEncryptEverythingEnabled() const override;
   PassphraseType GetPassphraseType() const override;
 
   // NigoriHandler implemenation.
@@ -67,4 +67,4 @@ class FakeSyncEncryptionHandler : public SyncEncryptionHandler,
 
 }  // namespace syncer
 
-#endif  // SYNC_INTERNAL_API_PUBLIC_TEST_FAKE_SYNC_ENCRYPTION_HANDLER_H_
+#endif  // SYNC_TEST_FAKE_SYNC_ENCRYPTION_HANDLER_H_

@@ -4,11 +4,15 @@
 
 #include "chrome/browser/bookmarks/bookmark_html_writer.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/files/file.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -118,6 +122,7 @@ class Writer : public base::RefCountedThreadSafe<Writer> {
     base::Value* root_folder_value;
     base::Value* other_folder_value = NULL;
     base::Value* mobile_folder_value = NULL;
+    base::Value* trash_folder_value = NULL;
     if (!roots_d_value->Get(BookmarkCodec::kRootFolderNameKey,
                             &root_folder_value) ||
         root_folder_value->GetType() != base::Value::TYPE_DICTIONARY ||
@@ -126,7 +131,11 @@ class Writer : public base::RefCountedThreadSafe<Writer> {
         other_folder_value->GetType() != base::Value::TYPE_DICTIONARY ||
         !roots_d_value->Get(BookmarkCodec::kMobileBookmarkFolderNameKey,
                             &mobile_folder_value) ||
-        mobile_folder_value->GetType() != base::Value::TYPE_DICTIONARY) {
+        mobile_folder_value->GetType() != base::Value::TYPE_DICTIONARY ||
+        (roots_d_value->Get(BookmarkCodec::kTrashBookmarkFolderNameKey,
+                            &trash_folder_value) &&
+          trash_folder_value &&
+          trash_folder_value->GetType() != base::Value::TYPE_DICTIONARY)) {
       NOTREACHED();
       return;  // Invalid type for root folder and/or other folder.
     }
@@ -138,7 +147,10 @@ class Writer : public base::RefCountedThreadSafe<Writer> {
         !WriteNode(*static_cast<base::DictionaryValue*>(other_folder_value),
                    BookmarkNode::OTHER_NODE) ||
         !WriteNode(*static_cast<base::DictionaryValue*>(mobile_folder_value),
-                   BookmarkNode::MOBILE)) {
+                   BookmarkNode::MOBILE) ||
+        (trash_folder_value && 
+        !WriteNode(*static_cast<base::DictionaryValue*>(trash_folder_value),
+                   BookmarkNode::TRASH))) {
       return;
     }
 
@@ -236,7 +248,7 @@ class Writer : public base::RefCountedThreadSafe<Writer> {
   // Converts a time string written to the JSON codec into a time_t string
   // (used by bookmarks.html) and writes it.
   bool WriteTime(const std::string& time_string) {
-    int64 internal_value;
+    int64_t internal_value;
     base::StringToInt64(time_string, &internal_value);
     return Write(base::Int64ToString(
         base::Time::FromInternalValue(internal_value).ToTimeT()));

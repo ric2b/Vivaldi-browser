@@ -9,10 +9,13 @@
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/stl_util.h"
 #include "chrome/common/extensions/api/extension_action/action_info.h"
+#include "extensions/common/constants.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/gfx/image/image.h"
 
 class GURL;
 
@@ -46,12 +49,11 @@ class ExtensionAction {
     // the UI.
   };
 
+  static extension_misc::ExtensionIcons ActionIconSize();
+
   // Use this ID to indicate the default state for properties that take a tab_id
   // parameter.
   static const int kDefaultTabId;
-
-  // Max size (both dimensions) for page actions.
-  static const int kPageActionIconMaxSize;
 
   ExtensionAction(const extensions::Extension& extension,
                   extensions::ActionInfo::Type action_type,
@@ -286,6 +288,11 @@ class ExtensionAction {
   // The default icon image, if |default_icon_| exists.
   // Lazily initialized via LoadDefaultIconImage().
   scoped_ptr<extensions::IconImage> default_icon_image_;
+
+  // The lazily-initialized image for a placeholder icon, in the event that the
+  // extension doesn't have its own icon. (Mutable to allow lazy init in
+  // GetDefaultIconImage().)
+  mutable gfx::Image placeholder_icon_image_;
 
   // The id for the ExtensionAction, for example: "RssPageAction". This is
   // needed for compat with an older version of the page actions API.

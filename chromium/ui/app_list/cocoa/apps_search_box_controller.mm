@@ -6,10 +6,12 @@
 
 #include "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
+#include "base/macros.h"
 #include "base/strings/sys_string_conversions.h"
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMNSBezierPath+RoundRect.h"
 #include "ui/app_list/app_list_menu.h"
 #include "ui/app_list/app_list_model.h"
+#include "ui/app_list/resources/grit/app_list_resources.h"
 #include "ui/app_list/search_box_model.h"
 #include "ui/app_list/search_box_model_observer.h"
 #import "ui/base/cocoa/controls/hover_image_menu_button.h"
@@ -17,7 +19,6 @@
 #import "ui/base/cocoa/menu_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image_skia_util_mac.h"
-#include "ui/resources/grit/ui_resources.h"
 
 namespace {
 
@@ -158,7 +159,11 @@ void SearchBoxModelObserverBridge::TextChanged() {
 
 - (void)clearSearch {
   [searchTextField_ setStringValue:@""];
-  [self controlTextDidChange:nil];
+  // -controlTextDidChange:'s parameter is marked nonnull in the 10.11 SDK,
+  // so pass a dummy object even though we know that this class's implementation
+  // never looks at the parameter.
+  [self controlTextDidChange:[NSNotification notificationWithName:@""
+                                                           object:self]];
 }
 
 - (void)rebuildMenu {

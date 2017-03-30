@@ -7,6 +7,7 @@
 #include <set>
 
 #include "base/prefs/pref_service.h"
+#include "build/build_config.h"
 #include "chrome/browser/apps/drive/drive_app_provider.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
@@ -18,6 +19,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/ui/app_list/arc/arc_app_list_prefs_factory.h"
 #endif
 
 namespace app_list {
@@ -31,7 +33,7 @@ AppListSyncableService* AppListSyncableServiceFactory::GetForProfile(
 
 // static
 AppListSyncableServiceFactory* AppListSyncableServiceFactory::GetInstance() {
-  return Singleton<AppListSyncableServiceFactory>::get();
+  return base::Singleton<AppListSyncableServiceFactory>::get();
 }
 
 // static
@@ -57,6 +59,9 @@ AppListSyncableServiceFactory::AppListSyncableServiceFactory()
   FactorySet dependent_factories;
   dependent_factories.insert(
       extensions::ExtensionsBrowserClient::Get()->GetExtensionSystemFactory());
+#if defined(OS_CHROMEOS)
+  dependent_factories.insert(ArcAppListPrefsFactory::GetInstance());
+#endif
   DriveAppProvider::AppendDependsOnFactories(&dependent_factories);
   for (FactorySet::iterator it = dependent_factories.begin();
        it != dependent_factories.end();

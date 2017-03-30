@@ -4,16 +4,18 @@
 
 #include "components/cdm/browser/cdm_message_filter_android.h"
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "components/cdm/common/cdm_messages_android.h"
 #include "ipc/ipc_message_macros.h"
-#include "media/base/android/media_codec_bridge.h"
+#include "media/base/android/media_codec_util.h"
 #include "media/base/android/media_drm_bridge.h"
 
 using content::BrowserThread;
-using media::MediaCodecBridge;
 using media::MediaDrmBridge;
 using media::SupportedCodecs;
 
@@ -59,7 +61,7 @@ static SupportedCodecs GetSupportedCodecs(
     if ((request.codecs & info.codec) &&
         MediaDrmBridge::IsKeySystemSupportedWithType(
             key_system, info.container_mime_type) &&
-        MediaCodecBridge::CanDecode(info.codec_name, is_secure)) {
+        media::MediaCodecUtil::CanDecode(info.codec_name, is_secure)) {
       supported_codecs |= info.codec;
     }
   }

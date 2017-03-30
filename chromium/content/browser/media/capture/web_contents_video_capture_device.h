@@ -7,10 +7,11 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "content/common/content_export.h"
-#include "media/capture/screen_capture_device_core.h"
-#include "media/video/capture/video_capture_device.h"
+#include "media/capture/content/screen_capture_device_core.h"
+#include "media/capture/video/video_capture_device.h"
 
 namespace content {
 

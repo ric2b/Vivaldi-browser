@@ -84,7 +84,7 @@ void PepperPlatformAudioInput::OnStreamCreated(
     int length,
     int total_segments) {
 #if defined(OS_WIN)
-  DCHECK(handle);
+  DCHECK(handle.IsValid());
   DCHECK(socket_handle);
 #else
   DCHECK(base::SharedMemory::IsHandleValid(handle));
@@ -168,7 +168,6 @@ bool PepperPlatformAudioInput::Initialize(
 
   params_.Reset(media::AudioParameters::AUDIO_PCM_LINEAR,
                 media::CHANNEL_LAYOUT_MONO,
-                ppapi::kAudioInputChannels,
                 sample_rate,
                 ppapi::kBitsPerAudioInputSample,
                 frames_per_buffer);

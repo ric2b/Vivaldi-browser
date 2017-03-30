@@ -4,6 +4,7 @@
 
 #include "ui/ozone/platform/caca/ozone_platform_caca.h"
 
+#include "base/macros.h"
 #include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"
 #include "ui/events/ozone/layout/no/no_keyboard_layout_engine.h"
 #include "ui/ozone/common/native_display_delegate_ozone.h"
@@ -15,7 +16,7 @@
 #include "ui/ozone/public/gpu_platform_support.h"
 #include "ui/ozone/public/gpu_platform_support_host.h"
 #include "ui/ozone/public/input_controller.h"
-#include "ui/ozone/public/ozone_platform.h"
+#include "ui/ozone/public/ozone_platform.h"  // nogncheck
 #include "ui/ozone/public/system_input_injector.h"
 
 namespace ui {
@@ -56,10 +57,13 @@ class OzonePlatformCaca : public OzonePlatform {
         delegate, window_manager_.get(), event_source_.get(), bounds));
     if (!caca_window->Initialize())
       return nullptr;
-    return caca_window.Pass();
+    return caca_window;
   }
   scoped_ptr<NativeDisplayDelegate> CreateNativeDisplayDelegate() override {
     return make_scoped_ptr(new NativeDisplayDelegateOzone());
+  }
+  base::ScopedFD OpenClientNativePixmapDevice() const override {
+    return base::ScopedFD();
   }
 
   void InitializeUI() override {

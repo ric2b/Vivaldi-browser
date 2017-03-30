@@ -4,10 +4,8 @@
 
 #include "chrome/browser/thumbnails/simple_thumbnail_crop.h"
 
-#include "base/basictypes.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/thumbnails/thumbnailing_context.h"
-#include "chrome/common/render_messages.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/test/mock_render_process_host.h"
@@ -27,8 +25,7 @@ typedef testing::Test SimpleThumbnailCropTest;
 TEST_F(SimpleThumbnailCropTest, GetClippedBitmap_TallerThanWide) {
   // The input bitmap is vertically long.
   gfx::Canvas canvas(gfx::Size(40, 90), 1.0f, true);
-  SkBitmap bitmap =
-      skia::GetTopDevice(*canvas.sk_canvas())->accessBitmap(false);
+  SkBitmap bitmap = skia::ReadPixels(canvas.sk_canvas());
 
   // The desired size is square.
   thumbnails::ClipResult clip_result = thumbnails::CLIP_RESULT_NOT_CLIPPED;
@@ -44,8 +41,7 @@ TEST_F(SimpleThumbnailCropTest, GetClippedBitmap_TallerThanWide) {
 TEST_F(SimpleThumbnailCropTest, GetClippedBitmap_WiderThanTall) {
   // The input bitmap is horizontally long.
   gfx::Canvas canvas(gfx::Size(70, 40), 1.0f, true);
-  SkBitmap bitmap =
-      skia::GetTopDevice(*canvas.sk_canvas())->accessBitmap(false);
+  SkBitmap bitmap = skia::ReadPixels(canvas.sk_canvas());
 
   // The desired size is square.
   thumbnails::ClipResult clip_result = thumbnails::CLIP_RESULT_NOT_CLIPPED;
@@ -61,8 +57,7 @@ TEST_F(SimpleThumbnailCropTest, GetClippedBitmap_WiderThanTall) {
 TEST_F(SimpleThumbnailCropTest, GetClippedBitmap_TooWiderThanTall) {
   // The input bitmap is horizontally very long.
   gfx::Canvas canvas(gfx::Size(90, 40), 1.0f, true);
-  SkBitmap bitmap =
-      skia::GetTopDevice(*canvas.sk_canvas())->accessBitmap(false);
+  SkBitmap bitmap = skia::ReadPixels(canvas.sk_canvas());
 
   // The desired size is square.
   thumbnails::ClipResult clip_result = thumbnails::CLIP_RESULT_NOT_CLIPPED;
@@ -78,8 +73,7 @@ TEST_F(SimpleThumbnailCropTest, GetClippedBitmap_TooWiderThanTall) {
 TEST_F(SimpleThumbnailCropTest, GetClippedBitmap_NotClipped) {
   // The input bitmap is square.
   gfx::Canvas canvas(gfx::Size(40, 40), 1.0f, true);
-  SkBitmap bitmap =
-      skia::GetTopDevice(*canvas.sk_canvas())->accessBitmap(false);
+  SkBitmap bitmap = skia::ReadPixels(canvas.sk_canvas());
 
   // The desired size is square.
   thumbnails::ClipResult clip_result = thumbnails::CLIP_RESULT_NOT_CLIPPED;
@@ -95,8 +89,7 @@ TEST_F(SimpleThumbnailCropTest, GetClippedBitmap_NotClipped) {
 TEST_F(SimpleThumbnailCropTest, GetClippedBitmap_NonSquareOutput) {
   // The input bitmap is square.
   gfx::Canvas canvas(gfx::Size(40, 40), 1.0f, true);
-  SkBitmap bitmap =
-      skia::GetTopDevice(*canvas.sk_canvas())->accessBitmap(false);
+  SkBitmap bitmap = skia::ReadPixels(canvas.sk_canvas());
 
   // The desired size is horizontally long.
   thumbnails::ClipResult clip_result = thumbnails::CLIP_RESULT_NOT_CLIPPED;
@@ -111,8 +104,7 @@ TEST_F(SimpleThumbnailCropTest, GetClippedBitmap_NonSquareOutput) {
 
 TEST_F(SimpleThumbnailCropTest, GetCanvasCopyInfo) {
   gfx::Size thumbnail_size(200, 120);
-  gfx::Size expected_2x_size =
-      gfx::ToFlooredSize(gfx::ScaleSize(thumbnail_size, 2.0));
+  gfx::Size expected_2x_size = gfx::ScaleToFlooredSize(thumbnail_size, 2.0);
   float desired_aspect =
       static_cast<float>(thumbnail_size.width()) / thumbnail_size.height();
   scoped_refptr<thumbnails::ThumbnailingAlgorithm> algorithm(
@@ -173,8 +165,7 @@ TEST_F(SimpleThumbnailCropTest, GetCanvasCopyInfoDifferentScales) {
   gfx::Rect clipping_rect_result;
   gfx::Size target_size_result;
 
-  gfx::Size expected_2x_size =
-      gfx::ToFlooredSize(gfx::ScaleSize(thumbnail_size, 2.0));
+  gfx::Size expected_2x_size = gfx::ScaleToFlooredSize(thumbnail_size, 2.0);
 
   // Test at 1x scale. Expect a 2x thumbnail (we do this for quality).
   algorithm->GetCanvasCopyInfo(gfx::Size(400, 210), ui::SCALE_FACTOR_100P,
@@ -187,8 +178,7 @@ TEST_F(SimpleThumbnailCropTest, GetCanvasCopyInfoDifferentScales) {
   EXPECT_EQ(expected_2x_size, target_size_result);
 
   // Test at 3x scale.
-  gfx::Size expected_3x_size =
-      gfx::ToFlooredSize(gfx::ScaleSize(thumbnail_size, 3.0));
+  gfx::Size expected_3x_size = gfx::ScaleToFlooredSize(thumbnail_size, 3.0);
   algorithm->GetCanvasCopyInfo(gfx::Size(400, 210), ui::SCALE_FACTOR_300P,
                                &clipping_rect_result, &target_size_result);
   EXPECT_EQ(expected_3x_size, target_size_result);

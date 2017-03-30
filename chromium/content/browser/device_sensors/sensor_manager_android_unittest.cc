@@ -7,7 +7,7 @@
 #include "base/android/jni_android.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "content/browser/device_sensors/inertial_sensor_consts.h"
+#include "content/browser/device_sensors/device_sensors_consts.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -20,6 +20,10 @@ class FakeSensorManagerAndroid : public SensorManagerAndroid {
   FakeSensorManagerAndroid() {}
   ~FakeSensorManagerAndroid() override {}
 
+  OrientationSensorType GetOrientationSensorTypeUsed() override {
+    return SensorManagerAndroid::ROTATION_VECTOR;
+  }
+
   int GetNumberActiveDeviceMotionSensors() override {
     return number_active_sensors_;
   }
@@ -29,8 +33,8 @@ class FakeSensorManagerAndroid : public SensorManagerAndroid {
   }
 
  protected:
-  bool Start(EventType event_type) override { return true; }
-  void Stop(EventType event_type) override {}
+  bool Start(ConsumerType event_type) override { return true; }
+  void Stop(ConsumerType event_type) override {}
 
  private:
   int number_active_sensors_;
@@ -42,11 +46,25 @@ class AndroidSensorManagerTest : public testing::Test {
     light_buffer_.reset(new DeviceLightHardwareBuffer);
     motion_buffer_.reset(new DeviceMotionHardwareBuffer);
     orientation_buffer_.reset(new DeviceOrientationHardwareBuffer);
+    orientation_absolute_buffer_.reset(new DeviceOrientationHardwareBuffer);
+  }
+
+  void VerifyOrientationBufferValues(
+      const DeviceOrientationHardwareBuffer* buffer,
+      double alpha, double beta, double gamma) {
+    ASSERT_TRUE(buffer->data.allAvailableSensorsAreActive);
+    ASSERT_EQ(alpha, buffer->data.alpha);
+    ASSERT_TRUE(buffer->data.hasAlpha);
+    ASSERT_EQ(beta, buffer->data.beta);
+    ASSERT_TRUE(buffer->data.hasBeta);
+    ASSERT_EQ(gamma, buffer->data.gamma);
+    ASSERT_TRUE(buffer->data.hasGamma);
   }
 
   scoped_ptr<DeviceLightHardwareBuffer> light_buffer_;
   scoped_ptr<DeviceMotionHardwareBuffer> motion_buffer_;
   scoped_ptr<DeviceOrientationHardwareBuffer> orientation_buffer_;
+  scoped_ptr<DeviceOrientationHardwareBuffer> orientation_absolute_buffer_;
   content::TestBrowserThreadBundle thread_bundle_;
 };
 
@@ -58,7 +76,7 @@ TEST_F(AndroidSensorManagerTest, ThreeDeviceMotionSensorsActive) {
   sensorManager.StartFetchingDeviceMotionData(motion_buffer_.get());
   ASSERT_FALSE(motion_buffer_->data.allAvailableSensorsAreActive);
 
-  sensorManager.GotAcceleration(0, 0, 1, 2, 3);
+  sensorManager.GotAcceleration(nullptr, nullptr, 1, 2, 3);
   ASSERT_FALSE(motion_buffer_->data.allAvailableSensorsAreActive);
   ASSERT_EQ(1, motion_buffer_->data.accelerationX);
   ASSERT_TRUE(motion_buffer_->data.hasAccelerationX);
@@ -67,7 +85,7 @@ TEST_F(AndroidSensorManagerTest, ThreeDeviceMotionSensorsActive) {
   ASSERT_EQ(3, motion_buffer_->data.accelerationZ);
   ASSERT_TRUE(motion_buffer_->data.hasAccelerationZ);
 
-  sensorManager.GotAccelerationIncludingGravity(0, 0, 4, 5, 6);
+  sensorManager.GotAccelerationIncludingGravity(nullptr, nullptr, 4, 5, 6);
   ASSERT_FALSE(motion_buffer_->data.allAvailableSensorsAreActive);
   ASSERT_EQ(4, motion_buffer_->data.accelerationIncludingGravityX);
   ASSERT_TRUE(motion_buffer_->data.hasAccelerationIncludingGravityX);
@@ -76,7 +94,7 @@ TEST_F(AndroidSensorManagerTest, ThreeDeviceMotionSensorsActive) {
   ASSERT_EQ(6, motion_buffer_->data.accelerationIncludingGravityZ);
   ASSERT_TRUE(motion_buffer_->data.hasAccelerationIncludingGravityZ);
 
-  sensorManager.GotRotationRate(0, 0, 7, 8, 9);
+  sensorManager.GotRotationRate(nullptr, nullptr, 7, 8, 9);
   ASSERT_TRUE(motion_buffer_->data.allAvailableSensorsAreActive);
   ASSERT_EQ(7, motion_buffer_->data.rotationRateAlpha);
   ASSERT_TRUE(motion_buffer_->data.hasRotationRateAlpha);
@@ -99,10 +117,10 @@ TEST_F(AndroidSensorManagerTest, TwoDeviceMotionSensorsActive) {
   sensorManager.StartFetchingDeviceMotionData(motion_buffer_.get());
   ASSERT_FALSE(motion_buffer_->data.allAvailableSensorsAreActive);
 
-  sensorManager.GotAcceleration(0, 0, 1, 2, 3);
+  sensorManager.GotAcceleration(nullptr, nullptr, 1, 2, 3);
   ASSERT_FALSE(motion_buffer_->data.allAvailableSensorsAreActive);
 
-  sensorManager.GotAccelerationIncludingGravity(0, 0, 1, 2, 3);
+  sensorManager.GotAccelerationIncludingGravity(nullptr, nullptr, 1, 2, 3);
   ASSERT_TRUE(motion_buffer_->data.allAvailableSensorsAreActive);
   ASSERT_EQ(kInertialSensorIntervalMicroseconds / 1000.,
             motion_buffer_->data.interval);
@@ -132,14 +150,23 @@ TEST_F(AndroidSensorManagerTest, DeviceOrientationSensorsActive) {
   sensorManager.StartFetchingDeviceOrientationData(orientation_buffer_.get());
   ASSERT_FALSE(orientation_buffer_->data.allAvailableSensorsAreActive);
 
-  sensorManager.GotOrientation(0, 0, 1, 2, 3);
-  ASSERT_TRUE(orientation_buffer_->data.allAvailableSensorsAreActive);
-  ASSERT_EQ(1, orientation_buffer_->data.alpha);
-  ASSERT_TRUE(orientation_buffer_->data.hasAlpha);
-  ASSERT_EQ(2, orientation_buffer_->data.beta);
-  ASSERT_TRUE(orientation_buffer_->data.hasBeta);
-  ASSERT_EQ(3, orientation_buffer_->data.gamma);
-  ASSERT_TRUE(orientation_buffer_->data.hasGamma);
+  sensorManager.GotOrientation(nullptr, nullptr, 1, 2, 3);
+  VerifyOrientationBufferValues(orientation_buffer_.get(), 1, 2, 3);
+
+  sensorManager.StopFetchingDeviceOrientationData();
+  ASSERT_FALSE(orientation_buffer_->data.allAvailableSensorsAreActive);
+}
+
+TEST_F(AndroidSensorManagerTest, DeviceOrientationAbsoluteSensorsActive) {
+  FakeSensorManagerAndroid::Register(base::android::AttachCurrentThread());
+  FakeSensorManagerAndroid sensorManager;
+
+  sensorManager.StartFetchingDeviceOrientationAbsoluteData(
+      orientation_absolute_buffer_.get());
+  ASSERT_FALSE(orientation_buffer_->data.allAvailableSensorsAreActive);
+
+  sensorManager.GotOrientationAbsolute(nullptr, nullptr, 4, 5, 6);
+  VerifyOrientationBufferValues(orientation_absolute_buffer_.get(), 4, 5, 6);
 
   sensorManager.StopFetchingDeviceOrientationData();
   ASSERT_FALSE(orientation_buffer_->data.allAvailableSensorsAreActive);
@@ -152,7 +179,7 @@ TEST_F(AndroidSensorManagerTest, DeviceLightSensorsActive) {
 
   sensorManager.StartFetchingDeviceLightData(light_buffer_.get());
 
-  sensorManager.GotLight(0, 0, 100);
+  sensorManager.GotLight(nullptr, nullptr, 100);
   ASSERT_EQ(100, light_buffer_->data.value);
 
   sensorManager.StopFetchingDeviceLightData();

@@ -10,9 +10,9 @@ import urllib
 
 import util
 
-CHROME_42_REVISION = '317499'
-CHROME_43_REVISION = '323865'
-CHROME_44_REVISION = '330231'
+CHROME_46_REVISION = '344997'
+CHROME_47_REVISION = '352825'
+CHROME_48_REVISION = '359663'
 
 _SITE = 'http://commondatastorage.googleapis.com'
 
@@ -51,13 +51,14 @@ def DownloadChrome(revision, dest_dir, site=Site.CONTINUOUS):
       return 'chrome-mac'
     elif util.IsLinux():
       return 'chrome-linux'
+
   def GetChromePathFromPackage():
     if util.IsWindows():
-      return 'vivaldi.exe'
+      return 'chrome.exe'
     elif util.IsMac():
       return 'Chromium.app/Contents/MacOS/Chromium'
     elif util.IsLinux():
-      return 'chrome'
+      return 'chrome-wrapper'
   zip_path = os.path.join(dest_dir, 'chrome-%s.zip' % revision)
   if not os.path.exists(zip_path):
     url = site + '/%s/%s/%s.zip' % (_GetDownloadPlatform(), revision,
@@ -80,18 +81,12 @@ def _GetDownloadPlatform():
     else:
       return 'Linux'
 
+
 def GetLatestSnapshotVersion():
   """Returns the latest revision of snapshot build."""
   return GetLatestRevision(GetSnapshotDownloadSite())
 
-def GetSnapshotDownloadSite():
-  """Returns the site to download snapshot build according to the platform.
 
-  For Linux 32-bit, it is chromium snapshot build.
-  For other platform, it is blink snapshot build.
-  Because there is no linux32 blink snapshot build.
-  """
-  if _GetDownloadPlatform() in ('Linux', 'Linux_x64', 'Mac'):
-    return Site.CHROMIUM_SNAPSHOT
-  else:
-    return Site.BLINK_SNAPSHOT
+def GetSnapshotDownloadSite():
+  """Returns the site to download snapshot build according to the platform."""
+  return Site.CHROMIUM_SNAPSHOT

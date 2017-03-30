@@ -4,6 +4,9 @@
 
 #include "chrome/browser/extensions/api/streams_private/streams_private_api.h"
 
+#include <limits.h>
+#include <utility>
+
 #include "base/lazy_instance.h"
 #include "base/values.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
@@ -65,7 +68,7 @@ void StreamsPrivateAPI::ExecuteMimeTypeHandler(
     content::WebContents* web_contents,
     scoped_ptr<content::StreamInfo> stream,
     const std::string& view_id,
-    int64 expected_content_size,
+    int64_t expected_content_size,
     bool embedded,
     int render_process_id,
     int render_frame_id) {
@@ -79,14 +82,14 @@ void StreamsPrivateAPI::ExecuteMimeTypeHandler(
   // If the mime handler uses MimeHandlerViewGuest, the MimeHandlerViewGuest
   // will take ownership of the stream. Otherwise, store the stream handle in
   // |streams_| and fire an event notifying the extension.
-  if (!handler->handler_url().empty()) {
+  if (handler->HasPlugin()) {
     GURL handler_url(Extension::GetBaseURLFromExtensionId(extension_id).spec() +
                      handler->handler_url());
     auto tab_id = ExtensionTabUtil::GetTabId(web_contents);
     scoped_ptr<StreamContainer> stream_container(new StreamContainer(
-        stream.Pass(), tab_id, embedded, handler_url, extension_id));
+        std::move(stream), tab_id, embedded, handler_url, extension_id));
     MimeHandlerStreamManager::Get(browser_context_)
-        ->AddStream(view_id, stream_container.Pass(), render_process_id,
+        ->AddStream(view_id, std::move(stream_container), render_process_id,
                     render_frame_id);
     return;
   }
@@ -110,12 +113,13 @@ void StreamsPrivateAPI::ExecuteMimeTypeHandler(
   CreateResponseHeadersDictionary(stream->response_headers.get(),
                                   &info.response_headers.additional_properties);
 
-  scoped_ptr<Event> event(new Event(
-      events::UNKNOWN, streams_private::OnExecuteMimeTypeHandler::kEventName,
-      streams_private::OnExecuteMimeTypeHandler::Create(info)));
+  scoped_ptr<Event> event(
+      new Event(events::STREAMS_PRIVATE_ON_EXECUTE_MIME_TYPE_HANDLER,
+                streams_private::OnExecuteMimeTypeHandler::kEventName,
+                streams_private::OnExecuteMimeTypeHandler::Create(info)));
 
   EventRouter::Get(browser_context_)
-      ->DispatchEventToExtension(extension_id, event.Pass());
+      ->DispatchEventToExtension(extension_id, std::move(event));
 
   GURL url = stream->handle->GetURL();
   streams_[extension_id][url] = make_linked_ptr(stream->handle.release());

@@ -4,28 +4,33 @@
 
 #include "chrome/browser/ui/webui/net_internals/net_internals_ui_browsertest.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
+#include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/io_thread.h"
-#include "chrome/browser/net/chrome_net_log.h"
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/net_internals/net_internals_ui.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
+#include "components/net_log/chrome_net_log.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui_message_handler.h"
@@ -38,6 +43,8 @@
 #include "net/http/http_transaction_factory.h"
 #include "net/log/net_log.h"
 #include "net/log/write_to_file_net_log_observer.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
+#include "net/test/embedded_test_server/request_handler_util.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -190,7 +197,7 @@ void NetInternalsTest::MessageHandler::GetTestServerURL(
   ASSERT_TRUE(net_internals_test_->StartTestServer());
   std::string path;
   ASSERT_TRUE(list_value->GetString(0, &path));
-  GURL url = net_internals_test_->test_server()->GetURL(path);
+  GURL url = net_internals_test_->embedded_test_server()->GetURL(path);
   scoped_ptr<base::Value> url_value(new base::StringValue(url.spec()));
   RunJavascriptCallback(url_value.get());
 }
@@ -248,7 +255,7 @@ void NetInternalsTest::MessageHandler::NavigateToPrerender(
   ASSERT_TRUE(list_value->GetString(0, &url));
   content::RenderFrameHost* frame =
       browser()->tab_strip_model()->GetWebContentsAt(1)->GetMainFrame();
-  frame->ExecuteJavaScript(
+  frame->ExecuteJavaScriptForTests(
       base::ASCIIToUTF16(base::StringPrintf("Click('%s')", url.c_str())));
 }
 
@@ -281,12 +288,14 @@ void NetInternalsTest::MessageHandler::GetNetLogFileContents(
   base::ScopedFILE temp_file_handle(base::OpenFile(temp_file, "w"));
   ASSERT_TRUE(temp_file_handle);
 
-  scoped_ptr<base::Value> constants(NetInternalsUI::GetConstants());
+  scoped_ptr<base::Value> constants(net_log::ChromeNetLog::GetConstants(
+      base::CommandLine::ForCurrentProcess()->GetCommandLineString(),
+      chrome::GetChannelString()));
   scoped_ptr<net::WriteToFileNetLogObserver> net_log_logger(
       new net::WriteToFileNetLogObserver());
-  net_log_logger->StartObserving(
-      g_browser_process->net_log(), temp_file_handle.Pass(), constants.get(),
-      nullptr);
+  net_log_logger->StartObserving(g_browser_process->net_log(),
+                                 std::move(temp_file_handle), constants.get(),
+                                 nullptr);
   g_browser_process->net_log()->AddGlobalEntry(
       net::NetLog::TYPE_NETWORK_IP_ADDRESSES_CHANGED);
   net::BoundNetLog bound_net_log = net::BoundNetLog::Make(
@@ -310,7 +319,7 @@ void NetInternalsTest::MessageHandler::EnableDataReductionProxy(
   bool enable;
   ASSERT_TRUE(list_value->GetBoolean(0, &enable));
   browser()->profile()->GetPrefs()->SetBoolean(
-      data_reduction_proxy::prefs::kDataReductionProxyEnabled, enable);
+      prefs::kDataSaverEnabled, enable);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -349,22 +358,20 @@ content::WebUIMessageHandler* NetInternalsTest::GetMockMessageHandler() {
 GURL NetInternalsTest::CreatePrerenderLoaderUrl(
     const GURL& prerender_url) {
   EXPECT_TRUE(StartTestServer());
-  std::vector<net::SpawnedTestServer::StringPair> replacement_text;
+  base::StringPairs replacement_text;
   replacement_text.push_back(
       make_pair("REPLACE_WITH_PRERENDER_URL", prerender_url.spec()));
   std::string replacement_path;
-  EXPECT_TRUE(net::SpawnedTestServer::GetFilePathWithReplacements(
-      "files/prerender/prerender_loader.html",
-      replacement_text,
-      &replacement_path));
-  GURL url_loader = test_server()->GetURL(replacement_path);
+  net::test_server::GetFilePathWithReplacements(
+      "/prerender/prerender_loader.html", replacement_text, &replacement_path);
+  GURL url_loader = embedded_test_server()->GetURL(replacement_path);
   return url_loader;
 }
 
 bool NetInternalsTest::StartTestServer() {
   if (test_server_started_)
     return true;
-  test_server_started_ = test_server()->Start();
+  test_server_started_ = embedded_test_server()->Start();
 
   // Sample domain for SDCH-view test. Dictionaries for localhost/127.0.0.1
   // are forbidden.

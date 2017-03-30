@@ -5,10 +5,13 @@
 #ifndef CONTENT_BROWSER_ANDROID_JAVA_GIN_JAVA_METHOD_INVOCATION_HELPER_H_
 #define CONTENT_BROWSER_ANDROID_JAVA_GIN_JAVA_METHOD_INVOCATION_HELPER_H_
 
+#include <stddef.h>
+
 #include <map>
 
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/values.h"
 #include "content/browser/android/java/gin_java_bound_object.h"
@@ -63,7 +66,7 @@ class CONTENT_EXPORT GinJavaMethodInvocationHelper
   const base::ListValue& GetPrimitiveResult();
   const base::android::JavaRef<jobject>& GetObjectResult();
   const base::android::JavaRef<jclass>& GetSafeAnnotationClass();
-  const GinJavaBridgeError GetInvocationError();
+  GinJavaBridgeError GetInvocationError();
 
  private:
   friend class base::RefCountedThreadSafe<GinJavaMethodInvocationHelper>;

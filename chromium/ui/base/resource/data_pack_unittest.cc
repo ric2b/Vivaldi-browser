@@ -2,14 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ui/base/resource/data_pack.h"
+
+#include <stddef.h>
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/path_service.h"
 #include "base/strings/string_piece.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/base/resource/data_pack.h"
 #include "ui/base/ui_base_paths.h"
 
 namespace ui {
@@ -71,7 +78,7 @@ TEST(DataPackTest, LoadFromFile) {
 
   // Load the file through the data pack API.
   DataPack pack(SCALE_FACTOR_100P);
-  ASSERT_TRUE(pack.LoadFromFile(file.Pass()));
+  ASSERT_TRUE(pack.LoadFromFile(std::move(file)));
 
   base::StringPiece data;
   ASSERT_TRUE(pack.HasResource(4));
@@ -111,7 +118,7 @@ TEST(DataPackTest, LoadFromFileRegion) {
   // Load the file through the data pack API.
   DataPack pack(SCALE_FACTOR_100P);
   base::MemoryMappedFile::Region region = {sizeof(kPadding), kSamplePakSize};
-  ASSERT_TRUE(pack.LoadFromFileRegion(file.Pass(), region));
+  ASSERT_TRUE(pack.LoadFromFileRegion(std::move(file), region));
 
   base::StringPiece data;
   ASSERT_TRUE(pack.HasResource(4));
@@ -159,7 +166,7 @@ TEST_P(DataPackTest, Write) {
   std::string four("four");
   std::string fifteen("fifteen");
 
-  std::map<uint16, base::StringPiece> resources;
+  std::map<uint16_t, base::StringPiece> resources;
   resources.insert(std::make_pair(1, base::StringPiece(one)));
   resources.insert(std::make_pair(2, base::StringPiece(two)));
   resources.insert(std::make_pair(15, base::StringPiece(fifteen)));
@@ -200,7 +207,7 @@ TEST(DataPackTest, ModifiedWhileUsed) {
 
   // Load the file through the data pack API.
   DataPack pack(SCALE_FACTOR_100P);
-  ASSERT_TRUE(pack.LoadFromFile(file.Pass()));
+  ASSERT_TRUE(pack.LoadFromFile(std::move(file)));
 
   base::StringPiece data;
   ASSERT_TRUE(pack.HasResource(10));

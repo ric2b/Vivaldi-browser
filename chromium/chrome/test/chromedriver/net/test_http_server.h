@@ -7,8 +7,8 @@
 
 #include <set>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
@@ -39,7 +39,7 @@ class TestHttpServer : public net::HttpServer::Delegate {
   // Creates an http server. By default it accepts WebSockets and echoes
   // WebSocket messages back.
   TestHttpServer();
-  virtual ~TestHttpServer();
+  ~TestHttpServer() override;
 
   // Starts the server. Returns whether it was started successfully.
   bool Start();

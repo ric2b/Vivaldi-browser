@@ -14,6 +14,8 @@ namespace switches {
 // alongside the definition of their values in the .cc file.
 extern const char kDontDeleteOnDownload[];
 extern const char kEnableMultiprocess[];
+extern const char kMojoNoSandbox[];
+extern const char kMojoSingleProcess[];
 extern const char kPredictableAppFilenames[];
 extern const char kUseUpdater[];
 

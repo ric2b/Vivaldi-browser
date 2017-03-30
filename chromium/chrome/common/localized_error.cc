@@ -4,24 +4,30 @@
 
 #include "chrome/common/localized_error.h"
 
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "base/i18n/rtl.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
-#include "chrome/common/chrome_switches.h"
+#include "build/build_config.h"
 #include "chrome/grit/chromium_strings.h"
-#include "chrome/grit/generated_resources.h"
+#include "chrome/grit/google_chrome_strings.h"
 #include "components/error_page/common/error_page_params.h"
+#include "components/error_page/common/error_page_switches.h"
 #include "components/error_page/common/net_error_info.h"
+#include "components/strings/grit/components_chromium_strings.h"
+#include "components/strings/grit/components_google_chrome_strings.h"
+#include "components/strings/grit/components_strings.h"
+#include "components/url_formatter/url_formatter.h"
 #include "net/base/escape.h"
 #include "net/base/net_errors.h"
-#include "net/base/net_util.h"
-#include "third_party/WebKit/public/platform/WebURLError.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
 
@@ -29,12 +35,11 @@
 #include "base/win/windows_version.h"
 #endif
 
-#if defined(OS_CHROMEOS)
-#include "base/command_line.h"
-#include "chrome/common/chrome_switches.h"
+#if defined(OS_ANDROID)
+#include "components/offline_pages/offline_page_feature.h"
 #endif
 
-using blink::WebURLError;
+using error_page::OfflinePageStatus;
 
 // Some error pages have no details.
 const unsigned int kErrorPagesNoDetails = 0;
@@ -45,10 +50,6 @@ static const char kRedirectLoopLearnMoreUrl[] =
     "https://support.google.com/chrome/answer/95626";
 static const char kWeakDHKeyLearnMoreUrl[] =
     "https://support.google.com/chrome?p=dh_error";
-static const char kCachedCopyButtonFieldTrial[] =
-    "EnableGoogleCachedCopyTextExperiment";
-static const char kCachedCopyButtonExpTypeControl[] = "control";
-static const char kCachedCopyButtonExpTypeCopy[] = "copy";
 static const int kGoogleCachedCopySuggestionType = 0;
 
 enum NAV_SUGGESTIONS {
@@ -62,6 +63,7 @@ enum NAV_SUGGESTIONS {
   SUGGEST_LEARNMORE             = 1 << 6,
   SUGGEST_VIEW_POLICIES         = 1 << 7,
   SUGGEST_CONTACT_ADMINISTRATOR = 1 << 8,
+  SUGGEST_UNSUPPORTED_CIPHER    = 1 << 9,
 };
 
 struct LocalizedErrorMap {
@@ -74,6 +76,7 @@ struct LocalizedErrorMap {
   // a frame.
   unsigned int details_resource_id;
   int suggestions;  // Bitmap of SUGGEST_* values.
+  unsigned int error_explanation_id;
 };
 
 const LocalizedErrorMap net_error_options[] = {
@@ -96,7 +99,7 @@ const LocalizedErrorMap net_error_options[] = {
   {net::ERR_CONNECTION_CLOSED,
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
    IDS_ERRORPAGES_HEADING_NOT_AVAILABLE,
-   IDS_ERRORPAGES_SUMMARY_NOT_AVAILABLE,
+   IDS_ERRORPAGES_SUMMARY_CONNECTION_CLOSED,
    IDS_ERRORPAGES_DETAILS_CONNECTION_CLOSED,
    SUGGEST_RELOAD,
   },
@@ -119,7 +122,7 @@ const LocalizedErrorMap net_error_options[] = {
   {net::ERR_CONNECTION_FAILED,
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
    IDS_ERRORPAGES_HEADING_NOT_AVAILABLE,
-   IDS_ERRORPAGES_SUMMARY_NOT_AVAILABLE,
+   IDS_ERRORPAGES_SUMMARY_CONNECTION_FAILED,
    IDS_ERRORPAGES_DETAILS_CONNECTION_FAILED,
    SUGGEST_RELOAD,
   },
@@ -154,7 +157,7 @@ const LocalizedErrorMap net_error_options[] = {
   },
   {net::ERR_PROXY_CONNECTION_FAILED,
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
-   IDS_ERRORPAGES_HEADING_PROXY_CONNECTION_FAILED,
+   IDS_ERRORPAGES_HEADING_INTERNET_DISCONNECTED,
    IDS_ERRORPAGES_SUMMARY_PROXY_CONNECTION_FAILED,
    IDS_ERRORPAGES_DETAILS_PROXY_CONNECTION_FAILED,
    SUGGEST_PROXY_CONFIG,
@@ -164,20 +167,20 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_HEADING_INTERNET_DISCONNECTED,
    IDS_ERRORPAGES_SUMMARY_INTERNET_DISCONNECTED,
    IDS_ERRORPAGES_DETAILS_INTERNET_DISCONNECTED,
-   SUGGEST_NONE,
+   SUGGEST_CHECK_CONNECTION | SUGGEST_FIREWALL_CONFIG,
   },
   {net::ERR_FILE_NOT_FOUND,
-   IDS_ERRORPAGES_TITLE_NOT_FOUND,
-   IDS_ERRORPAGES_HEADING_NOT_FOUND,
-   IDS_ERRORPAGES_SUMMARY_NOT_FOUND,
+   IDS_ERRORPAGES_TITLE_LOAD_FAILED,
+   IDS_ERRORPAGES_HEADING_FILE_NOT_FOUND,
+   IDS_ERRORPAGES_SUMMARY_FILE_NOT_FOUND,
    IDS_ERRORPAGES_DETAILS_FILE_NOT_FOUND,
-   SUGGEST_NONE,
+   SUGGEST_RELOAD,
   },
   {net::ERR_CACHE_MISS,
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
-   IDS_ERRORPAGES_HEADING_CACHE_MISS,
-   IDS_ERRORPAGES_SUMMARY_CACHE_MISS,
-   IDS_ERRORPAGES_DETAILS_CACHE_MISS,
+   IDS_ERRORPAGES_HEADING_CACHE_READ_FAILURE,
+   IDS_ERRORPAGES_SUMMARY_CACHE_READ_FAILURE,
+   IDS_ERRORPAGES_DETAILS_CACHE_READ_FAILURE,
    SUGGEST_RELOAD,
   },
   {net::ERR_CACHE_READ_FAILURE,
@@ -189,135 +192,149 @@ const LocalizedErrorMap net_error_options[] = {
   },
   {net::ERR_NETWORK_IO_SUSPENDED,
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
-   IDS_ERRORPAGES_HEADING_NETWORK_IO_SUSPENDED,
+   IDS_ERRORPAGES_HEADING_CONNECTION_INTERRUPTED,
    IDS_ERRORPAGES_SUMMARY_NETWORK_IO_SUSPENDED,
    IDS_ERRORPAGES_DETAILS_NETWORK_IO_SUSPENDED,
    SUGGEST_RELOAD,
   },
   {net::ERR_TOO_MANY_REDIRECTS,
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
-   IDS_ERRORPAGES_HEADING_TOO_MANY_REDIRECTS,
+   IDS_ERRORPAGES_HEADING_PAGE_NOT_WORKING,
    IDS_ERRORPAGES_SUMMARY_TOO_MANY_REDIRECTS,
    IDS_ERRORPAGES_DETAILS_TOO_MANY_REDIRECTS,
    SUGGEST_RELOAD | SUGGEST_LEARNMORE,
   },
   {net::ERR_EMPTY_RESPONSE,
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
-   IDS_ERRORPAGES_HEADING_EMPTY_RESPONSE,
+   IDS_ERRORPAGES_HEADING_PAGE_NOT_WORKING,
    IDS_ERRORPAGES_SUMMARY_EMPTY_RESPONSE,
    IDS_ERRORPAGES_DETAILS_EMPTY_RESPONSE,
    SUGGEST_RELOAD,
   },
   {net::ERR_RESPONSE_HEADERS_MULTIPLE_CONTENT_LENGTH,
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
-   IDS_ERRORPAGES_HEADING_DUPLICATE_HEADERS,
-   IDS_ERRORPAGES_SUMMARY_DUPLICATE_HEADERS,
+   IDS_ERRORPAGES_HEADING_PAGE_NOT_WORKING,
+   IDS_ERRORPAGES_SUMMARY_INVALID_RESPONSE,
    IDS_ERRORPAGES_DETAILS_RESPONSE_HEADERS_MULTIPLE_CONTENT_LENGTH,
-   SUGGEST_NONE,
+   SUGGEST_RELOAD,
   },
   {net::ERR_RESPONSE_HEADERS_MULTIPLE_CONTENT_DISPOSITION,
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
-   IDS_ERRORPAGES_HEADING_DUPLICATE_HEADERS,
-   IDS_ERRORPAGES_SUMMARY_DUPLICATE_HEADERS,
+   IDS_ERRORPAGES_HEADING_PAGE_NOT_WORKING,
+   IDS_ERRORPAGES_SUMMARY_INVALID_RESPONSE,
    IDS_ERRORPAGES_DETAILS_RESPONSE_HEADERS_MULTIPLE_CONTENT_DISPOSITION,
-   SUGGEST_NONE,
+   SUGGEST_RELOAD,
   },
   {net::ERR_RESPONSE_HEADERS_MULTIPLE_LOCATION,
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
-   IDS_ERRORPAGES_HEADING_DUPLICATE_HEADERS,
-   IDS_ERRORPAGES_SUMMARY_DUPLICATE_HEADERS,
+   IDS_ERRORPAGES_HEADING_PAGE_NOT_WORKING,
+   IDS_ERRORPAGES_SUMMARY_INVALID_RESPONSE,
    IDS_ERRORPAGES_DETAILS_RESPONSE_HEADERS_MULTIPLE_LOCATION,
-   SUGGEST_NONE,
+   SUGGEST_RELOAD,
   },
   {net::ERR_CONTENT_LENGTH_MISMATCH,
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
-   IDS_ERRORPAGES_HEADING_NOT_AVAILABLE,
-   IDS_ERRORPAGES_SUMMARY_NOT_AVAILABLE,
+   IDS_ERRORPAGES_HEADING_PAGE_NOT_WORKING,
+   IDS_ERRORPAGES_SUMMARY_CONNECTION_CLOSED,
    IDS_ERRORPAGES_DETAILS_CONNECTION_CLOSED,
    SUGGEST_RELOAD,
   },
   {net::ERR_INCOMPLETE_CHUNKED_ENCODING,
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
-   IDS_ERRORPAGES_HEADING_NOT_AVAILABLE,
-   IDS_ERRORPAGES_SUMMARY_NOT_AVAILABLE,
+   IDS_ERRORPAGES_HEADING_PAGE_NOT_WORKING,
+   IDS_ERRORPAGES_SUMMARY_CONNECTION_CLOSED,
    IDS_ERRORPAGES_DETAILS_CONNECTION_CLOSED,
    SUGGEST_RELOAD,
   },
   {net::ERR_SSL_PROTOCOL_ERROR,
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
-   IDS_ERRORPAGES_HEADING_SSL_PROTOCOL_ERROR,
-   IDS_ERRORPAGES_SUMMARY_SSL_PROTOCOL_ERROR,
+   IDS_ERRORPAGES_HEADING_INSECURE_CONNECTION,
+   IDS_ERRORPAGES_SUMMARY_INVALID_RESPONSE,
    IDS_ERRORPAGES_DETAILS_SSL_PROTOCOL_ERROR,
    SUGGEST_NONE,
   },
   {net::ERR_BAD_SSL_CLIENT_AUTH_CERT,
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
-   IDS_ERRORPAGES_HEADING_BAD_SSL_CLIENT_AUTH_CERT,
+   IDS_ERRORPAGES_HEADING_INSECURE_CONNECTION,
    IDS_ERRORPAGES_SUMMARY_BAD_SSL_CLIENT_AUTH_CERT,
    IDS_ERRORPAGES_DETAILS_BAD_SSL_CLIENT_AUTH_CERT,
    SUGGEST_NONE,
   },
   {net::ERR_SSL_WEAK_SERVER_EPHEMERAL_DH_KEY,
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
-   IDS_ERRORPAGES_HEADING_WEAK_SERVER_EPHEMERAL_DH_KEY,
-   IDS_ERRORPAGES_SUMMARY_WEAK_SERVER_EPHEMERAL_DH_KEY,
+   IDS_ERRORPAGES_HEADING_INSECURE_CONNECTION,
+   IDS_ERRORPAGES_SUMMARY_SSL_SECURITY_ERROR,
    IDS_ERRORPAGES_DETAILS_SSL_PROTOCOL_ERROR,
    SUGGEST_LEARNMORE,
   },
   {net::ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN,
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
-   IDS_ERRORPAGES_HEADING_PINNING_FAILURE,
-   IDS_ERRORPAGES_SUMMARY_PINNING_FAILURE,
-   IDS_ERRORPAGES_DETAILS_PINNING_FAILURE,
+   IDS_ERRORPAGES_HEADING_INSECURE_CONNECTION,
+   IDS_CERT_ERROR_SUMMARY_PINNING_FAILURE_DETAILS,
+   IDS_CERT_ERROR_SUMMARY_PINNING_FAILURE_DESCRIPTION,
    SUGGEST_NONE,
   },
   {net::ERR_TEMPORARILY_THROTTLED,
    IDS_ERRORPAGES_TITLE_ACCESS_DENIED,
-   IDS_ERRORPAGES_HEADING_ACCESS_DENIED,
-   IDS_ERRORPAGES_SUMMARY_TEMPORARILY_THROTTLED,
+   IDS_ERRORPAGES_HEADING_NOT_AVAILABLE,
+   IDS_ERRORPAGES_SUMMARY_NOT_AVAILABLE,
    IDS_ERRORPAGES_DETAILS_TEMPORARILY_THROTTLED,
    SUGGEST_NONE,
   },
   {net::ERR_BLOCKED_BY_CLIENT,
    IDS_ERRORPAGES_TITLE_BLOCKED,
    IDS_ERRORPAGES_HEADING_BLOCKED,
-   IDS_ERRORPAGES_SUMMARY_BLOCKED,
-   IDS_ERRORPAGES_DETAILS_BLOCKED,
+   IDS_ERRORPAGES_SUMMARY_BLOCKED_BY_EXTENSION,
+   IDS_ERRORPAGES_DETAILS_BLOCKED_BY_EXTENSION,
    SUGGEST_RELOAD | SUGGEST_DISABLE_EXTENSION,
   },
   {net::ERR_NETWORK_CHANGED,
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
-   IDS_ERRORPAGES_HEADING_NETWORK_ACCESS_DENIED,
+   IDS_ERRORPAGES_HEADING_CONNECTION_INTERRUPTED,
    IDS_ERRORPAGES_SUMMARY_NETWORK_CHANGED,
    IDS_ERRORPAGES_DETAILS_NETWORK_CHANGED,
    SUGGEST_RELOAD | SUGGEST_CHECK_CONNECTION,
   },
   {net::ERR_BLOCKED_BY_ADMINISTRATOR,
    IDS_ERRORPAGES_TITLE_BLOCKED,
-   IDS_ERRORPAGES_HEADING_BLOCKED_BY_ADMINISTRATOR,
+   IDS_ERRORPAGES_HEADING_BLOCKED,
    IDS_ERRORPAGES_SUMMARY_BLOCKED_BY_ADMINISTRATOR,
    IDS_ERRORPAGES_DETAILS_BLOCKED_BY_ADMINISTRATOR,
    SUGGEST_VIEW_POLICIES | SUGGEST_CONTACT_ADMINISTRATOR,
   },
   {net::ERR_BLOCKED_ENROLLMENT_CHECK_PENDING,
    IDS_ERRORPAGES_TITLE_BLOCKED,
-   IDS_ERRORPAGES_HEADING_BLOCKED_BY_ADMINISTRATOR,
+   IDS_ERRORPAGES_HEADING_INTERNET_DISCONNECTED,
    IDS_ERRORPAGES_SUMMARY_BLOCKED_ENROLLMENT_CHECK_PENDING,
    IDS_ERRORPAGES_DETAILS_BLOCKED_ENROLLMENT_CHECK_PENDING,
    SUGGEST_CHECK_CONNECTION,
   },
   {net::ERR_SSL_FALLBACK_BEYOND_MINIMUM_VERSION,
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
-   IDS_ERRORPAGES_HEADING_SSL_FALLBACK_BEYOND_MINIMUM_VERSION,
-   IDS_ERRORPAGES_SUMMARY_SSL_FALLBACK_BEYOND_MINIMUM_VERSION,
+   IDS_ERRORPAGES_HEADING_INSECURE_CONNECTION,
+   IDS_ERRORPAGES_SUMMARY_SSL_SECURITY_ERROR,
    IDS_ERRORPAGES_DETAILS_SSL_FALLBACK_BEYOND_MINIMUM_VERSION,
    SUGGEST_NONE,
   },
   {net::ERR_SSL_VERSION_OR_CIPHER_MISMATCH,
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
-   IDS_ERRORPAGES_HEADING_SSL_VERSION_OR_CIPHER_MISMATCH,
+   IDS_ERRORPAGES_HEADING_INSECURE_CONNECTION,
    IDS_ERRORPAGES_SUMMARY_SSL_VERSION_OR_CIPHER_MISMATCH,
    IDS_ERRORPAGES_DETAILS_SSL_VERSION_OR_CIPHER_MISMATCH,
+   SUGGEST_UNSUPPORTED_CIPHER,
+  },
+  {net::ERR_TEMPORARY_BACKOFF,
+   IDS_ERRORPAGES_TITLE_ACCESS_DENIED,
+   IDS_ERRORPAGES_HEADING_ACCESS_DENIED,
+   IDS_ERRORPAGES_SUMMARY_TEMPORARY_BACKOFF,
+   IDS_ERRORPAGES_DETAILS_TEMPORARY_BACKOFF,
+   SUGGEST_NONE,
+  },
+  {net::ERR_SSL_SERVER_CERT_BAD_FORMAT,
+   IDS_ERRORPAGES_TITLE_LOAD_FAILED,
+   IDS_ERRORPAGES_HEADING_INSECURE_CONNECTION,
+   IDS_ERRORPAGES_SUMMARY_SSL_SECURITY_ERROR,
+   IDS_ERRORPAGES_DETAILS_SSL_PROTOCOL_ERROR,
    SUGGEST_NONE,
   },
 };
@@ -330,7 +347,7 @@ const LocalizedErrorMap repost_error = {
   IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
   IDS_HTTP_POST_WARNING_TITLE,
   IDS_ERRORPAGES_HTTP_POST_WARNING,
-  IDS_ERRORPAGES_DETAILS_CACHE_MISS,
+  IDS_ERRORPAGES_DETAILS_CACHE_READ_FAILURE,
   SUGGEST_RELOAD,
 };
 
@@ -352,50 +369,43 @@ const LocalizedErrorMap http_error_options[] = {
 
   {500,
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
-   IDS_ERRORPAGES_HEADING_HTTP_SERVER_ERROR,
-   IDS_ERRORPAGES_SUMMARY_INTERNAL_SERVER_ERROR,
+   IDS_ERRORPAGES_HEADING_PAGE_NOT_WORKING,
+   IDS_ERRORPAGES_SUMMARY_WEBSITE_CANNOT_HANDLE_REQUEST,
    IDS_ERRORPAGES_DETAILS_INTERNAL_SERVER_ERROR,
    SUGGEST_RELOAD,
   },
   {501,
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
-   IDS_ERRORPAGES_HEADING_HTTP_SERVER_ERROR,
-   IDS_ERRORPAGES_SUMMARY_WEBSITE_CANNOT_HANDLE,
+   IDS_ERRORPAGES_HEADING_PAGE_NOT_WORKING,
+   IDS_ERRORPAGES_SUMMARY_WEBSITE_CANNOT_HANDLE_REQUEST,
    IDS_ERRORPAGES_DETAILS_NOT_IMPLEMENTED,
    SUGGEST_NONE,
   },
   {502,
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
-   IDS_ERRORPAGES_HEADING_HTTP_SERVER_ERROR,
-   IDS_ERRORPAGES_SUMMARY_BAD_GATEWAY,
+   IDS_ERRORPAGES_HEADING_PAGE_NOT_WORKING,
+   IDS_ERRORPAGES_SUMMARY_WEBSITE_CANNOT_HANDLE_REQUEST,
    IDS_ERRORPAGES_DETAILS_BAD_GATEWAY,
    SUGGEST_RELOAD,
   },
   {503,
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
-   IDS_ERRORPAGES_HEADING_HTTP_SERVER_ERROR,
-   IDS_ERRORPAGES_SUMMARY_SERVICE_UNAVAILABLE,
+   IDS_ERRORPAGES_HEADING_PAGE_NOT_WORKING,
+   IDS_ERRORPAGES_SUMMARY_WEBSITE_CANNOT_HANDLE_REQUEST,
    IDS_ERRORPAGES_DETAILS_SERVICE_UNAVAILABLE,
    SUGGEST_RELOAD,
   },
   {504,
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
-   IDS_ERRORPAGES_HEADING_HTTP_SERVER_ERROR,
+   IDS_ERRORPAGES_HEADING_PAGE_NOT_WORKING,
    IDS_ERRORPAGES_SUMMARY_GATEWAY_TIMEOUT,
    IDS_ERRORPAGES_DETAILS_GATEWAY_TIMEOUT,
    SUGGEST_RELOAD,
   },
-  {505,
-   IDS_ERRORPAGES_TITLE_LOAD_FAILED,
-   IDS_ERRORPAGES_HEADING_HTTP_SERVER_ERROR,
-   IDS_ERRORPAGES_SUMMARY_WEBSITE_CANNOT_HANDLE,
-   IDS_ERRORPAGES_DETAILS_HTTP_VERSION_NOT_SUPPORTED,
-   SUGGEST_NONE,
-  },
 };
 
 const LocalizedErrorMap dns_probe_error_options[] = {
-  {chrome_common_net::DNS_PROBE_POSSIBLE,
+  {error_page::DNS_PROBE_POSSIBLE,
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
    IDS_ERRORPAGES_HEADING_NOT_AVAILABLE,
    IDS_ERRORPAGES_SUMMARY_DNS_PROBE_RUNNING,
@@ -406,7 +416,7 @@ const LocalizedErrorMap dns_probe_error_options[] = {
   // DNS_PROBE_NOT_RUN is not here; NetErrorHelper will restore the original
   // error, which might be one of several DNS-related errors.
 
-  {chrome_common_net::DNS_PROBE_STARTED,
+  {error_page::DNS_PROBE_STARTED,
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
    IDS_ERRORPAGES_HEADING_NOT_AVAILABLE,
    IDS_ERRORPAGES_SUMMARY_DNS_PROBE_RUNNING,
@@ -418,21 +428,21 @@ const LocalizedErrorMap dns_probe_error_options[] = {
   // DNS_PROBE_FINISHED_UNKNOWN is not here; NetErrorHelper will restore the
   // original error, which might be one of several DNS-related errors.
 
-  {chrome_common_net::DNS_PROBE_FINISHED_NO_INTERNET,
+  {error_page::DNS_PROBE_FINISHED_NO_INTERNET,
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
    IDS_ERRORPAGES_HEADING_INTERNET_DISCONNECTED,
    IDS_ERRORPAGES_SUMMARY_INTERNET_DISCONNECTED,
    IDS_ERRORPAGES_DETAILS_INTERNET_DISCONNECTED,
-   SUGGEST_RELOAD | SUGGEST_CHECK_CONNECTION | SUGGEST_FIREWALL_CONFIG,
+   SUGGEST_CHECK_CONNECTION | SUGGEST_FIREWALL_CONFIG,
   },
-  {chrome_common_net::DNS_PROBE_FINISHED_BAD_CONFIG,
+  {error_page::DNS_PROBE_FINISHED_BAD_CONFIG,
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
    IDS_ERRORPAGES_HEADING_NOT_AVAILABLE,
    IDS_ERRORPAGES_SUMMARY_NAME_NOT_RESOLVED,
    IDS_ERRORPAGES_DETAILS_NAME_NOT_RESOLVED,
    SUGGEST_RELOAD | SUGGEST_DNS_CONFIG | SUGGEST_FIREWALL_CONFIG,
   },
-  {chrome_common_net::DNS_PROBE_FINISHED_NXDOMAIN,
+  {error_page::DNS_PROBE_FINISHED_NXDOMAIN,
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
    IDS_ERRORPAGES_HEADING_NOT_AVAILABLE,
    IDS_ERRORPAGES_SUMMARY_NAME_NOT_RESOLVED,
@@ -465,7 +475,7 @@ const LocalizedErrorMap* LookupErrorMap(const std::string& error_domain,
     return FindErrorMapInArray(http_error_options,
                                arraysize(http_error_options),
                                error_code);
-  } else if (error_domain == chrome_common_net::kDnsProbeErrorDomain) {
+  } else if (error_domain == error_page::kDnsProbeErrorDomain) {
     const LocalizedErrorMap* map =
         FindErrorMapInArray(dns_probe_error_options,
                             arraysize(dns_probe_error_options),
@@ -479,7 +489,7 @@ const LocalizedErrorMap* LookupErrorMap(const std::string& error_domain,
 }
 
 // Returns a dictionary containing the strings for the settings menu under the
-// wrench, and the advanced settings button.
+// app menu, and the advanced settings button.
 base::DictionaryValue* GetStandardMenuItemsText() {
   base::DictionaryValue* standard_menu_items_text = new base::DictionaryValue();
   standard_menu_items_text->SetString("settingsTitle",
@@ -494,11 +504,41 @@ const char* GetIconClassForError(const std::string& error_domain,
                                  int error_code) {
   if ((error_code == net::ERR_INTERNET_DISCONNECTED &&
        error_domain == net::kErrorDomain) ||
-      (error_code == chrome_common_net::DNS_PROBE_FINISHED_NO_INTERNET &&
-       error_domain == chrome_common_net::kDnsProbeErrorDomain))
+      (error_code == error_page::DNS_PROBE_FINISHED_NO_INTERNET &&
+       error_domain == error_page::kDnsProbeErrorDomain))
     return "icon-offline";
 
   return "icon-generic";
+}
+
+// If the first suggestion is for a Google cache copy link. Promote the
+// suggestion to a separate set of strings for displaying as a button.
+void AddGoogleCachedCopyButton(base::ListValue* suggestions,
+                               base::DictionaryValue* error_strings) {
+  if (!suggestions->empty()) {
+    base::DictionaryValue* suggestion;
+    suggestions->GetDictionary(0, &suggestion);
+    int type = -1;
+    suggestion->GetInteger("type", &type);
+
+    if (type == kGoogleCachedCopySuggestionType) {
+      base::string16 cache_url;
+      suggestion->GetString("urlCorrection", &cache_url);
+      int cache_tracking_id = -1;
+      suggestion->GetInteger("trackingId", &cache_tracking_id);
+      scoped_ptr<base::DictionaryValue> cache_button(new base::DictionaryValue);
+      cache_button->SetString(
+            "msg",
+            l10n_util::GetStringUTF16(IDS_ERRORPAGES_BUTTON_SHOW_SAVED_COPY));
+      cache_button->SetString("cacheUrl", cache_url);
+      cache_button->SetInteger("trackingId", cache_tracking_id);
+      error_strings->Set("cacheButton", cache_button.release());
+
+      // Remove the item from suggestions dictionary so that it does not get
+      // displayed by the template in the details section.
+      suggestions->Remove(0, nullptr);
+    }
+  }
 }
 
 }  // namespace
@@ -510,6 +550,8 @@ void LocalizedError::GetStrings(int error_code,
                                 const GURL& failed_url,
                                 bool is_post,
                                 bool stale_copy_in_cache,
+                                bool can_show_network_diagnostics_dialog,
+                                OfflinePageStatus offline_page_status,
                                 const std::string& locale,
                                 const std::string& accept_languages,
                                 scoped_ptr<error_page::ErrorPageParams> params,
@@ -546,47 +588,47 @@ void LocalizedError::GetStrings(int error_code,
     options.suggestions = SUGGEST_NONE;
   }
 
-  base::string16 failed_url_string(net::FormatUrl(
-      failed_url, accept_languages, net::kFormatUrlOmitNothing,
-      net::UnescapeRule::NORMAL, NULL, NULL, NULL));
+  base::string16 failed_url_string(url_formatter::FormatUrl(
+      failed_url, accept_languages, url_formatter::kFormatUrlOmitNothing,
+      net::UnescapeRule::NORMAL, nullptr, nullptr, nullptr));
   // URLs are always LTR.
   if (base::i18n::IsRTL())
     base::i18n::WrapStringWithLTRFormatting(&failed_url_string);
   error_strings->SetString("title",
       l10n_util::GetStringFUTF16(options.title_resource_id, failed_url_string));
-  error_strings->SetString("heading",
-      l10n_util::GetStringUTF16(options.heading_resource_id));
-
   std::string icon_class = GetIconClassForError(error_domain, error_code);
   error_strings->SetString("iconClass", icon_class);
 
+  base::string16 host_name(url_formatter::IDNToUnicode(failed_url.host(),
+                                                       accept_languages));
+
+  base::DictionaryValue* heading = new base::DictionaryValue;
+  heading->SetString("msg",
+                     l10n_util::GetStringUTF16(options.heading_resource_id));
+  heading->SetString("hostName", host_name);
+  error_strings->Set("heading", heading);
+
   base::DictionaryValue* summary = new base::DictionaryValue;
 
-  // For offline show a summary message underneath the heading.
-  if (error_code == net::ERR_INTERNET_DISCONNECTED ||
-      error_code == chrome_common_net::DNS_PROBE_FINISHED_NO_INTERNET) {
-    error_strings->SetString("primaryParagraph",
-        l10n_util::GetStringUTF16(options.summary_resource_id));
+  // Set summary message under the heading.
+  summary->SetString("msg",
+      l10n_util::GetStringUTF16(options.summary_resource_id));
+  // Add a DNS definition string.
+  summary->SetString("dnsDefinition",
+      l10n_util::GetStringUTF16(IDS_ERRORPAGES_SUMMARY_DNS_DEFINITION));
 
-#if defined(OS_CHROMEOS)
-    base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
 
-    // Check if easter egg should be disabled.
-    if (command_line->HasSwitch(switches::kDisableDinosaurEasterEgg)) {
-      // The prescence of this string disables the easter egg. Acts as a flag.
-      error_strings->SetString("disabledEasterEgg",
-          l10n_util::GetStringUTF16(IDS_ERRORPAGE_FUN_DISABLED));
-    }
-#endif
-
-  } else {
-    // Set summary message in the details.
-    summary->SetString("msg",
-        l10n_util::GetStringUTF16(options.summary_resource_id));
+  // Check if easter egg should be disabled.
+  if (command_line->HasSwitch(
+          error_page::switches::kDisableDinosaurEasterEgg)) {
+    // The presence of this string disables the easter egg. Acts as a flag.
+    error_strings->SetString("disabledEasterEgg",
+        l10n_util::GetStringUTF16(IDS_ERRORPAGE_FUN_DISABLED));
   }
+
   summary->SetString("failedUrl", failed_url_string);
-  summary->SetString("hostName", net::IDNToUnicode(failed_url.host(),
-                                                   accept_languages));
+  summary->SetString("hostName", host_name);
   summary->SetString("productName",
                      l10n_util::GetStringUTF16(IDS_PRODUCT_NAME));
 
@@ -597,25 +639,25 @@ void LocalizedError::GetStrings(int error_code,
           IDS_ERRORPAGE_NET_BUTTON_HIDE_DETAILS));
   error_strings->Set("summary", summary);
 
-  if (options.details_resource_id != kErrorPagesNoDetails) {
-    error_strings->SetString(
-        "errorDetails", l10n_util::GetStringUTF16(options.details_resource_id));
-  }
+  error_strings->SetString(
+      "errorDetails",
+      options.details_resource_id != kErrorPagesNoDetails
+          ? l10n_util::GetStringUTF16(options.details_resource_id)
+          : base::string16());
 
   base::string16 error_string;
   if (error_domain == net::kErrorDomain) {
     // Non-internationalized error string, for debugging Chrome itself.
     error_string = base::ASCIIToUTF16(net::ErrorToShortString(error_code));
-  } else if (error_domain == chrome_common_net::kDnsProbeErrorDomain) {
+  } else if (error_domain == error_page::kDnsProbeErrorDomain) {
     std::string ascii_error_string =
-        chrome_common_net::DnsProbeStatusToString(error_code);
+        error_page::DnsProbeStatusToString(error_code);
     error_string = base::ASCIIToUTF16(ascii_error_string);
   } else {
     DCHECK_EQ(LocalizedError::kHttpErrorDomain, error_domain);
     error_string = base::IntToString16(error_code);
   }
-  error_strings->SetString("errorCode",
-      l10n_util::GetStringFUTF16(IDS_ERRORPAGES_ERROR_CODE, error_string));
+  error_strings->SetString("errorCode", error_string);
 
   // Platform specific information for diagnosing network issues on OSX and
   // Windows.
@@ -658,9 +700,8 @@ void LocalizedError::GetStrings(int error_code,
   } else {
     suggestions = params->override_suggestions.release();
     use_default_suggestions = false;
-    EnableGoogleCachedCopyButtonExperiment(suggestions, error_strings);
+    AddGoogleCachedCopyButton(suggestions, error_strings);
   }
-
   error_strings->Set("suggestions", suggestions);
 
   if (params->search_url.is_valid()) {
@@ -702,13 +743,14 @@ void LocalizedError::GetStrings(int error_code,
   if (!use_default_suggestions)
     return;
 
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   const std::string& show_saved_copy_value =
-      command_line->GetSwitchValueASCII(switches::kShowSavedCopy);
-  bool show_saved_copy_primary = (show_saved_copy_value ==
-      switches::kEnableShowSavedCopyPrimary);
-  bool show_saved_copy_secondary = (show_saved_copy_value ==
-      switches::kEnableShowSavedCopySecondary);
+      command_line->GetSwitchValueASCII(error_page::switches::kShowSavedCopy);
+  bool show_saved_copy_primary =
+      (show_saved_copy_value ==
+       error_page::switches::kEnableShowSavedCopyPrimary);
+  bool show_saved_copy_secondary =
+      (show_saved_copy_value ==
+       error_page::switches::kEnableShowSavedCopySecondary);
   bool show_saved_copy_visible =
       (stale_copy_in_cache && !is_post &&
       (show_saved_copy_primary || show_saved_copy_secondary));
@@ -726,10 +768,42 @@ void LocalizedError::GetStrings(int error_code,
     error_strings->Set("showSavedCopyButton", show_saved_copy_button);
   }
 
+#if defined(OS_ANDROID)
+  // Offline button will not be provided when we want to show something in the
+  // cache.
+  if (!show_saved_copy_visible) {
+    if (offline_page_status == OfflinePageStatus::HAS_OFFLINE_PAGE) {
+      base::DictionaryValue* show_offline_copy_button =
+          new base::DictionaryValue;
+      base::string16 button_text =
+          l10n_util::GetStringUTF16(IDS_ERRORPAGES_BUTTON_SHOW_OFFLINE_COPY);
+      show_offline_copy_button->SetString("msg", button_text);
+      error_strings->Set("showOfflineCopyButton", show_offline_copy_button);
+    } else if (offline_page_status ==
+               OfflinePageStatus::HAS_OTHER_OFFLINE_PAGES) {
+      base::DictionaryValue* show_offline_pages_button =
+          new base::DictionaryValue;
+      base::string16 button_text = l10n_util::GetStringUTF16(
+          offline_pages::GetOfflinePageFeatureMode() ==
+              offline_pages::FeatureMode::ENABLED_AS_BOOKMARKS
+                  ? IDS_ERRORPAGES_BUTTON_SHOW_OFFLINE_PAGES_AS_BOOKMARKS
+                  : IDS_ERRORPAGES_BUTTON_SHOW_OFFLINE_PAGES);
+      show_offline_pages_button->SetString("msg", button_text);
+      error_strings->Set("showOfflinePagesButton", show_offline_pages_button);
+    }
+  }
+#endif  // defined(OS_ANDROID)
+
 #if defined(OS_CHROMEOS)
-  error_strings->SetString(
-      "diagnose", l10n_util::GetStringUTF16(IDS_ERRORPAGES_BUTTON_DIAGNOSE));
-#endif  // defined(OS_CHROMEOS)
+  // ChromeOS has its own diagnostics extension, which doesn't rely on a
+  // browser-initiated dialog.
+  can_show_network_diagnostics_dialog = true;
+#endif
+  if (can_show_network_diagnostics_dialog && failed_url.is_valid() &&
+      failed_url.SchemeIsHTTPOrHTTPS()) {
+    error_strings->SetString(
+        "diagnose", l10n_util::GetStringUTF16(IDS_ERRORPAGES_BUTTON_DIAGNOSE));
+  }
 
   if (options.suggestions & SUGGEST_CHECK_CONNECTION) {
     base::DictionaryValue* suggest_check_connection = new base::DictionaryValue;
@@ -854,12 +928,23 @@ void LocalizedError::GetStrings(int error_code,
       suggestions->Append(suggest_learn_more);
     }
   }
+
+  if (options.suggestions & SUGGEST_UNSUPPORTED_CIPHER) {
+    base::DictionaryValue* suggest_unsupported_cipher =
+        new base::DictionaryValue;
+    suggest_unsupported_cipher->SetString(
+        "body",
+        l10n_util::GetStringUTF16(
+            IDS_ERRORPAGES_SUGGESTION_UNSUPPORTED_CIPHER));
+    suggestions->Append(suggest_unsupported_cipher);
+  }
 }
 
-base::string16 LocalizedError::GetErrorDetails(const blink::WebURLError& error,
+base::string16 LocalizedError::GetErrorDetails(const std::string& error_domain,
+                                               int error_code,
                                                bool is_post) {
   const LocalizedErrorMap* error_map =
-      LookupErrorMap(error.domain.utf8(), error.reason, is_post);
+      LookupErrorMap(error_domain, error_code, is_post);
   if (error_map)
     return l10n_util::GetStringUTF16(error_map->details_resource_id);
   else
@@ -872,51 +957,4 @@ bool LocalizedError::HasStrings(const std::string& error_domain,
   // whether or not the page was be generated by a POST, so just claim it was
   // not.
   return LookupErrorMap(error_domain, error_code, /*is_post=*/false) != NULL;
-}
-
-void LocalizedError::EnableGoogleCachedCopyButtonExperiment(
-    base::ListValue* suggestions,
-    base::DictionaryValue* error_strings) {
-  std::string field_trial_exp_type_ =
-      base::FieldTrialList::FindFullName(kCachedCopyButtonFieldTrial);
-
-  // If the first suggestion is for a Google cache copy. Promote the
-  // suggestion to a separate set of strings for displaying as a button.
-  if (!suggestions->empty() && !field_trial_exp_type_.empty() &&
-      field_trial_exp_type_ != kCachedCopyButtonExpTypeControl) {
-    base::DictionaryValue* suggestion;
-    suggestions->GetDictionary(0, &suggestion);
-    int type = -1;
-    suggestion->GetInteger("type", &type);
-
-    if (type == kGoogleCachedCopySuggestionType) {
-      base::string16 cache_url;
-      suggestion->GetString("urlCorrection", &cache_url);
-      int cache_tracking_id = -1;
-      suggestion->GetInteger("trackingId", &cache_tracking_id);
-
-      scoped_ptr<base::DictionaryValue> cache_button(new base::DictionaryValue);
-
-      // Google cache copy button label experiment.
-      if (field_trial_exp_type_ == kCachedCopyButtonExpTypeCopy) {
-        cache_button->SetString(
-            "msg",
-            l10n_util::GetStringUTF16(IDS_ERRORPAGES_BUTTON_SHOW_CACHED_COPY));
-        cache_button->SetBoolean("defaultLabel", false);
-      } else {
-        // Default to "Show cached page" button label.
-        cache_button->SetString(
-            "msg",
-            l10n_util::GetStringUTF16(IDS_ERRORPAGES_BUTTON_SHOW_CACHED_PAGE));
-        cache_button->SetBoolean("defaultLabel", true);
-      }
-      cache_button->SetString("cacheUrl", cache_url);
-      cache_button->SetInteger("trackingId", cache_tracking_id);
-      error_strings->Set("cacheButton", cache_button.release());
-
-      // Remove the item from suggestions dictionary so that it does not get
-      // displayed by the template in the details section.
-      suggestions->Remove(0, nullptr);
-    }
-  }
 }

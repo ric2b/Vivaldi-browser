@@ -98,11 +98,7 @@ bool IsAppLaunchableWithoutEnabling(const std::string& extension_id,
                                     content::BrowserContext* context);
 
 // Returns true if |extension| should be synced.
-bool ShouldSyncExtension(const Extension* extension,
-                         content::BrowserContext* context);
-
-// Returns true if |app| should be synced.
-bool ShouldSyncApp(const Extension* app, content::BrowserContext* context);
+bool ShouldSync(const Extension* extension, content::BrowserContext* context);
 
 // Returns true if |extension_id| is idle and it is safe to perform actions such
 // as updating.
@@ -118,14 +114,6 @@ GURL GetSiteForExtensionId(const std::string& extension_id,
 // returned dictionary.
 scoped_ptr<base::DictionaryValue> GetExtensionInfo(const Extension* extension);
 
-// Returns true if the extension has isolated storage.
-bool HasIsolatedStorage(const ExtensionInfo& info);
-
-// Returns true if the site URL corresponds to an extension or app and has
-// isolated storage.
-bool SiteHasIsolatedStorage(const GURL& extension_site_url,
-                            content::BrowserContext* context);
-
 // Returns the default extension/app icon (for extensions or apps that don't
 // have one).
 const gfx::ImageSkia& GetDefaultExtensionIcon();
@@ -137,8 +125,16 @@ const gfx::ImageSkia& GetDefaultAppIcon();
 // feature is stable.
 bool IsNewBookmarkAppsEnabled();
 
+// TODO(dominickn): http://crbug.com/517682: Remove this entirely once
+// open in window is stable on Mac.
+bool CanHostedAppsOpenInWindows();
+
 // Returns true for custodian-installed extensions in a supervised profile.
-bool IsExtensionSupervised(const Extension* extension, Profile* profile);
+bool IsExtensionSupervised(const Extension* extension, const Profile* profile);
+
+// Returns true if supervised users need approval from their custodian for
+// approving escalated permissions on updated extensions.
+bool NeedCustodianApprovalForPermissionIncrease(const Profile* profile);
 
 }  // namespace util
 }  // namespace extensions

@@ -5,47 +5,62 @@
 #ifndef NET_QUIC_QUIC_STREAM_FACTORY_H_
 #define NET_QUIC_QUIC_STREAM_FACTORY_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <list>
 #include <map>
 #include <string>
 #include <vector>
 
+#include "base/gtest_prod_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
 #include "net/base/address_list.h"
 #include "net/base/completion_callback.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/network_change_notifier.h"
 #include "net/cert/cert_database.h"
+#include "net/http/http_server_properties.h"
 #include "net/log/net_log.h"
 #include "net/proxy/proxy_server.h"
 #include "net/quic/network_connection.h"
-#include "net/quic/quic_client_session.h"
+#include "net/quic/quic_chromium_client_session.h"
 #include "net/quic/quic_config.h"
 #include "net/quic/quic_crypto_stream.h"
 #include "net/quic/quic_http_stream.h"
 #include "net/quic/quic_protocol.h"
+#include "net/ssl/ssl_config_service.h"
 
 namespace net {
 
+class CTPolicyEnforcer;
 class CertVerifier;
 class ChannelIDService;
 class ClientSocketFactory;
+class CTVerifier;
 class HostResolver;
 class HttpServerProperties;
 class QuicClock;
-class QuicClientSession;
-class QuicConnectionHelper;
+class QuicChromiumClientSession;
+class QuicChromiumConnectionHelper;
 class QuicCryptoClientStreamFactory;
 class QuicRandom;
-class QuicServerInfoFactory;
 class QuicServerId;
+class QuicServerInfo;
+class QuicServerInfoFactory;
 class QuicStreamFactory;
+class SocketPerformanceWatcherFactory;
 class TransportSecurityState;
 
 namespace test {
 class QuicStreamFactoryPeer;
 }  // namespace test
+
+// When a connection is idle for 30 seconds it will be closed.
+const int kIdleConnectionTimeoutSeconds = 30;
 
 // Encapsulates a pending request for a QuicHttpStream.
 // If the request is still pending when it is destroyed, it will
@@ -55,11 +70,9 @@ class NET_EXPORT_PRIVATE QuicStreamRequest {
   explicit QuicStreamRequest(QuicStreamFactory* factory);
   ~QuicStreamRequest();
 
-  // For http, |is_https| is false.
   // |cert_verify_flags| is bitwise OR'd of CertVerifier::VerifyFlags and it is
   // passed to CertVerifier::Verify.
   int Request(const HostPortPair& host_port_pair,
-              bool is_https,
               PrivacyMode privacy_mode,
               int cert_verify_flags,
               base::StringPiece origin_host,
@@ -69,17 +82,19 @@ class NET_EXPORT_PRIVATE QuicStreamRequest {
 
   void OnRequestComplete(int rv);
 
+  // Helper method that calls |factory_|'s GetTimeDelayForWaitingJob(). It
+  // returns the amount of time waiting job should be delayed.
+  base::TimeDelta GetTimeDelayForWaitingJob() const;
+
   scoped_ptr<QuicHttpStream> ReleaseStream();
 
   void set_stream(scoped_ptr<QuicHttpStream> stream);
 
-  const std::string origin_host() const { return origin_host_; }
+  const std::string& origin_host() const { return origin_host_; }
 
   PrivacyMode privacy_mode() const { return privacy_mode_; }
 
-  const BoundNetLog& net_log() const{
-    return net_log_;
-  }
+  const BoundNetLog& net_log() const { return net_log_; }
 
  private:
   QuicStreamFactory* factory_;
@@ -94,9 +109,11 @@ class NET_EXPORT_PRIVATE QuicStreamRequest {
 };
 
 // A factory for creating new QuicHttpStreams on top of a pool of
-// QuicClientSessions.
+// QuicChromiumClientSessions.
 class NET_EXPORT_PRIVATE QuicStreamFactory
     : public NetworkChangeNotifier::IPAddressObserver,
+      public NetworkChangeNotifier::NetworkObserver,
+      public SSLConfigService::Observer,
       public CertDatabase::Observer {
  public:
   QuicStreamFactory(
@@ -104,8 +121,11 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
       ClientSocketFactory* client_socket_factory,
       base::WeakPtr<HttpServerProperties> http_server_properties,
       CertVerifier* cert_verifier,
+      CTPolicyEnforcer* ct_policy_enforcer,
       ChannelIDService* channel_id_service,
       TransportSecurityState* transport_security_state,
+      CTVerifier* cert_transparency_verifier,
+      SocketPerformanceWatcherFactory* socket_performance_watcher_factory,
       QuicCryptoClientStreamFactory* quic_crypto_client_stream_factory,
       QuicRandom* random_generator,
       QuicClock* clock,
@@ -126,16 +146,26 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
       int threshold_timeouts_with_streams_open,
       int threshold_public_resets_post_handshake,
       int socket_receive_buffer_size,
+      bool delay_tcp_race,
+      int max_server_configs_stored_in_properties,
+      bool close_sessions_on_ip_change,
+      int idle_connection_timeout_seconds,
+      bool migrate_sessions_on_network_change,
       const QuicTagVector& connection_options);
   ~QuicStreamFactory() override;
 
+  // Returns true if there is an existing session to |server_id| which can be
+  // used for request to |origin_host|.
+  bool CanUseExistingSession(QuicServerId server_id,
+                             PrivacyMode privacy_mode,
+                             StringPiece origin_host);
+
   // Creates a new QuicHttpStream to |host_port_pair| which will be
-  // owned by |request|. |is_https| specifies if the protocol is https or not.
+  // owned by |request|.
   // If a matching session already exists, this method will return OK.  If no
   // matching session exists, this will return ERR_IO_PENDING and will invoke
   // OnRequestComplete asynchronously.
   int Create(const HostPortPair& host_port_pair,
-             bool is_https,
              PrivacyMode privacy_mode,
              int cert_verify_flags,
              base::StringPiece origin_host,
@@ -150,41 +180,60 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   // disables QUIC. If QUIC is disabled then it closes the connection.
   //
   // Returns true if QUIC is disabled for the port of the session.
-  bool OnHandshakeConfirmed(QuicClientSession* session, float packet_loss_rate);
+  bool OnHandshakeConfirmed(QuicChromiumClientSession* session,
+                            float packet_loss_rate);
 
   // Returns true if QUIC is disabled for this port.
-  bool IsQuicDisabled(uint16 port);
+  bool IsQuicDisabled(uint16_t port);
 
   // Returns reason QUIC is disabled for this port, or QUIC_DISABLED_NOT if not.
-  QuicClientSession::QuicDisabledReason QuicDisabledReason(uint16 port) const;
+  QuicChromiumClientSession::QuicDisabledReason QuicDisabledReason(
+      uint16_t port) const;
 
   // Returns reason QUIC is disabled as string for net-internals, or
   // returns empty string if QUIC is not disabled.
   const char* QuicDisabledReasonString() const;
 
   // Called by a session when it becomes idle.
-  void OnIdleSession(QuicClientSession* session);
+  void OnIdleSession(QuicChromiumClientSession* session);
 
   // Called by a session when it is going away and no more streams should be
   // created on it.
-  void OnSessionGoingAway(QuicClientSession* session);
+  void OnSessionGoingAway(QuicChromiumClientSession* session);
 
   // Called by a session after it shuts down.
-  void OnSessionClosed(QuicClientSession* session);
+  void OnSessionClosed(QuicChromiumClientSession* session);
 
   // Called by a session whose connection has timed out.
-  void OnSessionConnectTimeout(QuicClientSession* session);
+  void OnSessionConnectTimeout(QuicChromiumClientSession* session);
 
   // Cancels a pending request.
   void CancelRequest(QuicStreamRequest* request);
 
-  // Closes all current sessions.
-  void CloseAllSessions(int error);
+  // Closes all current sessions with specified network and QUIC error codes.
+  void CloseAllSessions(int error, QuicErrorCode quic_error);
 
   scoped_ptr<base::Value> QuicStreamFactoryInfoToValue() const;
 
   // Delete all cached state objects in |crypto_config_|.
   void ClearCachedStatesInCryptoConfig();
+
+  // Helper method that configures a DatagramClientSocket. Socket is
+  // bound to the default network if the |network| param is
+  // NetworkChangeNotifier::kInvalidNetworkHandle.
+  // Returns net_error code.
+  int ConfigureSocket(DatagramClientSocket* socket,
+                      IPEndPoint addr,
+                      NetworkChangeNotifier::NetworkHandle network);
+
+  // Helper method that initiates migration of active sessions
+  // currently bound to |network| to an alternate network, if one
+  // exists. Idle sessions bound to |network| are closed. If there is
+  // no alternate network to migrate active sessions onto, active
+  // sessions are closed if |force_close| is true, and continue using
+  // |network| otherwise. Sessions not bound to |network| are left unchanged.
+  void MaybeMigrateOrCloseSessions(NetworkChangeNotifier::NetworkHandle network,
+                                   bool force_close);
 
   // NetworkChangeNotifier::IPAddressObserver methods:
 
@@ -192,31 +241,46 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   // IP address changes.
   void OnIPAddressChanged() override;
 
+  // NetworkChangeNotifier::NetworkObserver methods:
+  void OnNetworkConnected(
+      NetworkChangeNotifier::NetworkHandle network) override;
+  void OnNetworkDisconnected(
+      NetworkChangeNotifier::NetworkHandle network) override;
+  void OnNetworkSoonToDisconnect(
+      NetworkChangeNotifier::NetworkHandle network) override;
+  void OnNetworkMadeDefault(
+      NetworkChangeNotifier::NetworkHandle network) override;
+
+  // SSLConfigService::Observer methods:
+
+  // We perform the same flushing as described above when SSL settings change.
+  void OnSSLConfigChanged() override;
+
   // CertDatabase::Observer methods:
 
   // We close all sessions when certificate database is changed.
   void OnCertAdded(const X509Certificate* cert) override;
   void OnCACertChanged(const X509Certificate* cert) override;
 
-  bool require_confirmation() const {
-    return require_confirmation_;
-  }
+  bool require_confirmation() const { return require_confirmation_; }
 
   void set_require_confirmation(bool require_confirmation);
 
-  QuicConnectionHelper* helper() { return helper_.get(); }
+  bool ZeroRTTEnabledFor(const QuicServerId& server_id);
+
+  // It returns the amount of time waiting job should be delayed.
+  base::TimeDelta GetTimeDelayForWaitingJob(const QuicServerId& server_id);
+
+  QuicChromiumConnectionHelper* helper() { return helper_.get(); }
 
   bool enable_port_selection() const { return enable_port_selection_; }
 
   bool has_quic_server_info_factory() {
-    return quic_server_info_factory_ != NULL;
+    return quic_server_info_factory_.get() != nullptr;
   }
 
   void set_quic_server_info_factory(
-      QuicServerInfoFactory* quic_server_info_factory) {
-    DCHECK(!quic_server_info_factory_);
-    quic_server_info_factory_ = quic_server_info_factory;
-  }
+      QuicServerInfoFactory* quic_server_info_factory);
 
   bool enable_connection_racing() const { return enable_connection_racing_; }
   void set_enable_connection_racing(bool enable_connection_racing) {
@@ -225,39 +289,26 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
 
   int socket_receive_buffer_size() const { return socket_receive_buffer_size_; }
 
+  bool delay_tcp_race() const { return delay_tcp_race_; }
+
  private:
   class Job;
   friend class test::QuicStreamFactoryPeer;
   FRIEND_TEST_ALL_PREFIXES(HttpStreamFactoryTest, QuicLossyProxyMarkedAsBad);
 
-  // The key used to find session by ip. Includes
-  // the ip address, port, and scheme.
-  struct NET_EXPORT_PRIVATE IpAliasKey {
-    IpAliasKey();
-    IpAliasKey(IPEndPoint ip_endpoint, bool is_https);
-    ~IpAliasKey();
-
-    IPEndPoint ip_endpoint;
-    bool is_https;
-
-    // Needed to be an element of std::set.
-    bool operator<(const IpAliasKey &other) const;
-    bool operator==(const IpAliasKey &other) const;
-  };
-
-  typedef std::map<QuicServerId, QuicClientSession*> SessionMap;
-  typedef std::map<QuicClientSession*, QuicServerId> SessionIdMap;
+  typedef std::map<QuicServerId, QuicChromiumClientSession*> SessionMap;
+  typedef std::map<QuicChromiumClientSession*, QuicServerId> SessionIdMap;
   typedef std::set<QuicServerId> AliasSet;
-  typedef std::map<QuicClientSession*, AliasSet> SessionAliasMap;
-  typedef std::set<QuicClientSession*> SessionSet;
-  typedef std::map<IpAliasKey, SessionSet> IPAliasMap;
+  typedef std::map<QuicChromiumClientSession*, AliasSet> SessionAliasMap;
+  typedef std::set<QuicChromiumClientSession*> SessionSet;
+  typedef std::map<IPEndPoint, SessionSet> IPAliasMap;
   typedef std::map<QuicServerId, QuicCryptoClientConfig*> CryptoConfigMap;
   typedef std::set<Job*> JobSet;
   typedef std::map<QuicServerId, JobSet> JobMap;
   typedef std::map<QuicStreamRequest*, QuicServerId> RequestMap;
   typedef std::set<QuicStreamRequest*> RequestSet;
   typedef std::map<QuicServerId, RequestSet> ServerIDRequestsMap;
-  typedef std::deque<enum QuicClientSession::QuicDisabledReason>
+  typedef std::deque<enum QuicChromiumClientSession::QuicDisabledReason>
       DisabledReasonsQueue;
 
   // Creates a job which doesn't wait for server config to be loaded from the
@@ -269,7 +320,8 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
                          const BoundNetLog& net_log);
 
   // Returns a newly created QuicHttpStream owned by the caller.
-  scoped_ptr<QuicHttpStream> CreateFromSession(QuicClientSession*);
+  scoped_ptr<QuicHttpStream> CreateFromSession(
+      QuicChromiumClientSession* session);
 
   bool OnResolution(const QuicServerId& server_id,
                     const AddressList& address_list);
@@ -282,18 +334,19 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
                     const AddressList& address_list,
                     base::TimeTicks dns_resolution_end_time,
                     const BoundNetLog& net_log,
-                    QuicClientSession** session);
+                    QuicChromiumClientSession** session);
   void ActivateSession(const QuicServerId& key,
-                       QuicClientSession* session);
+                       QuicChromiumClientSession* session);
 
   // Returns |srtt| in micro seconds from ServerNetworkStats. Returns 0 if there
   // is no |http_server_properties_| or if |http_server_properties_| doesn't
   // have ServerNetworkStats for the given |server_id|.
-  int64 GetServerNetworkStatsSmoothedRttInMicroseconds(
+  int64_t GetServerNetworkStatsSmoothedRttInMicroseconds(
       const QuicServerId& server_id) const;
 
   // Helper methods.
   bool WasQuicRecentlyBroken(const QuicServerId& server_id) const;
+
   bool CryptoConfigCacheIsEmpty(const QuicServerId& server_id);
 
   // Initializes the cached state associated with |server_id| in
@@ -302,26 +355,37 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
       const QuicServerId& server_id,
       const scoped_ptr<QuicServerInfo>& server_info);
 
-  void ProcessGoingAwaySession(QuicClientSession* session,
+  // Initialize |quic_supported_servers_at_startup_| with the list of servers
+  // that supported QUIC at start up and also initialize in-memory cache of
+  // QuicServerInfo objects from HttpServerProperties.
+  void MaybeInitialize();
+
+  void ProcessGoingAwaySession(QuicChromiumClientSession* session,
                                const QuicServerId& server_id,
                                bool was_session_active);
 
   // Collect stats from recent connections, possibly disabling Quic.
-  void MaybeDisableQuic(QuicClientSession* session);
+  void MaybeDisableQuic(QuicChromiumClientSession* session);
 
   bool require_confirmation_;
   HostResolver* host_resolver_;
   ClientSocketFactory* client_socket_factory_;
   base::WeakPtr<HttpServerProperties> http_server_properties_;
   TransportSecurityState* transport_security_state_;
-  QuicServerInfoFactory* quic_server_info_factory_;
+  CTVerifier* cert_transparency_verifier_;
+  scoped_ptr<QuicServerInfoFactory> quic_server_info_factory_;
   QuicCryptoClientStreamFactory* quic_crypto_client_stream_factory_;
   QuicRandom* random_generator_;
   scoped_ptr<QuicClock> clock_;
   const size_t max_packet_length_;
 
+  // Factory which is used to create socket performance watcher. A new watcher
+  // is created for every QUIC connection.
+  // |socket_performance_watcher_factory_| may be null.
+  SocketPerformanceWatcherFactory* socket_performance_watcher_factory_;
+
   // The helper used for all connections.
-  scoped_ptr<QuicConnectionHelper> helper_;
+  scoped_ptr<QuicChromiumConnectionHelper> helper_;
 
   // Contains owning pointers to all sessions that currently exist.
   SessionIdMap all_sessions_;
@@ -385,7 +449,7 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   // and is considered as a lossy connection.
   float packet_loss_threshold_;
   // Count number of lossy connections by port.
-  std::map<uint16, int> number_of_lossy_connections_;
+  std::map<uint16_t, int> number_of_lossy_connections_;
 
   // Keep track of stats for recently closed connections, using a
   // bounded queue.
@@ -405,17 +469,34 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   // Size of the UDP receive buffer.
   int socket_receive_buffer_size_;
 
+  // Set if we do want to delay TCP connection when it is racing with QUIC.
+  bool delay_tcp_race_;
+
+  // If more than |yield_after_packets_| packets have been read or more than
+  // |yield_after_duration_| time has passed, then
+  // QuicPacketReader::StartReading() yields by doing a PostTask().
+  int yield_after_packets_;
+  QuicTime::Delta yield_after_duration_;
+
+  // Set if all sessions should be closed when any local IP address changes.
+  const bool close_sessions_on_ip_change_;
+
+  // Set if migration should be attempted on active sessions when primary
+  // interface changes.
+  const bool migrate_sessions_on_network_change_;
+
   // Each profile will (probably) have a unique port_seed_ value.  This value
   // is used to help seed a pseudo-random number generator (PortSuggester) so
   // that we consistently (within this profile) suggest the same ephemeral
   // port when we re-connect to any given server/port.  The differences between
   // profiles (probablistically) prevent two profiles from colliding in their
   // ephemeral port requests.
-  uint64 port_seed_;
+  uint64_t port_seed_;
 
   // Local address of socket that was created in CreateSession.
   IPEndPoint local_address_;
   bool check_persisted_supports_quic_;
+  bool has_initialized_data_;
   std::set<HostPortPair> quic_supported_servers_at_startup_;
 
   NetworkConnection network_connection_;

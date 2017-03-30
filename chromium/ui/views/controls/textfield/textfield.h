@@ -5,10 +5,13 @@
 #ifndef UI_VIEWS_CONTROLS_TEXTFIELD_TEXTFIELD_H_
 #define UI_VIEWS_CONTROLS_TEXTFIELD_TEXTFIELD_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
@@ -225,7 +228,7 @@ class VIEWS_EXPORT Textfield : public View,
   bool SkipDefaultKeyEventProcessing(const ui::KeyEvent& event) override;
   bool GetDropFormats(
       int* formats,
-      std::set<ui::OSExchangeData::CustomFormat>* custom_formats) override;
+      std::set<ui::Clipboard::FormatType>* format_types) override;
   bool CanDrop(const ui::OSExchangeData& data) override;
   int OnDragUpdated(const ui::DropTargetEvent& event) override;
   void OnDragExited() override;
@@ -284,13 +287,13 @@ class VIEWS_EXPORT Textfield : public View,
   void ConfirmCompositionText() override;
   void ClearCompositionText() override;
   void InsertText(const base::string16& text) override;
-  void InsertChar(base::char16 ch, int flags) override;
+  void InsertChar(const ui::KeyEvent& event) override;
   ui::TextInputType GetTextInputType() const override;
   ui::TextInputMode GetTextInputMode() const override;
   int GetTextInputFlags() const override;
   bool CanComposeInline() const override;
   gfx::Rect GetCaretBounds() const override;
-  bool GetCompositionCharacterBounds(uint32 index,
+  bool GetCompositionCharacterBounds(uint32_t index,
                                      gfx::Rect* rect) const override;
   bool HasCompositionText() const override;
   bool GetTextRange(gfx::Range* range) const override;
@@ -437,7 +440,7 @@ class VIEWS_EXPORT Textfield : public View,
 
   // The duration and timer to reveal the last typed password character.
   base::TimeDelta password_reveal_duration_;
-  base::OneShotTimer<Textfield> password_reveal_timer_;
+  base::OneShotTimer password_reveal_timer_;
 
   // Tracks whether a user action is being performed; i.e. OnBeforeUserAction()
   // has been called, but OnAfterUserAction() has not yet been called.
@@ -447,7 +450,7 @@ class VIEWS_EXPORT Textfield : public View,
   bool skip_input_method_cancel_composition_;
 
   // The text editing cursor repaint timer and visibility.
-  base::RepeatingTimer<Textfield> cursor_repaint_timer_;
+  base::RepeatingTimer cursor_repaint_timer_;
   bool cursor_visible_;
 
   // The drop cursor is a visual cue for where dragged text will be dropped.
@@ -458,7 +461,7 @@ class VIEWS_EXPORT Textfield : public View,
   bool initiating_drag_;
 
   // A timer and point used to modify the selection when dragging.
-  base::RepeatingTimer<Textfield> drag_selection_timer_;
+  base::RepeatingTimer drag_selection_timer_;
   gfx::Point last_drag_location_;
 
   // State variables used to track double and triple clicks.

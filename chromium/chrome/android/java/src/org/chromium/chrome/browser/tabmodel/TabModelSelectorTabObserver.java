@@ -4,8 +4,8 @@
 
 package org.chromium.chrome.browser.tabmodel;
 
-import org.chromium.chrome.browser.EmptyTabObserver;
-import org.chromium.chrome.browser.Tab;
+import org.chromium.chrome.browser.tab.EmptyTabObserver;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 
 import java.util.List;
@@ -19,7 +19,6 @@ public class TabModelSelectorTabObserver extends EmptyTabObserver {
     private final TabModelObserver mTabModelObserver;
 
     private TabModelSelectorObserver mSelectorObserver;
-    private boolean mIsDestroyed;
 
     /**
      * Constructs an observer that should be notified of tabs changes for all tabs owned
@@ -84,8 +83,6 @@ public class TabModelSelectorTabObserver extends EmptyTabObserver {
      * Destroys the observer and removes itself as a listener for Tab updates.
      */
     public void destroy() {
-        mIsDestroyed = true;
-
         if (mSelectorObserver != null) {
             mTabModelSelector.removeObserver(mSelectorObserver);
             mSelectorObserver = null;

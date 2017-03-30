@@ -15,7 +15,7 @@ namespace translate {
 
 // static
 TranslateDownloadManager* TranslateDownloadManager::GetInstance() {
-  return Singleton<TranslateDownloadManager>::get();
+  return base::Singleton<TranslateDownloadManager>::get();
 }
 
 TranslateDownloadManager::TranslateDownloadManager()
@@ -97,7 +97,6 @@ bool TranslateDownloadManager::IsSupportedLanguage(
     NOTREACHED();
     return false;
   }
-
   return language_list->IsSupportedLanguage(language);
 }
 

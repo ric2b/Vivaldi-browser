@@ -5,6 +5,9 @@
 #ifndef UI_PLATFORM_WINDOW_X11_X11_WINDOW_H_
 #define UI_PLATFORM_WINDOW_X11_X11_WINDOW_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "ui/events/platform/platform_event_dispatcher.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/x/x11_atom_cache.h"
@@ -34,6 +37,7 @@ class X11_WINDOW_EXPORT X11Window : public PlatformWindow,
   void Close() override;
   void SetBounds(const gfx::Rect& bounds) override;
   gfx::Rect GetBounds() override;
+  void SetTitle(const base::string16& title) override;
   void SetCapture() override;
   void ReleaseCapture() override;
   void ToggleFullscreen() override;
@@ -43,6 +47,7 @@ class X11_WINDOW_EXPORT X11Window : public PlatformWindow,
   void SetCursor(PlatformCursor cursor) override;
   void MoveCursorTo(const gfx::Point& location) override;
   void ConfineCursorToBounds(const gfx::Rect& bounds) override;
+  PlatformImeController* GetPlatformImeController() override;
 
   // PlatformEventDispatcher:
   bool CanDispatchEvent(const PlatformEvent& event) override;
@@ -55,6 +60,8 @@ class X11_WINDOW_EXPORT X11Window : public PlatformWindow,
   XID xroot_window_;
   X11AtomCache atom_cache_;
 
+  base::string16 window_title_;
+
   // Setting the bounds is an asynchronous operation in X11. |requested_bounds_|
   // is the bounds requested using XConfigureWindow, and |confirmed_bounds_| is
   // the bounds the X11 server has set on the window.
@@ -65,6 +72,18 @@ class X11_WINDOW_EXPORT X11Window : public PlatformWindow,
 
   DISALLOW_COPY_AND_ASSIGN(X11Window);
 };
+
+namespace test {
+
+// Sets the value of the |override_redirect| flag when creating an X11 window.
+// It is necessary to set this flag on for various tests, otherwise the call to
+// X11Window::Show() blocks because it never receives the MapNotify event. It is
+// unclear why this is necessary, but might be related to calls to
+// XInitThreads().
+X11_WINDOW_EXPORT void SetUseOverrideRedirectWindowByDefault(
+    bool override_redirect);
+
+}  // namespace test
 
 }  // namespace ui
 

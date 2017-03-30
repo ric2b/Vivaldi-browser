@@ -5,26 +5,31 @@
 #ifndef CHROME_BROWSER_LOCAL_DISCOVERY_SERVICE_DISCOVERY_SHARED_CLIENT_H_
 #define CHROME_BROWSER_LOCAL_DISCOVERY_SERVICE_DISCOVERY_SHARED_CLIENT_H_
 
-#include "chrome/common/local_discovery/service_discovery_client.h"
+#include "base/macros.h"
+#include "chrome/browser/local_discovery/service_discovery_client.h"
+#include "content/public/browser/browser_thread.h"
 
 namespace local_discovery {
 
 class ServiceDiscoverySharedClient
-    : public base::RefCounted<ServiceDiscoverySharedClient>,
+    : public base::RefCountedThreadSafe<
+          ServiceDiscoverySharedClient,
+          content::BrowserThread::DeleteOnUIThread>,
       public ServiceDiscoveryClient {
  public:
   static scoped_refptr<ServiceDiscoverySharedClient> GetInstance();
 
   typedef base::Callback<void(
       const scoped_refptr<ServiceDiscoverySharedClient>&)> GetInstanceCallback;
-  static void GetInstanceWithoutAlert(const GetInstanceCallback& callback);
 
  protected:
   ServiceDiscoverySharedClient();
   ~ServiceDiscoverySharedClient() override;
 
  private:
-  friend class base::RefCounted<ServiceDiscoverySharedClient>;
+  friend struct content::BrowserThread::DeleteOnThread<
+      content::BrowserThread::UI>;
+  friend class base::DeleteHelper<ServiceDiscoverySharedClient>;
 
   DISALLOW_COPY_AND_ASSIGN(ServiceDiscoverySharedClient);
 };

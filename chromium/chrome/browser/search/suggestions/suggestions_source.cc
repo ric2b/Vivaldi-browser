@@ -4,6 +4,9 @@
 
 #include "chrome/browser/search/suggestions/suggestions_source.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/barrier_closure.h"
@@ -48,8 +51,8 @@ void RenderOutputHtml(const SuggestionsProfile& profile,
   out.push_back(kHtmlBody);
   out.push_back("<h1>Suggestions</h1>\n<ul>");
 
-  int64 now = (base::Time::NowFromSystemTime() - base::Time::UnixEpoch())
-      .ToInternalValue();
+  int64_t now = (base::Time::NowFromSystemTime() - base::Time::UnixEpoch())
+                    .ToInternalValue();
   size_t size = profile.suggestions_size();
   for (size_t i = 0; i < size; ++i) {
     const ChromeSuggestion& suggestion = profile.suggestions(i);
@@ -78,7 +81,7 @@ void RenderOutputHtml(const SuggestionsProfile& profile,
   }
   out.push_back("</ul>");
   out.push_back(kHtmlFooter);
-  *output = JoinString(out, "");
+  *output = base::JoinString(out, base::StringPiece());
 }
 
 // Fills |output| with the HTML needed to display that no suggestions are
@@ -90,7 +93,7 @@ void RenderOutputHtmlNoSuggestions(std::string* output) {
   out.push_back("<h1>Suggestions</h1>\n");
   out.push_back("<p>You have no suggestions.</p>\n");
   out.push_back(kHtmlFooter);
-  *output = JoinString(out, "");
+  *output = base::JoinString(out, base::StringPiece());
 }
 
 }  // namespace

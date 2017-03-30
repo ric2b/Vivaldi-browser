@@ -4,7 +4,6 @@
 
 package org.chromium.android_webview.test;
 
-import android.os.Build;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.util.Pair;
 
@@ -14,7 +13,6 @@ import org.chromium.android_webview.test.util.AwTestTouchUtils;
 import org.chromium.android_webview.test.util.CommonResources;
 import org.chromium.android_webview.test.util.JSUtils;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.TestFileUtil;
 import org.chromium.content.browser.test.util.CallbackHelper;
 import org.chromium.content.browser.test.util.TestCallbackHelperContainer.OnReceivedErrorHelper;
@@ -34,11 +32,9 @@ import java.util.concurrent.CountDownLatch;
 /**
  * Tests for the WebViewClient.shouldInterceptRequest() method.
  */
-@MinAndroidSdkLevel(Build.VERSION_CODES.KITKAT)
 public class AwContentsClientShouldInterceptRequestTest extends AwTestBase {
 
-    private static class TestAwContentsClient
-            extends org.chromium.android_webview.test.TestAwContentsClient {
+    private static class ShouldInterceptRequestClient extends TestAwContentsClient {
 
         public static class ShouldInterceptRequestHelper extends CallbackHelper {
             private List<String> mShouldInterceptRequestUrls = new ArrayList<String>();
@@ -46,7 +42,7 @@ public class AwContentsClientShouldInterceptRequestTest extends AwTestBase {
                     new ConcurrentHashMap<String, AwWebResourceResponse>();
             private ConcurrentHashMap<String, AwWebResourceRequest> mRequestsByUrls =
                     new ConcurrentHashMap<String, AwWebResourceRequest>();
-            // This is read from the IO thread, so needs to be marked volatile.
+            // This is read on another thread, so needs to be marked volatile.
             private volatile AwWebResourceResponse mShouldInterceptRequestReturnValue = null;
             void setReturnValue(AwWebResourceResponse value) {
                 mShouldInterceptRequestReturnValue = value;
@@ -106,7 +102,7 @@ public class AwContentsClientShouldInterceptRequestTest extends AwTestBase {
         private ShouldInterceptRequestHelper mShouldInterceptRequestHelper;
         private OnLoadResourceHelper mOnLoadResourceHelper;
 
-        public TestAwContentsClient() {
+        public ShouldInterceptRequestClient() {
             mShouldInterceptRequestHelper = new ShouldInterceptRequestHelper();
             mOnLoadResourceHelper = new OnLoadResourceHelper();
         }
@@ -144,16 +140,16 @@ public class AwContentsClientShouldInterceptRequestTest extends AwTestBase {
     }
 
     private TestWebServer mWebServer;
-    private TestAwContentsClient mContentsClient;
+    private ShouldInterceptRequestClient mContentsClient;
     private AwTestContainerView mTestContainerView;
     private AwContents mAwContents;
-    private TestAwContentsClient.ShouldInterceptRequestHelper mShouldInterceptRequestHelper;
+    private ShouldInterceptRequestClient.ShouldInterceptRequestHelper mShouldInterceptRequestHelper;
 
     @Override
     protected void setUp() throws Exception {
         super.setUp();
 
-        mContentsClient = new TestAwContentsClient();
+        mContentsClient = new ShouldInterceptRequestClient();
         mTestContainerView = createAwTestContainerViewOnMainSync(mContentsClient);
         mAwContents = mTestContainerView.getAwContents();
         mShouldInterceptRequestHelper = mContentsClient.getShouldInterceptRequestHelper();
@@ -307,7 +303,7 @@ public class AwContentsClientShouldInterceptRequestTest extends AwTestBase {
     @Feature({"AndroidWebView"})
     public void testOnLoadResourceCalledWithCorrectUrl() throws Throwable {
         final String aboutPageUrl = addAboutPageToTestServer(mWebServer);
-        final TestAwContentsClient.OnLoadResourceHelper onLoadResourceHelper =
+        final ShouldInterceptRequestClient.OnLoadResourceHelper onLoadResourceHelper =
                 mContentsClient.getOnLoadResourceHelper();
 
         int callCount = onLoadResourceHelper.getCallCount();
@@ -816,5 +812,67 @@ public class AwContentsClientShouldInterceptRequestTest extends AwTestBase {
     @Feature({"AndroidWebView"})
     public void testCalledForNonexistentContentUrl() throws Throwable {
         calledForUrlTemplate("content://org.chromium.webview.NoSuchProvider/foo");
+    }
+
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testBaseUrlOfLoadDataSentInRefererHeader() throws Throwable {
+        final String imageFile = "a.jpg";
+        final String pageHtml = "<img src='" + imageFile + "'>";
+        final String baseUrl = "http://localhost:666/";
+        final String imageUrl = baseUrl + imageFile;
+        final String refererHeaderName = "Referer";
+        int callCount = mShouldInterceptRequestHelper.getCallCount();
+        loadDataWithBaseUrlAsync(mAwContents, pageHtml, "text/html", false, baseUrl, null);
+        mShouldInterceptRequestHelper.waitForCallback(callCount, 1);
+        assertEquals(1, mShouldInterceptRequestHelper.getUrls().size());
+        assertEquals(imageUrl, mShouldInterceptRequestHelper.getUrls().get(0));
+        Map<String, String> headers =
+                mShouldInterceptRequestHelper.getRequestsForUrl(imageUrl).requestHeaders;
+        assertTrue(headers.containsKey(refererHeaderName));
+        assertEquals(baseUrl, headers.get(refererHeaderName));
+    }
+
+    private static class DeadlockingAwContentsClient extends TestAwContentsClient {
+        public DeadlockingAwContentsClient(CountDownLatch ready, CountDownLatch wait) {
+            mReady = ready;
+            mWait = wait;
+        }
+
+        @Override
+        public AwWebResourceResponse shouldInterceptRequest(AwWebResourceRequest request) {
+            mReady.countDown();
+            try {
+                mWait.await();
+            } catch (InterruptedException e) {
+                // ignore
+            }
+            return null;
+        }
+
+        private CountDownLatch mReady;
+        private CountDownLatch mWait;
+    }
+
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testDeadlock() throws Throwable {
+        // The client will lock shouldInterceptRequest to wait for the UI thread.
+        // On the UI thread, we will try engaging the IO thread by executing
+        // an action that causes IPC message sending. If the client callback
+        // is executed on the IO thread, this will cause a deadlock.
+        CountDownLatch waitForShouldInterceptRequest = new CountDownLatch(1);
+        CountDownLatch signalAfterSendingIpc = new CountDownLatch(1);
+        DeadlockingAwContentsClient client = new DeadlockingAwContentsClient(
+                waitForShouldInterceptRequest, signalAfterSendingIpc);
+        mTestContainerView = createAwTestContainerViewOnMainSync(client);
+        mAwContents = mTestContainerView.getAwContents();
+        loadUrlAsync(mAwContents, "http://www.example.com");
+        waitForShouldInterceptRequest.await();
+        // The following call will try to send an IPC and wait for a reply from renderer.
+        // We do not check the actual result, because it can be bogus. The important
+        // thing is that the call does not cause a deadlock.
+        executeJavaScriptAndWaitForResult(mAwContents, client, "1+1");
+        signalAfterSendingIpc.countDown();
     }
 }

@@ -4,14 +4,12 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/json/json_writer.h"
 #include "base/process/process_handle.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/tracked_objects.h"
 #include "base/values.h"
 #include "chrome/browser/task_profiler/task_profiler_data_serializer.h"
-#include "content/public/common/process_type.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -19,7 +17,7 @@ namespace {
 void ExpectSerialization(
     const tracked_objects::ProcessDataPhaseSnapshot& process_data_phase,
     base::ProcessId process_id,
-    int process_type,
+    metrics::ProfilerEventProto::TrackedObject::ProcessType process_type,
     const std::string& expected_json) {
   base::DictionaryValue serialized_value;
   task_profiler::TaskProfilerDataSerializer::ToValue(
@@ -38,8 +36,8 @@ TEST(TaskProfilerDataSerializerTest, SerializeProcessDataToJson) {
   {
     // Empty data.
     tracked_objects::ProcessDataPhaseSnapshot process_data_phase;
-    int process_type = content::PROCESS_TYPE_BROWSER;
-    ExpectSerialization(process_data_phase, 239, process_type,
+    ExpectSerialization(process_data_phase, 239,
+                        metrics::ProfilerEventProto::TrackedObject::BROWSER,
                         "{"
                         "\"list\":["
                         "],"
@@ -90,8 +88,8 @@ TEST(TaskProfilerDataSerializerTest, SerializeProcessDataToJson) {
     process_data_phase.tasks.back().death_data.queue_duration_sum = 2079;
     process_data_phase.tasks.back().death_thread_name = "PAC thread #3";
 
-    int process_type = content::PROCESS_TYPE_RENDERER;
-    ExpectSerialization(process_data_phase, 239, process_type,
+    ExpectSerialization(process_data_phase, 239,
+                        metrics::ProfilerEventProto::TrackedObject::RENDERER,
                         "{"
                         "\"list\":[{"
                         "\"birth_location\":{"

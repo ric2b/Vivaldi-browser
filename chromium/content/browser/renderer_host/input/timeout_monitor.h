@@ -5,8 +5,8 @@
 #ifndef CONTENT_BROWSER_RENDERER_HOST_INPUT_TIMEOUT_MONITOR_H_
 #define CONTENT_BROWSER_RENDERER_HOST_INPUT_TIMEOUT_MONITOR_H_
 
-#include "base/basictypes.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "content/common/content_export.h"
@@ -41,7 +41,7 @@ class CONTENT_EXPORT TimeoutMonitor {
   base::TimeTicks time_when_considered_timed_out_;
 
   // This timer runs to check if |time_when_considered_timed_out_| has past.
-  base::OneShotTimer<TimeoutMonitor> timeout_timer_;
+  base::OneShotTimer timeout_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(TimeoutMonitor);
 };

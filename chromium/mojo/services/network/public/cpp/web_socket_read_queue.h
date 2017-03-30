@@ -5,11 +5,13 @@
 #ifndef MOJO_SERVICES_NETWORK_PUBLIC_CPP_WEB_SOCKET_READ_QUEUE_H_
 #define MOJO_SERVICES_NETWORK_PUBLIC_CPP_WEB_SOCKET_READ_QUEUE_H_
 
+#include <stdint.h>
+
 #include "base/callback.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
-#include "mojo/common/handle_watcher.h"
-#include "third_party/mojo/src/mojo/public/cpp/system/data_pipe.h"
+#include "mojo/message_pump/handle_watcher.h"
+#include "mojo/public/cpp/system/data_pipe.h"
 
 namespace mojo {
 
@@ -23,7 +25,8 @@ class WebSocketReadQueue {
   explicit WebSocketReadQueue(DataPipeConsumerHandle handle);
   ~WebSocketReadQueue();
 
-  void Read(uint32_t num_bytes, base::Callback<void(const char*)> callback);
+  void Read(uint32_t num_bytes,
+            const base::Callback<void(const char*)>& callback);
 
  private:
   struct Operation;

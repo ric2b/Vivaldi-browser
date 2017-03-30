@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_CREDENTIAL_MANAGER_PASSWORD_FORM_MANAGER_H_
 #define COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_CREDENTIAL_MANAGER_PASSWORD_FORM_MANAGER_H_
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "components/password_manager/core/browser/password_form_manager.h"
 
@@ -26,7 +27,7 @@ class CredentialManagerPasswordFormManagerDelegate {
   virtual void OnProvisionalSaveComplete() = 0;
 };
 
-// A PasswordFormManager built to handle PassworForm objects synthesized
+// A PasswordFormManager built to handle PasswordForm objects synthesized
 // by the Credential Manager API.
 class CredentialManagerPasswordFormManager : public PasswordFormManager {
  public:

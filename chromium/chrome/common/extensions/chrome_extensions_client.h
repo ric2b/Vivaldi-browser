@@ -5,9 +5,9 @@
 #ifndef CHROME_COMMON_EXTENSIONS_CHROME_EXTENSIONS_CLIENT_H_
 #define CHROME_COMMON_EXTENSIONS_CHROME_EXTENSIONS_CLIENT_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "chrome/common/extensions/permissions/chrome_api_permissions.h"
 #include "chrome/common/extensions/permissions/chrome_permission_message_provider.h"
 #include "extensions/common/extensions_client.h"
@@ -31,10 +31,6 @@ class ChromeExtensionsClient : public ExtensionsClient {
       const std::string& name) const override;
   scoped_ptr<JSONFeatureProviderSource> CreateFeatureProviderSource(
       const std::string& name) const override;
-  void FilterHostPermissions(
-      const URLPatternSet& hosts,
-      URLPatternSet* new_hosts,
-      std::set<PermissionMessage>* messages) const override;
   void FilterHostPermissions(const URLPatternSet& hosts,
                              URLPatternSet* new_hosts,
                              PermissionIDSet* permissions) const override;
@@ -54,6 +50,10 @@ class ChromeExtensionsClient : public ExtensionsClient {
   bool IsBlacklistUpdateURL(const GURL& url) const override;
   std::set<base::FilePath> GetBrowserImagePaths(
       const Extension* extension) override;
+
+  typedef ChromeExtensionsClient* (*ChromeExtensionsClientInstanceFetcher)();
+  static void RegisterAlternativeGetInstance(
+      ChromeExtensionsClientInstanceFetcher func);
 
   // Get the LazyInstance for ChromeExtensionsClient.
   static ChromeExtensionsClient* GetInstance();

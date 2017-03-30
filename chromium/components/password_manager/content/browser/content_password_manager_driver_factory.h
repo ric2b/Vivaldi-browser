@@ -5,8 +5,11 @@
 #ifndef COMPONENTS_PASSWORD_MANAGER_CONTENT_BROWSER_CONTENT_PASSWORD_MANAGER_DRIVER_FACTORY_H_
 #define COMPONENTS_PASSWORD_MANAGER_CONTENT_BROWSER_CONTENT_PASSWORD_MANAGER_DRIVER_FACTORY_H_
 
-#include "base/basictypes.h"
+#include <map>
+
 #include "base/compiler_specific.h"
+#include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/supports_user_data.h"
 #include "components/password_manager/core/browser/password_autofill_manager.h"
 #include "components/password_manager/core/browser/password_generation_manager.h"
@@ -48,6 +51,10 @@ class ContentPasswordManagerDriverFactory
       content::RenderFrameHost* render_frame_host,
       scoped_ptr<ContentPasswordManagerDriver> driver);
 
+  // Requests all drivers to inform their renderers whether
+  // chrome://password-manager-internals is available.
+  void RequestSendLoggingAvailability();
+
   // content::WebContentsObserver:
   bool OnMessageReceived(const IPC::Message& message,
                          content::RenderFrameHost* render_frame_host) override;
@@ -63,9 +70,7 @@ class ContentPasswordManagerDriverFactory
       PasswordManagerClient* client,
       autofill::AutofillClient* autofill_client);
 
-  void CreateDriverForFrame(content::RenderFrameHost* render_frame_host);
-
-  std::map<content::RenderFrameHost*, ContentPasswordManagerDriver*>
+  std::map<content::RenderFrameHost*, scoped_ptr<ContentPasswordManagerDriver>>
       frame_driver_map_;
 
   PasswordManagerClient* password_client_;

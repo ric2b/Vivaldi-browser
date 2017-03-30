@@ -16,6 +16,7 @@ var WebRequestSchema =
     requireNative('schema_registry').GetSchema('webRequest');
 var WebViewActionRequests =
     require('webViewActionRequests').WebViewActionRequests;
+var WebViewEventPrivate = require('webViewEventsPrivate');
 
 var WebRequestMessageEvent = CreateEvent('webViewInternal.onMessage');
 
@@ -151,35 +152,9 @@ WebViewEvents.EVENTS = {
     evt: CreateEvent('webViewInternal.onZoomChange'),
     fields: ['oldZoomFactor', 'newZoomFactor']
   },
-  'fullscreen': {
-    evt: CreateEvent('webViewInternal.onFullscreen'),
-    fields: ['enterFullscreen']
-  },
-  'mediastatechanged': {
-    evt: CreateEvent('webViewInternal.onMediaStateChanged'),
-    fields: ['activeMediaType']
-  },
-  'sslstatechanged': {
-    evt: CreateEvent('webViewInternal.onSSLStateChanged'),
-    fields: ['SSLState', 'issuerstring']
-  },
-  'targeturlchanged': {
-    evt: CreateEvent('webViewInternal.onTargetURLChanged'),
-    fields: ['newUrl']
-  },
-  'createsearch': {
-    evt: CreateEvent('webViewInternal.onCreateSearch'),
-    fields: ['Name','Url']
-  },
-  'requestpageinfo': {
-    evt: CreateEvent('webViewInternal.onRequestPageInfo'),
-    fields: ['url']
-  },
-  'pasteandgo': {
-    evt: CreateEvent('webViewInternal.onPasteAndGo'),
-    fields: ['clipBoardText']
-  },
 };
+
+WebViewEventPrivate.addPrivateEvents(WebViewEvents);
 
 WebViewEvents.prototype.setupWebRequestEvents = function() {
   var request = {};
@@ -330,4 +305,4 @@ function DeclarativeWebRequestEvent(opt_eventName,
 DeclarativeWebRequestEvent.prototype.__proto__ = EventBindings.Event.prototype;
 
 // Exports.
-exports.WebViewEvents = WebViewEvents;
+exports.$set('WebViewEvents', WebViewEvents);

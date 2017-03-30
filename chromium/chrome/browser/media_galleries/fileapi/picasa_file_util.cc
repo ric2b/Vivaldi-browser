@@ -5,9 +5,9 @@
 #include "chrome/browser/media_galleries/fileapi/picasa_file_util.h"
 
 #include <string>
+#include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/bind_helpers.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -93,7 +93,7 @@ void PicasaFileUtil::GetFileInfoOnTaskRunnerThread(
   // |data_provider| may be NULL if the file system was revoked before this
   // operation had a chance to run.
   if (!data_provider) {
-    GetFileInfoWithFreshDataProvider(context.Pass(), url, callback, false);
+    GetFileInfoWithFreshDataProvider(std::move(context), url, callback, false);
   } else {
     data_provider->RefreshData(
         GetDataTypeForURL(url),
@@ -113,7 +113,8 @@ void PicasaFileUtil::ReadDirectoryOnTaskRunnerThread(
   // |data_provider| may be NULL if the file system was revoked before this
   // operation had a chance to run.
   if (!data_provider) {
-    ReadDirectoryWithFreshDataProvider(context.Pass(), url, callback, false);
+    ReadDirectoryWithFreshDataProvider(std::move(context), url, callback,
+                                       false);
   } else {
     data_provider->RefreshData(
         GetDataTypeForURL(url),
@@ -207,11 +208,9 @@ base::File::Error PicasaFileUtil::ReadDirectorySync(
     case 0: {
       // Root directory.
       file_list->push_back(
-          DirectoryEntry(kPicasaDirAlbums, DirectoryEntry::DIRECTORY, 0,
-                         base::Time()));
+          DirectoryEntry(kPicasaDirAlbums, DirectoryEntry::DIRECTORY));
       file_list->push_back(
-          DirectoryEntry(kPicasaDirFolders, DirectoryEntry::DIRECTORY, 0,
-                         base::Time()));
+          DirectoryEntry(kPicasaDirFolders, DirectoryEntry::DIRECTORY));
       break;
     }
     case 1:
@@ -223,8 +222,7 @@ base::File::Error PicasaFileUtil::ReadDirectorySync(
         for (AlbumMap::const_iterator it = albums->begin();
              it != albums->end(); ++it) {
           file_list->push_back(
-              DirectoryEntry(it->first, DirectoryEntry::DIRECTORY, 0,
-                             it->second.timestamp));
+              DirectoryEntry(it->first, DirectoryEntry::DIRECTORY));
         }
       } else if (components[0] == kPicasaDirFolders) {
         scoped_ptr<AlbumMap> folders = GetDataProvider()->GetFolders();
@@ -234,8 +232,7 @@ base::File::Error PicasaFileUtil::ReadDirectorySync(
         for (AlbumMap::const_iterator it = folders->begin();
              it != folders->end(); ++it) {
           file_list->push_back(
-              DirectoryEntry(it->first, DirectoryEntry::DIRECTORY, 0,
-                             it->second.timestamp));
+              DirectoryEntry(it->first, DirectoryEntry::DIRECTORY));
         }
       }
       break;
@@ -265,8 +262,7 @@ base::File::Error PicasaFileUtil::ReadDirectorySync(
             continue;
           }
 
-          file_list->push_back(DirectoryEntry(
-              it->first, DirectoryEntry::FILE, info.size, info.last_modified));
+          file_list->push_back(DirectoryEntry(it->first, DirectoryEntry::FILE));
         }
       }
 
@@ -380,8 +376,8 @@ void PicasaFileUtil::GetFileInfoWithFreshDataProvider(
         base::Bind(callback, base::File::FILE_ERROR_IO, base::File::Info()));
     return;
   }
-  NativeMediaFileUtil::GetFileInfoOnTaskRunnerThread(
-      context.Pass(), url, callback);
+  NativeMediaFileUtil::GetFileInfoOnTaskRunnerThread(std::move(context), url,
+                                                     callback);
 }
 
 void PicasaFileUtil::ReadDirectoryWithFreshDataProvider(
@@ -396,8 +392,8 @@ void PicasaFileUtil::ReadDirectoryWithFreshDataProvider(
         base::Bind(callback, base::File::FILE_ERROR_IO, EntryList(), false));
     return;
   }
-  NativeMediaFileUtil::ReadDirectoryOnTaskRunnerThread(
-      context.Pass(), url, callback);
+  NativeMediaFileUtil::ReadDirectoryOnTaskRunnerThread(std::move(context), url,
+                                                       callback);
 }
 
 PicasaDataProvider* PicasaFileUtil::GetDataProvider() {

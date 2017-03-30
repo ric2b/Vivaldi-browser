@@ -5,8 +5,10 @@
 #ifndef COMPONENTS_SYNC_DRIVER_FAKE_GENERIC_CHANGE_PROCESSOR_H_
 #define COMPONENTS_SYNC_DRIVER_FAKE_GENERIC_CHANGE_PROCESSOR_H_
 
-#include "components/sync_driver/generic_change_processor.h"
+#include <string>
 
+#include "base/macros.h"
+#include "components/sync_driver/generic_change_processor.h"
 #include "components/sync_driver/generic_change_processor_factory.h"
 #include "components/sync_driver/sync_api_component_factory.h"
 #include "sync/api/sync_error.h"
@@ -18,7 +20,7 @@ namespace sync_driver {
 class FakeGenericChangeProcessor : public GenericChangeProcessor {
  public:
   FakeGenericChangeProcessor(syncer::ModelType type,
-                             SyncApiComponentFactory* sync_factory);
+                             SyncClient* sync_client);
   ~FakeGenericChangeProcessor() override;
 
   // Setters for GenericChangeProcessor implementation results.
@@ -53,7 +55,7 @@ class FakeGenericChangeProcessorFactory : public GenericChangeProcessorFactory {
       DataTypeErrorHandler* error_handler,
       const base::WeakPtr<syncer::SyncableService>& local_service,
       const base::WeakPtr<syncer::SyncMergeResult>& merge_result,
-      SyncApiComponentFactory* sync_factory) override;
+      SyncClient* sync_client) override;
 
  private:
   scoped_ptr<FakeGenericChangeProcessor> processor_;

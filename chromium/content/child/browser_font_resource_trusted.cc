@@ -4,10 +4,12 @@
 
 #include "content/child/browser_font_resource_trusted.h"
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "content/public/common/web_preferences.h"
-#include "ppapi/c/dev/ppb_font_dev.h"
 #include "ppapi/proxy/connection.h"
 #include "ppapi/shared_impl/ppapi_preferences.h"
 #include "ppapi/shared_impl/var.h"
@@ -98,7 +100,7 @@ class TextRunCollection {
     }
 
     // Override run, return the single one.
-    DCHECK(index == 0);
+    DCHECK_EQ(0, index);
     *run_start = 0;
     *run_len = static_cast<int32_t>(text_.size());
     return override_run_;
@@ -150,18 +152,22 @@ WebFontDescription PPFontDescToWebFontDesc(
   static_assert(static_cast<int>(WebFontDescription::Weight900) ==
                 static_cast<int>(PP_BROWSERFONT_TRUSTED_WEIGHT_900),
                 "font Weight900");
-  static_assert(WebFontDescription::GenericFamilyStandard ==
-                PP_FAMILY_TO_WEB_FAMILY(PP_FONTFAMILY_DEFAULT),
-                "FamilyStandard");
-  static_assert(WebFontDescription::GenericFamilySerif ==
-                PP_FAMILY_TO_WEB_FAMILY(PP_FONTFAMILY_SERIF),
-                "FamilySerif");
-  static_assert(WebFontDescription::GenericFamilySansSerif ==
-                PP_FAMILY_TO_WEB_FAMILY(PP_FONTFAMILY_SANSSERIF),
-                "FamilySansSerif");
-  static_assert(WebFontDescription::GenericFamilyMonospace ==
-                PP_FAMILY_TO_WEB_FAMILY(PP_FONTFAMILY_MONOSPACE),
-                "FamilyMonospace");
+  static_assert(
+      WebFontDescription::GenericFamilyStandard ==
+      PP_FAMILY_TO_WEB_FAMILY(PP_BROWSERFONT_TRUSTED_FAMILY_DEFAULT),
+      "FamilyStandard");
+  static_assert(
+      WebFontDescription::GenericFamilySerif ==
+      PP_FAMILY_TO_WEB_FAMILY(PP_BROWSERFONT_TRUSTED_FAMILY_SERIF),
+      "FamilySerif");
+  static_assert(
+      WebFontDescription::GenericFamilySansSerif ==
+      PP_FAMILY_TO_WEB_FAMILY(PP_BROWSERFONT_TRUSTED_FAMILY_SANSSERIF),
+      "FamilySansSerif");
+  static_assert(
+      WebFontDescription::GenericFamilyMonospace ==
+      PP_FAMILY_TO_WEB_FAMILY(PP_BROWSERFONT_TRUSTED_FAMILY_MONOSPACE),
+      "FamilyMonospace");
 
   StringVar* face_name = StringVar::FromPPVar(font.face);  // Possibly null.
 
@@ -201,9 +207,9 @@ WebFontDescription PPFontDescToWebFontDesc(
     // we should use the fixed or regular font size. It's difficult at this
     // level to detect if the requested font is fixed width, so we only apply
     // the alternate font size to the default fixed font family.
-    if (base::StringToLowerASCII(resolved_family) ==
-        base::StringToLowerASCII(GetFontFromMap(prefs.fixed_font_family_map,
-                                                kCommonScript)))
+    if (base::ToLowerASCII(resolved_family) ==
+        base::ToLowerASCII(GetFontFromMap(prefs.fixed_font_family_map,
+                                          kCommonScript)))
       result.size = static_cast<float>(prefs.default_fixed_font_size);
     else
       result.size = static_cast<float>(prefs.default_font_size);
@@ -272,8 +278,8 @@ PP_Bool BrowserFontResource_Trusted::Describe(
   // While converting the other way in PPFontDescToWebFontDesc we validated
   // that the enums can be casted.
   WebFontDescription web_desc = font_->fontDescription();
-  description->face =
-      StringVar::StringToPPVar(base::UTF16ToUTF8(web_desc.family));
+  description->face = StringVar::StringToPPVar(base::UTF16ToUTF8(
+      base::StringPiece16(web_desc.family)));
   description->family =
       static_cast<PP_BrowserFont_Trusted_Family>(web_desc.genericFamily);
   description->size = static_cast<uint32_t>(web_desc.size);

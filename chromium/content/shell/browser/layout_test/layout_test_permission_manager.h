@@ -5,6 +5,8 @@
 #ifndef CONTENT_SHELL_BROWSER_LAYOUT_TEST_LAYOUT_TEST_PERMISSION_MANAGER_H_
 #define CONTENT_SHELL_BROWSER_LAYOUT_TEST_LAYOUT_TEST_PERMISSION_MANAGER_H_
 
+#include <stddef.h>
+
 #include "base/callback_forward.h"
 #include "base/containers/hash_tables.h"
 #include "base/id_map.h"
@@ -21,17 +23,20 @@ class LayoutTestPermissionManager : public PermissionManager {
   ~LayoutTestPermissionManager() override;
 
   // PermissionManager overrides.
-  void RequestPermission(
+  int RequestPermission(
       PermissionType permission,
       RenderFrameHost* render_frame_host,
-      int request_id,
       const GURL& requesting_origin,
       bool user_gesture,
       const base::Callback<void(PermissionStatus)>& callback) override;
-  void CancelPermissionRequest(PermissionType permission,
-                               RenderFrameHost* render_frame_host,
-                               int request_id,
-                               const GURL& requesting_origin) override;
+  int RequestPermissions(
+      const std::vector<PermissionType>& permission,
+      RenderFrameHost* render_frame_host,
+      const GURL& requesting_origin,
+      bool user_gesture,
+      const base::Callback<void(
+          const std::vector<PermissionStatus>&)>& callback) override;
+  void CancelPermissionRequest(int request_id) override;
   void ResetPermission(PermissionType permission,
                        const GURL& requesting_origin,
                        const GURL& embedding_origin) override;

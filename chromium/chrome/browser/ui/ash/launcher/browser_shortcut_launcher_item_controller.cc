@@ -194,14 +194,16 @@ BrowserShortcutLauncherItemController::GetApplicationList(int event_flags) {
   for (BrowserList::const_iterator it = ash_browser_list->begin();
        it != ash_browser_list->end(); ++it) {
     Browser* browser = *it;
-    // Make sure that the browser was already shown, is from the current user
-    // and has a proper window.
-    if (!launcher_controller()->IsBrowserFromActiveUser(browser) ||
-        std::find(ash_browser_list->begin_last_active(),
-                  ash_browser_list->end_last_active(),
-                  browser) == ash_browser_list->end_last_active() ||
-        !browser->window())
+    // Make sure that the browser is from the current user, has a proper window,
+    // and the window was already shown.
+    if (!launcher_controller()->IsBrowserFromActiveUser(browser))
       continue;
+    if (!(browser->window() && browser->window()->GetNativeWindow()))
+      continue;
+    if (!(browser->window()->GetNativeWindow()->IsVisible() ||
+          browser->window()->IsMinimized())) {
+      continue;
+    }
     if (browser->is_type_tabbed())
       found_tabbed_browser = true;
     else if (!IsBrowserRepresentedInBrowserList(browser))
@@ -235,7 +237,7 @@ BrowserShortcutLauncherItemController::GetApplicationList(int event_flags) {
   // enforce the creation of a new browser.
   if (!found_tabbed_browser)
     items.clear();
-  return items.Pass();
+  return items;
 }
 
 ash::ShelfItemDelegate::PerformedAction
@@ -271,7 +273,11 @@ BrowserShortcutLauncherItemController::CreateApplicationMenu(int event_flags) {
 }
 
 bool BrowserShortcutLauncherItemController::IsDraggable() {
-  return launcher_controller()->CanPin() ? true : false;
+  return true;
+}
+
+bool BrowserShortcutLauncherItemController::CanPin() const {
+  return true;
 }
 
 bool BrowserShortcutLauncherItemController::ShouldShowTooltip() {

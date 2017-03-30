@@ -2,7 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/macros.h"
 #include "base/prefs/pref_service.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
@@ -92,8 +94,7 @@ class LanguageOptionsWebUITest : public InProcessBrowserTest {
 // This test will also fail if the language page is not loaded because a random
 // page will not have the language list.
 // Test assumes that the default active element is the list of languages.
-// TODO: Re-enable in vivaldi
-IN_PROC_BROWSER_TEST_F(LanguageOptionsWebUITest, DISABLED_TestAvailableLanguages) {
+IN_PROC_BROWSER_TEST_F(LanguageOptionsWebUITest, TestAvailableLanguages) {
   // Verify that the language list is focused by default.
   std::string original_id = GetActiveElementId();
   EXPECT_EQ("language-options-list", original_id);
@@ -128,10 +129,9 @@ IN_PROC_BROWSER_TEST_F(LanguageOptionsWebUITest, DISABLED_TestAvailableLanguages
 // the keyboard.
 // This test must be updated if the tab order of the elements on this page
 // is changed.
-// TODO: Re-enable in vivaldi
 
 // Crashes on Win 7. http://crbug.com/500609
-#if 1 || defined(OS_WIN)
+#if defined(OS_WIN)
 #define MAYBE_TestListTabAccessibility DISABLED_TestListTabAccessibility
 #else
 #define MAYBE_TestListTabAccessibility TestListTabAccessibility

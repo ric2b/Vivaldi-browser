@@ -9,6 +9,8 @@
 #include "ash/shell.h"
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_browser_main.h"
 #include "chrome/browser/ui/ash/ash_init.h"
 #include "chrome/browser/ui/ash/ash_util.h"
@@ -17,7 +19,7 @@
 #include "ui/aura/env.h"
 #include "ui/gfx/screen.h"
 #include "ui/gfx/screen_type_delegate.h"
-#include "ui/keyboard/keyboard.h"
+#include "ui/keyboard/content/keyboard.h"
 #include "ui/keyboard/keyboard_controller.h"
 
 #if defined(OS_CHROMEOS)

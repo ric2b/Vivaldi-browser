@@ -4,16 +4,18 @@
 
 #include "chrome/browser/signin/signin_global_error.h"
 
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
-#include "chrome/browser/prefs/pref_service_syncable.h"
 #include "chrome/browser/profiles/profile_info_cache.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/signin/fake_profile_oauth2_token_service_builder.h"
-#include "chrome/browser/signin/fake_signin_manager.h"
+#include "chrome/browser/signin/fake_signin_manager_builder.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_error_controller_factory.h"
 #include "chrome/browser/signin/signin_global_error_factory.h"
@@ -27,6 +29,7 @@
 #include "components/signin/core/browser/fake_auth_status_provider.h"
 #include "components/signin/core/browser/signin_error_controller.h"
 #include "components/signin/core/browser/signin_manager.h"
+#include "components/syncable_prefs/pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -48,10 +51,9 @@ class SigninGlobalErrorTest : public testing::Test {
         ProfileOAuth2TokenServiceFactory::GetInstance(),
         BuildFakeProfileOAuth2TokenService));
     testing_factories.push_back(std::make_pair(
-        SigninManagerFactory::GetInstance(),
-        FakeSigninManagerBase::Build));
+        SigninManagerFactory::GetInstance(), BuildFakeSigninManagerBase));
     profile_ = profile_manager_.CreateTestingProfile(
-        "Person 1", scoped_ptr<PrefServiceSyncable>(),
+        "Person 1", scoped_ptr<syncable_prefs::PrefServiceSyncable>(),
         base::UTF8ToUTF16("Person 1"), 0, std::string(), testing_factories);
 
     SigninManagerFactory::GetForProfile(profile())

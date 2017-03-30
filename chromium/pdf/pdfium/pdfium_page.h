@@ -30,6 +30,7 @@ class PDFiumPage {
              const pp::Rect& r,
              bool available);
   ~PDFiumPage();
+
   // Unloads the PDFium data for this page from memory.
   void Unload();
   // Gets the FPDF_PAGE for this page, loading and parsing it if necessary.
@@ -79,7 +80,7 @@ class PDFiumPage {
                         double top,
                         double right,
                         double bottom,
-                        int rotation);
+                        int rotation) const;
 
   int index() const { return index_; }
   pp::Rect rect() const { return rect_; }
@@ -102,15 +103,15 @@ class PDFiumPage {
   void CalculateLinks();
   // Returns link type and target associated with a link. Returns
   // NONSELECTABLE_AREA if link detection failed.
-  Area GetLinkTarget(FPDF_LINK link, LinkTarget* target);
+  Area GetLinkTarget(FPDF_LINK link, LinkTarget* target) const;
   // Returns target associated with a destination.
-  Area GetDestinationTarget(FPDF_DEST destination, LinkTarget* target);
+  Area GetDestinationTarget(FPDF_DEST destination, LinkTarget* target) const;
   // Returns the text in the supplied box as a Value Node
   base::Value* GetTextBoxAsValue(double page_height, double left, double top,
                                  double right, double bottom, int rotation);
   // Helper functions for JSON generation
-  base::Value* CreateTextNode(std::string text);
-  base::Value* CreateURLNode(std::string text, std::string url);
+  base::Value* CreateTextNode(const std::string& text);
+  base::Value* CreateURLNode(const std::string& text, const std::string& url);
 
   class ScopedLoadCounter {
    public:

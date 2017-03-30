@@ -4,21 +4,35 @@
 
 #include "extensions/browser/app_window/app_window.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task_runner.h"
+#include "base/thread_task_runner_handle.h"
 #include "base/values.h"
+#include "build/build_config.h"
+#include "browser/vivaldi_download_status.h"
+#include "chrome/browser/ui/tabs/tab_utils.h"
+#include "components/guest_view/browser/guest_view_base.h"
+#include "components/guest_view/browser/guest_view_event.h"
+#include "components/ui/zoom/zoom_controller.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/invalidate_type.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/media_stream_request.h"
 #include "extensions/browser/app_window/app_delegate.h"
@@ -32,6 +46,7 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extension_web_contents_observer.h"
 #include "extensions/browser/extensions_browser_client.h"
+#include "extensions/browser/guest_view/web_view/web_view_constants.h"
 #include "extensions/browser/notification_types.h"
 #include "extensions/browser/process_manager.h"
 #include "extensions/browser/suggest_permission_util.h"
@@ -42,18 +57,10 @@
 #include "extensions/common/permissions/permissions_data.h"
 #include "extensions/common/switches.h"
 #include "extensions/grit/extensions_browser_resources.h"
+#include "extensions/helper/vivaldi_app_helper.h"
 #include "third_party/skia/include/core/SkRegion.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/screen.h"
-
-#if defined(OS_WIN)
-#define VIVALDI_DOWNLOAD_PROGRESS
-#ifdef VIVALDI_DOWNLOAD_PROGRESS
-static const char vivaldi_app_id[] = "mpognobbkildjkofajifpdfhcoklimli";
-
-extern extensions::AppWindow* current_vivaldi_window_;
-#endif //VIVALDI_DOWNLOAD_PROGRESS
-#endif //OS_WIN
 
 #if !defined(OS_MACOSX)
 #include "base/prefs/pref_service.h"
@@ -63,6 +70,8 @@ extern extensions::AppWindow* current_vivaldi_window_;
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
 #endif
+
+#include "app/vivaldi_apptools.h"
 
 using content::BrowserContext;
 using content::ConsoleMessageLevel;
@@ -252,6 +261,7 @@ AppWindow::AppWindow(BrowserContext* context,
       can_send_events_(false),
       is_hidden_(false),
       initial_state_(ui::SHOW_STATE_NORMAL),
+      delayed_show_type_(SHOW_ACTIVE),
       cached_always_on_top_(false),
       dialoghost_guestwebview_(NULL),
       requested_alpha_enabled_(false),
@@ -261,11 +271,11 @@ AppWindow::AppWindow(BrowserContext* context,
   CHECK(!client->IsGuestSession(context) || context->IsOffTheRecord())
       << "Only off the record window may be opened in the guest mode.";
 
-#ifdef VIVALDI_DOWNLOAD_PROGRESS
-  if (extension_id() == vivaldi_app_id) {
-    current_vivaldi_window_ = this;
+#if defined(OS_WIN) && defined(VIVALDI_BUILD)
+  if (vivaldi::IsVivaldiApp(extension_id())) {
+    vivaldi::current_vivaldi_window_ = this;
   }
-#endif //VIVALDI_DOWNLOAD_PROGRESS
+#endif //VIVALDI_BUILD
 }
 
 void AppWindow::Init(const GURL& url,
@@ -289,16 +299,22 @@ void AppWindow::Init(const GURL& url,
   web_contents()->SetDelegate(this);
   WebContentsModalDialogManager::FromWebContents(web_contents())
       ->SetDelegate(this);
+  if (vivaldi::IsVivaldiRunning()) {
+    extensions::VivaldiAppHelper::CreateForWebContents(web_contents());
+    ui_zoom::ZoomController::CreateForWebContents(web_contents());
+  }
 
   // Initialize the window
   CreateParams new_params = LoadDefaults(params);
   window_type_ = new_params.window_type;
   window_key_ = new_params.window_key;
 
-//tomas@vivaldi.com: don't do this on osx, will cause VB-4330 to reappear.
 #if !defined(OS_MACOSX)
-  // andre@vivaldi.com ; override restore to fullscreen. Open as maximized instead. See VB-928.
-  if (base::CommandLine::ForCurrentProcess()->IsRunningVivaldi() &&
+  // NOTE(tomas@vivaldi.com): don't do this on osx, will cause VB-4330 to
+  // reappear.
+  // NOTE(andre@vivaldi.com): override restore to fullscreen. Open as maximized
+  // instead. See VB-928.
+  if (vivaldi::IsVivaldiRunning() &&
       new_params.state == ui::SHOW_STATE_FULLSCREEN)
     new_params.state = ui::SHOW_STATE_DEFAULT;
 #endif
@@ -319,12 +335,15 @@ void AppWindow::Init(const GURL& url,
   helper_.reset(new AppWebContentsHelper(
       browser_context_, extension_id_, web_contents(), app_delegate_.get()));
 
-  popup_manager_.reset(
-      new web_modal::PopupManager(GetWebContentsModalDialogHost()));
-  popup_manager_->RegisterWith(web_contents());
-
   UpdateExtensionAppIcon();
   AppWindowRegistry::Get(browser_context_)->AddAppWindow(this);
+
+  if (new_params.thumbnail_window) {
+    // Mute sound on thumbnail capture windows.
+    chrome::SetTabAudioMuted(web_contents(), true,
+                             TAB_MUTED_REASON_MEDIA_CAPTURE,
+                             extension_id_);
+  }
 
   if (new_params.hidden) {
     // Although the window starts hidden by default, calling Hide() here
@@ -333,7 +352,7 @@ void AppWindow::Init(const GURL& url,
 
 #if defined(OS_MACOSX)
     //tomas@vivaldi.com: Fixes VB-4330
-    if (base::CommandLine::ForCurrentProcess()->IsRunningVivaldi()) {
+    if (vivaldi::IsVivaldiRunning()) {
       if (new_params.state == ui::SHOW_STATE_FULLSCREEN)
         Fullscreen();
       else if (new_params.state == ui::SHOW_STATE_MAXIMIZED)
@@ -346,6 +365,7 @@ void AppWindow::Init(const GURL& url,
     // Panels are not activated by default.
     Show(window_type_is_panel() || !new_params.focused ? SHOW_INACTIVE
                                                        : SHOW_ACTIVE);
+
     // These states may cause the window to show, so they are ignored if the
     // window is initially hidden.
     if (new_params.state == ui::SHOW_STATE_FULLSCREEN)
@@ -380,11 +400,11 @@ void AppWindow::Init(const GURL& url,
 }
 
 AppWindow::~AppWindow() {
-#ifdef VIVALDI_DOWNLOAD_PROGRESS
-  if (extension_id() == vivaldi_app_id) {
-    current_vivaldi_window_ = NULL;
+#if defined(OS_WIN) && defined(VIVALDI_BUILD)
+  if (vivaldi::IsVivaldiApp(extension_id())) {
+    vivaldi::current_vivaldi_window_ = NULL;
   }
-#endif //VIVALDI_DOWNLOAD_PROGRESS
+#endif //VIVALDI_BUILD
 
   ExtensionRegistry::Get(browser_context_)->RemoveObserver(this);
 }
@@ -492,6 +512,25 @@ void AppWindow::DidFirstVisuallyNonEmptyPaint() {
   }
 }
 
+void AppWindow::SetOnFirstCommitCallback(const base::Closure& callback) {
+  DCHECK(on_first_commit_callback_.is_null());
+  on_first_commit_callback_ = callback;
+}
+
+void AppWindow::OnReadyToCommitFirstNavigation() {
+  CHECK(content::IsBrowserSideNavigationEnabled());
+  WindowEventsReady();
+  if (on_first_commit_callback_.is_null())
+    return;
+  // It is important that the callback executes after the calls to
+  // WebContentsObserver::ReadyToCommitNavigation have been processed. The
+  // CommitNavigation IPC that will properly set up the renderer will only be
+  // sent after these, and it must be sent before the callback gets to run,
+  // hence the use of PostTask.
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::ResetAndReturn(&on_first_commit_callback_));
+}
+
 void AppWindow::OnNativeClose() {
   AppWindowRegistry::Get(browser_context_)->RemoveAppWindow(this);
   if (app_window_contents_) {
@@ -501,7 +540,6 @@ void AppWindow::OnNativeClose() {
       modal_dialog_manager->SetDelegate(nullptr);
     app_window_contents_->NativeWindowClosed();
   }
-
   delete this;
 }
 
@@ -605,7 +643,7 @@ void AppWindow::SetAppIconUrl(const GURL& url) {
 }
 
 void AppWindow::UpdateShape(scoped_ptr<SkRegion> region) {
-  native_app_window_->UpdateShape(region.Pass());
+  native_app_window_->UpdateShape(std::move(region));
 }
 
 void AppWindow::UpdateDraggableRegions(
@@ -769,13 +807,14 @@ void AppWindow::RestoreAlwaysOnTop() {
     UpdateNativeAlwaysOnTop();
 }
 
-void AppWindow::SetInterceptAllKeys(bool want_all_keys) {
-  native_app_window_->SetInterceptAllKeys(want_all_keys);
-}
-
 void AppWindow::WindowEventsReady() {
   can_send_events_ = true;
   SendOnWindowShownIfShown();
+}
+
+void AppWindow::NotifyRenderViewReady() {
+  if (app_window_contents_)
+    app_window_contents_->OnWindowReady();
 }
 
 void AppWindow::GetSerializedState(base::DictionaryValue* properties) const {
@@ -1024,15 +1063,6 @@ void AppWindow::OnExtensionUnloaded(BrowserContext* browser_context,
     native_app_window_->Close();
 }
 
-void AppWindow::OnExtensionWillBeInstalled(
-    BrowserContext* browser_context,
-    const Extension* extension,
-    bool is_update,
-    bool from_ephemeral,
-    const std::string& old_name) {
-  if (extension->id() == extension_id())
-    native_app_window_->UpdateShelfMenu();
-}
 void AppWindow::SetWebContentsBlocked(content::WebContents* web_contents,
                                       bool blocked) {
   app_delegate_->SetWebContentsBlocked(web_contents, blocked);
@@ -1045,16 +1075,12 @@ bool AppWindow::IsWebContentsVisible(content::WebContents* web_contents) {
   }
   else
   {
-    return app_delegate_->IsWebContentsVisible(web_contents);
+  return app_delegate_->IsWebContentsVisible(web_contents);
   }
 }
 
 WebContentsModalDialogHost* AppWindow::GetWebContentsModalDialogHost() {
   return native_app_window_.get();
-}
-
-web_modal::PopupManager* AppWindow::GetPopupManager() const {
-  return popup_manager_.get();
 }
 
 void AppWindow::SaveWindowPosition() {

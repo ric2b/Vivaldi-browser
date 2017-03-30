@@ -1,0 +1,107 @@
+// Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
+
+// This features file defines extension APIs implemented under
+// vivaldi/vivaldi_extensions.
+// See extensions/common/features/* to understand this file, in particular
+// feature.h, simple_feature.h, and base_feature_provider.h.
+//
+// Note that specifying "web_page", "blessed_web_page", or "all" as a context
+// type will require manually updating chrome/renderer/resources/dispatcher.cc.
+
+// To add a new whitelisted ID, SHA-1 it and force it to uppercase. In Bash:
+//
+// $ echo -n "aaaabbbbccccddddeeeeffffgggghhhh" | \
+// sha1sum | tr '[:lower:]' '[:upper:]'
+// 9A0417016F345C934A1A88F55CA17C05014EEEBA  -
+//
+
+{
+  "autoUpdate": {
+    "dependencies": [ "permission:autoUpdate" ],
+    "contexts": [ "blessed_extension" ]
+  },
+  "bookmarksPrivate": {
+    "vivaldi": true,
+    "dependencies": [ "permission:bookmarksPrivate" ],
+    "contexts": [ "blessed_extension" ]
+  },
+  "editcommand": {
+    "dependencies": [ "permission:editcommand" ],
+    "contexts": [ "blessed_extension" ]
+  },
+  "extensionActionUtils": {
+    "dependencies": [ "permission:extensionActionUtils" ],
+    "contexts": [ "blessed_extension" ]
+  },
+  "historySearch": {
+    "vivaldi": true,
+    "dependencies": [ "permission:historySearch" ],
+    "contexts": [ "blessed_extension" ]
+  },
+  "importData": {
+    "vivaldi": true,
+    "dependencies": [ "permission:importData" ],
+    "contexts": [ "blessed_extension" ]
+  },
+  "notes": {
+    "vivaldi": true,
+    "dependencies": [ "permission:notes" ],
+    "contexts": [ "blessed_extension" ]
+  },
+  "runtimePrivate": {
+    "vivaldi": true,
+    "dependencies": [ "permission:runtimePrivate" ],
+    "contexts": [ "blessed_extension" ]
+  },
+  "savedpasswords": {
+    "dependencies": [ "permission:savedpasswords" ],
+    "contexts": [ "blessed_extension" ]
+  },
+  "sessionsPrivate": {
+    "vivaldi": true,
+    "dependencies": [ "permission:sessionsPrivate" ],
+    "contexts": [ "blessed_extension" ]
+  },
+  "settings": {
+    "vivaldi": true,
+    "dependencies": [ "permission:settings" ],
+    "contexts": [ "blessed_extension" ]
+  },
+  "showMenu": {
+    "vivaldi": true,
+    "dependencies": [ "permission:showMenu" ],
+    "contexts": [ "blessed_extension" ]
+  },
+  "tabsPrivate": {
+    "vivaldi": true,
+    "dependencies": [ "permission:tabsPrivate" ],
+    "contexts": [ "blessed_extension" ]
+  },
+  "thumbnails": {
+    "vivaldi": true,
+    "dependencies": [ "permission:thumbnails" ],
+    "contexts": [ "blessed_extension" ]
+  },
+  "zoom": {
+    "vivaldi": true,
+    "dependencies": [ "permission:zoom" ],
+    "contexts": [ "blessed_extension" ]
+  },
+  "utilities": {
+    "vivaldi": true,
+    "dependencies": [ "permission:utilities" ],
+    "contexts": [ "blessed_extension" ]
+  },
+  "webViewPrivate": [{
+    "dependencies": ["permission:webview"],
+    "contexts": ["blessed_extension"]
+  }, {
+    "channel": "dev",
+    "contexts": ["webui"],
+    "matches": [
+      "chrome://chrome-signin/*",
+      "chrome://media-router/*",
+      "chrome://oobe/*"
+    ]
+  }]
+}

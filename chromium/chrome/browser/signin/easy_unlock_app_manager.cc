@@ -4,8 +4,12 @@
 
 #include "chrome/browser/signin/easy_unlock_app_manager.h"
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/location.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/api/screenlock_private/screenlock_private_api.h"
 #include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -165,9 +169,9 @@ bool EasyUnlockAppManagerImpl::SendUserUpdatedEvent(const std::string& user_id,
   args->Append(info.ToValue().release());
 
   scoped_ptr<extensions::Event> event(
-      new extensions::Event(histogram_value, event_name, args.Pass()));
+      new extensions::Event(histogram_value, event_name, std::move(args)));
 
-  event_router->DispatchEventToExtension(app_id_, event.Pass());
+  event_router->DispatchEventToExtension(app_id_, std::move(event));
   return true;
 }
 

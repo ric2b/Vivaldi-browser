@@ -9,11 +9,13 @@ import android.os.Bundle;
 import android.os.Parcel;
 import android.test.suitebuilder.annotation.SmallTest;
 
+import org.chromium.base.ThreadUtils;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_shell.Shell;
 import org.chromium.content_shell_apk.ContentShellActivity;
 import org.chromium.content_shell_apk.ContentShellTestBase;
 
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 
 /**
@@ -39,14 +41,16 @@ public class WebContentsTest extends ContentShellTestBase {
         waitForActiveShellToBeDoneLoading();
         WebContents webContents = activity.getActiveWebContents();
 
-        assertFalse("WebContents incorrectly marked as destroyed", webContents.isDestroyed());
+        assertFalse("WebContents incorrectly marked as destroyed",
+                isWebContentsDestroyed(webContents));
 
         // Launch a new shell.
         Shell originalShell = activity.getActiveShell();
         loadNewShell(TEST_URL_1);
         assertNotSame("New shell not created", activity.getActiveShell(), originalShell);
 
-        assertTrue("WebContents incorrectly marked as not destroyed", webContents.isDestroyed());
+        assertTrue("WebContents incorrectly marked as not destroyed",
+                isWebContentsDestroyed(webContents));
     }
 
     /**
@@ -83,6 +87,7 @@ public class WebContentsTest extends ContentShellTestBase {
      * Check that it is possible to serialize and deserialize a WebContents object through Bundles.
      * @throws InterruptedException
      */
+    @SmallTest
     public void testWebContentsSerializeDeserializeInBundle() throws InterruptedException {
         launchContentShellWithUrl(TEST_URL_1);
         waitForActiveShellToBeDoneLoading();
@@ -121,6 +126,7 @@ public class WebContentsTest extends ContentShellTestBase {
      * Check that it is possible to serialize and deserialize a WebContents object through Intents.
      * @throws InterruptedException
      */
+    @SmallTest
     public void testWebContentsSerializeDeserializeInIntent() throws InterruptedException {
         launchContentShellWithUrl(TEST_URL_1);
         waitForActiveShellToBeDoneLoading();
@@ -202,7 +208,7 @@ public class WebContentsTest extends ContentShellTestBase {
         WebContents webContents = activity.getActiveWebContents();
         loadNewShell(TEST_URL_1);
 
-        assertTrue("WebContents not destroyed", webContents.isDestroyed());
+        assertTrue("WebContents not destroyed", isWebContentsDestroyed(webContents));
 
         Parcel parcel = Parcel.obtain();
 
@@ -244,7 +250,7 @@ public class WebContentsTest extends ContentShellTestBase {
 
             // Destroy the WebContents.
             loadNewShell(TEST_URL_1);
-            assertTrue("WebContents not destroyed", webContents.isDestroyed());
+            assertTrue("WebContents not destroyed", isWebContentsDestroyed(webContents));
 
             // Try to read back the WebContents.
             parcel.setDataPosition(0);
@@ -297,5 +303,14 @@ public class WebContentsTest extends ContentShellTestBase {
         } finally {
             parcel.recycle();
         }
+    }
+
+    private boolean isWebContentsDestroyed(final WebContents webContents) {
+        return ThreadUtils.runOnUiThreadBlockingNoException(new Callable<Boolean>() {
+            @Override
+            public Boolean call() throws Exception {
+                return webContents.isDestroyed();
+            }
+        });
     }
 }

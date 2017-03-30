@@ -3,11 +3,13 @@
 // found in the LICENSE file.
 
 #include <shlobj.h>
+#include <stddef.h>
 #include <wtsapi32.h>
 #pragma comment(lib, "wtsapi32.lib")
 
 #include "chrome/browser/policy/policy_path_parser.h"
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/registry.h"
@@ -77,7 +79,7 @@ base::FilePath::StringType ExpandPathVariables(
     result = result.substr(1, result.length() - 2);
   }
   // First translate all path variables we recognize.
-  for (int i = 0; i < arraysize(win_folder_mapping); ++i) {
+  for (size_t i = 0; i < arraysize(win_folder_mapping); ++i) {
     size_t position = result.find(win_folder_mapping[i].name);
     if (position != std::wstring::npos) {
       WCHAR path[MAX_PATH];

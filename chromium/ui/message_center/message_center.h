@@ -5,12 +5,18 @@
 #ifndef UI_MESSAGE_CENTER_MESSAGE_CENTER_H_
 #define UI_MESSAGE_CENTER_MESSAGE_CENTER_H_
 
+#include <stddef.h>
+
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "ui/message_center/message_center_export.h"
 #include "ui/message_center/message_center_types.h"
 #include "ui/message_center/notification_list.h"
+
+class DownloadNotification;
+class DownloadNotificationTestBase;
 
 namespace base {
 class DictionaryValue;
@@ -38,6 +44,7 @@ class MessagePopupCollectionTest;
 }
 
 class MessageCenterObserver;
+class MessageCenterImplTest;
 class NotificationBlocker;
 class NotifierSettingsProvider;
 
@@ -129,6 +136,11 @@ class MESSAGE_CENTER_EXPORT MessageCenter {
   virtual void ClickOnNotificationButton(const std::string& id,
                                          int button_index) = 0;
 
+  // Called by the UI classes when the settings buttons is clicked
+  // to trigger the notification's delegate and update the message
+  // center observers.
+  virtual void ClickOnSettingsButton(const std::string& id) = 0;
+
   // This should be called by UI classes after a visible notification popup
   // closes, indicating that the notification has been shown to the user.
   // |mark_notification_as_read|, if false, will unset the read bit on a
@@ -172,14 +184,28 @@ class MESSAGE_CENTER_EXPORT MessageCenter {
   virtual void RestartPopupTimers() = 0;
 
  protected:
+  friend class ::DownloadNotification;
+  friend class ::DownloadNotificationTestBase;
+  friend class MessageCenterImplTest;
+  friend class MessageCenterImplTestWithChangeQueue;
+  friend class MessageCenterImplTestWithoutChangeQueue;
+  friend class MessageCenterTrayTest;
   friend class TrayViewControllerTest;
   friend class test::MessagePopupCollectionTest;
   virtual void DisableTimersForTest() = 0;
+  virtual void EnableChangeQueueForTest(bool enabled) = 0;
 
   MessageCenter();
   virtual ~MessageCenter();
 
  private:
+  // Forces to flush the queued changes even when the message center opens. This
+  // method is a workaround of UpdateNotification not updating notifications
+  // while the message center.
+  // Note carefully: this may break the layout of message center. Shouldn't use
+  // this method if the update changes its notification size.
+  virtual void ForceNotificationFlush(const std::string& id) {}
+
   DISALLOW_COPY_AND_ASSIGN(MessageCenter);
 };
 

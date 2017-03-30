@@ -5,153 +5,62 @@
 #ifndef EXTENSIONS_COMMON_PERMISSIONS_PERMISSION_MESSAGE_H_
 #define EXTENSIONS_COMMON_PERMISSIONS_PERMISSION_MESSAGE_H_
 
+#include <list>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
-#include "base/strings/string16.h"
+#include "extensions/common/permissions/api_permission_set.h"
 
 namespace extensions {
 
-// When prompting the user to install or approve permissions, we display
-// messages describing the effects of the permissions rather than listing the
-// permissions themselves. Each PermissionMessage represents one of the
-// messages shown to the user.
+// The new kind of Chrome app/extension permission messages.
+//
+// A PermissionMessage is an immutable object that represents a single bullet
+// in the list of an app or extension's permissions. It contains the localized
+// permission message to display, as well as the set of permissions that
+// contributed to that message (and should be revoked if this permission is
+// revoked). It can also optionally contain a list of sub-messages which should
+// appear as nested bullet points below the main one.
+//
+// |permissions| contains the permissions that are 'represented' by this
+// message and should be revoked if this permission message is revoked. Note
+// that other permissions could have contributed to the message, but these are
+// the ones 'contained' in this message - if this set is taken for all
+// PermissionMessages, each permission will only be in at most one
+// PermissionMessage.
+//
+// Some permissions may contain nested messages, stored in |submessages|. These
+// are appropriate to show as nested bullet points below the permission,
+// collapsed if needed. For example, host permission messages may list all the
+// sites the app has access to in |submessages|, with a summary message in
+// |message|.
+//
+// TODO(sashab): Add a custom revoke action for each permission and nested
+// permission message, registerable as a callback.
 class PermissionMessage {
  public:
-  // Do not reorder this enumeration. If you need to add a new enum, add it just
-  // prior to kEnumBoundary.
-  // TODO(sashab): Deprecate these IDs - use whatever APIPermission::ID becomes
-  // instead.
-  enum ID {
-    kUnknown,
-    kNone,
-    kBookmarks,
-    kGeolocation,
-    kBrowsingHistory,
-    kTabs,
-    kManagement,
-    kDebugger,
-    kDesktopCapture,
-    kHid,
-    kHosts1,
-    kHosts2,
-    kHosts3,
-    kHosts4OrMore,
-    kHostsAll,
-    kFullAccess,
-    kClipboard,
-    kTtsEngine,
-    kContentSettings,
-    kPrivacy,
-    kSupervisedUser,
-    kInput,
-    kAudioCapture,
-    kVideoCapture,
-    kDownloads,
-    kDeleted_FileSystemWrite,
-    kMediaGalleriesAllGalleriesRead,
-    kSerial,
-    kSocketAnyHost,
-    kSocketDomainHosts,
-    kSocketSpecificHosts,
-    kBluetooth,
-    kUsb,
-    kSystemIndicator,
-    kUsbDevice,
-    kMediaGalleriesAllGalleriesCopyTo,
-    kSystemInfoDisplay,
-    kNativeMessaging,
-    kSyncFileSystem,
-    kAudio,
-    kFavicon,
-    kMusicManagerPrivate,
-    kWebConnectable,
-    kActivityLogPrivate,
-    kBluetoothDevices,
-    kDownloadsOpen,
-    kNetworkingPrivate,
-    kDeclarativeWebRequest,
-    kFileSystemDirectory,
-    kFileSystemWriteDirectory,
-    kSignedInDevices,
-    kWallpaper,
-    kNetworkState,
-    kHomepage,
-    kSearchProvider,
-    kStartupPages,
-    kMediaGalleriesAllGalleriesDelete,
-    kScreenlockPrivate,
-    kOverrideBookmarksUI,
-    kAutomation,
-    kAccessibilityFeaturesModify,
-    kAccessibilityFeaturesRead,
-    kBluetoothPrivate,
-    kIdentityEmail,
-    kExperienceSamplingPrivate,
-    kCopresence,
-    kTopSites,
-    kU2fDevices,
-    kDocumentScan,
-    kNetworkingConfig,
-    kPlatformKeys,
-    kMDns,
-    kVpnProvider,
-    kHosts1ReadOnly,
-    kHosts2ReadOnly,
-    kHosts3ReadOnly,
-    kHosts4OrMoreReadOnly,
-    kHostsAllReadOnly,
-    kInterceptAllKeys,
-    kSettingsPrivate,
-    kPrinterProvider,
-    kSearchEnginesPrivate,
-    kAutofillPrivate,
-    kPasswordsPrivate,
-    kUsersPrivate,
-    // Last entry: Add new entries above.
-    kEnumBoundary,
-  };
-  static_assert(PermissionMessage::kNone > PermissionMessage::kUnknown,
-                "kNone should not greater than kUnknown");
+  PermissionMessage(const base::string16& message,
+                    const PermissionIDSet& permissions);
+  PermissionMessage(const base::string16& message,
+                    const PermissionIDSet& permissions,
+                    const std::vector<base::string16>& submessages);
+  virtual ~PermissionMessage();
 
-  // Creates the corresponding permission message.
-  PermissionMessage(ID id, const base::string16& message);
-  PermissionMessage(ID id,
-                    const base::string16& message,
-                    const base::string16& details);
-  ~PermissionMessage();
-
-  // Gets the id of the permission message, which can be used in UMA
-  // histograms.
-  ID id() const { return id_; }
-
-  // Gets a localized message describing this permission. Please note that
-  // the message will be empty for message types TYPE_NONE and TYPE_UNKNOWN.
   const base::string16& message() const { return message_; }
-
-  // Gets a localized message describing the details for this permission. Please
-  // note that the message will be empty for message types TYPE_NONE and
-  // TYPE_UNKNOWN.
-  const base::string16& details() const { return details_; }
-
-  // Comparator to work with std::set.
-  bool operator<(const PermissionMessage& that) const {
-    return id_ < that.id_;
-  }
-  // Comparator to work with base::STLSetDifference.
-  bool operator>(const PermissionMessage& that) const {
-    return id_ > that.id_;
+  const PermissionIDSet& permissions() const { return permissions_; }
+  const std::vector<base::string16>& submessages() const {
+    return submessages_;
   }
 
  private:
-  ID id_;
-  base::string16 message_;
-  base::string16 details_;
+  const base::string16 message_;
+  const PermissionIDSet permissions_;
+  const std::vector<base::string16> submessages_;
 };
 
-typedef std::vector<PermissionMessage> PermissionMessages;
-typedef std::vector<PermissionMessage::ID> PermissionMessageIDs;
+// TODO(treib): Make this an std::vector when we have C++11 library support on
+// all platforms. (In C++03, std::vector's elements must be copy-assignable...)
+typedef std::list<PermissionMessage> PermissionMessages;
 
 }  // namespace extensions
 

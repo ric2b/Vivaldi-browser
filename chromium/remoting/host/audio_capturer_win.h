@@ -8,7 +8,7 @@
 #include <audioclient.h>
 #include <mmdeviceapi.h>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "base/timer/timer.h"
@@ -37,7 +37,7 @@ class AudioCapturerWin : public AudioCapturer {
 
   AudioPacket::SamplingRate sampling_rate_;
 
-  scoped_ptr<base::RepeatingTimer<AudioCapturerWin> > capture_timer_;
+  scoped_ptr<base::RepeatingTimer> capture_timer_;
   base::TimeDelta audio_device_period_;
 
   AudioSilenceDetector silence_detector_;

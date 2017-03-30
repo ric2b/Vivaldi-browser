@@ -7,6 +7,7 @@ This is a port of the trace event importer from
 https://code.google.com/p/trace-viewer/
 """
 
+import collections
 import copy
 
 import telemetry.timeline.async_slice as tracing_async_slice
@@ -26,7 +27,7 @@ class TraceEventTimelineImporter(importer.TimelineImporter):
     self._all_async_events = []
     self._all_object_events = []
     self._all_flow_events = []
-    self._all_memory_dump_events_by_dump_id = {}
+    self._all_memory_dumps_by_dump_id = collections.defaultdict(list)
 
     self._events = trace_data.GetEventsFor(trace_data_module.CHROME_TRACE_PART)
 
@@ -139,6 +140,16 @@ class TraceEventTimelineImporter(importer.TimelineImporter):
         event['tdur'] / 1000.0 if 'tdur' in event else None,
         event['args'])
 
+  def _ProcessMarkEvent(self, event):
+    thread = (self._GetOrCreateProcess(event['pid'])
+        .GetOrCreateThread(event['tid']))
+    thread.PushMarkSlice(
+        event['cat'],
+        event['name'],
+        event['ts'] / 1000.0,
+        event['tts'] / 1000.0 if 'tts' in event else None,
+        event['args'] if 'args' in event else None)
+
   def _ProcessMetadataEvent(self, event):
     if event['name'] == 'thread_name':
       thread = (self._GetOrCreateProcess(event['pid'])
@@ -147,6 +158,9 @@ class TraceEventTimelineImporter(importer.TimelineImporter):
     elif event['name'] == 'process_name':
       process = self._GetOrCreateProcess(event['pid'])
       process.name = event['args']['name']
+    elif event['name'] == 'process_labels':
+      process = self._GetOrCreateProcess(event['pid'])
+      process.labels = event['args']['labels']
     elif event['name'] == 'trace_buffer_overflowed':
       process = self._GetOrCreateProcess(event['pid'])
       process.SetTraceBufferOverflowTimestamp(event['args']['overflowed_at_ts'])
@@ -180,19 +194,26 @@ class TraceEventTimelineImporter(importer.TimelineImporter):
         'event': event,
         'thread': thread})
 
-  def _ProcessMemoryDumpEvent(self, event):
-    dump_id = event.get('id')
-    if not dump_id:
-      self._model.import_errors.append(
-          'Memory dump event with missing dump id.')
-      return
-    self._all_memory_dump_events_by_dump_id.setdefault(dump_id, [])
-    self._all_memory_dump_events_by_dump_id[dump_id].append(event)
+  def _ProcessMemoryDumpEvents(self, events):
+    # Dictionary to order dumps by id and process.
+    global_dumps = {}
+    for event in events:
+      global_dump = global_dumps.setdefault(event['id'], {})
+      dump_events = global_dump.setdefault(event['pid'], [])
+      dump_events.append(event)
+    for dump_id, global_dump in global_dumps.iteritems():
+      for pid, dump_events in global_dump.iteritems():
+        process = self._GetOrCreateProcess(pid)
+        memory_dump = memory_dump_event.ProcessMemoryDumpEvent(process,
+                                                               dump_events)
+        process.AddMemoryDumpEvent(memory_dump)
+        self._all_memory_dumps_by_dump_id[dump_id].append(memory_dump)
 
   def ImportEvents(self):
     """Walks through the events_ list and outputs the structures discovered to
     model_.
     """
+    memory_dump_events = []
     for event in self._events:
       phase = event.get('ph', None)
       if phase == 'B' or phase == 'E':
@@ -220,11 +241,16 @@ class TraceEventTimelineImporter(importer.TimelineImporter):
       elif phase == 's' or phase == 't' or phase == 'f':
         self._ProcessFlowEvent(event)
       elif phase == 'v':
-        self._ProcessMemoryDumpEvent(event)
+        memory_dump_events.append(event)
+      elif phase == 'R':
+        self._ProcessMarkEvent(event)
       else:
         self._model.import_errors.append('Unrecognized event phase: ' +
             phase + '(' + event['name'] + ')')
 
+    # Memory dumps of a process with the same dump id need to be merged before
+    # processing. So, memory dump events are processed all at once.
+    self._ProcessMemoryDumpEvents(memory_dump_events)
     return self._model
 
   def FinalizeImport(self):
@@ -407,9 +433,9 @@ class TraceEventTimelineImporter(importer.TimelineImporter):
           flow_id_to_event[event['id']] = flow_event
 
   def _CreateMemoryDumps(self):
-    self._model.SetMemoryDumpEvents(
-        memory_dump_event.MemoryDumpEvent(events)
-        for events in self._all_memory_dump_events_by_dump_id.itervalues())
+    self._model.SetGlobalMemoryDumps(
+        memory_dump_event.GlobalMemoryDump(events)
+        for events in self._all_memory_dumps_by_dump_id.itervalues())
 
   def _SetBrowserProcess(self):
     for thread in self._model.GetAllThreads():

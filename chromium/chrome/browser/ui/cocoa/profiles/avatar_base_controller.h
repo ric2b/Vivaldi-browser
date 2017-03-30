@@ -11,6 +11,7 @@
 #include "base/memory/scoped_ptr.h"
 #include "chrome/browser/ui/browser_window.h"
 #import "chrome/browser/ui/cocoa/has_weak_browser_pointer.h"
+#include "components/signin/core/browser/signin_header_helper.h"
 
 @class BaseBubbleController;
 class Browser;
@@ -43,12 +44,15 @@ class ProfileInfoUpdateObserver;
 // Shows the avatar bubble in the given mode.
 - (void)showAvatarBubbleAnchoredAt:(NSView*)anchor
                           withMode:(BrowserWindow::AvatarBubbleMode)mode
-                   withServiceType:(signin::GAIAServiceType)serviceType;
+                   withServiceType:(signin::GAIAServiceType)serviceType
+                   fromAccessPoint:(signin_metrics::AccessPoint)accessPoint;
 
 @end
 
 @interface AvatarBaseController (ExposedForTesting)
 - (BaseBubbleController*)menuController;
+
+- (BOOL)isCtrlPressed;
 @end
 
 #endif  // CHROME_BROWSER_UI_COCOA_PROFILES_AVATAR_BASE_CONTROLLER_H_

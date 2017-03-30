@@ -7,8 +7,6 @@
 #ifndef MEDIA_BASE_LIMITS_H_
 #define MEDIA_BASE_LIMITS_H_
 
-#include "base/basictypes.h"
-
 namespace media {
 
 namespace limits {
@@ -28,10 +26,11 @@ enum {
   // A few notes on sample rates of common formats:
   //   - AAC files are limited to 96 kHz.
   //   - MP3 files are limited to 48 kHz.
-  //   - Vorbis used to be limited to 96 KHz, but no longer has that
+  //   - Vorbis used to be limited to 96 kHz, but no longer has that
   //     restriction.
-  //   - Most PC audio hardware is limited to 192 KHz.
-  kMaxSampleRate = 192000,
+  //   - Most PC audio hardware is limited to 192 kHz, some specialized DAC
+  //     devices will use 384 kHz though.
+  kMaxSampleRate = 384000,
   kMinSampleRate = 3000,
   kMaxChannels = 32,
   kMaxBytesPerSample = 4,

@@ -25,10 +25,55 @@
     Low-power charger connected
   </message>
   <message name="IDS_ASH_STATUS_TRAY_LOW_POWER_CHARGER_MESSAGE" desc="The message body of a notification indicating that a low-current USB charger has been connected.">
-    Your Chromebook may not charge while it is turned on. Consider using the official charger.
+    Your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> may not charge while it is turned on. Consider using the official charger.
   </message>
   <message name="IDS_ASH_STATUS_TRAY_LOW_POWER_CHARGER_MESSAGE_SHORT" desc="The message body of a notification indicating that a low-current USB charger has been connected, short version.">
-    Your Chromebook may not charge while it is turned on.
+    Your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> may not charge while it is turned on.
+  </message>
+  <message name="IDS_ASH_STATUS_TRAY_CHARGING_FROM_DUAL_ROLE_TITLE" desc="The message title of a notification indicating that the device is being charged by a connected dual-role USB Type-C device.">
+    Charging from <ph name="POWER_SOURCE">$1<ex>USB-C device (left port)</ex></ph>
+  </message>
+  <message name="IDS_ASH_STATUS_TRAY_CHARGING_DUAL_ROLE_DEVICE_TITLE" desc="The message title of a notification indicating that the device is charging the connected USB Type-C device.">
+    Charging <ph name="POWER_SOURCE">$1<ex>USB-C device (left port)</ex></ph>
+  </message>
+  <message name="IDS_ASH_STATUS_TRAY_CHARGING_DUAL_ROLE_DEVICES_TITLE" desc="The message title of a notification indicating that the device is charging multiple connected USB Type-C devices.">
+    Charging connected USB-C devices
+  </message>
+  <message name="IDS_ASH_STATUS_TRAY_DUAL_ROLE_MESSAGE" desc="The message body of a notification, which indicates that the user can click the notification to see and change which device is being used as a power source.">
+    Click for more options
+  </message>
+  <message name="IDS_ASH_POWER_SOURCE_PORT_LEFT" desc="The text identifying an external device, when that device is connected to the USB Type-C port on the left side of this device.">
+    USB-C device (left port)
+  </message>
+  <message name="IDS_ASH_POWER_SOURCE_PORT_RIGHT" desc="The text identifying an external device, when that device is connected to the USB Type-C port on the right side of this device.">
+    USB-C device (right port)
+  </message>
+  <message name="IDS_ASH_POWER_SOURCE_PORT_BACK" desc="The text identifying an external device, when that device is connected to the USB Type-C port on the back of this device.">
+    USB-C device (rear port)
+  </message>
+  <message name="IDS_ASH_POWER_SOURCE_PORT_FRONT" desc="The text identifying an external device, when that device is connected to the USB Type-C port on the front of this device.">
+    USB-C device (front port)
+  </message>
+  <message name="IDS_ASH_POWER_SOURCE_PORT_LEFT_FRONT" desc="The text identifying an external device, when that device is connected to a USB Type-C port on the left side of this device. In this case there are two ports on that side, so this text should refer to the front one on that side.">
+    USB-C device (left side front port)
+  </message>
+  <message name="IDS_ASH_POWER_SOURCE_PORT_LEFT_BACK" desc="The text identifying an external device, when that device is connected to a USB Type-C port on the left side of this device. In this case there are two ports on that side, so this text should refer to the back one on that side.">
+    USB-C device (left side back port)
+  </message>
+  <message name="IDS_ASH_POWER_SOURCE_PORT_RIGHT_FRONT" desc="The text identifying an external device, when that device is connected to a USB Type-C port on the right side of this device. In this case there are two ports on that side, so this text should refer to the front one on that side.">
+    USB-C device (right side front port)
+  </message>
+  <message name="IDS_ASH_POWER_SOURCE_PORT_RIGHT_BACK" desc="The text identifying an external device, when that device is connected to a USB Type-C port on the right side of this device. In this case there are two ports on that side, so this text should refer to the back one on that side.">
+    USB-C device (right side back port)
+  </message>
+  <message name="IDS_ASH_POWER_SOURCE_PORT_BACK_LEFT" desc="The text identifying an external device, when that device is connected to a USB Type-C port on the back of this device. In this case there are two ports on the back, so this text should refer to the one on the left.">
+    USB-C device (left port in the back)
+  </message>
+  <message name="IDS_ASH_POWER_SOURCE_PORT_BACK_RIGHT" desc="The text identifying an external device, when that device is connected to a USB Type-C port on the back of this device. In this case there are two ports on the back, so this text should refer to the one on the right.">
+    USB-C device (right port in the back)
+  </message>
+  <message name="IDS_ASH_POWER_SOURCE_PORT_UNKNOWN" desc="The text referring to the device to charge from, when its port location cannot be determined.">
+    USB-C device
   </message>
 
   <message name="IDS_CHARGER_REPLACEMENT_ACCESSIBILITY_NOTIFICATION" desc="The notification string used in accessibility to tell user to contact Google for replacing the possible bad charger.">
@@ -54,11 +99,17 @@
   <message name="IDS_ASH_STATUS_TRAY_IP" desc="The label for the IP address of the network:">
     IP Address
   </message>
+  <message name="IDS_ASH_STATUS_TRAY_IPV6" desc="The label for the IP address of the network:">
+    IPv6 Address
+  </message>
   <message name="IDS_ASH_STATUS_TRAY_NETWORK_SETTINGS" desc="The label used in the settings entry in the network dialog.">
     Settings...
   </message>
   <message name="IDS_ASH_STATUS_TRAY_NETWORK_PROXY_SETTINGS" desc="The label used in the proxy settings entry in the network dialog in the login screen.">
     Proxy...
+  </message>
+  <message name="IDS_ASH_STATUS_TRAY_NETWORK_TECHNOLOGY_ENFORCED_BY_POLICY" desc="The label used for tell users that this technology is disabled by the administrator">
+    This network setting is disabled by the administrator.
   </message>
   <message name="IDS_ASH_STATUS_TRAY_ENABLE_WIFI" desc="The label used for the item to enable wifi.">
     Enable Wi-Fi
@@ -73,7 +124,7 @@
     The extension "<ph name="EXTENSION_NAME">$1<ex>Nexus S</ex></ph>" can help connect to this network.
   </message>
   <message name="IDS_ASH_STATUS_TRAY_TURN_ON_WIFI" desc="The label used for the item to turn on Wi-Fi networks.">
-    Turn Wi-Fi on...
+    Turn Wi-Fi on
   </message>
   <message name="IDS_ASH_STATUS_TRAY_ENABLE_MOBILE" desc="The label used for the item to enable cellular networks.">
     Enable mobile data
@@ -235,7 +286,7 @@
     Docked mode
   </message>
   <message name="IDS_ASH_STATUS_TRAY_DISPLAY_DOCKED_DESCRIPTION" desc="The body of the notification indicating that the system is in docked mode.">
-    You can keep using your Chromebook while it's connected to an external display, even with the lid closed.
+    You can keep using your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> while it's connected to an external display, even with the lid closed.
   </message>
   <message name="IDS_ASH_STATUS_TRAY_DISPLAY_RESOLUTION_CHANGED" desc="The label used in the tray to notify that the display resolution settings has changed.">
     <ph name="DISPLAY_NAME">$1</ph> resolution was changed to <ph name="RESOLUTION">$2</ph>
@@ -436,10 +487,37 @@ Press Shift + Alt to switch.
   <message name="IDS_ASH_LOGOUT_CONFIRMATION_BUTTON" desc="The text for okay button of the logout confirmation dialog.">
     Sign out now
   </message>
-  <message name="IDS_ASH_STATUS_TRAY_NEW_LOGIN_UI_ENABLED" desc="The text shown in the tray menu when the WebView-based sign-in is enabled.">
-    New login UI is ON
+
+  <!-- Deprecated Accelerators Messages -->
+  <!-- Shortcut keys MUST be connected with pluses (e.g. Ctrl+Shift+L). -->
+  <message name="IDS_SHORTCUT_LOCK_SCREEN_OLD" desc="the old deprecated shortcut to lock the screen.">
+    Ctrl+Shift+L
   </message>
-  <message name="IDS_ASH_STATUS_TRAY_NEW_LOGIN_UI_DISABLED" desc="The text shown in the tray menu when the WebView-based sign-in is disabled.">
-    New login UI is OFF
+  <message name="IDS_SHORTCUT_LOCK_SCREEN_NEW" desc="the new shortcut to lock the screen.">
+    Search+L
+  </message>
+  <message name="IDS_SHORTCUT_TASK_MANAGER_OLD" desc="the old deprecated shortcut to open the task manager.">
+    Shift+Esc
+  </message>
+  <message name="IDS_SHORTCUT_TASK_MANAGER_NEW" desc="the new shortcut to open the task manager.">
+    Search+Esc
+  </message>
+  <message name="IDS_SHORTCUT_NEXT_IME_OLD" desc="the old deprecated shortcut to switch to the next input method.">
+    Shift+Alt
+  </message>
+  <message name="IDS_SHORTCUT_NEXT_IME_NEW" desc="the new shortcut to switch to the next input method.">
+    Ctrl+Shift+Space
+  </message>
+  <message name="IDS_DEPRECATED_LOCK_SCREEN_MSG"
+           desc="Notification message to tell users about the deprecation of Ctrl+Shift+L shortcut to lock the screen.">
+    The shortcut to lock the screen has changed. Please use <ph name="NEW_SHORTCUT">$1<ex>Search+L</ex></ph> instead of <ph name="OLD_SHORTCUT">$2<ex>Ctrl+Shift+L</ex></ph>.
+  </message>
+  <message name="IDS_DEPRECATED_SHOW_TASK_MANAGER_MSG"
+           desc="Notification message to tell users about the deprecation of Shift+ESC shortcut to show the task manager.">
+    The shortcut to open the task manager has changed. Please use <ph name="NEW_SHORTCUT">$1<ex>Search+Esc</ex></ph> instead of <ph name="OLD_SHORTCUT">$2<ex>Shift+Esc</ex></ph>.
+  </message>
+  <message name="IDS_DEPRECATED_NEXT_IME_MSG"
+           desc="Notification message to tell users about the deprecation of Shift+Alt shortcut to switch to the next input method.">
+    The shortcut to switch to the next input method has changed. Please use <ph name="NEW_SHORTCUT">$1<ex>Ctrl+Shift+Space</ex></ph> instead of <ph name="OLD_SHORTCUT">$2<ex>Shift+Alt</ex></ph>.
   </message>
 </grit-part>

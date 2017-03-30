@@ -8,6 +8,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
@@ -23,16 +24,17 @@ void AddTabAt(Browser* browser, const GURL& url, int idx, bool foreground) {
   // WebContents, but we want to include the time it takes to create the
   // WebContents object too.
   base::TimeTicks new_tab_start_time = base::TimeTicks::Now();
+  bool show_ntp = url.is_empty();
   chrome::NavigateParams params(browser,
-      url.is_empty() ? GURL(chrome::kChromeUINewTabURL) : url,
-      ui::PAGE_TRANSITION_TYPED);
+      show_ntp ? GURL(chrome::kChromeUINewTabURL) : url,
+      show_ntp ? ui::PAGE_TRANSITION_AUTO_TOPLEVEL : ui::PAGE_TRANSITION_TYPED);
   params.disposition = foreground ? NEW_FOREGROUND_TAB : NEW_BACKGROUND_TAB;
   params.tabstrip_index = idx;
   chrome::Navigate(&params);
   CoreTabHelper* core_tab_helper =
       CoreTabHelper::FromWebContents(params.target_contents);
   if (core_tab_helper) {
-    core_tab_helper->set_new_tab_start_time(new_tab_start_time);
+  core_tab_helper->set_new_tab_start_time(new_tab_start_time);
   }
 }
 

@@ -45,6 +45,11 @@ class VIEWS_EXPORT HWNDMessageHandlerDelegate {
   virtual bool CanMinimize() const = 0;
   virtual bool CanActivate() const = 0;
 
+  // Returns true if the delegate wants mouse events when inactive and the
+  // window is clicked and should not become activated. A return value of false
+  // indicates the mouse events will be dropped.
+  virtual bool WantsMouseEventsWhenInactive() const = 0;
+
   virtual bool WidgetSizeIsClientSize() const = 0;
 
   // Returns true if the delegate represents a modal window.
@@ -166,13 +171,9 @@ class VIEWS_EXPORT HWNDMessageHandlerDelegate {
   // handled by the delegate.
   virtual bool HandleMouseEvent(const ui::MouseEvent& event) = 0;
 
-  // Called when a translated key event is received (i.e. post IME translation.)
-  // Returns true if the event was handled by the delegate.
-  virtual bool HandleKeyEvent(const ui::KeyEvent& event) = 0;
-
   // Called when an untranslated key event is received (i.e. pre-IME
-  // translation). Returns true if the event was sent to the input method.
-  virtual bool HandleUntranslatedKeyEvent(const ui::KeyEvent& event) = 0;
+  // translation).
+  virtual void HandleKeyEvent(ui::KeyEvent* event) = 0;
 
   // Called when a touch event is received.
   virtual void HandleTouchEvent(const ui::TouchEvent& event) = 0;

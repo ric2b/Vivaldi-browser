@@ -7,22 +7,15 @@
 
 #include "ash/shelf/shelf_delegate.h"
 #include "base/compiler_specific.h"
-
-namespace aura {
-class Window;
-}
+#include "base/macros.h"
 
 namespace ash {
 namespace shell {
 
-class WindowWatcher;
-
 class ShelfDelegateImpl : public ShelfDelegate {
  public:
-  explicit ShelfDelegateImpl(WindowWatcher* watcher);
+  ShelfDelegateImpl();
   ~ShelfDelegateImpl() override;
-
-  void set_watcher(WindowWatcher* watcher) { watcher_ = watcher; }
 
   // ShelfDelegate overrides:
   void OnShelfCreated(Shelf* shelf) override;
@@ -32,13 +25,9 @@ class ShelfDelegateImpl : public ShelfDelegate {
   const std::string& GetAppIDForShelfID(ShelfID id) override;
   void PinAppWithID(const std::string& app_id) override;
   bool IsAppPinned(const std::string& app_id) override;
-  bool CanPin() const override;
   void UnpinAppWithID(const std::string& app_id) override;
 
  private:
-  // Used to update Launcher. Owned by main.
-  WindowWatcher* watcher_;
-
   DISALLOW_COPY_AND_ASSIGN(ShelfDelegateImpl);
 };
 

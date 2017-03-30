@@ -5,11 +5,14 @@
 #ifndef MEDIA_CAST_RECEIVER_CAST_RECEIVER_IMPL_H_
 #define MEDIA_CAST_RECEIVER_CAST_RECEIVER_IMPL_H_
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
-#include "media/cast/cast_config.h"
 #include "media/cast/cast_environment.h"
 #include "media/cast/cast_receiver.h"
+#include "media/cast/common/rtp_time.h"
 #include "media/cast/net/pacing/paced_sender.h"
 #include "media/cast/receiver/frame_receiver.h"
 
@@ -63,8 +66,8 @@ class CastReceiverImpl : public CastReceiver {
   static void EmitDecodedAudioFrame(
       const scoped_refptr<CastEnvironment>& cast_environment,
       const AudioFrameDecodedCallback& callback,
-      uint32 frame_id,
-      uint32 rtp_timestamp,
+      uint32_t frame_id,
+      RtpTimeTicks rtp_timestamp,
       const base::TimeTicks& playout_time,
       scoped_ptr<AudioBus> audio_bus,
       bool is_continuous);
@@ -77,8 +80,8 @@ class CastReceiverImpl : public CastReceiver {
   static void EmitDecodedVideoFrame(
       const scoped_refptr<CastEnvironment>& cast_environment,
       const VideoFrameDecodedCallback& callback,
-      uint32 frame_id,
-      uint32 rtp_timestamp,
+      uint32_t frame_id,
+      RtpTimeTicks rtp_timestamp,
       const base::TimeTicks& playout_time,
       const scoped_refptr<VideoFrame>& video_frame,
       bool is_continuous);
@@ -89,8 +92,8 @@ class CastReceiverImpl : public CastReceiver {
 
   // Used by DispatchReceivedPacket() to direct packets to the appropriate frame
   // receiver.
-  const uint32 ssrc_of_audio_sender_;
-  const uint32 ssrc_of_video_sender_;
+  const uint32_t ssrc_of_audio_sender_;
+  const uint32_t ssrc_of_video_sender_;
 
   // Parameters for the decoders that are created on-demand.  The values here
   // might be nonsense if the client of CastReceiverImpl never intends to use

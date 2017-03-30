@@ -5,6 +5,8 @@
 #ifndef CONTENT_PUBLIC_TEST_LAYOUTTEST_SUPPORT_H_
 #define CONTENT_PUBLIC_TEST_LAYOUTTEST_SUPPORT_H_
 
+#include <stddef.h>
+
 #include <string>
 #include <vector>
 
@@ -133,13 +135,6 @@ void DisableAutoResizeMode(RenderView* render_view,
 // Provides a text dump of the contents of the given page state.
 std::string DumpBackForwardList(std::vector<PageState>& page_state,
                                 size_t current_index);
-
-// Creates cc::TextureLayer for TestPlugin.
-scoped_refptr<cc::TextureLayer> CreateTextureLayerForMailbox(
-    cc::TextureLayerClient* client);
-
-// Instantiates WebLayerImpl for TestPlugin.
-blink::WebLayer* InstantiateWebLayer(scoped_refptr<cc::TextureLayer> layer);
 
 }  // namespace content
 

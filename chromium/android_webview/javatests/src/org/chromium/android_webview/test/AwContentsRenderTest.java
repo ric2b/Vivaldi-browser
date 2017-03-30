@@ -4,33 +4,35 @@
 
 package org.chromium.android_webview.test;
 
+import android.graphics.Bitmap;
 import android.graphics.Color;
-import android.os.Build;
 import android.test.suitebuilder.annotation.SmallTest;
+import android.view.View;
 
 import org.chromium.android_webview.AwContents;
+import org.chromium.android_webview.AwContents.VisualStateCallback;
 import org.chromium.android_webview.test.util.GraphicsTestUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.MinAndroidSdkLevel;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 /**
  * AwContents rendering / pixel tests.
  */
-@MinAndroidSdkLevel(Build.VERSION_CODES.KITKAT)
 public class AwContentsRenderTest extends AwTestBase {
 
     private TestAwContentsClient mContentsClient;
     private AwContents mAwContents;
+    private AwTestContainerView mContainerView;
 
     @Override
     public void setUp() throws Exception {
         super.setUp();
         mContentsClient = new TestAwContentsClient();
-        final AwTestContainerView testContainerView =
-                createAwTestContainerViewOnMainSync(mContentsClient);
-        mAwContents = testContainerView.getAwContents();
+        mContainerView = createAwTestContainerViewOnMainSync(mContentsClient);
+        mAwContents = mContainerView.getAwContents();
     }
 
     void setBackgroundColorOnUiThread(final int c) {
@@ -61,16 +63,15 @@ public class AwContentsRenderTest extends AwTestBase {
         loadUrlSync(mAwContents, mContentsClient.getOnPageFinishedHelper(),
                 "data:text/html,<html><head><style>body {background-color:#227788}</style></head>"
                 + "<body></body></html>");
-        GraphicsTestUtils.pollForBackgroundColor(mAwContents, Color.rgb(0x22, 0x77, 0x88));
+        final int teal = 0xFF227788;
+        GraphicsTestUtils.pollForBackgroundColor(mAwContents, teal);
 
         // Changing the base background should not override CSS background.
         setBackgroundColorOnUiThread(Color.MAGENTA);
-        assertEquals(Color.rgb(0x22, 0x77, 0x88),
-                GraphicsTestUtils.sampleBackgroundColorOnUiThread(mAwContents));
+        assertEquals(teal, GraphicsTestUtils.sampleBackgroundColorOnUiThread(mAwContents));
         // ...setting the background is asynchronous, so pause a bit and retest just to be sure.
         Thread.sleep(500);
-        assertEquals(Color.rgb(0x22, 0x77, 0x88),
-                GraphicsTestUtils.sampleBackgroundColorOnUiThread(mAwContents));
+        assertEquals(teal, GraphicsTestUtils.sampleBackgroundColorOnUiThread(mAwContents));
     }
 
     @SmallTest
@@ -88,5 +89,66 @@ public class AwContentsRenderTest extends AwTestBase {
         mContentsClient.getPictureListenerHelper().waitForCallback(pictureCount, 1);
         // Invalidation only, so picture should be null.
         assertNull(mContentsClient.getPictureListenerHelper().getPicture());
+    }
+
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testForceDrawWhenInvisible() throws Throwable {
+        loadUrlSync(mAwContents, mContentsClient.getOnPageFinishedHelper(),
+                "data:text/html,<html><head><style>body {background-color:#227788}</style></head>"
+                        + "<body>Hello world!</body></html>");
+
+        Bitmap visibleBitmap = null;
+        Bitmap invisibleBitmap = null;
+        final CountDownLatch latch = new CountDownLatch(1);
+        runTestOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                final long requestId1 = 1;
+                mAwContents.insertVisualStateCallback(requestId1, new VisualStateCallback() {
+                    @Override
+                    public void onComplete(long id) {
+                        assertEquals(requestId1, id);
+                        latch.countDown();
+                    }
+                });
+            }
+        });
+        assertTrue(latch.await(AwTestBase.WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+
+        final int width = mAwContents.getContentWidthCss();
+        final int height = mAwContents.getContentHeightCss();
+        visibleBitmap = GraphicsTestUtils.drawAwContentsOnUiThread(mAwContents, width, height);
+
+        // Things that affect DOM page visibility:
+        // 1. isPaused
+        // 2. window's visibility, if the webview is attached to a window.
+        // Note android.view.View's visibility does not affect DOM page visibility.
+        runTestOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                mContainerView.setVisibility(View.INVISIBLE);
+                assertTrue(mAwContents.isPageVisible());
+
+                mAwContents.onPause();
+                assertFalse(mAwContents.isPageVisible());
+
+                mAwContents.onResume();
+                assertTrue(mAwContents.isPageVisible());
+
+                // Simulate a window visiblity change. WebView test app can't
+                // manipulate the window visibility directly.
+                mAwContents.onWindowVisibilityChanged(View.INVISIBLE);
+                assertFalse(mAwContents.isPageVisible());
+            }
+        });
+
+        // VisualStateCallback#onComplete won't be called when WebView is
+        // invisible. So there is no reliable way to tell if View#setVisibility
+        // has taken effect. Just sleep the test thread for 500ms.
+        Thread.sleep(500);
+        invisibleBitmap = GraphicsTestUtils.drawAwContentsOnUiThread(mAwContents, width, height);
+        assertNotNull(invisibleBitmap);
+        assertTrue(invisibleBitmap.sameAs(visibleBitmap));
     }
 }

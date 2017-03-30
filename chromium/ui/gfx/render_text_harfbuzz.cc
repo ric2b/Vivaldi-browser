@@ -10,16 +10,19 @@
 #include "base/i18n/bidi_line_iterator.h"
 #include "base/i18n/break_iterator.h"
 #include "base/i18n/char_iterator.h"
+#include "base/macros.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "third_party/harfbuzz-ng/src/hb.h"
 #include "third_party/icu/source/common/unicode/ubidi.h"
 #include "third_party/icu/source/common/unicode/utf16.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkTypeface.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/font.h"
 #include "ui/gfx/font_fallback.h"
 #include "ui/gfx/font_render_params.h"
 #include "ui/gfx/geometry/safe_integer_conversions.h"
@@ -45,8 +48,6 @@ const size_t kMaxTextLength = 10000;
 const size_t kMaxScripts = 5;
 
 // Returns true if characters of |block_code| may trigger font fallback.
-// Dingbats and emoticons can be rendered through the color emoji font file,
-// therefore it needs to be trigerred as fallbacks. See crbug.com/448909
 bool IsUnusualBlockCode(UBlockCode block_code) {
   return block_code == UBLOCK_GEOMETRIC_SHAPES ||
          block_code == UBLOCK_MISCELLANEOUS_SYMBOLS;
@@ -58,38 +59,10 @@ bool IsBracket(UChar32 character) {
   return std::find(kBrackets, kBracketsEnd, character) != kBracketsEnd;
 }
 
-// Returns the boundary between a special and a regular character. Special
-// characters are brackets or characters that satisfy |IsUnusualBlockCode|.
-size_t FindRunBreakingCharacter(const base::string16& text,
-                                size_t run_start,
-                                size_t run_break) {
-  const int32 run_length = static_cast<int32>(run_break - run_start);
-  base::i18n::UTF16CharIterator iter(text.c_str() + run_start, run_length);
-  const UChar32 first_char = iter.get();
-  // The newline character should form a single run so that the line breaker
-  // can handle them easily.
-  if (first_char == '\n')
-    return run_start + 1;
-
-  const UBlockCode first_block = ublock_getCode(first_char);
-  const bool first_block_unusual = IsUnusualBlockCode(first_block);
-  const bool first_bracket = IsBracket(first_char);
-
-  while (iter.Advance() && iter.array_pos() < run_length) {
-    const UChar32 current_char = iter.get();
-    const UBlockCode current_block = ublock_getCode(current_char);
-    const bool block_break = current_block != first_block &&
-        (first_block_unusual || IsUnusualBlockCode(current_block));
-    if (block_break || current_char == '\n' ||
-        first_bracket != IsBracket(current_char)) {
-      return run_start + iter.array_pos();
-    }
-  }
-  return run_break;
-}
-
 // If the given scripts match, returns the one that isn't USCRIPT_INHERITED,
-// i.e. the more specific one. Otherwise returns USCRIPT_INVALID_CODE.
+// i.e. the more specific one. Otherwise returns USCRIPT_INVALID_CODE. This
+// function is used to split runs between characters of different script codes,
+// unless either character has USCRIPT_INHERITED property. See crbug.com/448909.
 UScriptCode ScriptIntersect(UScriptCode first, UScriptCode second) {
   if (first == second || second == USCRIPT_INHERITED)
     return first;
@@ -137,6 +110,54 @@ void ScriptSetIntersect(UChar32 codepoint,
   }
 
   *result_size = out_size;
+}
+
+// Returns true if |first_char| and |current_char| both have "COMMON" script
+// property but only one of them is an ASCII character. By doing this ASCII
+// characters will be put into a separate run and be rendered using its default
+// font. See crbug.com/530021 and crbug.com/533721 for more details.
+bool AsciiBreak(UChar32 first_char, UChar32 current_char) {
+  if (isascii(first_char) == isascii(current_char))
+    return false;
+
+  size_t scripts_size = 1;
+  UScriptCode scripts[kMaxScripts] = { USCRIPT_COMMON };
+  ScriptSetIntersect(first_char, scripts, &scripts_size);
+  if (scripts_size == 0)
+    return false;
+  ScriptSetIntersect(current_char, scripts, &scripts_size);
+  return scripts_size != 0;
+}
+
+// Returns the boundary between a special and a regular character. Special
+// characters are brackets or characters that satisfy |IsUnusualBlockCode|.
+size_t FindRunBreakingCharacter(const base::string16& text,
+                                size_t run_start,
+                                size_t run_break) {
+  const int32_t run_length = static_cast<int32_t>(run_break - run_start);
+  base::i18n::UTF16CharIterator iter(text.c_str() + run_start, run_length);
+  const UChar32 first_char = iter.get();
+  // The newline character should form a single run so that the line breaker
+  // can handle them easily.
+  if (first_char == '\n')
+    return run_start + 1;
+
+  const UBlockCode first_block = ublock_getCode(first_char);
+  const bool first_block_unusual = IsUnusualBlockCode(first_block);
+  const bool first_bracket = IsBracket(first_char);
+
+  while (iter.Advance() && iter.array_pos() < run_length) {
+    const UChar32 current_char = iter.get();
+    const UBlockCode current_block = ublock_getCode(current_char);
+    const bool block_break = current_block != first_block &&
+        (first_block_unusual || IsUnusualBlockCode(current_block));
+    if (block_break || current_char == '\n' ||
+        first_bracket != IsBracket(current_char) ||
+        AsciiBreak(first_char, current_char)) {
+      return run_start + iter.array_pos();
+    }
+  }
+  return run_break;
 }
 
 // Find the longest sequence of characters from 0 and up to |length| that
@@ -438,7 +459,8 @@ class HarfBuzzLineBreaker {
       end_pos++;
     }
 
-    const size_t valid_end_pos = FindValidBoundaryBefore(text_, end_pos);
+    const size_t valid_end_pos = std::max(
+        segment.char_range.start(), FindValidBoundaryBefore(text_, end_pos));
     if (end_pos != valid_end_pos) {
       end_pos = valid_end_pos;
       width = run.GetGlyphWidthForCharRange(
@@ -449,8 +471,10 @@ class HarfBuzzLineBreaker {
     // need to put at least one character in the line. Note that, we should
     // not separate surrogate pair or combining characters.
     // See RenderTextTest.Multiline_MinWidth for an example.
-    if (width == 0 && available_width_ == max_width_)
-      end_pos = FindValidBoundaryAfter(text_, end_pos + 1);
+    if (width == 0 && available_width_ == max_width_) {
+      end_pos = std::min(segment.char_range.end(),
+                         FindValidBoundaryAfter(text_, end_pos + 1));
+    }
 
     return end_pos;
   }
@@ -529,8 +553,9 @@ class HarfBuzzLineBreaker {
 
 // Function object for case insensitive string comparison.
 struct CaseInsensitiveCompare {
-  bool operator() (const std::string& a, const std::string& b) const {
-    return base::strncasecmp(a.c_str(), b.c_str(), b.length()) < 0;
+  bool operator() (const Font& a, const Font& b) const {
+    return base::CompareCaseInsensitiveASCII(a.GetFontName(), b.GetFontName()) <
+           0;
   }
 };
 
@@ -657,6 +682,19 @@ SkScalar TextRunHarfBuzz::GetGlyphWidthForCharRange(
 
   DCHECK(range.Contains(char_range));
   Range glyph_range = CharRangeToGlyphRange(char_range);
+
+  // The |glyph_range| might be empty or invalid on Windows if a multi-character
+  // grapheme is divided into different runs (e.g., there are two font sizes or
+  // colors for a single glyph). In this case it might cause the browser crash,
+  // see crbug.com/526234.
+  if (glyph_range.start() >= glyph_range.end()) {
+    NOTREACHED() << "The glyph range is empty or invalid! Its char range: ["
+        << char_range.start() << ", " << char_range.end()
+        << "], and its glyph range: [" << glyph_range.start() << ", "
+        << glyph_range.end() << "].";
+    return 0;
+  }
+
   return ((glyph_range.end() == glyph_count)
               ? SkFloatToScalar(width)
               : positions[glyph_range.end()].x()) -
@@ -1071,13 +1109,7 @@ void RenderTextHarfBuzz::EnsureLayout() {
   }
 }
 
-void RenderTextHarfBuzz::DrawVisualText(Canvas* canvas) {
-  internal::SkiaTextRenderer renderer(canvas);
-  DrawVisualTextInternal(&renderer);
-}
-
-void RenderTextHarfBuzz::DrawVisualTextInternal(
-    internal::SkiaTextRenderer* renderer) {
+void RenderTextHarfBuzz::DrawVisualText(internal::SkiaTextRenderer* renderer) {
   DCHECK(!update_layout_run_list_);
   DCHECK(!update_display_run_list_);
   DCHECK(!update_display_text_);
@@ -1236,8 +1268,9 @@ void RenderTextHarfBuzz::ItemizeTextToRuns(
     run->strike = style.style(STRIKE);
     run->diagonal_strike = style.style(DIAGONAL_STRIKE);
     run->underline = style.style(UNDERLINE);
-    int32 script_item_break = 0;
+    int32_t script_item_break = 0;
     bidi_iterator.GetLogicalRun(run_break, &script_item_break, &run->level);
+    CHECK_GT(static_cast<size_t>(script_item_break), run_break);
     // Odd BiDi embedding levels correspond to RTL runs.
     run->is_rtl = (run->level % 2) == 1;
     // Find the length and script of this script run.
@@ -1245,9 +1278,12 @@ void RenderTextHarfBuzz::ItemizeTextToRuns(
         script_item_break - run_break, &run->script) + run_break;
 
     // Find the next break and advance the iterators as needed.
-    run_break = std::min(
+    const size_t new_run_break = std::min(
         static_cast<size_t>(script_item_break),
         TextIndexToGivenTextIndex(text, style.GetRange().end()));
+    CHECK_GT(new_run_break, run_break)
+        << "It must proceed! " << text << " " << run_break;
+    run_break = new_run_break;
 
     // Break runs at certain characters that need to be rendered separately to
     // prevent either an unusual character from forcing a fallback font on the
@@ -1271,18 +1307,18 @@ void RenderTextHarfBuzz::ItemizeTextToRuns(
 
 bool RenderTextHarfBuzz::CompareFamily(
     const base::string16& text,
-    const std::string& family,
+    const Font& font,
     const gfx::FontRenderParams& render_params,
     internal::TextRunHarfBuzz* run,
-    std::string* best_family,
+    Font* best_font,
     gfx::FontRenderParams* best_render_params,
     size_t* best_missing_glyphs) {
-  if (!ShapeRunWithFont(text, family, render_params, run))
+  if (!ShapeRunWithFont(text, font, render_params, run))
     return false;
 
   const size_t missing_glyphs = run->CountMissingGlyphs();
   if (missing_glyphs < *best_missing_glyphs) {
-    *best_family = family;
+    *best_font = font;
     *best_render_params = render_params;
     *best_missing_glyphs = missing_glyphs;
   }
@@ -1327,14 +1363,13 @@ void RenderTextHarfBuzz::ShapeRun(const base::string16& text,
     }
   }
 
-  std::string best_family;
+  Font best_font;
   FontRenderParams best_render_params;
   size_t best_missing_glyphs = std::numeric_limits<size_t>::max();
 
   for (const Font& font : font_list().GetFonts()) {
-    if (CompareFamily(text, font.GetFontName(), font.GetFontRenderParams(),
-                      run, &best_family, &best_render_params,
-                      &best_missing_glyphs))
+    if (CompareFamily(text, font, font.GetFontRenderParams(), run, &best_font,
+                      &best_render_params, &best_missing_glyphs))
       return;
   }
 
@@ -1345,22 +1380,20 @@ void RenderTextHarfBuzz::ShapeRun(const base::string16& text,
   if (GetUniscribeFallbackFont(primary_font, run_text, run->range.length(),
                                &uniscribe_font)) {
     uniscribe_family = uniscribe_font.GetFontName();
-    if (CompareFamily(text, uniscribe_family,
+    if (CompareFamily(text, uniscribe_font,
                       uniscribe_font.GetFontRenderParams(), run,
-                      &best_family, &best_render_params, &best_missing_glyphs))
+                      &best_font, &best_render_params, &best_missing_glyphs))
       return;
   }
 #endif
 
-  std::vector<std::string> fallback_families =
-      GetFallbackFontFamilies(primary_family);
+  std::vector<Font> fallback_font_list = GetFallbackFonts(primary_font);
 
 #if defined(OS_WIN)
   // Append fonts in the fallback list of the Uniscribe font.
   if (!uniscribe_family.empty()) {
-    std::vector<std::string> uniscribe_fallbacks =
-        GetFallbackFontFamilies(uniscribe_family);
-    fallback_families.insert(fallback_families.end(),
+    std::vector<Font> uniscribe_fallbacks = GetFallbackFonts(uniscribe_font);
+    fallback_font_list.insert(fallback_font_list.end(),
         uniscribe_fallbacks.begin(), uniscribe_fallbacks.end());
   }
 
@@ -1369,44 +1402,46 @@ void RenderTextHarfBuzz::ShapeRun(const base::string16& text,
   // http://crbug.com/467459. On some Windows configurations the default font
   // could be a raster font like System, which would not give us a reasonable
   // fallback font list.
-  if (!base::LowerCaseEqualsASCII(primary_family, "segoe ui") &&
+  if (!base::LowerCaseEqualsASCII(primary_font.GetFontName(), "segoe ui") &&
       !base::LowerCaseEqualsASCII(uniscribe_family, "segoe ui")) {
-    std::vector<std::string> default_fallback_families =
-        GetFallbackFontFamilies("Segoe UI");
-    fallback_families.insert(fallback_families.end(),
+    std::vector<Font> default_fallback_families =
+        GetFallbackFonts(Font("Segoe UI", 13));
+    fallback_font_list.insert(fallback_font_list.end(),
         default_fallback_families.begin(), default_fallback_families.end());
   }
 #endif
 
   // Use a set to track the fallback fonts and avoid duplicate entries.
-  std::set<std::string, CaseInsensitiveCompare> fallback_fonts;
+  std::set<Font, CaseInsensitiveCompare> fallback_fonts;
 
   // Try shaping with the fallback fonts.
-  for (const auto& family : fallback_families) {
-    if (family == primary_family)
+  for (const auto& font : fallback_font_list) {
+    std::string font_name = font.GetFontName();
+
+    if (font_name == primary_font.GetFontName())
       continue;
 #if defined(OS_WIN)
-    if (family == uniscribe_family)
+    if (font_name == uniscribe_family)
       continue;
 #endif
-    if (fallback_fonts.find(family) != fallback_fonts.end())
+    if (fallback_fonts.find(font) != fallback_fonts.end())
       continue;
 
-    fallback_fonts.insert(family);
+    fallback_fonts.insert(font);
 
     FontRenderParamsQuery query;
-    query.families.push_back(family);
+    query.families.push_back(font_name);
     query.pixel_size = run->font_size;
     query.style = run->font_style;
     FontRenderParams fallback_render_params = GetFontRenderParams(query, NULL);
-    if (CompareFamily(text, family, fallback_render_params, run, &best_family,
+    if (CompareFamily(text, font, fallback_render_params, run, &best_font,
                       &best_render_params, &best_missing_glyphs))
       return;
   }
 
-  if (!best_family.empty() &&
-      (best_family == run->family ||
-       ShapeRunWithFont(text, best_family, best_render_params, run)))
+  if (best_missing_glyphs != std::numeric_limits<size_t>::max() &&
+      (best_font.GetFontName() == run->font.GetFontName() ||
+       ShapeRunWithFont(text, best_font, best_render_params, run)))
     return;
 
   run->glyph_count = 0;
@@ -1414,15 +1449,15 @@ void RenderTextHarfBuzz::ShapeRun(const base::string16& text,
 }
 
 bool RenderTextHarfBuzz::ShapeRunWithFont(const base::string16& text,
-                                          const std::string& font_family,
+                                          const gfx::Font& font,
                                           const FontRenderParams& params,
                                           internal::TextRunHarfBuzz* run) {
   skia::RefPtr<SkTypeface> skia_face =
-      internal::CreateSkiaTypeface(font_family, run->font_style);
+      internal::CreateSkiaTypeface(font, run->font_style);
   if (skia_face == NULL)
     return false;
   run->skia_face = skia_face;
-  run->family = font_family;
+  run->font = font;
   run->render_params = params;
 
   hb_font_t* harfbuzz_font = CreateHarfBuzzFont(
@@ -1433,7 +1468,7 @@ bool RenderTextHarfBuzz::ShapeRunWithFont(const base::string16& text,
   // buffer holds our text, run information to be used by the shaping engine,
   // and the resulting glyph data.
   hb_buffer_t* buffer = hb_buffer_create();
-  hb_buffer_add_utf16(buffer, reinterpret_cast<const uint16*>(text.c_str()),
+  hb_buffer_add_utf16(buffer, reinterpret_cast<const uint16_t*>(text.c_str()),
                       text.length(), run->range.start(), run->range.length());
   hb_buffer_set_script(buffer, ICUScriptToHBScript(run->script));
   hb_buffer_set_direction(buffer,
@@ -1457,14 +1492,14 @@ bool RenderTextHarfBuzz::ShapeRunWithFont(const base::string16& text,
   run->glyph_count = glyph_count;
   hb_glyph_position_t* hb_positions =
       hb_buffer_get_glyph_positions(buffer, NULL);
-  run->glyphs.reset(new uint16[run->glyph_count]);
+  run->glyphs.reset(new uint16_t[run->glyph_count]);
   run->glyph_to_char.resize(run->glyph_count);
   run->positions.reset(new SkPoint[run->glyph_count]);
   run->width = 0.0f;
 
   for (size_t i = 0; i < run->glyph_count; ++i) {
-    DCHECK_LE(infos[i].codepoint, std::numeric_limits<uint16>::max());
-    run->glyphs[i] = static_cast<uint16>(infos[i].codepoint);
+    DCHECK_LE(infos[i].codepoint, std::numeric_limits<uint16_t>::max());
+    run->glyphs[i] = static_cast<uint16_t>(infos[i].codepoint);
     run->glyph_to_char[i] = infos[i].cluster;
     const SkScalar x_offset = SkFixedToScalar(hb_positions[i].x_offset);
     const SkScalar y_offset = SkFixedToScalar(hb_positions[i].y_offset);

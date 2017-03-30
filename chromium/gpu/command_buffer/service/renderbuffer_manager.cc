@@ -4,14 +4,21 @@
 
 #include "gpu/command_buffer/service/renderbuffer_manager.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
+#include "base/thread_task_runner_handle.h"
+#include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event.h"
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
 #include "gpu/command_buffer/service/feature_info.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
 #include "ui/gl/gl_implementation.h"
+#include "ui/gl/gl_version_info.h"
+#include "ui/gl/trace_util.h"
 
 namespace gpu {
 namespace gles2 {
@@ -40,19 +47,25 @@ struct RenderbufferSignature {
   }
 };
 
-RenderbufferManager::RenderbufferManager(
-    MemoryTracker* memory_tracker,
-    GLint max_renderbuffer_size,
-    GLint max_samples,
-    FeatureInfo* feature_info)
-    : memory_tracker_(
-          new MemoryTypeTracker(memory_tracker, MemoryTracker::kUnmanaged)),
+RenderbufferManager::RenderbufferManager(MemoryTracker* memory_tracker,
+                                         GLint max_renderbuffer_size,
+                                         GLint max_samples,
+                                         FeatureInfo* feature_info)
+    : memory_type_tracker_(
+          new MemoryTypeTracker(memory_tracker)),
+      memory_tracker_(memory_tracker),
       max_renderbuffer_size_(max_renderbuffer_size),
       max_samples_(max_samples),
       feature_info_(feature_info),
       num_uncleared_renderbuffers_(0),
       renderbuffer_count_(0),
       have_context_(true) {
+  // When created from InProcessCommandBuffer, we won't have a |memory_tracker_|
+  // so don't register a dump provider.
+  if (memory_tracker_) {
+    base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
+        this, "gpu::RenderbufferManager", base::ThreadTaskRunnerHandle::Get());
+  }
 }
 
 RenderbufferManager::~RenderbufferManager() {
@@ -62,10 +75,13 @@ RenderbufferManager::~RenderbufferManager() {
   CHECK_EQ(renderbuffer_count_, 0u);
 
   DCHECK_EQ(0, num_uncleared_renderbuffers_);
+
+  base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
+      this);
 }
 
 size_t Renderbuffer::EstimatedSize() {
-  uint32 size = 0;
+  uint32_t size = 0;
   manager_->ComputeEstimatedRenderbufferSize(
       width_, height_, samples_, internal_format_, &size);
   return size;
@@ -117,7 +133,7 @@ Renderbuffer::~Renderbuffer() {
 void RenderbufferManager::Destroy(bool have_context) {
   have_context_ = have_context;
   renderbuffers_.clear();
-  DCHECK_EQ(0u, memory_tracker_->GetMemRepresented());
+  DCHECK_EQ(0u, memory_type_tracker_->GetMemRepresented());
 }
 
 void RenderbufferManager::StartTracking(Renderbuffer* /* renderbuffer */) {
@@ -129,7 +145,7 @@ void RenderbufferManager::StopTracking(Renderbuffer* renderbuffer) {
   if (!renderbuffer->cleared()) {
     --num_uncleared_renderbuffers_;
   }
-  memory_tracker_->TrackMemFree(renderbuffer->EstimatedSize());
+  memory_type_tracker_->TrackMemFree(renderbuffer->EstimatedSize());
 }
 
 void RenderbufferManager::SetInfo(
@@ -139,9 +155,9 @@ void RenderbufferManager::SetInfo(
   if (!renderbuffer->cleared()) {
     --num_uncleared_renderbuffers_;
   }
-  memory_tracker_->TrackMemFree(renderbuffer->EstimatedSize());
+  memory_type_tracker_->TrackMemFree(renderbuffer->EstimatedSize());
   renderbuffer->SetInfo(samples, internalformat, width, height);
-  memory_tracker_->TrackMemAlloc(renderbuffer->EstimatedSize());
+  memory_type_tracker_->TrackMemAlloc(renderbuffer->EstimatedSize());
   if (!renderbuffer->cleared()) {
     ++num_uncleared_renderbuffers_;
   }
@@ -186,14 +202,15 @@ void RenderbufferManager::RemoveRenderbuffer(GLuint client_id) {
   }
 }
 
-bool RenderbufferManager::ComputeEstimatedRenderbufferSize(int width,
-                                                           int height,
-                                                           int samples,
-                                                           int internal_format,
-                                                           uint32* size) const {
+bool RenderbufferManager::ComputeEstimatedRenderbufferSize(
+    int width,
+    int height,
+    int samples,
+    int internal_format,
+    uint32_t* size) const {
   DCHECK(size);
 
-  uint32 temp = 0;
+  uint32_t temp = 0;
   if (!SafeMultiplyUint32(width, height, &temp)) {
     return false;
   }
@@ -230,7 +247,30 @@ GLenum RenderbufferManager::InternalRenderbufferFormatToImplFormat(
   return impl_format;
 }
 
+bool RenderbufferManager::OnMemoryDump(
+    const base::trace_event::MemoryDumpArgs& args,
+    base::trace_event::ProcessMemoryDump* pmd) {
+  int client_id = memory_tracker_->ClientId();
+  for (const auto& renderbuffer_entry : renderbuffers_) {
+    const auto& client_renderbuffer_id = renderbuffer_entry.first;
+    const auto& renderbuffer = renderbuffer_entry.second;
+
+    std::string dump_name =
+        base::StringPrintf("gpu/gl/renderbuffers/client_%d/renderbuffer_%d",
+                           client_id, client_renderbuffer_id);
+    base::trace_event::MemoryAllocatorDump* dump =
+        pmd->CreateAllocatorDump(dump_name);
+    dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
+                    base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+                    static_cast<uint64_t>(renderbuffer->EstimatedSize()));
+
+    auto guid = gfx::GetGLRenderbufferGUIDForTracing(
+        memory_tracker_->ShareGroupTracingGUID(), client_renderbuffer_id);
+    pmd->CreateSharedGlobalAllocatorDump(guid);
+    pmd->AddOwnershipEdge(dump->guid(), guid);
+  }
+  return true;
+}
+
 }  // namespace gles2
 }  // namespace gpu
-
-

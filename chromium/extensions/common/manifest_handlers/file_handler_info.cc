@@ -4,6 +4,8 @@
 
 #include "extensions/common/manifest_handlers/file_handler_info.h"
 
+#include <stddef.h>
+
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -82,9 +84,8 @@ bool LoadFileHandler(const std::string& handler_id,
     for (size_t i = 0; i < mime_types->GetSize(); ++i) {
       if (!mime_types->GetString(i, &type)) {
         *error = ErrorUtils::FormatErrorMessageUTF16(
-            errors::kInvalidFileHandlerTypeElement,
-            handler_id,
-            std::string(base::IntToString(i)));
+            errors::kInvalidFileHandlerTypeElement, handler_id,
+            base::SizeTToString(i));
         return false;
       }
       handler.types.insert(type);
@@ -96,9 +97,8 @@ bool LoadFileHandler(const std::string& handler_id,
     for (size_t i = 0; i < file_extensions->GetSize(); ++i) {
       if (!file_extensions->GetString(i, &file_extension)) {
         *error = ErrorUtils::FormatErrorMessageUTF16(
-            errors::kInvalidFileHandlerExtensionElement,
-            handler_id,
-            std::string(base::IntToString(i)));
+            errors::kInvalidFileHandlerExtensionElement, handler_id,
+            base::SizeTToString(i));
         return false;
       }
       handler.extensions.insert(file_extension);

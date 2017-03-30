@@ -6,6 +6,8 @@
 
 #include "chrome/browser/ui/webui/options/advanced_options_utils.h"
 
+#include <stddef.h>
+
 #include "base/bind.h"
 #include "base/environment.h"
 #include "base/files/file_path.h"
@@ -14,6 +16,7 @@
 #include "base/process/launch.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
@@ -34,9 +37,10 @@ const char* kGNOME2ProxyConfigCommand[] = {"gnome-network-properties", NULL};
 // has this but it doesn't do the same thing. See below where we use it.
 const char* kGNOME3ProxyConfigCommand[] = {"gnome-control-center", "network",
                                            NULL};
-// KDE3 and KDE4 are only slightly different, but incompatible. Go figure.
+// KDE3, 4, and 5 are only slightly different, but incompatible. Go figure.
 const char* kKDE3ProxyConfigCommand[] = {"kcmshell", "proxy", NULL};
 const char* kKDE4ProxyConfigCommand[] = {"kcmshell4", "proxy", NULL};
+const char* kKDE5ProxyConfigCommand[] = {"kcmshell5", "proxy", NULL};
 
 // The URL for Linux proxy configuration help when not running under a
 // supported desktop environment.
@@ -134,6 +138,10 @@ void DetectAndStartProxyConfigUtil(int render_process_id,
 
     case base::nix::DESKTOP_ENVIRONMENT_KDE4:
       launched = StartProxyConfigUtil(kKDE4ProxyConfigCommand);
+      break;
+
+    case base::nix::DESKTOP_ENVIRONMENT_KDE5:
+      launched = StartProxyConfigUtil(kKDE5ProxyConfigCommand);
       break;
 
     case base::nix::DESKTOP_ENVIRONMENT_XFCE:

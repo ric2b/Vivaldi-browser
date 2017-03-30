@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "remoting/protocol/connection_to_host.h"
 #include "remoting/protocol/protocol_mock_objects.h"
 
@@ -19,16 +20,12 @@ class FakeConnectionToHost : public protocol::ConnectionToHost {
   ~FakeConnectionToHost() override;
 
   // ConnectionToHost interface.
-  void set_candidate_config(
-      scoped_ptr<protocol::CandidateSessionConfig> config) override;
   void set_client_stub(protocol::ClientStub* client_stub) override;
   void set_clipboard_stub(protocol::ClipboardStub* clipboard_stub) override;
-  void set_video_stub(protocol::VideoStub* video_stub) override;
+  void set_video_renderer(protocol::VideoRenderer* video_renderer) override;
   void set_audio_stub(protocol::AudioStub* audio_stub) override;
-  void Connect(SignalStrategy* signal_strategy,
-               scoped_ptr<protocol::TransportFactory> transport_factory,
-               scoped_ptr<protocol::Authenticator> authenticator,
-               const std::string& host_jid,
+  void Connect(scoped_ptr<protocol::Session> session,
+               scoped_refptr<protocol::TransportContext> transport_context,
                HostEventCallback* event_callback) override;
   const protocol::SessionConfig& config() override;
   protocol::ClipboardStub* clipboard_forwarder() override;
@@ -47,7 +44,7 @@ class FakeConnectionToHost : public protocol::ConnectionToHost {
  private:
   void SetState(State state, protocol::ErrorCode error);
 
-  State state_;
+  State state_ = INITIALIZING;
 
   HostEventCallback* event_callback_;
 

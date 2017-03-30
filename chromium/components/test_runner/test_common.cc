@@ -4,6 +4,14 @@
 
 #include "components/test_runner/test_common.h"
 
+#include <stddef.h>
+
+#include "base/lazy_instance.h"
+#include "base/macros.h"
+#include "base/rand_util.h"
+#include "third_party/WebKit/public/platform/Platform.h"
+#include "third_party/WebKit/public/web/WebKit.h"
+
 namespace test_runner {
 
 namespace {
@@ -16,6 +24,21 @@ const char file_test_prefix[] = "(file test):";
 const char data_url_pattern[] = "data:";
 const std::string::size_type data_url_pattern_size =
     sizeof(data_url_pattern) - 1;
+
+// This mock is used to initialize blink.
+class MockBlinkPlatform : NON_EXPORTED_BASE(public blink::Platform) {
+ public:
+  MockBlinkPlatform() {
+    blink::initializeWithoutV8(this);
+  }
+  ~MockBlinkPlatform() override {}
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MockBlinkPlatform);
+};
+
+base::LazyInstance<MockBlinkPlatform>::Leaky g_mock_blink_platform =
+    LAZY_INSTANCE_INITIALIZER;
 
 }  // namespace
 
@@ -32,6 +55,10 @@ std::string NormalizeLayoutTestURL(const std::string& url) {
     result.replace(data_url_pattern_size, url.length(), path);
   }
   return result;
+}
+
+void EnsureBlinkInitialized() {
+  g_mock_blink_platform.Get();
 }
 
 }  // namespace test_runner

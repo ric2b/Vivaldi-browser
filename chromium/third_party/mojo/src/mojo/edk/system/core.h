@@ -2,24 +2,24 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef MOJO_EDK_SYSTEM_CORE_H_
-#define MOJO_EDK_SYSTEM_CORE_H_
+#ifndef THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_CORE_H_
+#define THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_CORE_H_
 
 #include <stdint.h>
 
 #include "base/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/synchronization/lock.h"
-#include "mojo/edk/system/handle_table.h"
-#include "mojo/edk/system/mapping_table.h"
-#include "mojo/edk/system/memory.h"
-#include "mojo/edk/system/system_impl_export.h"
 #include "mojo/public/c/system/buffer.h"
 #include "mojo/public/c/system/data_pipe.h"
 #include "mojo/public/c/system/message_pipe.h"
 #include "mojo/public/c/system/types.h"
 #include "mojo/public/cpp/system/macros.h"
+#include "third_party/mojo/src/mojo/edk/system/handle_table.h"
+#include "third_party/mojo/src/mojo/edk/system/mapping_table.h"
+#include "third_party/mojo/src/mojo/edk/system/memory.h"
+#include "third_party/mojo/src/mojo/edk/system/mutex.h"
+#include "third_party/mojo/src/mojo/edk/system/system_impl_export.h"
 
 namespace mojo {
 
@@ -51,15 +51,6 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
   // Looks up the dispatcher for the given handle. Returns null if the handle is
   // invalid.
   scoped_refptr<Dispatcher> GetDispatcher(MojoHandle handle);
-
-  // Like |GetDispatcher()|, but also removes the handle from the handle table.
-  // On success, gets the dispatcher for a given handle (which should not be
-  // |MOJO_HANDLE_INVALID|) and removes it. (On failure, returns an appropriate
-  // result (and leaves |dispatcher| alone), namely
-  // |MOJO_RESULT_INVALID_ARGUMENT| if there's no dispatcher for the given
-  // handle or |MOJO_RESULT_BUSY| if the handle is marked as busy.)
-  MojoResult GetAndRemoveDispatcher(MojoHandle handle,
-                                    scoped_refptr<Dispatcher>* dispatcher);
 
   // Watches on the given handle for the given signals, calling |callback| when
   // a signal is satisfied or when all signals become unsatisfiable. |callback|
@@ -95,6 +86,21 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
                       MojoDeadline deadline,
                       UserPointer<uint32_t> result_index,
                       UserPointer<MojoHandleSignalsState> signals_states);
+
+  // These methods correspond to the API functions defined in
+  // "mojo/public/c/system/wait_set.h":
+  MojoResult CreateWaitSet(UserPointer<MojoHandle> wait_set_handle);
+  MojoResult AddHandle(MojoHandle wait_set_handle,
+                       MojoHandle handle,
+                       MojoHandleSignals signals);
+  MojoResult RemoveHandle(MojoHandle wait_set_handle,
+                          MojoHandle handle);
+  MojoResult GetReadyHandles(
+      MojoHandle wait_set_handle,
+      UserPointer<uint32_t> count,
+      UserPointer<MojoHandle> handles,
+      UserPointer<MojoResult> results,
+      UserPointer<MojoHandleSignalsState> signals_states);
 
   // These methods correspond to the API functions defined in
   // "mojo/public/c/system/message_pipe.h":
@@ -175,13 +181,13 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
 
   embedder::PlatformSupport* const platform_support_;
 
-  // TODO(vtl): |handle_table_lock_| should be a reader-writer lock (if only we
+  // TODO(vtl): |handle_table_mutex_| should be a reader-writer lock (if only we
   // had them).
-  base::Lock handle_table_lock_;  // Protects |handle_table_|.
-  HandleTable handle_table_;
+  Mutex handle_table_mutex_;
+  HandleTable handle_table_ MOJO_GUARDED_BY(handle_table_mutex_);
 
-  base::Lock mapping_table_lock_;  // Protects |mapping_table_|.
-  MappingTable mapping_table_;
+  Mutex mapping_table_mutex_;
+  MappingTable mapping_table_ MOJO_GUARDED_BY(mapping_table_mutex_);
 
   MOJO_DISALLOW_COPY_AND_ASSIGN(Core);
 };
@@ -189,4 +195,4 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
 }  // namespace system
 }  // namespace mojo
 
-#endif  // MOJO_EDK_SYSTEM_CORE_H_
+#endif  // THIRD_PARTY_MOJO_SRC_MOJO_EDK_SYSTEM_CORE_H_

@@ -170,7 +170,7 @@ def _CommitPositionState(test_results_log, commit_position):
   """Check the state of tests at a given commit position.
 
   Considers tests as having passed at a commit position if they passed at
-  revisons both before and after.
+  revisions both before and after.
 
   Args:
     test_results_log: A test results log dictionary from _GetTestResultsLog().
@@ -329,8 +329,10 @@ def _MaybeUploadReleaseNotes(version):
       continue
     issue_id = issue[0]
     desc = issue[1]
-    labels = issue[2]
+    labels = issue[2].split(', ')
     labels.remove('ChromeDriver-%s' % version)
+    if 'Hotlist-GoodFirstBug' in labels:
+      labels.remove('Hotlist-GoodFirstBug')
     fixed_issues += ['Resolved issue %s: %s [%s]' % (issue_id, desc, labels)]
 
   old_notes = ''
@@ -539,7 +541,7 @@ def main():
     util.MarkBuildStepError()
 
   # Add a "cleanup" step so that errors from runtest.py or bb_device_steps.py
-  # (which invoke this script) are kept in thier own build step.
+  # (which invoke this script) are kept in their own build step.
   util.MarkBuildStepStart('cleanup')
 
 

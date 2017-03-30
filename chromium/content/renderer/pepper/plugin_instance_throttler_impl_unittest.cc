@@ -15,11 +15,11 @@
 #include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "third_party/WebKit/public/web/WebPluginParams.h"
 #include "ui/gfx/canvas.h"
+#include "url/gurl.h"
+#include "url/origin.h"
 
 using testing::_;
 using testing::Return;
-
-class GURL;
 
 namespace content {
 
@@ -37,7 +37,7 @@ class PluginInstanceThrottlerImplTest
 
   void SetUp() override {
     throttler_.reset(new PluginInstanceThrottlerImpl);
-    throttler_->Initialize(nullptr, GURL("http://example.com"),
+    throttler_->Initialize(nullptr, url::Origin(GURL("http://example.com")),
                            "Shockwave Flash", gfx::Size(100, 100));
     throttler_->AddObserver(this);
   }
@@ -99,8 +99,7 @@ TEST_F(PluginInstanceThrottlerImplTest, ThrottleByKeyframe) {
   gfx::Canvas canvas(gfx::Size(20, 10), 1.0f, true);
   canvas.FillRect(gfx::Rect(20, 10), SK_ColorBLACK);
   canvas.FillRect(gfx::Rect(10, 10), SK_ColorWHITE);
-  SkBitmap interesting_bitmap =
-      skia::GetTopDevice(*canvas.sk_canvas())->accessBitmap(false);
+  SkBitmap interesting_bitmap = skia::ReadPixels(canvas.sk_canvas());
 
   // Don't throttle for a boring frame.
   throttler()->OnImageFlush(&boring_bitmap);

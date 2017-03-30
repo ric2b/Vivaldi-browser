@@ -4,20 +4,32 @@
 
 #include "chrome/browser/safe_browsing/srt_fetcher_win.h"
 
+#include <stdint.h>
+
+#include <vector>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
-#include "base/memory/singleton.h"
+#include "base/macros.h"
 #include "base/metrics/field_trial.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/prefs/pref_service.h"
 #include "base/process/launch.h"
-#include "base/threading/worker_pool.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
+#include "base/task_runner_util.h"
+#include "base/threading/thread_checker.h"
 #include "base/time/time.h"
+#include "base/win/registry.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_io_data.h"
 #include "chrome/browser/safe_browsing/srt_field_trial_win.h"
 #include "chrome/browser/safe_browsing/srt_global_error_win.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -26,6 +38,8 @@
 #include "chrome/browser/ui/global_error/global_error_service.h"
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
 #include "components/component_updater/pref_names.h"
+#include "components/rappor/rappor_service.h"
+#include "components/variations/net/variations_http_headers.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_status_code.h"
@@ -37,10 +51,42 @@ using content::BrowserThread;
 
 namespace safe_browsing {
 
+const wchar_t kSoftwareRemovalToolRegistryKey[] =
+    L"Software\\Google\\Software Removal Tool";
+
+const wchar_t kEndTimeValueName[] = L"EndTime";
+const wchar_t kStartTimeValueName[] = L"StartTime";
+
 namespace {
 
-// The number of days to wait before triggering another sw_reporter run.
-const int kDaysBetweenSuccessfulSwReporterRuns = 7;
+// Used to send UMA information about missing start and end time registry values
+// for the reporter.
+enum SwReporterRunningTimeRegistryError {
+  REPORTER_RUNNING_TIME_ERROR_NO_ERROR = 0,
+  REPORTER_RUNNING_TIME_ERROR_REGISTRY_KEY_INVALID = 1,
+  REPORTER_RUNNING_TIME_ERROR_MISSING_START_TIME = 2,
+  REPORTER_RUNNING_TIME_ERROR_MISSING_END_TIME = 3,
+  REPORTER_RUNNING_TIME_ERROR_MISSING_BOTH_TIMES = 4,
+  REPORTER_RUNNING_TIME_ERROR_MAX,
+};
+
+const char kRunningTimeErrorMetricName[] =
+    "SoftwareReporter.RunningTimeRegistryError";
+
+// Overrides for the reporter launcher and prompt triggers free function, used
+// by tests.
+ReporterLauncher g_reporter_launcher_;
+PromptTrigger g_prompt_trigger_;
+
+const wchar_t kScanTimesSubKey[] = L"ScanTimes";
+const wchar_t kFoundUwsValueName[] = L"FoundUws";
+const wchar_t kMemoryUsedValueName[] = L"MemoryUsed";
+
+const char kFoundUwsMetricName[] = "SoftwareReporter.FoundUwS";
+const char kFoundUwsReadErrorMetricName[] =
+    "SoftwareReporter.FoundUwSReadError";
+const char kScanTimesMetricName[] = "SoftwareReporter.UwSScanTimes";
+const char kMemoryUsedMetricName[] = "SoftwareReporter.MemoryUsed";
 
 void DisplaySRTPrompt(const base::FilePath& download_path) {
   // Find the last active browser, which may be NULL, in which case we won't
@@ -71,18 +117,100 @@ void DisplaySRTPrompt(const base::FilePath& download_path) {
   // itself from the service and self-destructs when done.
   global_error_service->AddGlobalError(global_error);
 
-  // Do not try to show bubble if another GlobalError is already showing
-  // one. The bubble will be shown once the others have been dismissed.
-  bool need_to_show_bubble = true;
-  for (GlobalError* error : global_error_service->errors()) {
-    if (error->GetBubbleView()) {
-      need_to_show_bubble = false;
-      break;
+  bool show_bubble = true;
+  PrefService* local_state = g_browser_process->local_state();
+  if (local_state && local_state->GetBoolean(prefs::kSwReporterPendingPrompt)) {
+    // Don't show the bubble if there's already a pending prompt to only be
+    // sown in the Chrome menu.
+    RecordReporterStepHistogram(SW_REPORTER_ADDED_TO_MENU);
+    show_bubble = false;
+  } else {
+    // Do not try to show bubble if another GlobalError is already showing
+    // one. The bubble will be shown once the others have been dismissed.
+    for (GlobalError* error : global_error_service->errors()) {
+      if (error->GetBubbleView()) {
+        show_bubble = false;
+        break;
+      }
     }
   }
-  if (need_to_show_bubble)
+  if (show_bubble)
     global_error->ShowBubbleView(browser);
 }
+
+// This function is called from a worker thread to launch the SwReporter and
+// wait for termination to collect its exit code. This task could be
+// interrupted by a shutdown at any time, so it shouldn't depend on anything
+// external that could be shut down beforehand.
+int LaunchAndWaitForExit(const base::FilePath& exe_path,
+                         const std::string& version) {
+  if (!g_reporter_launcher_.is_null())
+    return g_reporter_launcher_.Run(exe_path, version);
+  base::Process reporter_process =
+      base::LaunchProcess(exe_path.value(), base::LaunchOptions());
+  // This exit code is used to identify that a reporter run didn't happen, so
+  // the result should be ignored and a rerun scheduled for the usual delay.
+  int exit_code = kReporterFailureExitCode;
+  if (reporter_process.IsValid()) {
+    RecordReporterStepHistogram(SW_REPORTER_START_EXECUTION);
+    bool success = reporter_process.WaitForExit(&exit_code);
+    DCHECK(success);
+  } else {
+    RecordReporterStepHistogram(SW_REPORTER_FAILED_TO_START);
+  }
+  return exit_code;
+}
+
+// Reports UwS found by the software reporter tool via UMA and RAPPOR.
+void ReportFoundUwS() {
+  base::win::RegKey reporter_key(HKEY_CURRENT_USER,
+                                 kSoftwareRemovalToolRegistryKey,
+                                 KEY_QUERY_VALUE | KEY_SET_VALUE);
+  std::vector<base::string16> found_uws_strings;
+  if (reporter_key.Valid() &&
+      reporter_key.ReadValues(kFoundUwsValueName, &found_uws_strings) ==
+          ERROR_SUCCESS) {
+    rappor::RapporService* rappor_service = g_browser_process->rappor_service();
+
+    bool parse_error = false;
+    for (const base::string16& uws_string : found_uws_strings) {
+      // All UwS ids are expected to be integers.
+      uint32_t uws_id = 0;
+      if (base::StringToUint(uws_string, &uws_id)) {
+        UMA_HISTOGRAM_SPARSE_SLOWLY(kFoundUwsMetricName, uws_id);
+        if (rappor_service) {
+          rappor_service->RecordSample(kFoundUwsMetricName,
+                                       rappor::COARSE_RAPPOR_TYPE,
+                                       base::UTF16ToUTF8(uws_string));
+        }
+      } else {
+        parse_error = true;
+      }
+    }
+
+    // Clean up the old value.
+    reporter_key.DeleteValue(kFoundUwsValueName);
+
+    UMA_HISTOGRAM_BOOLEAN(kFoundUwsReadErrorMetricName, parse_error);
+  }
+}
+
+// Reports to UMA the memory usage of the software reporter tool as reported by
+// the tool itself in the Windows registry.
+void ReportSwReporterMemoryUsage() {
+  base::win::RegKey reporter_key(HKEY_CURRENT_USER,
+                                 kSoftwareRemovalToolRegistryKey,
+                                 KEY_QUERY_VALUE | KEY_SET_VALUE);
+  DWORD memory_used = 0;
+  if (reporter_key.Valid() &&
+      reporter_key.ReadValueDW(kMemoryUsedValueName, &memory_used) ==
+          ERROR_SUCCESS) {
+    UMA_HISTOGRAM_MEMORY_KB(kMemoryUsedMetricName, memory_used);
+    reporter_key.DeleteValue(kMemoryUsedValueName);
+  }
+}
+
+}  // namespace
 
 // Class that will attempt to download the SRT, showing the SRT notification
 // bubble when the download operation is complete. Instances of SRTFetcher own
@@ -90,8 +218,9 @@ void DisplaySRTPrompt(const base::FilePath& download_path) {
 // OnURLFetchComplete is called.
 class SRTFetcher : public net::URLFetcherDelegate {
  public:
-  SRTFetcher()
-      : url_fetcher_(net::URLFetcher::Create(0,
+  explicit SRTFetcher(Profile* profile)
+      : profile_(profile),
+        url_fetcher_(net::URLFetcher::Create(0,
                                              GURL(GetSRTDownloadURL()),
                                              net::URLFetcher::GET,
                                              this)) {
@@ -101,6 +230,15 @@ class SRTFetcher : public net::URLFetcherDelegate {
         BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE));
     url_fetcher_->SetRequestContext(
         g_browser_process->system_request_context());
+    // Adds the UMA bit to the download request if the user is enrolled in UMA.
+    ProfileIOData* io_data = ProfileIOData::FromResourceContext(
+        profile_->GetResourceContext());
+    net::HttpRequestHeaders headers;
+    variations::AppendVariationHeaders(
+        url_fetcher_->GetOriginalURL(), io_data->IsOffTheRecord(),
+        ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled(),
+        &headers);
+    url_fetcher_->SetExtraRequestHeaders(headers.ToString());
     url_fetcher_->Start();
   }
 
@@ -142,6 +280,9 @@ class SRTFetcher : public net::URLFetcherDelegate {
  private:
   ~SRTFetcher() override {}
 
+  // The user profile.
+  Profile* profile_;
+
   // The underlying URL fetcher. The instance is alive from construction through
   // OnURLFetchComplete.
   scoped_ptr<net::URLFetcher> url_fetcher_;
@@ -149,26 +290,176 @@ class SRTFetcher : public net::URLFetcherDelegate {
   DISALLOW_COPY_AND_ASSIGN(SRTFetcher);
 };
 
+namespace {
+
+// Try to fetch the SRT, and on success, show the prompt to run it.
+void MaybeFetchSRT(Browser* browser, const std::string& reporter_version) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  if (!g_prompt_trigger_.is_null()) {
+    g_prompt_trigger_.Run(browser, reporter_version);
+    return;
+  }
+  Profile* profile = browser->profile();
+  DCHECK(profile);
+  PrefService* prefs = profile->GetPrefs();
+  DCHECK(prefs);
+
+  // Don't show the prompt again if it's been shown before for this profile
+  // and for the current variations seed, unless there's a pending prompt to
+  // show in the Chrome menu.
+  std::string incoming_seed = GetIncomingSRTSeed();
+  std::string old_seed = prefs->GetString(prefs::kSwReporterPromptSeed);
+  PrefService* local_state = g_browser_process->local_state();
+  bool pending_prompt =
+      local_state && local_state->GetBoolean(prefs::kSwReporterPendingPrompt);
+  if (!incoming_seed.empty() && incoming_seed == old_seed && !pending_prompt) {
+    RecordReporterStepHistogram(SW_REPORTER_ALREADY_PROMPTED);
+    return;
+  }
+
+  if (!incoming_seed.empty() && incoming_seed != old_seed) {
+    prefs->SetString(prefs::kSwReporterPromptSeed, incoming_seed);
+    // Forget about pending prompts if prompt seed has changed.
+    if (local_state)
+      local_state->SetBoolean(prefs::kSwReporterPendingPrompt, false);
+  }
+  prefs->SetString(prefs::kSwReporterPromptVersion, reporter_version);
+
+  // Download the SRT.
+  RecordReporterStepHistogram(SW_REPORTER_DOWNLOAD_START);
+
+  // All the work happens in the self-deleting class below.
+  new SRTFetcher(profile);
+}
+
+// Report the SwReporter run time with UMA both as reported by the tool via
+// the registry and as measured by |ReporterRunner|.
+void ReportSwReporterRuntime(const base::TimeDelta& reporter_running_time) {
+  UMA_HISTOGRAM_LONG_TIMES("SoftwareReporter.RunningTimeAccordingToChrome",
+                           reporter_running_time);
+
+  base::win::RegKey reporter_key(
+      HKEY_CURRENT_USER, kSoftwareRemovalToolRegistryKey, KEY_ALL_ACCESS);
+  if (!reporter_key.Valid()) {
+    UMA_HISTOGRAM_ENUMERATION(kRunningTimeErrorMetricName,
+                              REPORTER_RUNNING_TIME_ERROR_REGISTRY_KEY_INVALID,
+                              REPORTER_RUNNING_TIME_ERROR_MAX);
+    return;
+  }
+
+  bool has_start_time = false;
+  int64_t start_time_value = 0;
+  if (reporter_key.HasValue(kStartTimeValueName) &&
+      reporter_key.ReadInt64(kStartTimeValueName, &start_time_value) ==
+          ERROR_SUCCESS) {
+    has_start_time = true;
+    reporter_key.DeleteValue(kStartTimeValueName);
+  }
+
+  bool has_end_time = false;
+  int64_t end_time_value = 0;
+  if (reporter_key.HasValue(kEndTimeValueName) &&
+      reporter_key.ReadInt64(kEndTimeValueName, &end_time_value) ==
+          ERROR_SUCCESS) {
+    has_end_time = true;
+    reporter_key.DeleteValue(kEndTimeValueName);
+  }
+
+  if (has_start_time && has_end_time) {
+    base::TimeDelta registry_run_time =
+        base::Time::FromInternalValue(end_time_value) -
+        base::Time::FromInternalValue(start_time_value);
+    UMA_HISTOGRAM_LONG_TIMES("SoftwareReporter.RunningTime", registry_run_time);
+    UMA_HISTOGRAM_ENUMERATION(kRunningTimeErrorMetricName,
+                              REPORTER_RUNNING_TIME_ERROR_NO_ERROR,
+                              REPORTER_RUNNING_TIME_ERROR_MAX);
+  } else if (!has_start_time && !has_end_time) {
+    UMA_HISTOGRAM_ENUMERATION(kRunningTimeErrorMetricName,
+                              REPORTER_RUNNING_TIME_ERROR_MISSING_BOTH_TIMES,
+                              REPORTER_RUNNING_TIME_ERROR_MAX);
+  } else if (!has_start_time) {
+    UMA_HISTOGRAM_ENUMERATION(kRunningTimeErrorMetricName,
+                              REPORTER_RUNNING_TIME_ERROR_MISSING_START_TIME,
+                              REPORTER_RUNNING_TIME_ERROR_MAX);
+  } else {
+    DCHECK(!has_end_time);
+    UMA_HISTOGRAM_ENUMERATION(kRunningTimeErrorMetricName,
+                              REPORTER_RUNNING_TIME_ERROR_MISSING_END_TIME,
+                              REPORTER_RUNNING_TIME_ERROR_MAX);
+  }
+}
+
+// Report the UwS scan times of the software reporter tool via UMA.
+void ReportSwReporterScanTimes() {
+  base::string16 scan_times_key_path = base::StringPrintf(
+      L"%ls\\%ls", kSoftwareRemovalToolRegistryKey, kScanTimesSubKey);
+  base::win::RegKey scan_times_key(HKEY_CURRENT_USER,
+                                   scan_times_key_path.c_str(), KEY_ALL_ACCESS);
+  if (!scan_times_key.Valid())
+    return;
+
+  base::string16 value_name;
+  int uws_id = 0;
+  int64_t raw_scan_time = 0;
+  int num_scan_times = scan_times_key.GetValueCount();
+  for (int i = 0; i < num_scan_times; ++i) {
+    if (scan_times_key.GetValueNameAt(i, &value_name) == ERROR_SUCCESS &&
+        base::StringToInt(value_name, &uws_id) &&
+        scan_times_key.ReadInt64(value_name.c_str(), &raw_scan_time) ==
+            ERROR_SUCCESS) {
+      base::TimeDelta scan_time =
+          base::TimeDelta::FromInternalValue(raw_scan_time);
+      base::HistogramBase* histogram = base::SparseHistogram::FactoryGet(
+          kScanTimesMetricName, base::HistogramBase::kUmaTargetedHistogramFlag);
+      if (histogram) {
+        // We report the number of seconds plus one because it can take less
+        // than one second to scan some UwS and the count passed to |AddCount|
+        // must be at least one.
+        histogram->AddCount(uws_id, scan_time.InSeconds() + 1);
+      }
+    }
+  }
+  // Clean up by deleting the scan times key, which is a subkey of the main
+  // reporter key.
+  scan_times_key.Close();
+  base::win::RegKey reporter_key(HKEY_CURRENT_USER,
+                                 kSoftwareRemovalToolRegistryKey,
+                                 KEY_ENUMERATE_SUB_KEYS);
+  if (reporter_key.Valid())
+    reporter_key.DeleteKey(kScanTimesSubKey);
+}
+
 // This class tries to run the reporter and reacts to its exit code. It
 // schedules subsequent runs as needed, or retries as soon as a browser is
 // available when none is on first try.
 class ReporterRunner : public chrome::BrowserListObserver {
  public:
-  static ReporterRunner* GetInstance() {
-    return Singleton<ReporterRunner,
-                     LeakySingletonTraits<ReporterRunner>>::get();
-  }
-
   // Starts the sequence of attempts to run the reporter.
-  void Run(const base::FilePath& exe_path, const std::string& version) {
-    DCHECK_CURRENTLY_ON(BrowserThread::UI);
-    exe_path_ = exe_path;
-    version_ = version;
-    TryToRun();
+  static void Run(
+      const base::FilePath& exe_path,
+      const std::string& version,
+      const scoped_refptr<base::TaskRunner>& main_thread_task_runner,
+      const scoped_refptr<base::TaskRunner>& blocking_task_runner) {
+    if (!instance_)
+      instance_ = new ReporterRunner;
+    DCHECK(instance_->thread_checker_.CalledOnValidThread());
+    // There's nothing to do if the path and version of the reporter has not
+    // changed, we just keep running the tasks that are running now.
+    if (instance_->exe_path_ == exe_path && instance_->version_ == version)
+      return;
+    bool first_run = instance_->exe_path_.empty();
+
+    instance_->exe_path_ = exe_path;
+    instance_->version_ = version;
+    instance_->main_thread_task_runner_ = main_thread_task_runner;
+    instance_->blocking_task_runner_ = blocking_task_runner;
+
+    if (first_run)
+      instance_->TryToRun();
   }
 
  private:
-  friend struct DefaultSingletonTraits<ReporterRunner>;
   ReporterRunner() {}
   ~ReporterRunner() override {}
 
@@ -176,42 +467,43 @@ class ReporterRunner : public chrome::BrowserListObserver {
   void OnBrowserSetLastActive(Browser* browser) override {}
   void OnBrowserRemoved(Browser* browser) override {}
   void OnBrowserAdded(Browser* browser) override {
+    DCHECK(thread_checker_.CalledOnValidThread());
     DCHECK(browser);
     if (browser->host_desktop_type() == chrome::GetActiveDesktop()) {
-      MaybeFetchSRT(browser);
+      MaybeFetchSRT(browser, version_);
       BrowserList::RemoveObserver(this);
     }
-  }
-
-  // Identifies that we completed the run of the reporter and schedule the next
-  // run in kDaysBetweenSuccessfulSwReporterRuns.
-  void CompletedRun() {
-    DCHECK_CURRENTLY_ON(BrowserThread::UI);
-    g_browser_process->local_state()->SetInt64(
-        prefs::kSwReporterLastTimeTriggered,
-        base::Time::Now().ToInternalValue());
-
-    BrowserThread::PostDelayedTask(
-        BrowserThread::UI, FROM_HERE,
-        base::Bind(&ReporterRunner::TryToRun, base::Unretained(this)),
-        base::TimeDelta::FromDays(kDaysBetweenSuccessfulSwReporterRuns));
   }
 
   // This method is called on the UI thread when the reporter run has completed.
   // This is run as a task posted from an interruptible worker thread so should
   // be resilient to unexpected shutdown.
-  void ReporterDone(int exit_code) {
-    DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  void ReporterDone(const base::Time& reporter_start_time, int exit_code) {
+    DCHECK(thread_checker_.CalledOnValidThread());
+
+    base::TimeDelta reporter_running_time =
+        base::Time::Now() - reporter_start_time;
+    // Don't continue when the reporter process failed to launch, but still try
+    // again after the regular delay. It's not worth retrying earlier, risking
+    // running too often if it always fails, since not many users fail here.
+    main_thread_task_runner_->PostDelayedTask(
+        FROM_HERE,
+        base::Bind(&ReporterRunner::TryToRun, base::Unretained(this)),
+        base::TimeDelta::FromDays(days_between_reporter_runs_));
+    if (exit_code == kReporterFailureExitCode)
+      return;
+
     UMA_HISTOGRAM_SPARSE_SLOWLY("SoftwareReporter.ExitCode", exit_code);
-
-    if (g_browser_process && g_browser_process->local_state()) {
-      g_browser_process->local_state()->SetInteger(
-          prefs::kSwReporterLastExitCode, exit_code);
+    ReportFoundUwS();
+    PrefService* local_state = g_browser_process->local_state();
+    if (local_state) {
+      local_state->SetInteger(prefs::kSwReporterLastExitCode, exit_code);
+      local_state->SetInt64(prefs::kSwReporterLastTimeTriggered,
+                            base::Time::Now().ToInternalValue());
     }
-
-    // To complete the run if we exit without releasing this scoped closure.
-    base::ScopedClosureRunner completed(
-        base::Bind(&ReporterRunner::CompletedRun, base::Unretained(this)));
+    ReportSwReporterRuntime(reporter_running_time);
+    ReportSwReporterScanTimes();
+    ReportSwReporterMemoryUsage();
 
     if (!IsInSRTPromptFieldTrialGroups()) {
       // Knowing about disabled field trial is more important than reporter not
@@ -236,119 +528,93 @@ class ReporterRunner : public chrome::BrowserListObserver {
     Browser* browser = chrome::FindLastActiveWithHostDesktopType(desktop_type);
     if (!browser) {
       RecordReporterStepHistogram(SW_REPORTER_NO_BROWSER);
-      BrowserList::AddObserver(GetInstance());
+      BrowserList::AddObserver(this);
     } else {
-      MaybeFetchSRT(browser);
+      MaybeFetchSRT(browser, version_);
     }
-  }
-
-  static void MaybeFetchSRT(Browser* browser) {
-    DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-    Profile* profile = browser->profile();
-    DCHECK(profile);
-    PrefService* prefs = profile->GetPrefs();
-    DCHECK(prefs);
-
-    // Don't show the prompt again if it's been shown before for this profile
-    // and for the current Finch seed.
-    std::string incoming_seed = GetIncomingSRTSeed();
-    std::string old_seed = prefs->GetString(prefs::kSwReporterPromptSeed);
-    if (!incoming_seed.empty() && incoming_seed == old_seed) {
-      RecordReporterStepHistogram(SW_REPORTER_ALREADY_PROMPTED);
-      return;
-    }
-
-    if (!incoming_seed.empty())
-      prefs->SetString(prefs::kSwReporterPromptSeed, incoming_seed);
-    prefs->SetString(prefs::kSwReporterPromptVersion, GetInstance()->version_);
-
-    // Download the SRT.
-    RecordReporterStepHistogram(SW_REPORTER_DOWNLOAD_START);
-
-    // All the work happens in the self-deleting class above.
-    new SRTFetcher();
-  }
-
-  // This method is called from a worker thread to launch the SwReporter and
-  // wait for termination to collect its exit code. This task could be
-  // interrupted by a shutdown at anytime, so it shouldn't depend on anything
-  // external that could be shutdown beforehand. It's static to make sure it
-  // won't access data members, except for the need for a this pointer to call
-  // back member functions on the UI thread. We can safely use GetInstance()
-  // here because the singleton is leaky.
-  static void LaunchAndWaitForExit(const base::FilePath& exe_path,
-                                   const std::string& version) {
-    const base::CommandLine reporter_command_line(exe_path);
-    base::Process reporter_process =
-        base::LaunchProcess(reporter_command_line, base::LaunchOptions());
-    if (!reporter_process.IsValid()) {
-      RecordReporterStepHistogram(SW_REPORTER_FAILED_TO_START);
-      // Don't call ReporterDone when the reporter process failed to launch, but
-      // try again after the regular delay. It's not worth retrying earlier,
-      // risking running too often if it always fail, since not many users fail
-      // here, less than 1%.
-      BrowserThread::PostDelayedTask(
-          BrowserThread::UI, FROM_HERE,
-          base::Bind(&ReporterRunner::TryToRun,
-                     base::Unretained(GetInstance())),
-          base::TimeDelta::FromDays(kDaysBetweenSuccessfulSwReporterRuns));
-      return;
-    }
-    RecordReporterStepHistogram(SW_REPORTER_START_EXECUTION);
-
-    int exit_code = -1;
-    bool success = reporter_process.WaitForExit(&exit_code);
-    DCHECK(success);
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
-        base::Bind(&ReporterRunner::ReporterDone,
-                   base::Unretained(GetInstance()), exit_code));
   }
 
   void TryToRun() {
-    DCHECK_CURRENTLY_ON(BrowserThread::UI);
-    if (version_.empty()) {
+    DCHECK(thread_checker_.CalledOnValidThread());
+    PrefService* local_state = g_browser_process->local_state();
+    if (version_.empty() || !local_state) {
       DCHECK(exe_path_.empty());
       return;
     }
 
-    // Run the reporter if it hasn't been triggered in the
-    // kDaysBetweenSuccessfulSwReporterRuns days.
+    // Run the reporter if it hasn't been triggered in the last
+    // |days_between_reporter_runs_| days, which depends if there is a pending
+    // prompt to be added to Chrome's menu.
+    if (local_state->GetBoolean(prefs::kSwReporterPendingPrompt)) {
+      days_between_reporter_runs_ = kDaysBetweenSwReporterRunsForPendingPrompt;
+      RecordReporterStepHistogram(SW_REPORTER_RAN_DAILY);
+    } else {
+      days_between_reporter_runs_ = kDaysBetweenSuccessfulSwReporterRuns;
+    }
     const base::Time last_time_triggered = base::Time::FromInternalValue(
-        g_browser_process->local_state()->GetInt64(
-            prefs::kSwReporterLastTimeTriggered));
+        local_state->GetInt64(prefs::kSwReporterLastTimeTriggered));
     base::TimeDelta next_trigger_delay(
         last_time_triggered +
-        base::TimeDelta::FromDays(kDaysBetweenSuccessfulSwReporterRuns) -
+        base::TimeDelta::FromDays(days_between_reporter_runs_) -
         base::Time::Now());
-    if (next_trigger_delay.ToInternalValue() <= 0) {
-      // Use a worker pool because this task is blocking and may take a long
-      // time to complete.
-      base::WorkerPool::PostTask(
-          FROM_HERE, base::Bind(&ReporterRunner::LaunchAndWaitForExit,
-                                exe_path_, version_),
-          true);
+    if (next_trigger_delay.ToInternalValue() <= 0 ||
+        // Also make sure the kSwReporterLastTimeTriggered value is not set in
+        // the future.
+        last_time_triggered > base::Time::Now()) {
+      // It's OK to simply |PostTaskAndReplyWithResult| so that
+      // |LaunchAndWaitForExit| doesn't need to access
+      // |main_thread_task_runner_| since the callback is not delayed and the
+      // test task runner won't need to force it.
+      base::PostTaskAndReplyWithResult(
+          blocking_task_runner_.get(), FROM_HERE,
+          base::Bind(&LaunchAndWaitForExit, exe_path_, version_),
+          base::Bind(&ReporterRunner::ReporterDone, base::Unretained(this),
+                     base::Time::Now()));
     } else {
-      BrowserThread::PostDelayedTask(
-          BrowserThread::UI, FROM_HERE,
-          base::Bind(&ReporterRunner::TryToRun,
-                     base::Unretained(GetInstance())),
+      main_thread_task_runner_->PostDelayedTask(
+          FROM_HERE,
+          base::Bind(&ReporterRunner::TryToRun, base::Unretained(this)),
           next_trigger_delay);
     }
   }
 
   base::FilePath exe_path_;
   std::string version_;
+  scoped_refptr<base::TaskRunner> main_thread_task_runner_;
+  scoped_refptr<base::TaskRunner> blocking_task_runner_;
 
+  // This value is used to identify how long to wait before starting a new run
+  // of the reporter. It's initialized with the default value and may be changed
+  // to a different value when a prompt is pending and the reporter should be
+  // run before adding the global error to the Chrome menu.
+  int days_between_reporter_runs_ = kDaysBetweenSuccessfulSwReporterRuns;
+
+  // A single leaky instance.
+  static ReporterRunner* instance_;
+
+  base::ThreadChecker thread_checker_;
   DISALLOW_COPY_AND_ASSIGN(ReporterRunner);
 };
 
+ReporterRunner* ReporterRunner::instance_ = nullptr;
+
 }  // namespace
 
-void RunSwReporter(const base::FilePath& exe_path, const std::string& version) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  ReporterRunner::GetInstance()->Run(exe_path, version);
+void RunSwReporter(
+    const base::FilePath& exe_path,
+    const std::string& version,
+    const scoped_refptr<base::TaskRunner>& main_thread_task_runner,
+    const scoped_refptr<base::TaskRunner>& blocking_task_runner) {
+  ReporterRunner::Run(exe_path, version, main_thread_task_runner,
+                      blocking_task_runner);
+}
+
+void SetReporterLauncherForTesting(const ReporterLauncher& reporter_launcher) {
+  g_reporter_launcher_ = reporter_launcher;
+}
+
+void SetPromptTriggerForTesting(const PromptTrigger& prompt_trigger) {
+  g_prompt_trigger_ = prompt_trigger;
 }
 
 }  // namespace safe_browsing

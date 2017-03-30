@@ -4,6 +4,8 @@
 
 #include "content/renderer/vr/vr_dispatcher.h"
 
+#include <stddef.h>
+
 #include "content/public/common/service_registry.h"
 #include "content/renderer/vr/vr_type_converters.h"
 
@@ -57,7 +59,7 @@ void VRDispatcher::OnGetDevices(int request_id,
     web_devices[i] = devices[i].To<blink::WebVRDevice>();
   }
 
-  callback->onSuccess(&web_devices);
+  callback->onSuccess(web_devices);
   pending_requests_.Remove(request_id);
 }
 

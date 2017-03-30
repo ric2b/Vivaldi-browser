@@ -4,23 +4,27 @@
 
 #include "chrome/utility/media_galleries/image_metadata_extractor.h"
 
+extern "C" {
+#include <libexif/exif-data.h>
+#include <libexif/exif-loader.h>
+}  // extern "C"
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/path_service.h"
 #include "base/scoped_native_library.h"
 #include "base/strings/string_number_conversions.h"
+#include "build/build_config.h"
 #include "content/public/common/content_paths.h"
 #include "media/base/data_source.h"
 #include "net/base/io_buffer.h"
-
-extern "C" {
-#include <libexif/exif-data.h>
-#include <libexif/exif-loader.h>
-}  // extern "C"
 
 namespace metadata {
 
@@ -44,12 +48,10 @@ void FinishGetImageBytes(
   buffer->DidConsume(bytes_read);
   // Didn't get the whole file. Continue reading to get the rest.
   if (buffer->BytesRemaining() > 0) {
-    source->Read(
-        0,
-        buffer->BytesRemaining(),
-        reinterpret_cast<uint8*>(buffer->data()),
-        base::Bind(
-            &FinishGetImageBytes, buffer, base::Unretained(source), callback));
+    source->Read(0, buffer->BytesRemaining(),
+                 reinterpret_cast<uint8_t*>(buffer->data()),
+                 base::Bind(&FinishGetImageBytes, buffer,
+                            base::Unretained(source), callback));
     return;
   }
 
@@ -60,7 +62,7 @@ void FinishGetImageBytes(
 void GetImageBytes(
     media::DataSource* source,
     const GotImageCallback& callback) {
-  int64 size64 = 0;
+  int64_t size64 = 0;
   if (!source->GetSize(&size64) ||
       base::saturated_cast<size_t>(size64) > kMaxBufferSize) {
     return callback.Run(NULL);
@@ -70,7 +72,7 @@ void GetImageBytes(
   scoped_refptr<net::DrainableIOBuffer> buffer(
       new net::DrainableIOBuffer(new net::IOBuffer(size), size));
   source->Read(0, buffer->BytesRemaining(),
-               reinterpret_cast<uint8*>(buffer->data()),
+               reinterpret_cast<uint8_t*>(buffer->data()),
                base::Bind(&FinishGetImageBytes, buffer,
                           base::Unretained(source), callback));
 }
@@ -106,9 +108,10 @@ class ExifFunctions {
     base::FilePath module_path = base::FilePath().AppendASCII("libexif.so.12");
 #endif
 
-    base::ScopedNativeLibrary lib(base::LoadNativeLibrary(module_path, NULL));
+    base::NativeLibraryLoadError error;
+    base::ScopedNativeLibrary lib(base::LoadNativeLibrary(module_path, &error));
     if (!lib.is_valid()) {
-      LOG(ERROR) << "Couldn't load libexif.";
+      LOG(ERROR) << "Couldn't load libexif. " << error.ToString();
       return false;
     }
 
@@ -215,8 +218,9 @@ class ExifFunctions {
 
  private:
   // Exported by libexif.
-  typedef unsigned char (*ExifLoaderWriteFunc)(
-      ExifLoader *eld, unsigned char *buf, unsigned int len);
+  typedef unsigned char (*ExifLoaderWriteFunc)(ExifLoader* eld,
+                                               unsigned char* buf,
+                                               unsigned int len);
   typedef ExifLoader* (*ExifLoaderNewFunc)();
   typedef void (*ExifLoaderUnrefFunc)(ExifLoader* loader);
   typedef ExifData* (*ExifLoaderGetDataFunc)(ExifLoader* loader);
@@ -319,7 +323,6 @@ void ImageMetadataExtractor::Extract(media::DataSource* source,
 
   GetImageBytes(source, base::Bind(&ImageMetadataExtractor::FinishExtraction,
                                    base::Unretained(this), callback));
-
 }
 
 int ImageMetadataExtractor::width() const {

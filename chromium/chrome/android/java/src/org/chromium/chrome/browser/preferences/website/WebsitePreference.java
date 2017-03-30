@@ -23,9 +23,8 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.widget.RoundedIconGenerator;
 
 /**
- * A preference that displays a website's URL and, optionally, some extra permission-related data
- * (e.g. the amount of local storage used by the site, or an icon describing what type of media
- * access the site has.)
+ * A preference that displays a website's favicon and URL and, optionally, the amount of local
+ * storage used by the site.
  */
 @SuppressFBWarnings("EQ_COMPARETO_USE_OBJECT_EQUALS")
 class WebsitePreference extends Preference implements FaviconImageCallback {
@@ -42,16 +41,18 @@ class WebsitePreference extends Preference implements FaviconImageCallback {
 
     // Metrics for favicon processing.
     private static final int FAVICON_CORNER_RADIUS_DP = 2;
-    private static final int FAVICON_SIZE_DP = 16;
     private static final int FAVICON_PADDING_DP = 4;
     private static final int FAVICON_TEXT_SIZE_DP = 10;
     private static final int FAVICON_BACKGROUND_COLOR = 0xff969696;
+
+    private int mFaviconSizePx;
 
     WebsitePreference(Context context, Website site, SiteSettingsCategory category) {
         super(context);
         mSite = site;
         mCategory = category;
         setWidgetLayoutResource(R.layout.website_features);
+        mFaviconSizePx = context.getResources().getDimensionPixelSize(R.dimen.default_favicon_size);
 
         // To make sure the layout stays stable throughout, we assign a
         // transparent drawable as the icon initially. This is so that
@@ -80,8 +81,10 @@ class WebsitePreference extends Preference implements FaviconImageCallback {
         mFaviconHelper = null;
         if (image == null) {
             // Invalid favicon, produce a generic one.
+            float density = getContext().getResources().getDisplayMetrics().density;
+            int faviconSizeDp = Math.round(mFaviconSizePx / density);
             RoundedIconGenerator faviconGenerator = new RoundedIconGenerator(
-                    getContext(), FAVICON_SIZE_DP, FAVICON_SIZE_DP,
+                    getContext(), faviconSizeDp, faviconSizeDp,
                     FAVICON_CORNER_RADIUS_DP, FAVICON_BACKGROUND_COLOR,
                     FAVICON_TEXT_SIZE_DP);
             image = faviconGenerator.generateIconForUrl(faviconUrl());
@@ -144,21 +147,17 @@ class WebsitePreference extends Preference implements FaviconImageCallback {
             }
         }
 
-        float density = getContext().getResources().getDisplayMetrics().density;
         if (!mFaviconFetched) {
             // Start the favicon fetching. Will respond in onFaviconAvailable.
             mFaviconHelper = new FaviconHelper();
             if (!mFaviconHelper.getLocalFaviconImageForURL(
-                    Profile.getLastUsedProfile(), faviconUrl(),
-                    FaviconHelper.FAVICON | FaviconHelper.TOUCH_ICON
-                            | FaviconHelper.TOUCH_PRECOMPOSED_ICON,
-                    Math.round(FAVICON_SIZE_DP * density),
-                    this)) {
+                        Profile.getLastUsedProfile(), faviconUrl(), mFaviconSizePx, this)) {
                 onFaviconAvailable(null, null);
             }
             mFaviconFetched = true;
         }
 
+        float density = getContext().getResources().getDisplayMetrics().density;
         int iconPadding = Math.round(FAVICON_PADDING_DP * density);
         View iconView = view.findViewById(android.R.id.icon);
         iconView.setPadding(iconPadding, iconPadding, iconPadding, iconPadding);

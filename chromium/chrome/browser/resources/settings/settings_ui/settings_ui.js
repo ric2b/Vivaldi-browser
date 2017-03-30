@@ -4,17 +4,17 @@
 
 /**
  * @fileoverview
- * 'cr-settings-ui' implements the UI for the Settings page.
+ * 'settings-ui' implements the UI for the Settings page.
  *
  * Example:
  *
- *    <cr-settings-ui prefs="{{prefs}}"></cr-settings-ui>
+ *    <settings-ui prefs="{{prefs}}"></settings-ui>
  *
  * @group Chrome Settings Elements
- * @element cr-settings-ui
+ * @element settings-ui
  */
 Polymer({
-  is: 'cr-settings-ui',
+  is: 'settings-ui',
 
   properties: {
     /**
@@ -22,16 +22,5 @@ Polymer({
      * @type {?CrSettingsPrefsElement}
      */
     prefs: Object,
-
-    /**
-     * Ordered list of settings pages available to the user. Do not edit
-     * this variable directly.
-     * @type {!Array<!HTMLElement>}
-     */
-    pages: {
-      type: Array,
-      value: function() { return []; },
-      notify: true,
-    },
   },
 });

@@ -1,4 +1,5 @@
-# For Linux sandboxing
+# For Linux sandboxing related changes only. Regular content/
+# OWNERS own content/common/.
 jln@chromium.org
 
 # For security review of sandboxes
@@ -56,9 +57,22 @@ per-file *param_traits*.h=palmer@chromium.org
 per-file *param_traits*.h=tsepez@chromium.org
 per-file *param_traits*.h=wfh@chromium.org
 
+per-file *font_config_ipc_linux*=set noparent
+per-file *font_config_ipc_linux*=dcheng@chromium.org
+per-file *font_config_ipc_linux*=inferno@chromium.org
+per-file *font_config_ipc_linux*=jln@chromium.org
+per-file *font_config_ipc_linux*=jschuh@chromium.org
+per-file *font_config_ipc_linux*=kenrb@chromium.org
+per-file *font_config_ipc_linux*=mkwst@chromium.org
+per-file *font_config_ipc_linux*=nasko@chromium.org
+per-file *font_config_ipc_linux*=palmer@chromium.org
+per-file *font_config_ipc_linux*=tsepez@chromium.org
+per-file *font_config_ipc_linux*=wfh@chromium.org
+
 # Changes to Mojo interfaces require a security review to avoid
 # introducing new sandbox escapes.
 per-file *.mojom=set noparent
+per-file *.mojom=palmer@chromium.org
 per-file *.mojom=tsepez@chromium.org
 
 # Accessibility
@@ -75,5 +89,5 @@ per-file cc_messages_unittest.cc=danakj@chromium.org
 per-file cc_messages_perftest.cc=danakj@chromium.org
 
 # DirectWrite
-per-file dwrite_font_platform_win*=shrikant@chromium.org
 per-file dwrite_font_platform_win*=scottmg@chromium.org
+per-file font_warmup_win.cc=scottmg@chromium.org

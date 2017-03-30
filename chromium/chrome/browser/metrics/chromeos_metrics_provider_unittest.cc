@@ -6,46 +6,49 @@
 
 #include <string>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
 #include "chrome/browser/metrics/chromeos_metrics_provider.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/fake_bluetooth_adapter_client.h"
-#include "chromeos/dbus/fake_bluetooth_agent_manager_client.h"
-#include "chromeos/dbus/fake_bluetooth_device_client.h"
-#include "chromeos/dbus/fake_bluetooth_gatt_characteristic_client.h"
-#include "chromeos/dbus/fake_bluetooth_gatt_descriptor_client.h"
-#include "chromeos/dbus/fake_bluetooth_gatt_service_client.h"
-#include "chromeos/dbus/fake_bluetooth_input_client.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "chromeos/login/login_state.h"
 #include "components/metrics/proto/system_profile.pb.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
+#include "device/bluetooth/dbus/bluez_dbus_manager.h"
+#include "device/bluetooth/dbus/fake_bluetooth_adapter_client.h"
+#include "device/bluetooth/dbus/fake_bluetooth_agent_manager_client.h"
+#include "device/bluetooth/dbus/fake_bluetooth_device_client.h"
+#include "device/bluetooth/dbus/fake_bluetooth_gatt_characteristic_client.h"
+#include "device/bluetooth/dbus/fake_bluetooth_gatt_descriptor_client.h"
+#include "device/bluetooth/dbus/fake_bluetooth_gatt_service_client.h"
+#include "device/bluetooth/dbus/fake_bluetooth_input_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if defined(USE_X11)
 #include "ui/events/devices/x11/device_data_manager_x11.h"
 #endif
 
+using bluez::BluetoothAdapterClient;
+using bluez::BluetoothAgentManagerClient;
+using bluez::BluetoothDeviceClient;
+using bluez::BluetoothGattCharacteristicClient;
+using bluez::BluetoothGattDescriptorClient;
+using bluez::BluetoothGattServiceClient;
+using bluez::BluetoothInputClient;
+using bluez::BluezDBusManager;
+using bluez::BluezDBusManagerSetter;
+using bluez::FakeBluetoothAdapterClient;
+using bluez::FakeBluetoothAgentManagerClient;
+using bluez::FakeBluetoothDeviceClient;
+using bluez::FakeBluetoothGattCharacteristicClient;
+using bluez::FakeBluetoothGattDescriptorClient;
+using bluez::FakeBluetoothGattServiceClient;
+using bluez::FakeBluetoothInputClient;
 using chromeos::DBusThreadManager;
 using chromeos::DBusThreadManagerSetter;
-using chromeos::BluetoothAdapterClient;
-using chromeos::BluetoothAgentManagerClient;
-using chromeos::BluetoothDeviceClient;
-using chromeos::BluetoothGattCharacteristicClient;
-using chromeos::BluetoothGattDescriptorClient;
-using chromeos::BluetoothGattServiceClient;
-using chromeos::BluetoothInputClient;
-using chromeos::FakeBluetoothAdapterClient;
-using chromeos::FakeBluetoothAgentManagerClient;
-using chromeos::FakeBluetoothDeviceClient;
-using chromeos::FakeBluetoothGattCharacteristicClient;
-using chromeos::FakeBluetoothGattDescriptorClient;
-using chromeos::FakeBluetoothGattServiceClient;
-using chromeos::FakeBluetoothInputClient;
 using chromeos::PowerManagerClient;
 using chromeos::STUB_DBUS_CLIENT_IMPLEMENTATION;
 
@@ -60,37 +63,39 @@ class ChromeOSMetricsProviderTest : public testing::Test {
 #endif
 
     // Set up the fake Bluetooth environment,
-    scoped_ptr<DBusThreadManagerSetter> dbus_setter =
-        DBusThreadManager::GetSetterForTesting();
-    dbus_setter->SetBluetoothAdapterClient(
+    scoped_ptr<BluezDBusManagerSetter> bluez_dbus_setter =
+        BluezDBusManager::GetSetterForTesting();
+    bluez_dbus_setter->SetBluetoothAdapterClient(
         scoped_ptr<BluetoothAdapterClient>(new FakeBluetoothAdapterClient));
-    dbus_setter->SetBluetoothDeviceClient(
+    bluez_dbus_setter->SetBluetoothDeviceClient(
         scoped_ptr<BluetoothDeviceClient>(new FakeBluetoothDeviceClient));
-    dbus_setter->SetBluetoothGattCharacteristicClient(
+    bluez_dbus_setter->SetBluetoothGattCharacteristicClient(
         scoped_ptr<BluetoothGattCharacteristicClient>(
             new FakeBluetoothGattCharacteristicClient));
-    dbus_setter->SetBluetoothGattDescriptorClient(
+    bluez_dbus_setter->SetBluetoothGattDescriptorClient(
         scoped_ptr<BluetoothGattDescriptorClient>(
             new FakeBluetoothGattDescriptorClient));
-    dbus_setter->SetBluetoothGattServiceClient(
+    bluez_dbus_setter->SetBluetoothGattServiceClient(
         scoped_ptr<BluetoothGattServiceClient>(
             new FakeBluetoothGattServiceClient));
-    dbus_setter->SetBluetoothInputClient(
+    bluez_dbus_setter->SetBluetoothInputClient(
         scoped_ptr<BluetoothInputClient>(new FakeBluetoothInputClient));
-    dbus_setter->SetBluetoothAgentManagerClient(
+    bluez_dbus_setter->SetBluetoothAgentManagerClient(
         scoped_ptr<BluetoothAgentManagerClient>(
             new FakeBluetoothAgentManagerClient));
 
     // Set up a PowerManagerClient instance for PerfProvider.
+    scoped_ptr<DBusThreadManagerSetter> dbus_setter =
+        DBusThreadManager::GetSetterForTesting();
     dbus_setter->SetPowerManagerClient(
         scoped_ptr<PowerManagerClient>(
             PowerManagerClient::Create(STUB_DBUS_CLIENT_IMPLEMENTATION)));
 
     // Grab pointers to members of the thread manager for easier testing.
     fake_bluetooth_adapter_client_ = static_cast<FakeBluetoothAdapterClient*>(
-        DBusThreadManager::Get()->GetBluetoothAdapterClient());
+        BluezDBusManager::Get()->GetBluetoothAdapterClient());
     fake_bluetooth_device_client_ = static_cast<FakeBluetoothDeviceClient*>(
-        DBusThreadManager::Get()->GetBluetoothDeviceClient());
+        BluezDBusManager::Get()->GetBluetoothDeviceClient());
 
     // Initialize the login state trackers.
     if (!chromeos::LoginState::IsInitialized())
@@ -115,20 +120,20 @@ class ChromeOSMetricsProviderTest : public testing::Test {
 };
 
 TEST_F(ChromeOSMetricsProviderTest, MultiProfileUserCount) {
-  std::string user1("user1@example.com");
-  std::string user2("user2@example.com");
-  std::string user3("user3@example.com");
+  const AccountId account_id1(AccountId::FromUserEmail("user1@example.com"));
+  const AccountId account_id2(AccountId::FromUserEmail("user2@example.com"));
+  const AccountId account_id3(AccountId::FromUserEmail("user3@example.com"));
 
   // |scoped_enabler| takes over the lifetime of |user_manager|.
   chromeos::FakeChromeUserManager* user_manager =
       new chromeos::FakeChromeUserManager();
   chromeos::ScopedUserManagerEnabler scoped_enabler(user_manager);
-  user_manager->AddKioskAppUser(user1);
-  user_manager->AddKioskAppUser(user2);
-  user_manager->AddKioskAppUser(user3);
+  user_manager->AddKioskAppUser(account_id1);
+  user_manager->AddKioskAppUser(account_id2);
+  user_manager->AddKioskAppUser(account_id3);
 
-  user_manager->LoginUser(user1);
-  user_manager->LoginUser(user3);
+  user_manager->LoginUser(account_id1);
+  user_manager->LoginUser(account_id3);
 
   ChromeOSMetricsProvider provider;
   provider.OnDidCreateMetricsLog();
@@ -138,19 +143,19 @@ TEST_F(ChromeOSMetricsProviderTest, MultiProfileUserCount) {
 }
 
 TEST_F(ChromeOSMetricsProviderTest, MultiProfileCountInvalidated) {
-  std::string user1("user1@example.com");
-  std::string user2("user2@example.com");
-  std::string user3("user3@example.com");
+  const AccountId account_id1(AccountId::FromUserEmail("user1@example.com"));
+  const AccountId account_id2(AccountId::FromUserEmail("user2@example.com"));
+  const AccountId account_id3(AccountId::FromUserEmail("user3@example.com"));
 
   // |scoped_enabler| takes over the lifetime of |user_manager|.
   chromeos::FakeChromeUserManager* user_manager =
       new chromeos::FakeChromeUserManager();
   chromeos::ScopedUserManagerEnabler scoped_enabler(user_manager);
-  user_manager->AddKioskAppUser(user1);
-  user_manager->AddKioskAppUser(user2);
-  user_manager->AddKioskAppUser(user3);
+  user_manager->AddKioskAppUser(account_id1);
+  user_manager->AddKioskAppUser(account_id2);
+  user_manager->AddKioskAppUser(account_id3);
 
-  user_manager->LoginUser(user1);
+  user_manager->LoginUser(account_id1);
 
   ChromeOSMetricsProvider provider;
   provider.OnDidCreateMetricsLog();
@@ -159,7 +164,7 @@ TEST_F(ChromeOSMetricsProviderTest, MultiProfileCountInvalidated) {
   provider.ProvideSystemProfileMetrics(&system_profile);
   EXPECT_EQ(1u, system_profile.multi_profile_user_count());
 
-  user_manager->LoginUser(user2);
+  user_manager->LoginUser(account_id2);
   provider.ProvideSystemProfileMetrics(&system_profile);
   EXPECT_EQ(0u, system_profile.multi_profile_user_count());
 }
@@ -225,11 +230,29 @@ TEST_F(ChromeOSMetricsProviderTest, BluetoothPairedDevices) {
 
   typedef metrics::SystemProfileProto::Hardware::Bluetooth::PairedDevice
       PairedDevice;
+  // As BluetoothAdapter keeps the device list without ordering,
+  // it's not appropriate to use fixed positional indices to index into the
+  // system_profile.hardware().bluetooth().paired_device list.
+  // Instead, directly find the two devices we're interested in.
+  PairedDevice device1;
+  PairedDevice device2;
+  for (int i = 0;
+       i < system_profile.hardware().bluetooth().paired_device_size(); ++i) {
+    const PairedDevice& device =
+        system_profile.hardware().bluetooth().paired_device(i);
+    if (device.bluetooth_class() ==
+            FakeBluetoothDeviceClient::kPairedDeviceClass &&
+        device.vendor_prefix() == 0x001122U) {
+      // Found the Paired Device object.
+      device1 = device;
+    } else if (device.bluetooth_class() ==
+               FakeBluetoothDeviceClient::kConfirmPasskeyClass) {
+      // Found the Confirm Passkey object.
+      device2 = device;
+    }
+  }
 
-  // First device should match the Paired Device object, complete with
-  // parsed Device ID information.
-  PairedDevice device1 = system_profile.hardware().bluetooth().paired_device(0);
-
+  // The Paired Device object, complete with parsed Device ID information.
   EXPECT_EQ(FakeBluetoothDeviceClient::kPairedDeviceClass,
             device1.bluetooth_class());
   EXPECT_EQ(PairedDevice::DEVICE_COMPUTER, device1.type());
@@ -239,10 +262,7 @@ TEST_F(ChromeOSMetricsProviderTest, BluetoothPairedDevices) {
   EXPECT_EQ(0x030DU, device1.product_id());
   EXPECT_EQ(0x0306U, device1.device_id());
 
-  // Third device should match the Confirm Passkey object, this has
-  // no Device ID information.
-  PairedDevice device2 = system_profile.hardware().bluetooth().paired_device(1);
-
+  // The Confirm Passkey object, this has no Device ID information.
   EXPECT_EQ(FakeBluetoothDeviceClient::kConfirmPasskeyClass,
             device2.bluetooth_class());
   EXPECT_EQ(PairedDevice::DEVICE_PHONE, device2.type());

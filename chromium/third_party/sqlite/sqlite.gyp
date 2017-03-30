@@ -28,9 +28,16 @@
       # appropriately.  Chromium doesn't configure SQLite for that, and would
       # prefer to control distribution to worker threads.
       'SQLITE_MAX_WORKER_THREADS=0',
-      # TODO(shess): Figure out why this is here.  Nobody references it
-      # directly.
-      '_HAS_EXCEPTIONS=0',
+      # Allow 256MB mmap footprint per connection.  Should not be too open-ended
+      # as that could cause memory fragmentation.  50MB encompasses the 99th
+      # percentile of Chrome databases in the wild.
+      # TODO(shess): A 64-bit-specific value could be 1G or more.
+      # TODO(shess): Figure out if exceeding this is costly.
+      'SQLITE_MAX_MMAP_SIZE=268435456',
+      # Use a read-only memory map when mmap'ed I/O is enabled to prevent memory
+      # stompers from directly corrupting the database.
+      # TODO(shess): Upstream the ability to use this define.
+      'SQLITE_MMAP_READ_ONLY=1',
       # NOTE(shess): Some defines can affect the amalgamation.  Those should be
       # added to google_generate_amalgamation.sh, and the amalgamation
       # re-generated.  Usually this involves disabling features which include
@@ -46,15 +53,14 @@
       'target_name': 'sqlite',
       'conditions': [
         [ 'chromeos==1' , {
-            'defines': [
-                # Despite obvious warnings about not using this flag
-                # in deployment, we are turning off sync in ChromeOS
-                # and relying on the underlying journaling filesystem
-                # to do error recovery properly.  It's much faster.
-                'SQLITE_NO_SYNC',
-                ],
-          },
-        ],
+          'defines': [
+            # Despite obvious warnings about not using this flag in deployment,
+            # we are turning off sync in ChromeOS and relying on the underlying
+            # journaling filesystem to do error recovery properly.  It's much
+            # faster.
+            'SQLITE_NO_SYNC',
+          ],
+        }],
         ['os_posix == 1', {
           'defines': [
             # Allow xSleep() call on Unix to use usleep() rather than sleep().
@@ -63,12 +69,21 @@
             # profile databases are mostly exclusive, but renderer databases may
             # allow for contention.
             'HAVE_USLEEP=1',
+            # Use pread/pwrite directly rather than emulating them.
+            'USE_PREAD=1',
           ],
         }],
         ['OS == "linux" or OS == "android"', {
           'defines': [
             # Linux provides fdatasync(), a faster equivalent of fsync().
             'fdatasync=fdatasync',
+          ],
+        }],
+        # Pull in config.h on Linux.  This allows use of preprocessor macros
+        # which are not available to the build config.
+        ['OS == "linux"', {
+          'defines': [
+            '_HAVE_SQLITE_CONFIG_H',
           ],
         }],
         ['use_system_sqlite', {
@@ -114,12 +129,24 @@
             }],
           ],
         }, { # !use_system_sqlite
-          'product_name': 'sqlite3',
-          'type': 'static_library',
+          # "sqlite3" can cause conflicts with the system library.
+          'product_name': 'chromium_sqlite3',
+          'type': '<(component)',
           'sources': [
+            'amalgamation/config.h',
             'amalgamation/sqlite3.h',
             'amalgamation/sqlite3.c',
           ],
+          'variables': {
+            'clang_warning_flags': [
+              # sqlite contains a few functions that are unused, at least on
+              # Windows with Chromium's sqlite patches applied
+              # (interiorCursorEOF fts3EvalDeferredPhrase
+              # fts3EvalSelectDeferred sqlite3Fts3InitHashTable
+              # sqlite3Fts3InitTok).
+              '-Wno-unused-function',
+            ],
+          },
           'include_dirs': [
             'amalgamation',
           ],
@@ -127,16 +154,19 @@
             '../icu/icu.gyp:icui18n',
             '../icu/icu.gyp:icuuc',
           ],
-          'direct_dependent_settings': {
-            'include_dirs': [
-              '.',
-              '../..',
-            ],
-          },
           'msvs_disabled_warnings': [
-            4018, 4244, 4267,
+            4244, 4267,
           ],
           'conditions': [
+            ['OS == "win" and component == "shared_library"', {
+              'defines': ['SQLITE_API=__declspec(dllexport)'],
+              'direct_dependent_settings': {
+                'defines': ['SQLITE_API=__declspec(dllimport)'],
+              },
+            }],
+            ['OS != "win" and component == "shared_library"', {
+              'defines': ['SQLITE_API=__attribute__((visibility("default")))'],
+            }],
             ['OS=="linux"', {
               'link_settings': {
                 'libraries': [
@@ -148,6 +178,7 @@
               'link_settings': {
                 'libraries': [
                   '$(SDKROOT)/System/Library/Frameworks/CoreFoundation.framework',
+                  '$(SDKROOT)/System/Library/Frameworks/CoreServices.framework',
                 ],
               },
             }],
@@ -175,7 +206,7 @@
       'includes': [
         # Disable LTO due to ELF section name out of range
         # crbug.com/422251
-        '../../build/android/disable_lto.gypi',
+        '../../build/android/disable_gcc_lto.gypi',
       ],
     },
   ],
@@ -188,6 +219,10 @@
           'dependencies': [
             '../icu/icu.gyp:icuuc',
             'sqlite',
+          ],
+          # So shell.c can find the correct sqlite3.h.
+          'include_dirs': [
+            'amalgamation',
           ],
           'sources': [
             'src/src/shell.c',
@@ -214,6 +249,12 @@
           'sources': [
             'src/ext/icu/icu.c',
           ],
+          'variables': {
+            'clang_warning_flags_unset': [
+              # icu.c uses assert(!"foo") instead of assert(false && "foo")
+              '-Wstring-conversion',
+            ],
+          },
         },
       ],
     }],

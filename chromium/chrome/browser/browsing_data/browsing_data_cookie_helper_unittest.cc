@@ -18,10 +18,10 @@ namespace {
 // Test expectations for a given cookie.
 class CookieExpectation {
  public:
-  CookieExpectation() : matched_(false) {}
+  CookieExpectation() {}
 
   bool MatchesCookie(const net::CanonicalCookie& cookie) const {
-    if (!source_.empty() && source_ != cookie.Source())
+    if (!source_.is_empty() && source_ != cookie.Source())
       return false;
     if (!domain_.empty() && domain_ != cookie.Domain())
       return false;
@@ -34,12 +34,12 @@ class CookieExpectation {
     return true;
   }
 
-  std::string source_;
+  GURL source_;
   std::string domain_;
   std::string path_;
   std::string name_;
   std::string value_;
-  bool matched_;
+  bool matched_ = false;
 };
 
 // Matches a CookieExpectation against a Cookie.
@@ -74,7 +74,7 @@ class BrowsingDataCookieHelperTest : public testing::Test {
                             const char* value) {
     CookieExpectation matcher;
     if (source)
-      matcher.source_ = source;
+      matcher.source_ = GURL(source);
     if (domain)
       matcher.domain_ = domain;
     if (path)
@@ -92,10 +92,8 @@ class BrowsingDataCookieHelperTest : public testing::Test {
     ASSERT_EQ(cookie_expectations_.size(), cookie_list_.size());
 
     // For each cookie, look for a matching expectation.
-    for (net::CookieList::iterator it = cookie_list_.begin();
-         it != cookie_list_.end();
-         ++it) {
-      CookieMatcher matcher(*it);
+    for (const auto& cookie : cookie_list_) {
+      CookieMatcher matcher(cookie);
       std::vector<CookieExpectation>::iterator match = std::find_if(
           cookie_expectations_.begin(), cookie_expectations_.end(), matcher);
       if (match != cookie_expectations_.end())
@@ -136,29 +134,31 @@ class BrowsingDataCookieHelperTest : public testing::Test {
   void FetchCallback(const net::CookieList& cookies) {
     cookie_list_ = cookies;
 
-    AddCookieExpectation(NULL, "www.google.com", NULL, "A", NULL);
-    AddCookieExpectation(NULL, "www.gmail.google.com", NULL, "B", NULL);
+    AddCookieExpectation(nullptr, "www.google.com", nullptr, "A", nullptr);
+    AddCookieExpectation(nullptr, "www.gmail.google.com", nullptr, "B",
+                         nullptr);
     CheckCookieExpectations();
   }
 
   void DomainCookieCallback(const net::CookieList& cookies) {
     cookie_list_ = cookies;
 
-    AddCookieExpectation(NULL, "www.google.com", NULL, "A", "1");
-    AddCookieExpectation(NULL, ".www.google.com", NULL, "A", "2");
+    AddCookieExpectation(nullptr, "www.google.com", nullptr, "A", "1");
+    AddCookieExpectation(nullptr, ".www.google.com", nullptr, "A", "2");
     CheckCookieExpectations();
   }
 
   void DeleteCallback(const net::CookieList& cookies) {
     cookie_list_ = cookies;
-    AddCookieExpectation(NULL, "www.gmail.google.com", NULL, "B", NULL);
+    AddCookieExpectation(nullptr, "www.gmail.google.com", nullptr, "B",
+                         nullptr);
     CheckCookieExpectations();
   }
 
   void CannedUniqueCallback(const net::CookieList& cookies) {
     cookie_list_ = cookies;
-    AddCookieExpectation(
-        "http://www.google.com/", "www.google.com", "/", "A", NULL);
+    AddCookieExpectation("http://www.google.com/", "www.google.com", "/", "A",
+                         nullptr);
     CheckCookieExpectations();
   }
 
@@ -179,10 +179,10 @@ class BrowsingDataCookieHelperTest : public testing::Test {
 
   void CannedDomainCookieCallback(const net::CookieList& cookies) {
     cookie_list_ = cookies;
-    AddCookieExpectation(
-        "http://www.google.com/", "www.google.com", NULL, "A", NULL);
-    AddCookieExpectation(
-        "http://www.google.com/", ".www.google.com", NULL, "A", NULL);
+    AddCookieExpectation("http://www.google.com/", "www.google.com", nullptr,
+                         "A", nullptr);
+    AddCookieExpectation("http://www.google.com/", ".www.google.com", nullptr,
+                         "A", nullptr);
     CheckCookieExpectations();
   }
 
@@ -191,11 +191,9 @@ class BrowsingDataCookieHelperTest : public testing::Test {
   }
 
   void DeleteCookie(BrowsingDataCookieHelper* helper, const GURL origin) {
-    for (net::CookieList::iterator it = cookie_list_.begin();
-         it != cookie_list_.end();
-         ++it) {
-      if (it->Source() == net::CanonicalCookie::GetCookieSourceFromURL(origin))
-        helper->DeleteCookie(*it);
+    for (const auto& cookie : cookie_list_) {
+      if (cookie.Source() == origin)
+        helper->DeleteCookie(cookie);
     }
   }
 

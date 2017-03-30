@@ -4,8 +4,10 @@
 
 #include "ui/message_center/message_center_tray.h"
 
+#include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/message_center/message_center.h"
@@ -20,7 +22,10 @@ namespace {
 
 // Menu constants
 const int kTogglePermissionCommand = 0;
+
+#if defined(OS_CHROMEOS)
 const int kShowSettingsCommand = 1;
+#endif
 
 // The model of the context menu for a notification card.
 class NotificationMenuModel : public ui::SimpleMenuModel,
@@ -51,15 +56,17 @@ NotificationMenuModel::NotificationMenuModel(
     : ui::SimpleMenuModel(this),
       tray_(tray),
       notifier_id_(notifier_id) {
-  // Add 'disable notifications' menu item.
   if (!display_source.empty()) {
     AddItem(kTogglePermissionCommand,
             l10n_util::GetStringFUTF16(IDS_MESSAGE_CENTER_NOTIFIER_DISABLE,
                                        display_source));
   }
+
+#ifdef OS_CHROMEOS
   // Add settings menu item.
   AddItem(kShowSettingsCommand,
           l10n_util::GetStringUTF16(IDS_MESSAGE_CENTER_SETTINGS));
+#endif
 }
 
 NotificationMenuModel::~NotificationMenuModel() {
@@ -84,9 +91,11 @@ void NotificationMenuModel::ExecuteCommand(int command_id, int event_flags) {
     case kTogglePermissionCommand:
       tray_->message_center()->DisableNotificationsByNotifier(notifier_id_);
       break;
+#ifdef OS_CHROMEOS
     case kShowSettingsCommand:
       tray_->ShowNotifierSettingsBubble();
       break;
+#endif
     default:
       NOTREACHED();
   }
@@ -115,8 +124,10 @@ bool MessageCenterTray::ShowMessageCenterBubble() {
   HidePopupBubbleInternal();
 
   message_center_visible_ = delegate_->ShowMessageCenter();
-  message_center_->SetVisibility(message_center::VISIBILITY_MESSAGE_CENTER);
-  NotifyMessageCenterTrayChanged();
+  if (message_center_visible_) {
+    message_center_->SetVisibility(message_center::VISIBILITY_MESSAGE_CENTER);
+    NotifyMessageCenterTrayChanged();
+  }
   return message_center_visible_;
 }
 
@@ -142,13 +153,6 @@ void MessageCenterTray::MarkMessageCenterHidden() {
   }
 
   NotifyMessageCenterTrayChanged();
-}
-
-void MessageCenterTray::ToggleMessageCenterBubble() {
-  if (message_center_visible_)
-    HideMessageCenterBubble();
-  else
-    ShowMessageCenterBubble();
 }
 
 void MessageCenterTray::ShowPopupBubble() {
@@ -198,6 +202,13 @@ void MessageCenterTray::ShowNotifierSettingsBubble() {
 scoped_ptr<ui::MenuModel> MessageCenterTray::CreateNotificationMenuModel(
     const NotifierId& notifier_id,
     const base::string16& display_source) {
+#if !defined(OS_CHROMEOS)
+  // Only web pages are configurable on non-chromeos platforms.
+  if (notifier_id.type != NotifierId::WEB_PAGE) {
+    return nullptr;
+  }
+#endif
+
   return make_scoped_ptr(
       new NotificationMenuModel(this, notifier_id, display_source));
 }

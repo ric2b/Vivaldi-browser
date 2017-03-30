@@ -4,6 +4,7 @@
 
 #include "net/url_request/url_request_filter.h"
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "net/base/request_priority.h"
 #include "net/url_request/url_request.h"
@@ -66,8 +67,8 @@ TEST(URLRequestFilter, BasicMatching) {
   EXPECT_TRUE(filter->AddUrlInterceptor(
       kUrl1, scoped_ptr<URLRequestInterceptor>(interceptor)));
   {
-    scoped_refptr<URLRequestJob> found =
-        filter->MaybeInterceptRequest(request1.get(), NULL);
+    scoped_ptr<URLRequestJob> found(
+        filter->MaybeInterceptRequest(request1.get(), NULL));
     EXPECT_TRUE(interceptor->WasLastJobCreated(found.get()));
   }
   EXPECT_EQ(filter->hit_count(), 1);
@@ -89,8 +90,8 @@ TEST(URLRequestFilter, BasicMatching) {
       kUrl1.scheme(), kUrl1.host(),
       scoped_ptr<URLRequestInterceptor>(interceptor));
   {
-    scoped_refptr<URLRequestJob> found =
-        filter->MaybeInterceptRequest(request1.get(), NULL);
+    scoped_ptr<URLRequestJob> found(
+        filter->MaybeInterceptRequest(request1.get(), NULL));
     EXPECT_TRUE(interceptor->WasLastJobCreated(found.get()));
   }
   EXPECT_EQ(1, filter->hit_count());

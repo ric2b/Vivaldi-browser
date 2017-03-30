@@ -4,6 +4,7 @@
 
 #include "content/browser/download/download_stats.h"
 
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/strings/string_util.h"
@@ -213,6 +214,112 @@ const base::FilePath::CharType* kDangerousFileTypes[] = {
   FILE_PATH_LITERAL(".gadget"),
   FILE_PATH_LITERAL(".efi"),
   FILE_PATH_LITERAL(".fon"),
+  FILE_PATH_LITERAL(".partial"),
+  FILE_PATH_LITERAL(".svg"),
+  FILE_PATH_LITERAL(".xml"),
+  FILE_PATH_LITERAL(".xrm_ms"),
+  FILE_PATH_LITERAL(".xsl"),
+  FILE_PATH_LITERAL(".action"),
+  FILE_PATH_LITERAL(".bin"),
+  FILE_PATH_LITERAL(".inx"),
+  FILE_PATH_LITERAL(".ipa"),
+  FILE_PATH_LITERAL(".isu"),
+  FILE_PATH_LITERAL(".job"),
+  FILE_PATH_LITERAL(".out"),
+  FILE_PATH_LITERAL(".pad"),
+  FILE_PATH_LITERAL(".paf"),
+  FILE_PATH_LITERAL(".rgs"),
+  FILE_PATH_LITERAL(".u3p"),
+  FILE_PATH_LITERAL(".vbscript"),
+  FILE_PATH_LITERAL(".workflow"),
+  FILE_PATH_LITERAL(".001"),
+  FILE_PATH_LITERAL(".7z"),
+  FILE_PATH_LITERAL(".ace"),
+  FILE_PATH_LITERAL(".arc"),
+  FILE_PATH_LITERAL(".arj"),
+  FILE_PATH_LITERAL(".b64"),
+  FILE_PATH_LITERAL(".balz"),
+  FILE_PATH_LITERAL(".bhx"),
+  FILE_PATH_LITERAL(".bz"),
+  FILE_PATH_LITERAL(".bz2"),
+  FILE_PATH_LITERAL(".bzip2"),
+  FILE_PATH_LITERAL(".cab"),
+  FILE_PATH_LITERAL(".cpio"),
+  FILE_PATH_LITERAL(".fat"),
+  FILE_PATH_LITERAL(".gz"),
+  FILE_PATH_LITERAL(".gzip"),
+  FILE_PATH_LITERAL(".hfs"),
+  FILE_PATH_LITERAL(".hqx"),
+  FILE_PATH_LITERAL(".iso"),
+  FILE_PATH_LITERAL(".lha"),
+  FILE_PATH_LITERAL(".lpaq1"),
+  FILE_PATH_LITERAL(".lpaq5"),
+  FILE_PATH_LITERAL(".lpaq8"),
+  FILE_PATH_LITERAL(".lzh"),
+  FILE_PATH_LITERAL(".lzma"),
+  FILE_PATH_LITERAL(".mim"),
+  FILE_PATH_LITERAL(".ntfs"),
+  FILE_PATH_LITERAL(".paq8f"),
+  FILE_PATH_LITERAL(".paq8jd"),
+  FILE_PATH_LITERAL(".paq8l"),
+  FILE_PATH_LITERAL(".paq8o"),
+  FILE_PATH_LITERAL(".pea"),
+  FILE_PATH_LITERAL(".quad"),
+  FILE_PATH_LITERAL(".r00"),
+  FILE_PATH_LITERAL(".r01"),
+  FILE_PATH_LITERAL(".r02"),
+  FILE_PATH_LITERAL(".r03"),
+  FILE_PATH_LITERAL(".r04"),
+  FILE_PATH_LITERAL(".r05"),
+  FILE_PATH_LITERAL(".r06"),
+  FILE_PATH_LITERAL(".r07"),
+  FILE_PATH_LITERAL(".r08"),
+  FILE_PATH_LITERAL(".r09"),
+  FILE_PATH_LITERAL(".r10"),
+  FILE_PATH_LITERAL(".r11"),
+  FILE_PATH_LITERAL(".r12"),
+  FILE_PATH_LITERAL(".r13"),
+  FILE_PATH_LITERAL(".r14"),
+  FILE_PATH_LITERAL(".r15"),
+  FILE_PATH_LITERAL(".r16"),
+  FILE_PATH_LITERAL(".r17"),
+  FILE_PATH_LITERAL(".r18"),
+  FILE_PATH_LITERAL(".r19"),
+  FILE_PATH_LITERAL(".r20"),
+  FILE_PATH_LITERAL(".r21"),
+  FILE_PATH_LITERAL(".r22"),
+  FILE_PATH_LITERAL(".r23"),
+  FILE_PATH_LITERAL(".r24"),
+  FILE_PATH_LITERAL(".r25"),
+  FILE_PATH_LITERAL(".r26"),
+  FILE_PATH_LITERAL(".r27"),
+  FILE_PATH_LITERAL(".r28"),
+  FILE_PATH_LITERAL(".r29"),
+  FILE_PATH_LITERAL(".rar"),
+  FILE_PATH_LITERAL(".squashfs"),
+  FILE_PATH_LITERAL(".swm"),
+  FILE_PATH_LITERAL(".tar"),
+  FILE_PATH_LITERAL(".taz"),
+  FILE_PATH_LITERAL(".tbz"),
+  FILE_PATH_LITERAL(".tbz2"),
+  FILE_PATH_LITERAL(".tgz"),
+  FILE_PATH_LITERAL(".tpz"),
+  FILE_PATH_LITERAL(".txz"),
+  FILE_PATH_LITERAL(".tz"),
+  FILE_PATH_LITERAL(".udf"),
+  FILE_PATH_LITERAL(".uu"),
+  FILE_PATH_LITERAL(".uue"),
+  FILE_PATH_LITERAL(".vhd"),
+  FILE_PATH_LITERAL(".vmdk"),
+  FILE_PATH_LITERAL(".wim"),
+  FILE_PATH_LITERAL(".wrc"),
+  FILE_PATH_LITERAL(".xar"),
+  FILE_PATH_LITERAL(".xxe"),
+  FILE_PATH_LITERAL(".xz"),
+  FILE_PATH_LITERAL(".z"),
+  FILE_PATH_LITERAL(".zip"),
+  FILE_PATH_LITERAL(".zipx"),
+  FILE_PATH_LITERAL(".zpaq"),
 };
 
 // Maps extensions to their matching UMA histogram int value.
@@ -236,10 +343,11 @@ void RecordDownloadSource(DownloadSource source) {
       "Download.Sources", source, DOWNLOAD_SOURCE_LAST_ENTRY);
 }
 
-void RecordDownloadCompleted(const base::TimeTicks& start, int64 download_len) {
+void RecordDownloadCompleted(const base::TimeTicks& start,
+                             int64_t download_len) {
   RecordDownloadCount(COMPLETED_COUNT);
   UMA_HISTOGRAM_LONG_TIMES("Download.Time", (base::TimeTicks::Now() - start));
-  int64 max = 1024 * 1024 * 1024;  // One Terabyte.
+  int64_t max = 1024 * 1024 * 1024;  // One Terabyte.
   download_len /= 1024;  // In Kilobytes
   UMA_HISTOGRAM_CUSTOM_COUNTS("Download.DownloadSize",
                               download_len,
@@ -249,8 +357,8 @@ void RecordDownloadCompleted(const base::TimeTicks& start, int64 download_len) {
 }
 
 void RecordDownloadInterrupted(DownloadInterruptReason reason,
-                               int64 received,
-                               int64 total) {
+                               int64_t received,
+                               int64_t total) {
   RecordDownloadCount(INTERRUPTED_COUNT);
   UMA_HISTOGRAM_CUSTOM_ENUMERATION(
       "Download.InterruptedReason",
@@ -261,11 +369,11 @@ void RecordDownloadInterrupted(DownloadInterruptReason reason,
   // The maximum should be 2^kBuckets, to have the logarithmic bucket
   // boundaries fall on powers of 2.
   static const int kBuckets = 30;
-  static const int64 kMaxKb = 1 << kBuckets;  // One Terabyte, in Kilobytes.
-  int64 delta_bytes = total - received;
+  static const int64_t kMaxKb = 1 << kBuckets;  // One Terabyte, in Kilobytes.
+  int64_t delta_bytes = total - received;
   bool unknown_size = total <= 0;
-  int64 received_kb = received / 1024;
-  int64 total_kb = total / 1024;
+  int64_t received_kb = received / 1024;
+  int64_t total_kb = total / 1024;
   UMA_HISTOGRAM_CUSTOM_COUNTS("Download.InterruptedReceivedSizeK",
                               received_kb,
                               1,
@@ -356,9 +464,9 @@ void RecordDownloadWriteLoopCount(int count) {
 }
 
 void RecordAcceptsRanges(const std::string& accepts_ranges,
-                         int64 download_len,
+                         int64_t download_len,
                          bool has_strong_validator) {
-  int64 max = 1024 * 1024 * 1024;  // One Terabyte.
+  int64_t max = 1024 * 1024 * 1024;  // One Terabyte.
   download_len /= 1024;  // In Kilobytes
   static const int kBuckets = 50;
 
@@ -485,14 +593,18 @@ void RecordDownloadMimeType(const std::string& mime_type_string) {
 
   // Do partial matches.
   if (download_content == DOWNLOAD_CONTENT_UNRECOGNIZED) {
-    if (base::StartsWithASCII(mime_type_string, "text/", true)) {
+    if (base::StartsWith(mime_type_string, "text/",
+                         base::CompareCase::SENSITIVE)) {
       download_content = DOWNLOAD_CONTENT_TEXT;
-    } else if (base::StartsWithASCII(mime_type_string, "image/", true)) {
+    } else if (base::StartsWith(mime_type_string, "image/",
+                                base::CompareCase::SENSITIVE)) {
       download_content = DOWNLOAD_CONTENT_IMAGE;
       RecordDownloadImageType(mime_type_string);
-    } else if (base::StartsWithASCII(mime_type_string, "audio/", true)) {
+    } else if (base::StartsWith(mime_type_string, "audio/",
+                                base::CompareCase::SENSITIVE)) {
       download_content = DOWNLOAD_CONTENT_AUDIO;
-    } else if (base::StartsWithASCII(mime_type_string, "video/", true)) {
+    } else if (base::StartsWith(mime_type_string, "video/",
+                                base::CompareCase::SENSITIVE)) {
       download_content = DOWNLOAD_CONTENT_VIDEO;
     }
   }

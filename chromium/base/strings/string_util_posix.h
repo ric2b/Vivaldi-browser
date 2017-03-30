@@ -6,6 +6,7 @@
 #define BASE_STRINGS_STRING_UTIL_POSIX_H_
 
 #include <stdarg.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 #include <wchar.h>
@@ -18,14 +19,6 @@ namespace base {
 // for interaction with APIs that require it.
 inline char* strdup(const char* str) {
   return ::strdup(str);
-}
-
-inline int strcasecmp(const char* string1, const char* string2) {
-  return ::strcasecmp(string1, string2);
-}
-
-inline int strncasecmp(const char* string1, const char* string2, size_t count) {
-  return ::strncasecmp(string1, string2, count);
 }
 
 inline int vsnprintf(char* buffer, size_t size,

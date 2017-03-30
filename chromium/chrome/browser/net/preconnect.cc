@@ -8,6 +8,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
 #include "content/public/browser/browser_thread.h"
+#include "net/base/load_flags.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_request_info.h"
 #include "net/http/http_stream_factory.h"
@@ -30,20 +31,18 @@ void PreconnectOnUIThread(
     net::URLRequestContextGetter* getter) {
   // Prewarm connection to Search URL.
   BrowserThread::PostTask(
-      BrowserThread::IO,
-      FROM_HERE,
+      BrowserThread::IO, FROM_HERE,
       base::Bind(&PreconnectOnIOThread, url, first_party_for_cookies,
-                 motivation, count, make_scoped_refptr(getter)));
+                 motivation, count, make_scoped_refptr(getter), true));
   return;
 }
 
-
-void PreconnectOnIOThread(
-    const GURL& url,
-    const GURL& first_party_for_cookies,
-    UrlInfo::ResolutionMotivation motivation,
-    int count,
-    net::URLRequestContextGetter* getter) {
+void PreconnectOnIOThread(const GURL& url,
+                          const GURL& first_party_for_cookies,
+                          UrlInfo::ResolutionMotivation motivation,
+                          int count,
+                          net::URLRequestContextGetter* getter,
+                          bool allow_credentials) {
   if (!BrowserThread::CurrentlyOn(BrowserThread::IO)) {
     LOG(DFATAL) << "This must be run only on the IO thread.";
     return;
@@ -71,18 +70,15 @@ void PreconnectOnIOThread(
   if (delegate->CanEnablePrivacyMode(url, first_party_for_cookies))
     request_info.privacy_mode = net::PRIVACY_MODE_ENABLED;
 
-  // It almost doesn't matter whether we use net::LOWEST or net::HIGHEST
-  // priority here, as we won't make a request, and will surrender the created
-  // socket to the pool as soon as we can.  However, we would like to mark the
-  // speculative socket as such, and IF we use a net::LOWEST priority, and if
-  // a navigation asked for a socket (after us) then it would get our socket,
-  // and we'd get its later-arriving socket, which might make us record that
-  // the speculation didn't help :-/.  By using net::HIGHEST, we ensure that
-  // a socket is given to us if "we asked first" and this allows us to mark it
-  // as speculative, and better detect stats (if it gets used).
-  // TODO(jar): histogram to see how often we accidentally use a previously-
-  // unused socket, when a previously used socket was available.
-  net::RequestPriority priority = net::HIGHEST;
+  // TODO(yoav): Fix this layering violation, since when credentials are not
+  // allowed we should turn on a flag indicating that, rather then turn on
+  // private mode, even if lower layers would treat both the same.
+  if (!allow_credentials) {
+    request_info.privacy_mode = net::PRIVACY_MODE_ENABLED;
+    request_info.load_flags = net::LOAD_DO_NOT_SEND_COOKIES |
+                              net::LOAD_DO_NOT_SAVE_COOKIES |
+                              net::LOAD_DO_NOT_SEND_AUTH_DATA;
+  }
 
   // Translate the motivation from UrlRequest motivations to HttpRequest
   // motivations.
@@ -107,14 +103,15 @@ void PreconnectOnIOThread(
   // Setup the SSL Configuration.
   net::SSLConfig ssl_config;
   session->ssl_config_service()->GetSSLConfig(&ssl_config);
-  session->GetNextProtos(&ssl_config.next_protos);
+  session->GetAlpnProtos(&ssl_config.alpn_protos);
+  session->GetNpnProtos(&ssl_config.npn_protos);
 
   // All preconnects should perform EV certificate verification.
   ssl_config.verify_ev_cert = true;
 
   net::HttpStreamFactory* http_stream_factory = session->http_stream_factory();
-  http_stream_factory->PreconnectStreams(count, request_info, priority,
-                                         ssl_config, ssl_config);
+  http_stream_factory->PreconnectStreams(count, request_info, ssl_config,
+                                         ssl_config);
 }
 
 }  // namespace chrome_browser_net

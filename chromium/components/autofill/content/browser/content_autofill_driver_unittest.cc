@@ -2,13 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "components/autofill/content/browser/content_autofill_driver.h"
+
+#include <stdint.h>
 #include <algorithm>
+#include <utility>
 #include <vector>
 
 #include "base/command_line.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/utf_string_conversions.h"
-#include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/content/common/autofill_messages.h"
 #include "components/autofill/core/browser/autofill_external_delegate.h"
 #include "components/autofill/core/browser/autofill_manager.h"
@@ -52,7 +55,7 @@ class TestContentAutofillDriver : public ContentAutofillDriver {
       : ContentAutofillDriver(rfh, client, kAppLocale, kDownloadState) {
     scoped_ptr<AutofillManager> autofill_manager(
         new MockAutofillManager(this, client));
-    SetAutofillManager(autofill_manager.Pass());
+    SetAutofillManager(std::move(autofill_manager));
   }
   ~TestContentAutofillDriver() override {}
 
@@ -86,7 +89,7 @@ class ContentAutofillDriverTest : public content::RenderViewHostTestHarness {
   // |AutofillMsg_FillForm| message, fills the output parameters with the values
   // of the message's parameters, and clears the queue of sent messages.
   bool GetAutofillFillFormMessage(int* page_id, FormData* results) {
-    const uint32 kMsgID = AutofillMsg_FillForm::ID;
+    const uint32_t kMsgID = AutofillMsg_FillForm::ID;
     const IPC::Message* message =
         process()->sink().GetFirstMessageMatching(kMsgID);
     if (!message)
@@ -107,7 +110,7 @@ class ContentAutofillDriverTest : public content::RenderViewHostTestHarness {
   // |AutofillMsg_PreviewForm| message, fills the output parameters with the
   // values of the message's parameters, and clears the queue of sent messages.
   bool GetAutofillPreviewFormMessage(int* page_id, FormData* results) {
-    const uint32 kMsgID = AutofillMsg_PreviewForm::ID;
+    const uint32_t kMsgID = AutofillMsg_PreviewForm::ID;
     const IPC::Message* message =
         process()->sink().GetFirstMessageMatching(kMsgID);
     if (!message)
@@ -130,7 +133,7 @@ class ContentAutofillDriverTest : public content::RenderViewHostTestHarness {
   // clears the queue of sent messages.
   bool GetFieldTypePredictionsAvailable(
       std::vector<FormDataPredictions>* predictions) {
-    const uint32 kMsgID = AutofillMsg_FieldTypePredictionsAvailable::ID;
+    const uint32_t kMsgID = AutofillMsg_FieldTypePredictionsAvailable::ID;
     const IPC::Message* message =
         process()->sink().GetFirstMessageMatching(kMsgID);
     if (!message)
@@ -150,7 +153,7 @@ class ContentAutofillDriverTest : public content::RenderViewHostTestHarness {
   // messages. If none is present, returns false. Otherwise, extracts the first
   // matching message, fills the output parameter with the string16 from the
   // message's parameter, and clears the queue of sent messages.
-  bool GetString16FromMessageWithID(uint32 messageID, base::string16* value) {
+  bool GetString16FromMessageWithID(uint32_t messageID, base::string16* value) {
     const IPC::Message* message =
         process()->sink().GetFirstMessageMatching(messageID);
     if (!message)
@@ -182,7 +185,7 @@ class ContentAutofillDriverTest : public content::RenderViewHostTestHarness {
   // Searches for a message matching |messageID| in the queue of sent IPC
   // messages. If none is present, returns false. Otherwise, clears the queue
   // of sent messages and returns true.
-  bool HasMessageMatchingID(uint32 messageID) {
+  bool HasMessageMatchingID(uint32_t messageID) {
     const IPC::Message* message =
         process()->sink().GetFirstMessageMatching(messageID);
     if (!message)

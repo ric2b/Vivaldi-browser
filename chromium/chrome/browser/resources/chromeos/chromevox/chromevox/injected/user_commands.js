@@ -20,12 +20,14 @@ goog.provide('cvox.ChromeVoxUserCommands');
 goog.require('cvox.BrailleKeyCommand');
 goog.require('cvox.BrailleOverlayWidget');
 goog.require('cvox.ChromeVox');
+goog.require('cvox.ChromeVoxKbHandler');
 goog.require('cvox.CommandStore');
 goog.require('cvox.ConsoleTts');
 goog.require('cvox.ContextMenuWidget');
 goog.require('cvox.DomPredicates');
 goog.require('cvox.DomUtil');
 goog.require('cvox.FocusUtil');
+goog.require('cvox.History');
 goog.require('cvox.KeyboardHelpWidget');
 goog.require('cvox.NodeSearchWidget');
 goog.require('cvox.PlatformUtil');
@@ -42,6 +44,17 @@ goog.require('goog.object');
  * @private
  */
 cvox.ChromeVoxUserCommands.init_ = function() {
+  cvox.ChromeVoxKbHandler.commandHandler = function(commandName) {
+    var command = cvox.ChromeVoxUserCommands.commands[commandName];
+    if (!command)
+      return undefined;
+    var history = cvox.History.getInstance();
+    history.enterUserCommand(commandName);
+    var ret = command();
+    history.exitUserCommand(commandName);
+    return ret;
+  };
+
   if (cvox.ChromeVoxUserCommands.commands) {
     return;
   } else {
@@ -299,11 +312,11 @@ cvox.ChromeVoxUserCommands.doCommand_ = function(cmdStruct) {
       var error = '';
       var wrap = '';
       if (cmdStruct.forward) {
-        wrap = cvox.ChromeVox.msgs.getMsg('wrapped_to_top');
-        error = cvox.ChromeVox.msgs.getMsg(NodeInfoStruct.forwardError);
+        wrap = Msgs.getMsg('wrapped_to_top');
+        error = Msgs.getMsg(NodeInfoStruct.forwardError);
       } else if (cmdStruct.backward) {
-        wrap = cvox.ChromeVox.msgs.getMsg('wrapped_to_bottom');
-        error = cvox.ChromeVox.msgs.getMsg(NodeInfoStruct.backwardError);
+        wrap = Msgs.getMsg('wrapped_to_bottom');
+        error = Msgs.getMsg(NodeInfoStruct.backwardError);
       }
       var found = null;
       var status = cmdStruct.status || cvox.UserEventDetail.Status.PENDING;
@@ -325,7 +338,7 @@ cvox.ChromeVoxUserCommands.doCommand_ = function(cmdStruct) {
             cvox.ChromeVox.navigationManager.saveSel();
             prefixMsg = wrap;
             cvox.ChromeVox.navigationManager.syncToBeginning();
-            cvox.ChromeVox.earcons.playEarcon(cvox.AbstractEarcons.WRAP);
+            cvox.ChromeVox.earcons.playEarcon(cvox.Earcon.WRAP);
             found = cvox.ChromeVox.navigationManager.findNext(
                 predicate, predicateName, true);
             if (!found) {
@@ -504,7 +517,7 @@ cvox.ChromeVoxUserCommands.doCommand_ = function(cmdStruct) {
       if (url != '') {
         cvox.ChromeVox.tts.speak(url, cvox.QueueMode.QUEUE);
       } else {
-        cvox.ChromeVox.tts.speak(cvox.ChromeVox.msgs.getMsg('no_url_found'),
+        cvox.ChromeVox.tts.speak(Msgs.getMsg('no_url_found'),
                                  cvox.QueueMode.QUEUE);
       }
       break;
@@ -527,12 +540,12 @@ cvox.ChromeVoxUserCommands.doCommand_ = function(cmdStruct) {
       }
       break;
     case 'forceClickOnCurrentItem':
-      prefixMsg = cvox.ChromeVox.msgs.getMsg('element_clicked');
+      prefixMsg = Msgs.getMsg('element_clicked');
       var targetNode = cvox.ChromeVox.navigationManager.getCurrentNode();
       cvox.DomUtil.clickElem(targetNode, false, false);
       break;
     case 'forceDoubleClickOnCurrentItem':
-      prefixMsg = cvox.ChromeVox.msgs.getMsg('element_double_clicked');
+      prefixMsg = Msgs.getMsg('element_double_clicked');
       var targetNode = cvox.ChromeVox.navigationManager.getCurrentNode();
       cvox.DomUtil.clickElem(targetNode, false, false, true);
       break;
@@ -542,6 +555,11 @@ cvox.ChromeVoxUserCommands.doCommand_ = function(cmdStruct) {
         'action': 'setPref',
         'pref': 'active',
         'value': !cvox.ChromeVox.isActive
+      });
+      break;
+    case 'toggleChromeVoxVersion':
+      cvox.ChromeVox.host.sendToBackgroundPage({
+        'target': 'toggleChromeVoxVersion'
       });
       break;
     case 'fullyDescribe':
@@ -559,7 +577,7 @@ cvox.ChromeVoxUserCommands.doCommand_ = function(cmdStruct) {
       break;
     case 'toggleSelection':
       var selState = cvox.ChromeVox.navigationManager.togglePageSel();
-      prefixMsg = cvox.ChromeVox.msgs.getMsg(
+      prefixMsg = Msgs.getMsg(
           selState ? 'begin_selection' : 'end_selection');
     break;
     case 'startHistoryRecording':
@@ -651,7 +669,7 @@ cvox.ChromeVoxUserCommands.doCommand_ = function(cmdStruct) {
     case 'passThroughMode':
       cvox.ChromeVox.passThroughMode = true;
       cvox.ChromeVox.tts.speak(
-          cvox.ChromeVox.msgs.getMsg('pass_through_key'), cvox.QueueMode.QUEUE);
+          Msgs.getMsg('pass_through_key'), cvox.QueueMode.QUEUE);
       break;
     case 'toggleSearchWidget':
       cvox.SearchWidget.getInstance().toggle();
@@ -659,8 +677,8 @@ cvox.ChromeVoxUserCommands.doCommand_ = function(cmdStruct) {
 
     case 'toggleEarcons':
       prefixMsg = cvox.ChromeVox.earcons.toggle() ?
-          cvox.ChromeVox.msgs.getMsg('earcons_on') :
-              cvox.ChromeVox.msgs.getMsg('earcons_off');
+          Msgs.getMsg('earcons_on') :
+              Msgs.getMsg('earcons_off');
       break;
 
     case 'showHeadingsList':
@@ -689,7 +707,7 @@ cvox.ChromeVoxUserCommands.doCommand_ = function(cmdStruct) {
         });
       } else {
         cvox.ChromeVox.tts.speak(
-          cvox.ChromeVox.msgs.getMsg('no_long_desc'),
+          Msgs.getMsg('no_long_desc'),
           cvox.QueueMode.FLUSH,
           cvox.AbstractTts.PERSONALITY_ANNOTATION);
       }
@@ -709,10 +727,10 @@ cvox.ChromeVoxUserCommands.doCommand_ = function(cmdStruct) {
     // Math specific commands.
     case 'toggleSemantics':
       if (cvox.TraverseMath.toggleSemantic()) {
-        cvox.ChromeVox.tts.speak(cvox.ChromeVox.msgs.getMsg('semantics_on'),
+        cvox.ChromeVox.tts.speak(Msgs.getMsg('semantics_on'),
                                  cvox.QueueMode.QUEUE);
       } else {
-        cvox.ChromeVox.tts.speak(cvox.ChromeVox.msgs.getMsg('semantics_off'),
+        cvox.ChromeVox.tts.speak(Msgs.getMsg('semantics_off'),
                                  cvox.QueueMode.QUEUE);
       }
       break;
@@ -748,7 +766,7 @@ cvox.ChromeVoxUserCommands.doCommand_ = function(cmdStruct) {
 
   if (errorMsg != '') {
     cvox.ChromeVox.tts.speak(
-        cvox.ChromeVox.msgs.getMsg(errorMsg),
+        Msgs.getMsg(errorMsg),
         cvox.QueueMode.FLUSH,
         cvox.AbstractTts.PERSONALITY_ANNOTATION);
   } else if (cvox.ChromeVox.navigationManager.isReading()) {

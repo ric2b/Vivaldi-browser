@@ -7,8 +7,8 @@
 
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "content/common/accessibility_mode_enums.h"
 #include "content/public/browser/browser_accessibility_state.h"
@@ -74,7 +74,7 @@ class CONTENT_EXPORT BrowserAccessibilityStateImpl
 
  private:
   friend class base::RefCountedThreadSafe<BrowserAccessibilityStateImpl>;
-  friend struct DefaultSingletonTraits<BrowserAccessibilityStateImpl>;
+  friend struct base::DefaultSingletonTraits<BrowserAccessibilityStateImpl>;
 
   // Resets accessibility_mode_ to the default value.
   void ResetAccessibilityModeValue();

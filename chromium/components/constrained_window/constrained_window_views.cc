@@ -6,6 +6,8 @@
 
 #include <algorithm>
 
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "components/constrained_window/constrained_window_views_client.h"
 #include "components/guest_view/browser/guest_view_base.h"
 #include "components/web_modal/web_contents_modal_dialog_host.h"
@@ -147,12 +149,19 @@ views::Widget* ShowWebModalDialogViews(
 views::Widget* CreateWebModalDialogViews(views::WidgetDelegate* dialog,
                                          content::WebContents* web_contents) {
   DCHECK_EQ(ui::MODAL_TYPE_CHILD, dialog->GetModalType());
+  // Vivaldi start
+  // NOTE(pettern): The delegate is first setup in AppWindow::Init(), which is
+  // too late for session auth dialogs, so nullptr check it here. The delegate
+  // is set later and will position the dialog correctly before it's shown,
+  // so this is just to avoid the crasher from VB-4437.
+  web_modal::WebContentsModalDialogManagerDelegate *delegate =
+      web_modal::WebContentsModalDialogManager::FromWebContents(web_contents)
+          ->delegate();
   return views::DialogDelegate::CreateDialogWidget(
       dialog, nullptr,
-      web_modal::WebContentsModalDialogManager::FromWebContents(web_contents)
-          ->delegate()
-          ->GetWebContentsModalDialogHost()
-          ->GetHostView());
+      delegate ? delegate->GetWebContentsModalDialogHost()->GetHostView()
+               : nullptr);
+  // Vivaldi end
 }
 
 views::Widget* CreateBrowserModalDialogViews(views::DialogDelegate* dialog,
@@ -166,8 +175,18 @@ views::Widget* CreateBrowserModalDialogViews(views::DialogDelegate* dialog,
              : nullptr;
   views::Widget* widget =
       views::DialogDelegate::CreateDialogWidget(dialog, NULL, parent_view);
-  if (!dialog->UseNewStyleForThisDialog())
+
+  bool requires_positioning = dialog->UseNewStyleForThisDialog();
+
+#if defined(OS_MACOSX)
+  // On Mac, window modal dialogs are displayed as sheets, so their position is
+  // managed by the parent window.
+  requires_positioning = false;
+#endif
+
+  if (!requires_positioning)
     return widget;
+
   ModalDialogHost* host = constrained_window_views_client->
       GetModalDialogHost(parent);
   if (host) {

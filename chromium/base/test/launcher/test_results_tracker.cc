@@ -4,6 +4,10 @@
 
 #include "base/test/launcher/test_results_tracker.h"
 
+#include <stddef.h>
+
+#include <utility>
+
 #include "base/base64.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
@@ -24,26 +28,6 @@ namespace {
 // The default output file for XML output.
 const FilePath::CharType kDefaultOutputFile[] = FILE_PATH_LITERAL(
     "test_detail.xml");
-
-// Utility function to print a list of test names. Uses iterator to be
-// compatible with different containers, like vector and set.
-template<typename InputIterator>
-void PrintTests(InputIterator first,
-                InputIterator last,
-                const std::string& description) {
-  size_t count = std::distance(first, last);
-  if (count == 0)
-    return;
-
-  fprintf(stdout,
-          "%" PRIuS " test%s %s:\n",
-          count,
-          count != 1 ? "s" : "",
-          description.c_str());
-  for (InputIterator i = first; i != last; ++i)
-    fprintf(stdout, "    %s\n", (*i).c_str());
-  fflush(stdout);
-}
 
 std::string TestNameWithoutDisabledPrefix(const std::string& test_name) {
   std::string test_name_no_disabled(test_name);
@@ -159,10 +143,13 @@ void TestResultsTracker::OnTestIterationStarting() {
   per_iteration_data_.push_back(PerIterationData());
 }
 
-void TestResultsTracker::AddTest(const std::string& test_name) {
+void TestResultsTracker::AddTest(
+    const std::string& test_name, const std::string& file, int line) {
   // Record disabled test names without DISABLED_ prefix so that they are easy
   // to compare with regular test names, e.g. before or after disabling.
   all_tests_.insert(TestNameWithoutDisabledPrefix(test_name));
+
+  test_locations_.insert(std::make_pair(test_name, CodeLocation(file, line)));
 }
 
 void TestResultsTracker::AddDisabledTest(const std::string& test_name) {
@@ -243,19 +230,19 @@ bool TestResultsTracker::SaveSummaryAsJSON(const FilePath& path) const {
   for (const auto& global_tag : global_tags_) {
     global_tags->AppendString(global_tag);
   }
-  summary_root->Set("global_tags", global_tags.Pass());
+  summary_root->Set("global_tags", std::move(global_tags));
 
   scoped_ptr<ListValue> all_tests(new ListValue);
   for (const auto& test : all_tests_) {
     all_tests->AppendString(test);
   }
-  summary_root->Set("all_tests", all_tests.Pass());
+  summary_root->Set("all_tests", std::move(all_tests));
 
   scoped_ptr<ListValue> disabled_tests(new ListValue);
   for (const auto& disabled_test : disabled_tests_) {
     disabled_tests->AppendString(disabled_test);
   }
-  summary_root->Set("disabled_tests", disabled_tests.Pass());
+  summary_root->Set("disabled_tests", std::move(disabled_tests));
 
   scoped_ptr<ListValue> per_iteration_data(new ListValue);
 
@@ -278,16 +265,20 @@ bool TestResultsTracker::SaveSummaryAsJSON(const FilePath& path) const {
             "elapsed_time_ms",
             static_cast<int>(test_result.elapsed_time.InMilliseconds()));
 
-        // There are no guarantees about character encoding of the output
-        // snippet. Escape it and record whether it was losless.
-        // It's useful to have the output snippet as string in the summary
-        // for easy viewing.
-        std::string escaped_output_snippet;
-        bool losless_snippet = EscapeJSONString(
-            test_result.output_snippet, false, &escaped_output_snippet);
-        test_result_value->SetString("output_snippet",
-                                     escaped_output_snippet);
-        test_result_value->SetBoolean("losless_snippet", losless_snippet);
+        bool lossless_snippet = false;
+        if (IsStringUTF8(test_result.output_snippet)) {
+          test_result_value->SetString(
+              "output_snippet", test_result.output_snippet);
+          lossless_snippet = true;
+        } else {
+          test_result_value->SetString(
+              "output_snippet",
+              "<non-UTF-8 snippet, see output_snippet_base64>");
+        }
+
+        // TODO(phajdan.jr): Fix typo in JSON key (losless -> lossless)
+        // making sure not to break any consumers of this data.
+        test_result_value->SetBoolean("losless_snippet", lossless_snippet);
 
         // Also include the raw version (base64-encoded so that it can be safely
         // JSON-serialized - there are no guarantees about character encoding
@@ -297,14 +288,14 @@ bool TestResultsTracker::SaveSummaryAsJSON(const FilePath& path) const {
         Base64Encode(test_result.output_snippet, &base64_output_snippet);
         test_result_value->SetString("output_snippet_base64",
                                      base64_output_snippet);
-        test_results->Append(test_result_value.Pass());
+        test_results->Append(std::move(test_result_value));
       }
 
       current_iteration_data->SetWithoutPathExpansion(j->first,
-                                                      test_results.Pass());
+                                                      std::move(test_results));
     }
-    per_iteration_data->Append(current_iteration_data.Pass());
-    summary_root->Set("per_iteration_data", per_iteration_data.Pass());
+    per_iteration_data->Append(std::move(current_iteration_data));
+    summary_root->Set("per_iteration_data", std::move(per_iteration_data));
   }
 
   JSONFileValueSerializer serializer(path);
@@ -337,6 +328,32 @@ void TestResultsTracker::GetTestStatusForIteration(
     (*map)[result.status].insert(result.full_name);
   }
 }
+
+// Utility function to print a list of test names. Uses iterator to be
+// compatible with different containers, like vector and set.
+template<typename InputIterator>
+void TestResultsTracker::PrintTests(InputIterator first,
+                                    InputIterator last,
+                                    const std::string& description) const {
+  size_t count = std::distance(first, last);
+  if (count == 0)
+    return;
+
+  fprintf(stdout,
+          "%" PRIuS " test%s %s:\n",
+          count,
+          count != 1 ? "s" : "",
+          description.c_str());
+  for (InputIterator i = first; i != last; ++i) {
+    fprintf(stdout,
+            "    %s (%s:%d)\n",
+            (*i).c_str(),
+            test_locations_.at(*i).file.c_str(),
+            test_locations_.at(*i).line);
+  }
+  fflush(stdout);
+}
+
 
 TestResultsTracker::AggregateTestResult::AggregateTestResult() {
 }

@@ -4,27 +4,31 @@
 
 package org.chromium.chrome.test;
 
-import android.annotation.TargetApi;
-import android.app.ActivityManager;
 import android.content.Context;
-import android.content.Intent;
-import android.os.Build;
+import android.test.InstrumentationTestCase;
 import android.text.TextUtils;
 
-import junit.framework.Assert;
-
-import org.chromium.base.ApplicationState;
-import org.chromium.base.ApplicationStatus;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.UrlUtils;
+import org.chromium.base.test.util.parameter.BaseParameter;
+import org.chromium.base.test.util.parameter.Parameter;
+import org.chromium.base.test.util.parameter.Parameterizable;
+import org.chromium.base.test.util.parameter.parameters.MethodParameter;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeSwitches;
-import org.chromium.chrome.browser.Tab;
-import org.chromium.chrome.browser.omaha.OmahaClient;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.document.DocumentTabModelSelector;
+import org.chromium.chrome.test.util.ApplicationTestUtils;
 import org.chromium.chrome.test.util.browser.tabmodel.document.MockStorageDelegate;
+import org.chromium.chrome.test.util.parameters.AddFakeAccountToAppParameter;
+import org.chromium.chrome.test.util.parameters.AddFakeAccountToOsParameter;
+import org.chromium.chrome.test.util.parameters.AddGoogleAccountToOsParameter;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Base for testing and interacting with multiple Activities (e.g. Document or Webapp Activities).
@@ -32,14 +36,18 @@ import org.chromium.content.browser.test.util.CriteriaHelper;
 @CommandLineFlags.Add({
         ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE
         })
-public abstract class MultiActivityTestBase extends RestrictedInstrumentationTestCase {
+public abstract class MultiActivityTestBase extends InstrumentationTestCase
+        implements Parameterizable {
     protected static final String URL_1 = createTestUrl(1);
     protected static final String URL_2 = createTestUrl(2);
     protected static final String URL_3 = createTestUrl(3);
     protected static final String URL_4 = createTestUrl(4);
 
+    private Parameter.Reader mParameterReader;
+    private Map<String, BaseParameter> mAvailableParameters;
+
     /** Defines one gigantic link spanning the whole page that creates a new window with URL_4. */
-    protected static final String HREF_LINK = UrlUtils.encodeHtmlDataUri(
+    public static final String HREF_LINK = UrlUtils.encodeHtmlDataUri(
             "<html>"
             + "  <head>"
             + "    <title>href link page</title>"
@@ -83,16 +91,44 @@ public abstract class MultiActivityTestBase extends RestrictedInstrumentationTes
             + "    </style>"
             + "    <script>"
             + "      function openNewWindow() {"
-            + "        if (window.open('" + URL_4 + "')) location.href = '" + SUCCESS_URL + "';"
+            + "        var site = window.open('" + URL_4 + "');"
+            + "        if (site) location.href = '" + SUCCESS_URL + "';"
             + "      }"
             + "    </script>"
             + "  </head>"
             + "  <body id='body'>"
-            + "    <div onclick='openNewWindow()'></div></a>"
+            + "    <div onclick='openNewWindow()'></div>"
             + "  </body>"
             + "</html>");
 
-    private static final float FLOAT_EPSILON = 0.001f;
+    /** Opens a new page via window.open(), but get rid of the opener. */
+    protected static final String ONCLICK_NO_REFERRER_LINK = UrlUtils.encodeHtmlDataUri(
+            "<html>"
+            + "  <head>"
+            + "    <title>window.open page, opener set to null</title>"
+            + "    <meta name='viewport'"
+            + "        content='width=device-width initial-scale=0.5, maximum-scale=0.5'>"
+            + "    <style>"
+            + "      body {margin: 0em;} div {width: 100%; height: 100%; background: #011684;}"
+            + "    </style>"
+            + "    <script>"
+            + "      function openWithoutReferrer() {"
+            + "        var site = window.open();"
+            + "        site.opener = null;"
+            + "        site.document.open();"
+            + "        site.document.write("
+            + "          '<meta http-equiv=\"refresh\" content=\"0;url=" + URL_4 + "\">');"
+            + "        site.document.close();"
+            + "        if (site) location.href = '" + SUCCESS_URL + "';"
+            + "      }"
+            + "    </script>"
+            + "  </head>"
+            + "  <body>"
+            + "    <a onclick='openWithoutReferrer()'>"
+            + "      <div>The bug that just keeps on coming back.</div>"
+            + "    </a>"
+            + "  </body>"
+            + "</html>");
 
     protected MockStorageDelegate mStorageDelegate;
     protected Context mContext;
@@ -100,18 +136,10 @@ public abstract class MultiActivityTestBase extends RestrictedInstrumentationTes
     @Override
     public void setUp() throws Exception {
         super.setUp();
+        RecordHistogram.disableForTests();
         mContext = getInstrumentation().getTargetContext();
         CommandLineFlags.setUp(mContext, getClass().getMethod(getName()));
-
-        // Disable Omaha related activities.
-        OmahaClient.setEnableCommunication(false);
-        OmahaClient.setEnableUpdateDetection(false);
-
-        // Kill any tasks, if we have the API for it.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            Context context = getInstrumentation().getTargetContext();
-            MultiActivityTestBase.finishAllChromeTasks(context);
-        }
+        ApplicationTestUtils.setUp(mContext, true, true);
 
         // Make the DocumentTabModelSelector use a mocked out directory so that test runs don't
         // interfere with each other.
@@ -122,114 +150,98 @@ public abstract class MultiActivityTestBase extends RestrictedInstrumentationTes
     @Override
     public void tearDown() throws Exception {
         super.tearDown();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            Context context = getInstrumentation().getTargetContext();
-            MultiActivityTestBase.finishAllChromeTasks(context);
-        }
         mStorageDelegate.ensureDirectoryDestroyed();
+        ApplicationTestUtils.tearDown(mContext);
     }
 
-    /** Counts how many tasks Chrome has listed in Android's Overview. */
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
-    public static int getNumChromeTasks(Context context) {
-        int count = 0;
-        ActivityManager activityManager =
-                (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
-        return activityManager.getAppTasks().size();
-    }
-
-    /** Finishes all tasks Chrome has listed in Android's Overview. */
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
-    private static void finishAllChromeTasks(final Context context) throws Exception {
-        // Go to the Home screen so that Android has no good reason to keep Chrome Activities alive.
-        Intent homeIntent = new Intent(Intent.ACTION_MAIN);
-        homeIntent.addCategory(Intent.CATEGORY_HOME);
-        homeIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        context.startActivity(homeIntent);
-
-        // Close all of the tasks one by one.
-        ActivityManager activityManager =
-                (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
-        for (ActivityManager.AppTask task : activityManager.getAppTasks()) {
-            task.finishAndRemoveTask();
-        }
-
-        Assert.assertTrue(CriteriaHelper.pollForCriteria(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return getNumChromeTasks(context) == 0;
-            }
-        }));
-    }
-
-    /** Send the user to the home screen. */
-    public static void launchHomescreenIntent(Context context) throws Exception {
-        Intent homeIntent = new Intent(Intent.ACTION_MAIN);
-        homeIntent.addCategory(Intent.CATEGORY_HOME);
-        homeIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        context.startActivity(homeIntent);
-        waitUntilChromeInBackground();
-    }
-
-    /** Waits until Chrome is in the foreground. */
-    public static void waitUntilChromeInForeground() throws Exception {
-        Assert.assertTrue(CriteriaHelper.pollForCriteria(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                int state = ApplicationStatus.getStateForApplication();
-                return state == ApplicationState.HAS_RUNNING_ACTIVITIES;
-            }
-        }));
-    }
-
-    /** Waits until Chrome is in the background. */
-    public static void waitUntilChromeInBackground() throws Exception {
-        Assert.assertTrue(CriteriaHelper.pollForCriteria(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                int state = ApplicationStatus.getStateForApplication();
-                return state == ApplicationState.HAS_STOPPED_ACTIVITIES
-                        || state == ApplicationState.HAS_DESTROYED_ACTIVITIES;
-            }
-        }));
+    /**
+     * See {@link #waitForFullLoad(ChromeActivity,String,boolean)}.
+     */
+    protected void waitForFullLoad(final ChromeActivity activity, final String expectedTitle)
+            throws Exception {
+        waitForFullLoad(activity, expectedTitle, false);
     }
 
     /**
      * Approximates when a ChromeActivity is fully ready and loaded, which is hard to gauge
      * because Android's Activity transition animations are not monitorable.
      */
-    protected void waitForFullLoad(final ChromeActivity activity, final String expectedTitle)
-            throws Exception {
-        assertWaitForPageScaleFactorMatch(activity, 0.5f);
+    protected void waitForFullLoad(final ChromeActivity activity, final String expectedTitle,
+            boolean waitLongerForLoad) throws Exception {
+        ApplicationTestUtils.assertWaitForPageScaleFactorMatch(activity, 0.5f, waitLongerForLoad);
         final Tab tab = activity.getActivityTab();
         assert tab != null;
 
-        assertTrue(CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
+        CriteriaHelper.pollForUIThreadCriteria(new Criteria() {
             @Override
             public boolean isSatisfied() {
                 if (!tab.isLoadingAndRenderingDone()) return false;
                 if (!TextUtils.equals(expectedTitle, tab.getTitle())) return false;
                 return true;
             }
-        }));
+        });
     }
 
     /**
-     * Proper use of this function requires waiting for a page scale factor that isn't 1.0f because
-     * the default seems to be 1.0f.
-     * TODO(dfalcantara): Combine this one and ChromeActivityTestCaseBase's (crbug.com/498973)
+     * Creates the {@link Map} of available parameters for the test to use.
+     *
+     * @return a {@link Map} of {@link BaseParameter} objects.
      */
-    private void assertWaitForPageScaleFactorMatch(
-            final ChromeActivity activity, final float expectedScale) throws Exception {
-        assertTrue(CriteriaHelper.pollForCriteria(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                if (activity.getCurrentContentViewCore() == null) return false;
+    protected Map<String, BaseParameter> createAvailableParameters() {
+        Map<String, BaseParameter> availableParameters = new HashMap<>();
+        availableParameters
+                .put(MethodParameter.PARAMETER_TAG, new MethodParameter(getParameterReader()));
+        availableParameters.put(AddFakeAccountToAppParameter.PARAMETER_TAG,
+                new AddFakeAccountToAppParameter(getParameterReader(), getInstrumentation()));
+        availableParameters.put(AddFakeAccountToOsParameter.PARAMETER_TAG,
+                new AddFakeAccountToOsParameter(getParameterReader(), getInstrumentation()));
+        availableParameters.put(AddGoogleAccountToOsParameter.PARAMETER_TAG,
+                new AddGoogleAccountToOsParameter(getParameterReader(), getInstrumentation()));
+        return availableParameters;
+    }
 
-                return Math.abs(activity.getCurrentContentViewCore().getScale() - expectedScale)
-                        < FLOAT_EPSILON;
-            }
-        }));
+    /**
+     * Gets the {@link Map} of available parameters that inherited classes can use.
+     *
+     * @return a {@link Map} of {@link BaseParameter} objects to set as the available parameters.
+     */
+    @Override
+    public Map<String, BaseParameter> getAvailableParameters() {
+        return mAvailableParameters;
+    }
+
+    /**
+     * Gets a specific parameter from the current test.
+     *
+     * @param parameterTag a string with the name of the {@link BaseParameter} we want.
+     * @return a parameter that extends {@link BaseParameter} that has the matching parameterTag.
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T extends BaseParameter> T getAvailableParameter(String parameterTag) {
+        return (T) mAvailableParameters.get(parameterTag);
+    }
+
+    /**
+     * Setter method for {@link Parameter.Reader}.
+     *
+     * @param parameterReader the {@link Parameter.Reader} to set.
+     */
+    @Override
+    public void setParameterReader(Parameter.Reader parameterReader) {
+        mParameterReader = parameterReader;
+        mAvailableParameters = createAvailableParameters();
+    }
+
+    /**
+     * Getter method for {@link Parameter.Reader} object to be used by test cases reading the
+     * parameter.
+     *
+     * @return the {@link Parameter.Reader} for the current {@link
+     * org.chromium.base.test.util.parameter.ParameterizedTest} being run.
+     */
+    protected Parameter.Reader getParameterReader() {
+        return mParameterReader;
     }
 
     private static final String createTestUrl(int index) {

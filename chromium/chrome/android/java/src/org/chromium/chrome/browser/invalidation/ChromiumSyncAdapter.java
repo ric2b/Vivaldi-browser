@@ -25,7 +25,8 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.components.invalidation.PendingInvalidation;
 import org.chromium.content.app.ContentApplication;
 import org.chromium.content.browser.BrowserStartupController;
-import org.chromium.sync.internal_api.pub.base.ModelType;
+import org.chromium.sync.ModelType;
+import org.chromium.sync.ModelTypeHelper;
 import org.chromium.sync.signin.ChromeSigninController;
 
 import java.util.concurrent.Semaphore;
@@ -36,7 +37,7 @@ import java.util.concurrent.TimeUnit;
  * it to the native side with a caching layer in {@link DelayedInvalidationsController}.
  */
 public abstract class ChromiumSyncAdapter extends AbstractThreadedSyncAdapter {
-    private static final String TAG = "cr.invalidation";
+    private static final String TAG = "invalidation";
 
     private final Application mApplication;
     private final boolean mAsyncStartup;
@@ -173,7 +174,7 @@ public abstract class ChromiumSyncAdapter extends AbstractThreadedSyncAdapter {
         // Count the number of sessions sync invalidations to evaluate effectiveness of
         // AndroidSessionNotifications field trial. The histogram is recorded here because
         // RecordHistogram requires the native library to be loaded.
-        if (ModelType.SESSION.name().equals(objectId)) {
+        if (ModelTypeHelper.toNotificationType(ModelType.SESSIONS).equals(objectId)) {
             RecordHistogram.recordBooleanHistogram("Sync.InvalidationSessionsAndroid", true);
         }
     }

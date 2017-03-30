@@ -27,6 +27,10 @@
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/storage_partition.h"
 
+#if defined(ENABLE_BROWSER_CDMS)
+#include "media/base/media_keys.h"
+#endif
+
 namespace content {
 
 MockRenderProcessHost::MockRenderProcessHost(BrowserContext* browser_context)
@@ -38,7 +42,9 @@ MockRenderProcessHost::MockRenderProcessHost(BrowserContext* browser_context)
       prev_routing_id_(0),
       fast_shutdown_started_(false),
       deletion_callback_called_(false),
-      is_for_guests_only_(false) {
+      is_for_guests_only_(false),
+      is_process_backgrounded_(false),
+      worker_ref_count_(0) {
   // Child process security operations can't be unit tested unless we add
   // ourselves as an existing child process.
   ChildProcessSecurityPolicyImpl::GetInstance()->Add(GetID());
@@ -76,7 +82,7 @@ void MockRenderProcessHost::SimulateCrash() {
   // predictable order for unittests which may assert against the order, we sort
   // the listeners by descending routing ID, instead of using the arbitrary
   // hash-map order like RenderProcessHostImpl.
-  std::vector<std::pair<int32, IPC::Listener*>> sorted_listeners_;
+  std::vector<std::pair<int32_t, IPC::Listener*>> sorted_listeners_;
   IDMap<IPC::Listener>::iterator iter(&listeners_);
   while (!iter.IsAtEnd()) {
     sorted_listeners_.push_back(
@@ -103,13 +109,12 @@ int MockRenderProcessHost::GetNextRoutingID() {
   return ++prev_routing_id_;
 }
 
-void MockRenderProcessHost::AddRoute(
-    int32 routing_id,
-    IPC::Listener* listener) {
+void MockRenderProcessHost::AddRoute(int32_t routing_id,
+                                     IPC::Listener* listener) {
   listeners_.AddWithID(listener, routing_id);
 }
 
-void MockRenderProcessHost::RemoveRoute(int32 routing_id) {
+void MockRenderProcessHost::RemoveRoute(int32_t routing_id) {
   DCHECK(listeners_.Lookup(routing_id) != NULL);
   listeners_.Remove(routing_id);
   Cleanup();
@@ -137,6 +142,8 @@ void MockRenderProcessHost::WidgetHidden() {
 int MockRenderProcessHost::VisibleWidgetCount() const {
   return 1;
 }
+
+void MockRenderProcessHost::AudioStateChanged() {}
 
 bool MockRenderProcessHost::IsForGuestsOnly() const {
   return is_for_guests_only_;
@@ -170,6 +177,10 @@ base::ProcessHandle MockRenderProcessHost::GetHandle() const {
   if (process_handle)
     return *process_handle;
   return base::GetCurrentProcessHandle();
+}
+
+bool MockRenderProcessHost::IsReady() const {
+  return false;
 }
 
 bool MockRenderProcessHost::Send(IPC::Message* msg) {
@@ -236,7 +247,7 @@ void MockRenderProcessHost::AddFilter(BrowserMessageFilter* filter) {
 }
 
 bool MockRenderProcessHost::FastShutdownForPageCount(size_t count) {
-  if (static_cast<size_t>(GetActiveViewCount()) == count)
+  if (GetActiveViewCount() == count)
     return FastShutdownIfPossible();
   return false;
 }
@@ -252,7 +263,7 @@ void MockRenderProcessHost::NotifyTimezoneChange(const std::string& zone_id) {
 }
 
 ServiceRegistry* MockRenderProcessHost::GetServiceRegistry() {
-  return NULL;
+  return service_registry_.get();
 }
 
 const base::TimeTicks& MockRenderProcessHost::GetInitTimeForNavigationMetrics()
@@ -276,22 +287,41 @@ void MockRenderProcessHost::SendUpdateValueState(
 }
 
 #if defined(ENABLE_BROWSER_CDMS)
-media::BrowserCdm* MockRenderProcessHost::GetBrowserCdm(int render_frame_id,
-                                                        int cdm_id) const {
+scoped_refptr<media::MediaKeys> MockRenderProcessHost::GetCdm(
+    int render_frame_id,
+    int cdm_id) const {
   return nullptr;
 }
 #endif
+
+bool MockRenderProcessHost::IsProcessBackgrounded() const {
+  return is_process_backgrounded_;
+}
+
+void MockRenderProcessHost::IncrementWorkerRefCount() {
+  ++worker_ref_count_;
+}
+
+void MockRenderProcessHost::DecrementWorkerRefCount() {
+  --worker_ref_count_;
+}
 
 void MockRenderProcessHost::FilterURL(bool empty_allowed, GURL* url) {
   RenderProcessHostImpl::FilterURL(this, empty_allowed, url);
 }
 
 #if defined(ENABLE_WEBRTC)
-void MockRenderProcessHost::EnableAecDump(const base::FilePath& file) {
+void MockRenderProcessHost::EnableAudioDebugRecordings(
+    const base::FilePath& file) {
 }
 
-void MockRenderProcessHost::DisableAecDump() {
+void MockRenderProcessHost::DisableAudioDebugRecordings() {
 }
+
+void MockRenderProcessHost::EnableEventLogRecordings(
+    const base::FilePath& file) {}
+
+void MockRenderProcessHost::DisableEventLogRecordings() {}
 
 void MockRenderProcessHost::SetWebRtcLogMessageCallback(
     base::Callback<void(const std::string&)> callback) {
@@ -316,8 +346,7 @@ bool MockRenderProcessHost::OnMessageReceived(const IPC::Message& msg) {
   return false;
 }
 
-void MockRenderProcessHost::OnChannelConnected(int32 peer_pid) {
-}
+void MockRenderProcessHost::OnChannelConnected(int32_t peer_pid) {}
 
 MockRenderProcessHostFactory::MockRenderProcessHostFactory() {}
 
@@ -351,4 +380,4 @@ void MockRenderProcessHostFactory::Remove(MockRenderProcessHost* host) const {
   }
 }
 
-}  // content
+}  // namespace content

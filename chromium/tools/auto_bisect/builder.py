@@ -148,7 +148,11 @@ class AndroidBuilder(Builder):
   # pylint: disable=R0201
   def _GetTargets(self):
     """Returns a list of build targets."""
-    return ['chrome_shell_apk', 'cc_perftests_apk', 'android_tools']
+    return [
+        'chrome_public_apk',
+        'cc_perftests_apk',
+        'android_tools'
+    ]
 
   def Build(self, depot, opts):
     """Builds the android content shell and other necessary tools.

@@ -5,17 +5,13 @@
 #ifndef COMPONENTS_SIGNIN_CORE_BROWSER_TEST_SIGNIN_CLIENT_H_
 #define COMPONENTS_SIGNIN_CORE_BROWSER_TEST_SIGNIN_CLIENT_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "components/signin/core/browser/signin_client.h"
 #include "net/url_request/url_request_test_util.h"
-
-#if defined(OS_IOS)
-#include "ios/public/test/fake_profile_oauth2_token_service_ios_provider.h"
-#endif
 
 class PrefService;
 
@@ -24,7 +20,6 @@ class PrefService;
 // part of its interface.
 class TestSigninClient : public SigninClient {
  public:
-  TestSigninClient();
   TestSigninClient(PrefService* pref_service);
   ~TestSigninClient() override;
 
@@ -67,10 +62,6 @@ class TestSigninClient : public SigninClient {
   // in the default constructor.
   void SetURLRequestContext(net::URLRequestContextGetter* request_context);
 
-#if defined(OS_IOS)
-  ios::ProfileOAuth2TokenServiceIOSProvider* GetIOSProvider() override;
-#endif
-
   // Returns true.
   bool ShouldMergeSigninCredentialsIntoCookieJar() override;
 
@@ -80,13 +71,6 @@ class TestSigninClient : public SigninClient {
       const GURL& url,
       const std::string& name,
       const net::CookieStore::CookieChangedCallback& callback) override;
-
-  bool UpdateAccountInfo(
-      AccountTrackerService::AccountInfo* out_account_info) override;
-
-#if defined(OS_IOS)
-  ios::FakeProfileOAuth2TokenServiceIOSProvider* GetIOSProviderAsFake();
-#endif
 
   void set_are_signin_cookies_allowed(bool value) {
     are_signin_cookies_allowed_ = value;
@@ -106,10 +90,10 @@ class TestSigninClient : public SigninClient {
       const std::string& source,
       net::URLRequestContextGetter* getter) override;
 
- private:
   // Loads the token database.
-  void LoadDatabase();
+  void LoadTokenDatabase();
 
+ private:
   base::ScopedTempDir temp_dir_;
   scoped_refptr<net::URLRequestContextGetter> request_context_;
   scoped_refptr<TokenWebData> database_;
@@ -118,10 +102,6 @@ class TestSigninClient : public SigninClient {
 
   // Pointer to be filled by PostSignedIn.
   std::string signed_in_password_;
-
-#if defined(OS_IOS)
-  scoped_ptr<ios::FakeProfileOAuth2TokenServiceIOSProvider> iosProvider_;
-#endif
 
   DISALLOW_COPY_AND_ASSIGN(TestSigninClient);
 };

@@ -94,7 +94,6 @@
         [ 'OS == "win"', {
           'msvs_disabled_warnings': [
             4267,  # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-            4018,
           ],
         }],
         [ 'use_openssl==1', {
@@ -104,8 +103,8 @@
             # TODO(joth): Use a glob to match exclude patterns once the
             #             OpenSSL file set is complete.
             'sources!': [
-              'aes_128_gcm_helpers_nss.cc',
-              'aes_128_gcm_helpers_nss.h',
+              'curve25519-donna.c',
+              'curve25519_nss.cc',
               'ec_private_key_nss.cc',
               'ec_signature_creator_nss.cc',
               'encryptor_nss.cc',
@@ -129,6 +128,7 @@
             'sources!': [
               'aead_openssl.cc',
               'aead_openssl.h',
+              'curve25519_openssl.cc',
               'ec_private_key_openssl.cc',
               'ec_signature_creator_openssl.cc',
               'encryptor_openssl.cc',
@@ -165,7 +165,6 @@
       'type': 'executable',
       'sources': [
         'aead_openssl_unittest.cc',
-        'aes_128_gcm_helpers_nss_unittest.cc',
         'curve25519_unittest.cc',
         'ec_private_key_unittest.cc',
         'ec_signature_creator_unittest.cc',
@@ -230,9 +229,6 @@
           'dependencies': [
             '../third_party/boringssl/boringssl.gyp:boringssl',
           ],
-          'sources!': [
-            'aes_128_gcm_helpers_nss_unittest.cc',
-          ],
         }, {
           'sources!': [
             'openssl_bio_string_unittest.cc',
@@ -242,7 +238,7 @@
     },
   ],
   'conditions': [
-    ['0 and OS == "win" and target_arch=="ia32"', {
+    ['OS == "win" and target_arch=="ia32"', {
       'targets': [
         {
           'target_name': 'crypto_nacl_win64',
@@ -260,9 +256,6 @@
           'defines': [
            'CRYPTO_IMPLEMENTATION',
            '<@(nacl_win64_defines)',
-          ],
-          'msvs_disabled_warnings': [
-            4018,
           ],
           'configurations': {
             'Common_Base': {

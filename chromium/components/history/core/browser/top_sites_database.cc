@@ -4,6 +4,10 @@
 
 #include "components/history/core/browser/top_sites_database.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/files/file_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram.h"
@@ -12,11 +16,15 @@
 #include "components/history/core/browser/history_types.h"
 #include "components/history/core/browser/top_sites.h"
 #include "components/history/core/common/thumbnail_score.h"
+#include "content/public/browser/browser_thread.h"
 #include "sql/connection.h"
 #include "sql/recovery.h"
 #include "sql/statement.h"
 #include "sql/transaction.h"
 #include "third_party/sqlite/sqlite3.h"
+#include "base/time/time.h"
+
+#include "app/vivaldi_apptools.h"
 
 namespace history {
 
@@ -85,17 +93,17 @@ std::string GetRedirects(const MostVisitedURL& url) {
   std::vector<std::string> redirects;
   for (size_t i = 0; i < url.redirects.size(); i++)
     redirects.push_back(url.redirects[i].spec());
-  return JoinString(redirects, ' ');
+  return base::JoinString(redirects, " ");
 }
 
 // Decodes redirects from a string and sets them for the url.
 void SetRedirects(const std::string& redirects, MostVisitedURL* url) {
-  std::vector<std::string> redirects_vector;
-  base::SplitStringAlongWhitespace(redirects, &redirects_vector);
-  for (size_t i = 0; i < redirects_vector.size(); ++i) {
-    GURL redirects_url(redirects_vector[i]);
-    if (redirects_url.is_valid())
-      url->redirects.push_back(redirects_url);
+  for (const std::string& redirect : base::SplitString(
+           redirects, base::kWhitespaceASCII,
+           base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
+    GURL redirect_url(redirect);
+    if (redirect_url.is_valid())
+      url->redirects.push_back(redirect_url);
   }
 }
 
@@ -209,7 +217,7 @@ void RecoverDatabaseOrRaze(sql::Connection* db, const base::FilePath& db_path) {
 
   // For generating histogram stats.
   size_t thumbnails_recovered = 0;
-  int64 original_size = 0;
+  int64_t original_size = 0;
   base::GetFileSize(db_path, &original_size);
 
   scoped_ptr<sql::Recovery> recovery = sql::Recovery::Begin(db, db_path);
@@ -225,7 +233,7 @@ void RecoverDatabaseOrRaze(sql::Connection* db, const base::FilePath& db_path) {
     // TODO(shess): Prior histograms indicate all failures are in creating the
     // recover virtual table for corrupt.meta.  The table may not exist, or the
     // database may be too far gone.  Either way, unclear how to resolve.
-    sql::Recovery::Rollback(recovery.Pass());
+    sql::Recovery::Rollback(std::move(recovery));
     RecordRecoveryEvent(RECOVERY_EVENT_FAILED_META_VERSION);
     return;
   }
@@ -234,7 +242,7 @@ void RecoverDatabaseOrRaze(sql::Connection* db, const base::FilePath& db_path) {
   // that the regular deprecation path cannot.  The effect of this code will be
   // to raze the database.
   if (version <= kDeprecatedVersionNumber) {
-    sql::Recovery::Unrecoverable(recovery.Pass());
+    sql::Recovery::Unrecoverable(std::move(recovery));
     RecordRecoveryEvent(RECOVERY_EVENT_DEPRECATED);
     return;
   }
@@ -244,7 +252,7 @@ void RecoverDatabaseOrRaze(sql::Connection* db, const base::FilePath& db_path) {
   // infrequent enough.
   if (version != 2 && version != 3) {
     RecordRecoveryEvent(RECOVERY_EVENT_FAILED_META_WRONG_VERSION);
-    sql::Recovery::Rollback(recovery.Pass());
+    sql::Recovery::Rollback(std::move(recovery));
     return;
   }
 
@@ -252,7 +260,7 @@ void RecoverDatabaseOrRaze(sql::Connection* db, const base::FilePath& db_path) {
   sql::MetaTable recover_meta_table;
   if (!recover_meta_table.Init(recovery->db(), kVersionNumber,
                                kVersionNumber)) {
-    sql::Recovery::Rollback(recovery.Pass());
+    sql::Recovery::Rollback(std::move(recovery));
     RecordRecoveryEvent(RECOVERY_EVENT_FAILED_META_INIT);
     return;
   }
@@ -268,7 +276,7 @@ void RecoverDatabaseOrRaze(sql::Connection* db, const base::FilePath& db_path) {
     // opened as in-memory.  If the temp database had a filesystem problem and
     // the temp filesystem differs from the main database, then that could fix
     // it.
-    sql::Recovery::Rollback(recovery.Pass());
+    sql::Recovery::Rollback(std::move(recovery));
     RecordRecoveryEvent(RECOVERY_EVENT_FAILED_SCHEMA_INIT);
     return;
   }
@@ -276,7 +284,7 @@ void RecoverDatabaseOrRaze(sql::Connection* db, const base::FilePath& db_path) {
   // The |1| is because v2 [thumbnails] has one less column than v3 did.  In the
   // v2 case the column will get default values.
   if (!recovery->AutoRecoverTable("thumbnails", 1, &thumbnails_recovered)) {
-    sql::Recovery::Rollback(recovery.Pass());
+    sql::Recovery::Rollback(std::move(recovery));
     RecordRecoveryEvent(RECOVERY_EVENT_FAILED_AUTORECOVER_THUMBNAILS);
     return;
   }
@@ -284,7 +292,7 @@ void RecoverDatabaseOrRaze(sql::Connection* db, const base::FilePath& db_path) {
   // TODO(shess): Inline this?
   FixThumbnailsTable(recovery->db());
 
-  if (!sql::Recovery::Recovered(recovery.Pass())) {
+  if (!sql::Recovery::Recovered(std::move(recovery))) {
     // TODO(shess): Very unclear what this failure would actually mean, and what
     // should be done.  Add histograms to Recovered() implementation to get some
     // insight.
@@ -296,7 +304,7 @@ void RecoverDatabaseOrRaze(sql::Connection* db, const base::FilePath& db_path) {
   // database.  The size should almost always be smaller, unless the input
   // database was empty to start with.  If the percentage results are very low,
   // something is awry.
-  int64 final_size = 0;
+  int64_t final_size = 0;
   if (original_size > 0 && base::GetFileSize(db_path, &final_size) &&
       final_size > 0) {
     UMA_HISTOGRAM_PERCENTAGE("History.TopSitesRecoveredPercentage",
@@ -423,6 +431,10 @@ bool TopSitesDatabase::InitImpl(const base::FilePath& db_name) {
   if (!transaction.Commit())
     return false;
 
+  if (vivaldi::IsVivaldiRunning()) {
+    if (!TrimThumbnailData())
+      return false;
+  }
   return true;
 }
 
@@ -548,7 +560,7 @@ void TopSitesDatabase::AddPageThumbnail(const MostVisitedURL& url,
   statement.BindBool(7, score.at_top);
   statement.BindInt64(8, score.time_at_snapshot.ToInternalValue());
   statement.BindBool(9, score.load_completed);
-  int64 last_forced = url.last_forced_time.ToInternalValue();
+  int64_t last_forced = url.last_forced_time.ToInternalValue();
   DCHECK((last_forced == 0) == (new_rank != kRankOfForcedURL))
       << "Thumbnail without a forced time stamp has a forced rank, or the "
       << "opposite.";
@@ -727,6 +739,53 @@ sql::Connection* TopSitesDatabase::CreateDB(const base::FilePath& db_name) {
   if (!db->Open(db_name))
     return NULL;
   return db.release();
+}
+
+bool TopSitesDatabase::DeleteDataExceptBookmarkThumbnails() {
+  sql::Transaction transaction(db_.get());
+  transaction.Begin();
+
+  // NOTE(pettern@vivaldi.com): We remove all data except bookmark thumbnails.
+  sql::Statement delete_statement(db_->GetCachedStatement(
+    SQL_FROM_HERE,
+    "DELETE FROM thumbnails WHERE thumbnail notnull and url not like "
+    "'%bookmark_thumbnail%'"));
+
+  if (!delete_statement.Run())
+    return false;
+
+  return transaction.Commit();
+}
+
+namespace {
+const int kTopSitesExpireDays = 7;
+}  // namespace
+
+bool TopSitesDatabase::TrimThumbnailData() {
+  sql::Transaction transaction(db_.get());
+  transaction.Begin();
+
+  base::Time expire_before =
+      base::Time::Now() - base::TimeDelta::FromDays(kTopSitesExpireDays);
+  // NOTE(pettern@vivaldi.com): We remove all thumbnails that are not attached
+  // to a bookmark and haven't been updated with the last 7 days.
+  sql::Statement delete_statement(db_->GetCachedStatement(
+      SQL_FROM_HERE,
+      "DELETE FROM thumbnails WHERE thumbnail notnull and url not like "
+      "'%bookmark_thumbnail%' and last_updated < ?"));
+  delete_statement.BindInt64(0, expire_before.ToInternalValue());
+
+  if (!delete_statement.Run())
+    return false;
+
+  return transaction.Commit();
+}
+
+void TopSitesDatabase::Vacuum() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::DB);
+  DCHECK(db_->transaction_nesting() == 0)
+      << "Can not have a transaction when vacuuming.";
+  ignore_result(db_->Execute("VACUUM"));
 }
 
 }  // namespace history

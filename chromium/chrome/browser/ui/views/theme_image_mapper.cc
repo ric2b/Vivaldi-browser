@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/theme_image_mapper.h"
 
+#include "build/build_config.h"
 #include "grit/theme_resources.h"
 
 namespace chrome {
@@ -37,7 +38,7 @@ int MapThemeImage(HostDesktopType desktop_type, int resource) {
     default:
       break;
   }
-#endif  // !defined(OS_CHROMEOS)
+#endif
 
   return resource;
 }

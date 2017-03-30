@@ -5,7 +5,6 @@
 #ifndef COMPONENTS_SYNC_DRIVER_DATA_TYPE_ENCRYPTION_HANDLER_H_
 #define COMPONENTS_SYNC_DRIVER_DATA_TYPE_ENCRYPTION_HANDLER_H_
 
-#include "base/basictypes.h"
 #include "sync/internal_api/public/base/model_type.h"
 
 namespace sync_driver {
@@ -24,6 +23,6 @@ class DataTypeEncryptionHandler {
   virtual syncer::ModelTypeSet GetEncryptedDataTypes() const = 0;
 };
 
-} // namespace sync_driver
+}  // namespace sync_driver
 
 #endif  // COMPONENTS_SYNC_DRIVER_DATA_TYPE_ENCRYPTION_HANDLER_H_

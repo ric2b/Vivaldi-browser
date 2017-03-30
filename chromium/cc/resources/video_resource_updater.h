@@ -5,10 +5,13 @@
 #ifndef CC_RESOURCES_VIDEO_RESOURCE_UPDATER_H_
 #define CC_RESOURCES_VIDEO_RESOURCE_UPDATER_H_
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <list>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
@@ -35,6 +38,7 @@ class CC_EXPORT VideoFrameExternalResources {
     NONE,
     YUV_RESOURCE,
     RGB_RESOURCE,
+    RGBA_PREMULTIPLIED_RESOURCE,
     RGBA_RESOURCE,
     STREAM_TEXTURE_RESOURCE,
     IO_SURFACE,
@@ -114,6 +118,9 @@ class CC_EXPORT VideoResourceUpdater
                                           bool has_mailbox);
   void DeleteResource(ResourceList::iterator resource_it);
   bool VerifyFrame(const scoped_refptr<media::VideoFrame>& video_frame);
+  void CopyPlaneTexture(const scoped_refptr<media::VideoFrame>& video_frame,
+                        const gpu::MailboxHolder& mailbox_holder,
+                        VideoFrameExternalResources* external_resources);
   VideoFrameExternalResources CreateForHardwarePlanes(
       const scoped_refptr<media::VideoFrame>& video_frame);
   VideoFrameExternalResources CreateForSoftwarePlanes(
@@ -121,12 +128,12 @@ class CC_EXPORT VideoResourceUpdater
 
   static void RecycleResource(base::WeakPtr<VideoResourceUpdater> updater,
                               unsigned resource_id,
-                              uint32 sync_point,
+                              const gpu::SyncToken& sync_token,
                               bool lost_resource,
                               BlockingTaskRunner* main_thread_task_runner);
   static void ReturnTexture(base::WeakPtr<VideoResourceUpdater> updater,
                             const scoped_refptr<media::VideoFrame>& video_frame,
-                            uint32 sync_point,
+                            const gpu::SyncToken& sync_token,
                             bool lost_resource,
                             BlockingTaskRunner* main_thread_task_runner);
 

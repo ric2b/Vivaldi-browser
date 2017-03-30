@@ -4,12 +4,13 @@
 
 #include "device/core/device_monitor_win.h"
 
+#include <windows.h>
 #include <dbt.h>
 #include <map>
-#include <windows.h>
 
 #include "base/at_exit.h"
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/win/message_window.h"
@@ -114,7 +115,7 @@ class DeviceMonitorMessageWindow {
 
       std::string device_path(base::SysWideToUTF8(db->dbcc_name));
       DCHECK(base::IsStringASCII(device_path));
-      device_path = base::StringToLowerASCII(device_path);
+      device_path = base::ToLowerASCII(device_path);
 
       if (wparam == DBT_DEVICEARRIVAL) {
         if (device_monitor) {

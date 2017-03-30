@@ -22,19 +22,14 @@
       '_ATL_NO_AUTOMATIC_NAMESPACE',
       '_ATL_NO_EXCEPTIONS',
     ],
-    'conditions': [
-      ['OS=="win"', {
-        # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-        'msvs_disabled_warnings': [ 4267, ],
-      }],
-    ],
   },
   'targets': [
     {
+      # GN version: //cloud_print/service:resources
       'target_name': 'service_resources',
       'type': 'none',
       'variables': {
-        'grit_out_dir': '<(SHARED_INTERMEDIATE_DIR)/cloud_print',
+        'grit_out_dir': '<(SHARED_INTERMEDIATE_DIR)/cloud_print/service',
       },
       'actions': [
         {
@@ -48,12 +43,14 @@
       'includes': [ '../../build/grit_target.gypi' ],
     },
     {
+      # GN version: //cloud_print/service
       'target_name': 'cloud_print_service_lib',
       'type': 'static_library',
       'dependencies': [
         '<(DEPTH)/base/base.gyp:base',
         '<(DEPTH)/base/base.gyp:base_static',
         '<(DEPTH)/base/third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
+        '<(DEPTH)/components/components.gyp:browser_sync_common',
         '<(DEPTH)/components/components.gyp:cloud_devices_common',
         '<(DEPTH)/google_apis/google_apis.gyp:google_apis',
         '<(DEPTH)/ipc/ipc.gyp:ipc',
@@ -64,9 +61,9 @@
       'conditions': [
         ['OS=="win"', {
           'dependencies': [
-            '<(DEPTH)/chrome/chrome.gyp:chrome_version_header',
             '<(DEPTH)/chrome/chrome.gyp:launcher_support',
             '<(DEPTH)/chrome/common_constants.gyp:common_constants',
+            '<(DEPTH)/chrome/common_constants.gyp:version_header',
           ],
         }],
         ['OS=="win" and clang==1', {

@@ -4,7 +4,9 @@
 
 #include "extensions/browser/verified_contents.h"
 
-#include "base/base64.h"
+#include <stddef.h>
+
+#include "base/base64url.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/strings/string_util.h"
@@ -23,9 +25,9 @@ namespace {
 // parameters.  The signature algorithm is "RSA256" aka "RSASSA-PKCS-v1_5 using
 // SHA-256 hash algorithm". This is defined in PKCS #1 (RFC 3447).
 // It is encoding: { OID sha256WithRSAEncryption      PARAMETERS NULL }
-const uint8 kSignatureAlgorithm[15] = {0x30, 0x0d, 0x06, 0x09, 0x2a,
-                                       0x86, 0x48, 0x86, 0xf7, 0x0d,
-                                       0x01, 0x01, 0x0b, 0x05, 0x00};
+const uint8_t kSignatureAlgorithm[15] = {0x30, 0x0d, 0x06, 0x09, 0x2a,
+                                         0x86, 0x48, 0x86, 0xf7, 0x0d,
+                                         0x01, 0x01, 0x0b, 0x05, 0x00};
 
 const char kBlockSizeKey[] = "block_size";
 const char kContentHashesKey[] = "content_hashes";
@@ -67,35 +69,12 @@ DictionaryValue* FindDictionaryWithValue(const ListValue* list,
 
 namespace extensions {
 
-// static
-bool VerifiedContents::FixupBase64Encoding(std::string* input) {
-  for (std::string::iterator i = input->begin(); i != input->end(); ++i) {
-    if (*i == '-')
-      *i = '+';
-    else if (*i == '_')
-      *i = '/';
-  }
-  switch (input->size() % 4) {
-    case 0:
-      break;
-    case 2:
-      input->append("==");
-      break;
-    case 3:
-      input->append("=");
-      break;
-    default:
-      return false;
-  }
-  return true;
-}
-
-VerifiedContents::VerifiedContents(const uint8* public_key, int public_key_size)
+VerifiedContents::VerifiedContents(const uint8_t* public_key,
+                                   int public_key_size)
     : public_key_(public_key),
       public_key_size_(public_key_size),
       valid_signature_(false),  // Guilty until proven innocent.
-      block_size_(0) {
-}
+      block_size_(0) {}
 
 VerifiedContents::~VerifiedContents() {
 }
@@ -181,13 +160,14 @@ bool VerifiedContents::InitFrom(const base::FilePath& path,
       if (!data->GetString(kPathKey, &file_path_string) ||
           !base::IsStringUTF8(file_path_string) ||
           !data->GetString(kRootHashKey, &encoded_root_hash) ||
-          !FixupBase64Encoding(&encoded_root_hash) ||
-          !base::Base64Decode(encoded_root_hash, &root_hash))
+          !base::Base64UrlDecode(encoded_root_hash,
+                                 base::Base64UrlDecodePolicy::IGNORE_PADDING,
+                                 &root_hash))
         return false;
       base::FilePath file_path =
           base::FilePath::FromUTF8Unsafe(file_path_string);
       RootHashes::iterator i = root_hashes_.insert(std::make_pair(
-          base::StringToLowerASCII(file_path.value()), std::string()));
+          base::ToLowerASCII(file_path.value()), std::string()));
       i->second.swap(root_hash);
     }
 
@@ -198,14 +178,14 @@ bool VerifiedContents::InitFrom(const base::FilePath& path,
 
 bool VerifiedContents::HasTreeHashRoot(
     const base::FilePath& relative_path) const {
-  base::FilePath::StringType path = base::StringToLowerASCII(
+  base::FilePath::StringType path = base::ToLowerASCII(
       relative_path.NormalizePathSeparatorsTo('/').value());
   return root_hashes_.find(path) != root_hashes_.end();
 }
 
 bool VerifiedContents::TreeHashRootEquals(const base::FilePath& relative_path,
                                           const std::string& expected) const {
-  base::FilePath::StringType path = base::StringToLowerASCII(
+  base::FilePath::StringType path = base::ToLowerASCII(
       relative_path.NormalizePathSeparatorsTo('/').value());
   for (RootHashes::const_iterator i = root_hashes_.find(path);
        i != root_hashes_.end();
@@ -301,8 +281,9 @@ bool VerifiedContents::GetPayload(const base::FilePath& path,
   std::string decoded_signature;
   if (!signature_dict->GetString(kProtectedKey, &protected_value) ||
       !signature_dict->GetString(kSignatureKey, &encoded_signature) ||
-      !FixupBase64Encoding(&encoded_signature) ||
-      !base::Base64Decode(encoded_signature, &decoded_signature))
+      !base::Base64UrlDecode(encoded_signature,
+                             base::Base64UrlDecodePolicy::IGNORE_PADDING,
+                             &decoded_signature))
     return false;
 
   std::string encoded_payload;
@@ -314,8 +295,9 @@ bool VerifiedContents::GetPayload(const base::FilePath& path,
   if (!valid_signature_ && !ignore_invalid_signature)
     return false;
 
-  if (!FixupBase64Encoding(&encoded_payload) ||
-      !base::Base64Decode(encoded_payload, payload))
+  if (!base::Base64UrlDecode(encoded_payload,
+                             base::Base64UrlDecodePolicy::IGNORE_PADDING,
+                             payload))
     return false;
 
   return true;
@@ -326,26 +308,23 @@ bool VerifiedContents::VerifySignature(const std::string& protected_value,
                                        const std::string& signature_bytes) {
   crypto::SignatureVerifier signature_verifier;
   if (!signature_verifier.VerifyInit(
-          kSignatureAlgorithm,
-          sizeof(kSignatureAlgorithm),
-          reinterpret_cast<const uint8*>(signature_bytes.data()),
-          signature_bytes.size(),
-          public_key_,
-          public_key_size_)) {
+          kSignatureAlgorithm, sizeof(kSignatureAlgorithm),
+          reinterpret_cast<const uint8_t*>(signature_bytes.data()),
+          signature_bytes.size(), public_key_, public_key_size_)) {
     VLOG(1) << "Could not verify signature - VerifyInit failure";
     return false;
   }
 
   signature_verifier.VerifyUpdate(
-      reinterpret_cast<const uint8*>(protected_value.data()),
+      reinterpret_cast<const uint8_t*>(protected_value.data()),
       protected_value.size());
 
   std::string dot(".");
-  signature_verifier.VerifyUpdate(reinterpret_cast<const uint8*>(dot.data()),
+  signature_verifier.VerifyUpdate(reinterpret_cast<const uint8_t*>(dot.data()),
                                   dot.size());
 
   signature_verifier.VerifyUpdate(
-      reinterpret_cast<const uint8*>(payload.data()), payload.size());
+      reinterpret_cast<const uint8_t*>(payload.data()), payload.size());
 
   if (!signature_verifier.VerifyFinal()) {
     VLOG(1) << "Could not verify signature - VerifyFinal failure";

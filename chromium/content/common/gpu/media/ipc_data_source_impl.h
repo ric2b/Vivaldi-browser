@@ -34,12 +34,12 @@ class IPCDataSourceImpl : public IPCDataSource {
   void Resume() override;
 
   // media::DataSource implementation.
-  void Read(int64 position,
+  void Read(int64_t position,
             int size,
-            uint8* data,
+            uint8_t* data,
             const ReadCB& read_cb) override;
   void Stop() override;
-  bool GetSize(int64* size_out) override;
+  bool GetSize(int64_t* size_out) override;
   bool IsStreaming() override;
   void SetBitrate(int bitrate) override;
 

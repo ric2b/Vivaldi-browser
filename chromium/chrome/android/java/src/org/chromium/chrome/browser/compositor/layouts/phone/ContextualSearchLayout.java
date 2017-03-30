@@ -5,13 +5,14 @@
 package org.chromium.chrome.browser.compositor.layouts.phone;
 
 import android.content.Context;
+import android.graphics.Color;
 import android.graphics.Rect;
 import android.view.View;
 
-import org.chromium.chrome.browser.Tab;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
-import org.chromium.chrome.browser.compositor.bottombar.contextualsearch.ContextualSearchPanel;
-import org.chromium.chrome.browser.compositor.bottombar.contextualsearch.ContextualSearchPanel.StateChangeReason;
+import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
+import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.StateChangeReason;
+import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager;
 import org.chromium.chrome.browser.compositor.layouts.ContextualSearchSupportedLayout;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
 import org.chromium.chrome.browser.compositor.layouts.LayoutRenderHost;
@@ -23,6 +24,7 @@ import org.chromium.chrome.browser.compositor.layouts.eventfilter.EventFilter;
 import org.chromium.chrome.browser.compositor.scene_layer.SceneLayer;
 import org.chromium.chrome.browser.compositor.scene_layer.TabListSceneLayer;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.util.MathUtils;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content_public.common.TopControlsState;
@@ -49,20 +51,52 @@ public class ContextualSearchLayout extends ContextualSearchSupportedLayout {
      * @param updateHost The {@link LayoutUpdateHost} view for this layout.
      * @param renderHost The {@link LayoutRenderHost} view for this layout.
      * @param eventFilter The {@link EventFilter} that is needed for this view.
+     * @param panelManager The {@link OverlayPanelManager} for getting the active panel.
      */
     public ContextualSearchLayout(Context context, LayoutUpdateHost updateHost,
-            LayoutRenderHost renderHost, EventFilter eventFilter, ContextualSearchPanel panel) {
-        super(context, updateHost, renderHost, eventFilter, panel);
-        mTabListSceneLayer = new TabListSceneLayer();
-        // TODO(changwan): use SceneOverlayTree's setContentTree() instead once we refactor
-        // ContextualSearchSupportedLayout into LayoutHelper.
-        mTabListSceneLayer.setContentTree(super.getSceneLayer());
+            LayoutRenderHost renderHost, EventFilter eventFilter,
+            OverlayPanelManager panelManager) {
+        super(context, updateHost, renderHost, eventFilter, panelManager);
+        mTabListSceneLayer = new TabListSceneLayer() {
+            @Override
+            protected int getTabListBackgroundColor(Context context) {
+                OverlayPanel panel = mPanelManager.getActivePanel();
+                // If the panel is null (which in theory should never happen in this case since
+                // this layout is only present when the Panel is open), we will assume the
+                // background color to be white (assuming most pages have a white background).
+                if (panel == null) {
+                    return Color.WHITE;
+                } else {
+                    return panel.getBasePageBackgroundColor();
+                }
+            }
+        };
+    }
+
+    /**
+     * Handles the resizing of the viewport.
+     * @param width  The new width in dp.
+     * @param height The new height in dp.
+     */
+    protected void onSizeChanged(float width, float height) {
+        if (mBaseTab != null) {
+            OverlayPanel panel = mPanelManager.getActivePanel();
+            if (panel != null) {
+                mBaseTab.setMaxContentWidth(width);
+                mBaseTab.setMaxContentHeight(panel.getMaximumHeight());
+                mBaseTab.setContentSize(width, panel.getMaximumHeight());
+            }
+        }
     }
 
     @Override
     public View getViewForInteraction() {
-        ContentViewCore content = mSearchPanel.getManagementDelegate().getSearchContentViewCore();
-        if (content != null) return content.getContainerView();
+        OverlayPanel panel = mPanelManager.getActivePanel();
+        if (panel != null) {
+            ContentViewCore content = panel.getContentViewCore();
+            if (content != null) return content.getContainerView();
+        }
+
         return super.getViewForInteraction();
     }
 
@@ -73,7 +107,7 @@ public class ContextualSearchLayout extends ContextualSearchSupportedLayout {
 
     @Override
     public float getTopControlsOffset(float currentOffsetDp) {
-        return MathUtils.clamp(mBaseTab.getY(), -mSearchPanel.getToolbarHeight(),
+        return MathUtils.clamp(mBaseTab.getY(), -mPanelManager.getActivePanel().getToolbarHeight(),
                 Math.min(currentOffsetDp, 0f));
     }
 
@@ -82,8 +116,11 @@ public class ContextualSearchLayout extends ContextualSearchSupportedLayout {
         super.updateLayout(time, dt);
         if (mBaseTab == null) return;
 
-        mBaseTab.setY(mSearchPanel.getBasePageY());
-        mBaseTab.setBrightness(mSearchPanel.getBasePageBrightness());
+        OverlayPanel panel = mPanelManager.getActivePanel();
+        if (panel != null) {
+            mBaseTab.setY(panel.getBasePageY());
+            mBaseTab.setBrightness(panel.getBasePageBrightness());
+        }
 
         boolean needUpdate = mBaseTab.updateSnap(dt);
         if (needUpdate) requestUpdate();
@@ -99,18 +136,20 @@ public class ContextualSearchLayout extends ContextualSearchSupportedLayout {
         // if the SearchContentView's vertical scroll position is zero. Otherwise the
         // ContentView will appear to jump in the screen. Coordinate with @dtrainor to solve
         // this problem.
-        mSearchPanel.getManagementDelegate().updateTopControlsState(TopControlsState.BOTH, false);
+        mPanelManager.getActivePanel().updateTopControlsState(TopControlsState.BOTH, false);
         return true;
     }
 
     @Override
     public void show(long time, boolean animate) {
+        // TODO(changwan): use SceneOverlayTree's setContentTree() instead once we refactor
+        // ContextualSearchSupportedLayout into LayoutHelper.
+        mTabListSceneLayer.setContentTree(super.getSceneLayer());
+
         super.show(time, animate);
 
         resetLayout();
         createBaseLayoutTab(mBaseTab);
-
-        mSearchPanel.createPromoView();
     }
 
     /**
@@ -149,8 +188,8 @@ public class ContextualSearchLayout extends ContextualSearchSupportedLayout {
 
     @Override
     protected void hideContextualSearch(boolean immediately) {
-        if (isActive() && mBaseTab != null) {
-            startHiding(mBaseTab.getId(), false);
+        if (isActive()) {
+            startHiding(Tab.INVALID_TAB_ID, false);
             if (immediately) doneHiding();
         }
     }
@@ -162,29 +201,29 @@ public class ContextualSearchLayout extends ContextualSearchSupportedLayout {
     @Override
     public void onDown(long time, float x, float y) {
         mInitialPanelTouchY = y;
-        mSearchPanel.handleSwipeStart();
+        mPanelManager.getActivePanel().handleSwipeStart();
     }
 
     @Override
     public void drag(long time, float x, float y, float deltaX, float deltaY) {
         final float ty = y - mInitialPanelTouchY;
 
-        mSearchPanel.handleSwipeMove(ty);
+        mPanelManager.getActivePanel().handleSwipeMove(ty);
     }
 
     @Override
     public void onUpOrCancel(long time) {
-        mSearchPanel.handleSwipeEnd();
+        mPanelManager.getActivePanel().handleSwipeEnd();
     }
 
     @Override
     public void fling(long time, float x, float y, float velocityX, float velocityY) {
-        mSearchPanel.handleFling(velocityY);
+        mPanelManager.getActivePanel().handleFling(velocityY);
     }
 
     @Override
     public void click(long time, float x, float y) {
-        mSearchPanel.handleClick(time, x, y);
+        mPanelManager.getActivePanel().handleClick(time, x, y);
     }
 
     // ============================================================================================
@@ -193,23 +232,23 @@ public class ContextualSearchLayout extends ContextualSearchSupportedLayout {
 
     @Override
     public void swipeStarted(long time, ScrollDirection direction, float x, float y) {
-        mSearchPanel.handleSwipeStart();
+        mPanelManager.getActivePanel().handleSwipeStart();
     }
 
     @Override
     public void swipeUpdated(long time, float x, float y, float dx, float dy, float tx, float ty) {
-        mSearchPanel.handleSwipeMove(ty);
+        mPanelManager.getActivePanel().handleSwipeMove(ty);
     }
 
     @Override
     public void swipeFlingOccurred(
             long time, float x, float y, float tx, float ty, float vx, float vy) {
-        mSearchPanel.handleFling(vy);
+        mPanelManager.getActivePanel().handleFling(vy);
     }
 
     @Override
     public void swipeFinished(long time) {
-        mSearchPanel.handleSwipeEnd();
+        mPanelManager.getActivePanel().handleSwipeEnd();
     }
 
     @Override
@@ -219,7 +258,7 @@ public class ContextualSearchLayout extends ContextualSearchSupportedLayout {
 
     @Override
     public boolean onBackPressed() {
-        mSearchPanel.closePanel(StateChangeReason.BACK_PRESS, true);
+        mPanelManager.getActivePanel().closePanel(StateChangeReason.BACK_PRESS, true);
         return true;
     }
 
@@ -237,5 +276,20 @@ public class ContextualSearchLayout extends ContextualSearchSupportedLayout {
         assert mTabListSceneLayer != null;
         mTabListSceneLayer.pushLayers(getContext(), viewport, contentViewport, this,
                 layerTitleCache, tabContentManager, resourceManager);
+    }
+
+    @Override
+    public boolean forceHideTopControlsAndroidView() {
+        return true;
+    }
+
+    @Override
+    public float getToolbarBrightness() {
+        return mPanelManager.getActivePanel().getBasePageBrightness();
+    }
+
+    @Override
+    public boolean isTabStripEventFilterEnabled() {
+        return false;
     }
 }

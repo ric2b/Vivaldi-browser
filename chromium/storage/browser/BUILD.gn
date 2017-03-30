@@ -6,6 +6,10 @@
 component("browser") {
   output_name = "storage_browser"
   sources = [
+    "blob/blob_async_builder_host.cc",
+    "blob/blob_async_builder_host.h",
+    "blob/blob_async_transport_strategy.cc",
+    "blob/blob_async_transport_strategy.h",
     "blob/blob_data_builder.cc",
     "blob/blob_data_builder.h",
     "blob/blob_data_handle.cc",
@@ -14,8 +18,12 @@ component("browser") {
     "blob/blob_data_item.h",
     "blob/blob_data_snapshot.cc",
     "blob/blob_data_snapshot.h",
+    "blob/blob_reader.cc",
+    "blob/blob_reader.h",
     "blob/blob_storage_context.cc",
     "blob/blob_storage_context.h",
+    "blob/blob_storage_registry.cc",
+    "blob/blob_storage_registry.h",
     "blob/blob_url_request_job.cc",
     "blob/blob_url_request_job.h",
     "blob/blob_url_request_job_factory.cc",
@@ -28,6 +36,8 @@ component("browser") {
     "blob/shareable_blob_data_item.h",
     "blob/shareable_file_reference.cc",
     "blob/shareable_file_reference.h",
+    "blob/upload_blob_element_reader.cc",
+    "blob/upload_blob_element_reader.h",
     "blob/view_blob_internals_job.cc",
     "blob/view_blob_internals_job.h",
     "database/database_quota_client.cc",
@@ -171,6 +181,8 @@ component("browser") {
 
   defines = [ "STORAGE_BROWSER_IMPLEMENTATION" ]
   configs += [
+    "//build/config:precompiled_headers",
+
     # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
     "//build/config/compiler:no_size_t_to_int_warning",
     "//build/config/compiler:wexit_time_destructors",
@@ -204,6 +216,7 @@ executable("dump_file_system") {
   deps = [
     ":browser",
     "//base",
+    "//build/config/sanitizers:deps",
     "//storage/common",
   ]
 }

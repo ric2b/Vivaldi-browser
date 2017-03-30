@@ -14,9 +14,9 @@ import android.view.ViewTreeObserver;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.Tab;
 import org.chromium.chrome.browser.preferences.NetworkPredictionOptions;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeActivityTestCaseBase;
 import org.chromium.chrome.test.util.InfoBarTestAnimationListener;
 import org.chromium.chrome.test.util.InfoBarUtil;
@@ -24,7 +24,7 @@ import org.chromium.chrome.test.util.TestHttpServerClient;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 
-import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
@@ -33,7 +33,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * Tests for InfoBars.
  *
- * TODO(newt): merge this with InfoBarTest after upstreaming.
+ * TODO(newt): rename this to InfoBarContainerTest.
  */
 public class InfoBarTest2 extends ChromeActivityTestCaseBase<ChromeActivity> {
     static class MutableBoolean {
@@ -97,21 +97,6 @@ public class InfoBarTest2 extends ChromeActivityTestCaseBase<ChromeActivity> {
         getInstrumentation().waitForIdleSync();
     }
 
-    protected ArrayList<Integer> getInfoBarIdsForCurrentTab() {
-        final ArrayList<Integer> infoBarIds = new ArrayList<Integer>();
-        getInstrumentation().runOnMainSync(new Runnable() {
-            @Override
-            public void run() {
-                Tab tab = getActivity().getActivityTab();
-                assertTrue("Failed to find tab.", tab != null);
-                for (InfoBar infoBar : tab.getInfoBarContainer().getInfoBars()) {
-                    infoBarIds.add(infoBar.getId());
-                }
-            }
-        });
-        return infoBarIds;
-    }
-
     /**
      * Verifies that infobars added from Java expire or not as expected.
      */
@@ -131,16 +116,15 @@ public class InfoBarTest2 extends ChromeActivityTestCaseBase<ChromeActivity> {
         addInfoBarToCurrentTab(expiringInfoBar);
 
         // Verify it's really there.
-        ArrayList<Integer> infoBarIds = getInfoBarIdsForCurrentTab();
-        assertEquals(1, infoBarIds.size());
-        assertEquals(expiringInfoBar.getId(), infoBarIds.get(0).intValue());
+        List<InfoBar> infoBars = getInfoBars();
+        assertEquals(1, infoBars.size());
+        assertSame(expiringInfoBar, infoBars.get(0));
 
         // Now navigate, it should expire.
         loadUrl(TestHttpServerClient.getUrl("chrome/test/data/android/google.html"));
         assertTrue("InfoBar not removed.", mListener.removeInfoBarAnimationFinished());
         assertTrue("InfoBar did not expire on navigation.", dismissed.mValue);
-        infoBarIds = getInfoBarIdsForCurrentTab();
-        assertTrue(infoBarIds.isEmpty());
+        assertTrue(getInfoBars().isEmpty());
 
         // Now test a non-expiring infobar.
         MessageInfoBar persistentInfoBar = new MessageInfoBar("Hello!");
@@ -157,9 +141,9 @@ public class InfoBarTest2 extends ChromeActivityTestCaseBase<ChromeActivity> {
         // Navigate, it should still be there.
         loadUrl(TestHttpServerClient.getUrl("chrome/test/data/android/google.html"));
         assertFalse("InfoBar did expire on navigation.", dismissed.mValue);
-        infoBarIds = getInfoBarIdsForCurrentTab();
-        assertEquals(1, infoBarIds.size());
-        assertEquals(persistentInfoBar.getId(), infoBarIds.get(0).intValue());
+        infoBars = getInfoBars();
+        assertEquals(1, infoBars.size());
+        assertSame(persistentInfoBar, infoBars.get(0));
 
         // Close the infobar.
         dismissInfoBar(persistentInfoBar);
@@ -175,7 +159,7 @@ public class InfoBarTest2 extends ChromeActivityTestCaseBase<ChromeActivity> {
                         networkPredictionOptions);
             }
         };
-    };
+    }
 
     /**
      * Same as testInfoBarExpiration but with prerender turned-off.
@@ -214,7 +198,7 @@ public class InfoBarTest2 extends ChromeActivityTestCaseBase<ChromeActivity> {
         final InfoBar infoBar = new MessageInfoBar("Hello");
         addInfoBarToCurrentTab(infoBar);
         removeInfoBarFromCurrentTab(infoBar);
-        assertTrue(getInfoBarIdsForCurrentTab().isEmpty());
+        assertTrue(getInfoBars().isEmpty());
     }
 
     /**
@@ -227,7 +211,7 @@ public class InfoBarTest2 extends ChromeActivityTestCaseBase<ChromeActivity> {
         final InfoBar infoBar = new MessageInfoBar("Hello");
         addInfoBarToCurrentTab(infoBar);
         dismissInfoBar(infoBar);
-        assertTrue(getInfoBarIdsForCurrentTab().isEmpty());
+        assertTrue(getInfoBars().isEmpty());
     }
 
     /**
@@ -255,9 +239,9 @@ public class InfoBarTest2 extends ChromeActivityTestCaseBase<ChromeActivity> {
 
         // But no infobar removed event as the 2nd infobar was removed before it got added.
         assertFalse("InfoBar not removed.", mListener.removeInfoBarAnimationFinished());
-        ArrayList<Integer> infoBarIds = getInfoBarIdsForCurrentTab();
-        assertEquals(1, infoBarIds.size());
-        assertEquals(infoBar1.getId(), infoBarIds.get(0).intValue());
+        List<InfoBar> infoBars = getInfoBars();
+        assertEquals(1, infoBars.size());
+        assertSame(infoBar1, infoBars.get(0));
     }
 
     /**
@@ -285,9 +269,9 @@ public class InfoBarTest2 extends ChromeActivityTestCaseBase<ChromeActivity> {
 
         // But no infobar removed event as the 2nd infobar was removed before it got added.
         assertFalse("InfoBar not removed.", mListener.removeInfoBarAnimationFinished());
-        ArrayList<Integer> infoBarIds = getInfoBarIdsForCurrentTab();
-        assertEquals(1, infoBarIds.size());
-        assertEquals(infoBar1.getId(), infoBarIds.get(0).intValue());
+        List<InfoBar> infoBars = getInfoBars();
+        assertEquals(1, infoBars.size());
+        assertSame(infoBar1, infoBars.get(0));
     }
 
     /**
@@ -375,14 +359,13 @@ public class InfoBarTest2 extends ChromeActivityTestCaseBase<ChromeActivity> {
         addInfoBarToCurrentTab(infoBar);
 
         // A layout must occur to recalculate the transparent region.
-        boolean layoutOccured = CriteriaHelper.pollForUIThreadCriteria(
+        CriteriaHelper.pollForUIThreadCriteria(
                 new Criteria() {
                     @Override
                     public boolean isSatisfied() {
                         return layoutCount.get() > 0;
                     }
                 });
-        assertTrue(layoutOccured);
 
         final Rect fullDisplayFrame = new Rect();
         final Rect fullDisplayFrameMinusContainer = new Rect();
@@ -414,14 +397,13 @@ public class InfoBarTest2 extends ChromeActivityTestCaseBase<ChromeActivity> {
         dismissInfoBar(infoBar);
 
         // A layout must occur to recalculate the transparent region.
-        layoutOccured = CriteriaHelper.pollForUIThreadCriteria(
+        CriteriaHelper.pollForUIThreadCriteria(
                 new Criteria() {
                     @Override
                     public boolean isSatisfied() {
                         return layoutCount.get() > 0;
                     }
                 });
-        assertTrue(layoutOccured);
 
         getInstrumentation().runOnMainSync(new Runnable() {
             @Override

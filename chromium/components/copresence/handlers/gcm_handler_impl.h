@@ -10,6 +10,7 @@
 
 #include "base/callback_forward.h"
 #include "base/cancelable_callback.h"
+#include "base/macros.h"
 #include "components/copresence/handlers/gcm_handler.h"
 #include "components/copresence/public/copresence_constants.h"
 #include "components/gcm_driver/gcm_app_handler.h"
@@ -51,7 +52,7 @@ class GCMHandlerImpl final : public GCMHandler,
   // GCMAppHandler overrides
   void ShutdownHandler() override;
   void OnMessage(const std::string& app_id,
-                 const gcm::GCMClient::IncomingMessage& message) override;
+                 const gcm::IncomingMessage& message) override;
   void OnMessagesDeleted(const std::string& app_id) override;
   void OnSendError(
       const std::string& /* app_id */,

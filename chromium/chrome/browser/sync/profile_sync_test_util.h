@@ -8,8 +8,10 @@
 #include <string>
 
 #include "base/memory/ref_counted.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/synchronization/waitable_event.h"
+#include "components/browser_sync/browser/profile_sync_service_mock.h"
 #include "components/sync_driver/sync_service_observer.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
@@ -19,7 +21,28 @@
 
 namespace base {
 class Thread;
+class Time;
+class TimeDelta;
 }
+
+namespace content {
+class BrowserContext;
+}
+
+namespace sync_driver {
+class SyncClient;
+}
+
+class KeyedService;
+class Profile;
+class ProfileSyncServiceMock;
+class TestingProfile;
+
+// An empty syncer::NetworkTimeUpdateCallback. Used in various tests to
+// instantiate ProfileSyncService.
+void EmptyNetworkTimeUpdate(const base::Time&,
+                            const base::TimeDelta&,
+                            const base::TimeDelta&);
 
 ACTION_P(Notify, type) {
   content::NotificationService::current()->Notify(
@@ -30,7 +53,7 @@ ACTION_P(Notify, type) {
 
 ACTION(QuitUIMessageLoop) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  base::MessageLoop::current()->Quit();
+  base::MessageLoop::current()->QuitWhenIdle();
 }
 
 class SyncServiceObserverMock : public sync_driver::SyncServiceObserver {
@@ -63,5 +86,21 @@ class ThreadNotifier :  // NOLINT
   base::WaitableEvent done_event_;
   base::Thread* notify_thread_;
 };
+
+// Helper methods for constructing ProfileSyncService mocks.
+ProfileSyncService::InitParams CreateProfileSyncServiceParamsForTest(
+    Profile* profile);
+ProfileSyncService::InitParams CreateProfileSyncServiceParamsForTest(
+    scoped_ptr<sync_driver::SyncClient> sync_client,
+    Profile* profile);
+
+// A utility used by sync tests to create a TestingProfile with a Google
+// Services username stored in a (Testing)PrefService.
+scoped_ptr<TestingProfile> MakeSignedInTestingProfile();
+
+// Helper routine to be used in conjunction with
+// BrowserContextKeyedServiceFactory::SetTestingFactory().
+scoped_ptr<KeyedService> BuildMockProfileSyncService(
+    content::BrowserContext* context);
 
 #endif  // CHROME_BROWSER_SYNC_PROFILE_SYNC_TEST_UTIL_H_

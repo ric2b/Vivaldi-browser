@@ -22,15 +22,18 @@
 #ifndef NET_SOCKET_CLIENT_SOCKET_POOL_BASE_H_
 #define NET_SOCKET_CLIENT_SOCKET_POOL_BASE_H_
 
+#include <stddef.h>
+#include <stdint.h>
 #include <cstddef>
 #include <deque>
 #include <list>
 #include <map>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -136,7 +139,7 @@ class NET_EXPORT_PRIVATE ConnectJob {
   // TODO(akalin): Support reprioritization.
   const RequestPriority priority_;
   // Timer to abort jobs that take too long.
-  base::OneShotTimer<ConnectJob> timer_;
+  base::OneShotTimer timer_;
   Delegate* delegate_;
   scoped_ptr<StreamSocket> socket_;
   BoundNetLog net_log_;
@@ -157,7 +160,7 @@ class NET_EXPORT_PRIVATE ClientSocketPoolBaseHelper
     : public ConnectJob::Delegate,
       public NetworkChangeNotifier::IPAddressObserver {
  public:
-  typedef uint32 Flags;
+  typedef uint32_t Flags;
 
   // Used to specify specific behavior for the ClientSocketPool.
   enum Flag {
@@ -346,8 +349,6 @@ class NET_EXPORT_PRIVATE ClientSocketPoolBaseHelper
   void OnIPAddressChanged() override;
 
  private:
-  friend class base::RefCounted<ClientSocketPoolBaseHelper>;
-
   // Entry for a persistent socket which became idle at time |start_time|.
   struct IdleSocket {
     IdleSocket() : socket(NULL) {}
@@ -496,7 +497,7 @@ class NET_EXPORT_PRIVATE ClientSocketPoolBaseHelper
     RequestQueue pending_requests_;
     int active_socket_count_;  // number of active sockets used by clients
     // A timer for when to start the backup job.
-    base::OneShotTimer<Group> backup_job_timer_;
+    base::OneShotTimer backup_job_timer_;
   };
 
   typedef std::map<std::string, Group*> GroupMap;
@@ -617,7 +618,7 @@ class NET_EXPORT_PRIVATE ClientSocketPoolBaseHelper
 
   // Timer used to periodically prune idle sockets that timed out or can't be
   // reused.
-  base::RepeatingTimer<ClientSocketPoolBaseHelper> timer_;
+  base::RepeatingTimer timer_;
 
   // The total number of idle sockets in the system.
   int idle_socket_count_;
@@ -756,23 +757,19 @@ class ClientSocketPoolBase {
                     internal::ClientSocketPoolBaseHelper::NORMAL,
                     params->ignore_limits(),
                     params, net_log));
-    return helper_.RequestSocket(group_name, request.Pass());
+    return helper_.RequestSocket(group_name, std::move(request));
   }
 
   // RequestSockets bundles up the parameters into a Request and then forwards
   // to ClientSocketPoolBaseHelper::RequestSockets().  Note that it assigns the
-  // priority to DEFAULT_PRIORITY and specifies the NO_IDLE_SOCKETS flag.
+  // priority to IDLE and specifies the NO_IDLE_SOCKETS flag.
   void RequestSockets(const std::string& group_name,
                       const scoped_refptr<SocketParams>& params,
                       int num_sockets,
                       const BoundNetLog& net_log) {
-    const Request request(NULL /* no handle */,
-                          CompletionCallback(),
-                          DEFAULT_PRIORITY,
+    const Request request(NULL /* no handle */, CompletionCallback(), IDLE,
                           internal::ClientSocketPoolBaseHelper::NO_IDLE_SOCKETS,
-                          params->ignore_limits(),
-                          params,
-                          net_log);
+                          params->ignore_limits(), params, net_log);
     helper_.RequestSockets(group_name, request, num_sockets);
   }
 
@@ -784,7 +781,7 @@ class ClientSocketPoolBase {
   void ReleaseSocket(const std::string& group_name,
                      scoped_ptr<StreamSocket> socket,
                      int id) {
-    return helper_.ReleaseSocket(group_name, socket.Pass(), id);
+    return helper_.ReleaseSocket(group_name, std::move(socket), id);
   }
 
   void FlushWithError(int error) { helper_.FlushWithError(error); }

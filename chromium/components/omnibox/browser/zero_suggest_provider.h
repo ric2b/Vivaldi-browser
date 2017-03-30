@@ -9,8 +9,8 @@
 #ifndef COMPONENTS_OMNIBOX_BROWSER_ZERO_SUGGEST_PROVIDER_H_
 #define COMPONENTS_OMNIBOX_BROWSER_ZERO_SUGGEST_PROVIDER_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/metrics/proto/omnibox_event.pb.h"
@@ -112,9 +112,6 @@ class ZeroSuggestProvider : public BaseSearchProvider,
   // service for the most visited URLs during Run().  It calls back to this
   // function to return those |urls|.
   void OnMostVisitedUrlsAvailable(const history::MostVisitedURLList& urls);
-
-  // Returns the relevance score for the verbatim result.
-  int GetVerbatimRelevance() const;
 
   // Whether we can show zero suggest without sending |current_page_url| to
   // |suggest_url| search provider. Also checks that other conditions for

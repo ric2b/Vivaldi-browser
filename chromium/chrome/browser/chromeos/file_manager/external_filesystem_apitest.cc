@@ -10,16 +10,16 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
-#include "chrome/browser/chromeos/file_manager/drive_test_util.h"
+#include "chrome/browser/chromeos/file_manager/mount_test_util.h"
 #include "chrome/browser/chromeos/file_manager/volume_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chrome/browser/drive/fake_drive_service.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
+#include "components/drive/service/fake_drive_service.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/notification_service.h"
@@ -188,7 +188,7 @@ scoped_ptr<google_apis::FileResource> UpdateDriveEntryTime(
   if (error != google_apis::HTTP_SUCCESS)
     return scoped_ptr<google_apis::FileResource>();
 
-  return entry.Pass();
+  return entry;
 }
 
 scoped_ptr<google_apis::FileResource> AddFileToDriveService(
@@ -561,19 +561,22 @@ class DriveFileSystemExtensionApiTest : public FileSystemExtensionApiTestBase {
 class MultiProfileDriveFileSystemExtensionApiTest :
     public FileSystemExtensionApiTestBase {
  public:
-  MultiProfileDriveFileSystemExtensionApiTest() : second_profile(NULL) {}
+  MultiProfileDriveFileSystemExtensionApiTest() : second_profile_(NULL) {}
 
   void SetUpOnMainThread() override {
+    ASSERT_TRUE(tmp_dir_.CreateUniqueTempDir());
+
     base::FilePath user_data_directory;
     PathService::Get(chrome::DIR_USER_DATA, &user_data_directory);
     user_manager::UserManager::Get()->UserLoggedIn(
-        kSecondProfileAccount, kSecondProfileHash, false);
+        AccountId::FromUserEmail(kSecondProfileAccount), kSecondProfileHash,
+        false);
     // Set up the secondary profile.
     base::FilePath profile_dir =
         user_data_directory.Append(
             chromeos::ProfileHelper::GetUserProfileDir(
                 kSecondProfileHash).BaseName());
-    second_profile =
+    second_profile_ =
         g_browser_process->profile_manager()->GetProfile(profile_dir);
 
     FileSystemExtensionApiTestBase::SetUpOnMainThread();
@@ -592,7 +595,7 @@ class MultiProfileDriveFileSystemExtensionApiTest :
 
   void AddTestMountPoint() override {
     test_util::WaitUntilDriveMountPointIsAdded(browser()->profile());
-    test_util::WaitUntilDriveMountPointIsAdded(second_profile);
+    test_util::WaitUntilDriveMountPointIsAdded(second_profile_);
   }
 
  protected:
@@ -600,7 +603,8 @@ class MultiProfileDriveFileSystemExtensionApiTest :
   drive::DriveIntegrationService* CreateDriveIntegrationService(
       Profile* profile) {
     base::FilePath cache_dir;
-    base::CreateNewTempDirectory(base::FilePath::StringType(), &cache_dir);
+    base::CreateTemporaryDirInDir(tmp_dir_.path(), base::FilePath::StringType(),
+                                  &cache_dir);
 
     drive::FakeDriveService* const fake_drive_service =
         new drive::FakeDriveService;
@@ -618,7 +622,7 @@ class MultiProfileDriveFileSystemExtensionApiTest :
             drive::util::GetDriveServiceByProfile(browser()->profile()));
     drive::FakeDriveService* const sub_service =
         static_cast<drive::FakeDriveService*>(
-            drive::util::GetDriveServiceByProfile(second_profile));
+            drive::util::GetDriveServiceByProfile(second_profile_));
 
     google_apis::DriveApiErrorCode error = google_apis::DRIVE_OTHER_ERROR;
     scoped_ptr<google_apis::FileResource> entry;
@@ -644,11 +648,12 @@ class MultiProfileDriveFileSystemExtensionApiTest :
     return (error == google_apis::HTTP_CREATED);
   }
 
+  base::ScopedTempDir tmp_dir_;
   DriveIntegrationServiceFactory::FactoryCallback
       create_drive_integration_service_;
   scoped_ptr<DriveIntegrationServiceFactory::ScopedFactoryForTest>
       service_factory_for_test_;
-  Profile* second_profile;
+  Profile* second_profile_;
   std::map<std::string, std::string> resource_ids_;
 };
 

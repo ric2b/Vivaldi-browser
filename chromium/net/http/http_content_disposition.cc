@@ -10,6 +10,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "net/base/escape.h"
 #include "net/base/net_string_util.h"
 #include "net/base/net_util.h"
 #include "net/http/http_util.h"
@@ -359,9 +360,11 @@ std::string::const_iterator HttpContentDisposition::ConsumeDispositionType(
 
   DCHECK(std::find(type_begin, type_end, '=') == type_end);
 
-  if (base::LowerCaseEqualsASCII(type_begin, type_end, "inline")) {
+  if (base::LowerCaseEqualsASCII(base::StringPiece(type_begin, type_end),
+                                 "inline")) {
     type_ = INLINE;
-  } else if (base::LowerCaseEqualsASCII(type_begin, type_end, "attachment")) {
+  } else if (base::LowerCaseEqualsASCII(base::StringPiece(type_begin, type_end),
+                                        "attachment")) {
     type_ = ATTACHMENT;
   } else {
     parse_result_flags_ |= HAS_UNKNOWN_DISPOSITION_TYPE;
@@ -403,15 +406,17 @@ void HttpContentDisposition::Parse(const std::string& header,
   HttpUtil::NameValuePairsIterator iter(pos, end, ';');
   while (iter.GetNext()) {
     if (filename.empty() &&
-        base::LowerCaseEqualsASCII(iter.name_begin(), iter.name_end(),
-                                   "filename")) {
+        base::LowerCaseEqualsASCII(
+            base::StringPiece(iter.name_begin(), iter.name_end()),
+            "filename")) {
       DecodeFilenameValue(iter.value(), referrer_charset, &filename,
                           &parse_result_flags_);
       if (!filename.empty())
         parse_result_flags_ |= HAS_FILENAME;
     } else if (ext_filename.empty() &&
-               base::LowerCaseEqualsASCII(iter.name_begin(), iter.name_end(),
-                                          "filename*")) {
+               base::LowerCaseEqualsASCII(
+                   base::StringPiece(iter.name_begin(), iter.name_end()),
+                   "filename*")) {
       DecodeExtValue(iter.raw_value(), &ext_filename);
       if (!ext_filename.empty())
         parse_result_flags_ |= HAS_EXT_FILENAME;

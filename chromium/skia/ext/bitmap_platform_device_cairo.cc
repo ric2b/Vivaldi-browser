@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "build/build_config.h"
 #include "skia/ext/bitmap_platform_device_cairo.h"
 #include "skia/ext/platform_canvas.h"
 
@@ -35,8 +36,10 @@ bool InstallCairoSurfacePixels(SkBitmap* dst,
     return false;
   }
   SkImageInfo info
-      = SkImageInfo::MakeN32Premul(cairo_image_surface_get_width(surface),
-                                   cairo_image_surface_get_height(surface));
+      = SkImageInfo::MakeN32(cairo_image_surface_get_width(surface),
+                             cairo_image_surface_get_height(surface),
+                             is_opaque ? kOpaque_SkAlphaType
+                                       : kPremul_SkAlphaType);
   return dst->installPixels(info,
                             cairo_image_surface_get_data(surface),
                             cairo_image_surface_get_stride(surface),
@@ -134,14 +137,6 @@ BitmapPlatformDevice* BitmapPlatformDevice::Create(int width, int height,
   return device;
 }
 
-BitmapPlatformDevice* BitmapPlatformDevice::CreateAndClear(int width,
-                                                           int height,
-                                                           bool is_opaque) {
-  // The Linux port always constructs initialized bitmaps, so there is no extra
-  // work to perform here.
-  return Create(width, height, is_opaque);
-}
-
 BitmapPlatformDevice* BitmapPlatformDevice::Create(int width, int height,
                                                    bool is_opaque,
                                                    uint8_t* data) {
@@ -198,28 +193,6 @@ SkCanvas* CreatePlatformCanvas(int width, int height, bool is_opaque,
   skia::RefPtr<SkBaseDevice> dev = skia::AdoptRef(
       BitmapPlatformDevice::Create(width, height, is_opaque, data));
   return CreateCanvas(dev, failureType);
-}
-
-// Port of PlatformBitmap to linux
-PlatformBitmap::~PlatformBitmap() {
-  cairo_destroy(surface_);
-}
-
-bool PlatformBitmap::Allocate(int width, int height, bool is_opaque) {
-  // The SkBitmap allocates and owns the bitmap memory; PlatformBitmap owns the
-  // cairo drawing context tied to the bitmap. The SkBitmap's pixelRef can
-  // outlive the PlatformBitmap if additional copies are made.
-  int stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, width);
-
-  cairo_surface_t* surf = cairo_image_surface_create(
-      CAIRO_FORMAT_ARGB32,
-      width,
-      height);
-  if (cairo_surface_status(surf) != CAIRO_STATUS_SUCCESS) {
-    cairo_surface_destroy(surf);
-    return false;
-  }
-  return InstallCairoSurfacePixels(&bitmap_, surf, is_opaque);
 }
 
 }  // namespace skia

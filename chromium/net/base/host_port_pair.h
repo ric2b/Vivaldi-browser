@@ -5,8 +5,11 @@
 #ifndef NET_BASE_HOST_PORT_PAIR_H_
 #define NET_BASE_HOST_PORT_PAIR_H_
 
+#include <stdint.h>
+
 #include <string>
-#include "base/basictypes.h"
+#include <tuple>
+
 #include "net/base/net_export.h"
 
 class GURL;
@@ -34,9 +37,7 @@ class NET_EXPORT HostPortPair {
   // TODO(willchan): Define a functor instead.
   // Comparator function so this can be placed in a std::map.
   bool operator<(const HostPortPair& other) const {
-    if (port_ != other.port_)
-      return port_ < other.port_;
-    return host_ < other.host_;
+    return std::tie(port_, host_) < std::tie(other.port_, other.host_);
   }
 
   // Equality test of contents. (Probably another violation of style guide).

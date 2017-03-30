@@ -4,6 +4,9 @@
 
 #include "components/dom_distiller/core/dom_distiller_store.h"
 
+#include <stdint.h>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
@@ -79,8 +82,10 @@ class FakeSyncChangeProcessor : public syncer::SyncChangeProcessor {
   EntryMap* model_;
 };
 
-ArticleEntry CreateEntry(std::string entry_id, std::string page_url1,
-                         std::string page_url2, std::string page_url3) {
+ArticleEntry CreateEntry(const std::string& entry_id,
+                         const std::string& page_url1,
+                         const std::string& page_url2,
+                         const std::string& page_url3) {
   ArticleEntry entry;
   entry.set_entry_id(entry_id);
   if (!page_url1.empty()) {
@@ -182,7 +187,7 @@ class DomDistillerStoreTest : public testing::Test {
   FakeDB<ArticleEntry>* fake_db_;
   FakeSyncChangeProcessor* fake_sync_processor_;
 
-  int64 next_sync_id_;
+  int64_t next_sync_id_;
 };
 
 AssertionResult AreEntriesEqual(const DomDistillerStore::EntryVector& entries,
@@ -518,9 +523,8 @@ TEST_F(DomDistillerStoreTest, TestSyncMergeWithSecondDomDistillerStore) {
 
   FakeSyncErrorFactory* other_error_factory = new FakeSyncErrorFactory();
   store_->MergeDataAndStartSyncing(
-      kDomDistillerModelType,
-      SyncDataFromEntryMap(other_db_model),
-      owned_other_store.Pass(),
+      kDomDistillerModelType, SyncDataFromEntryMap(other_db_model),
+      std::move(owned_other_store),
       make_scoped_ptr<SyncErrorFactory>(other_error_factory));
 
   EXPECT_TRUE(AreEntriesEqual(store_->GetEntries(), expected_model));

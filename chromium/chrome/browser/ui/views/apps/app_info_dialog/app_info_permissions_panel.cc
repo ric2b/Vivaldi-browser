@@ -10,6 +10,7 @@
 #include "apps/app_load_service.h"
 #include "apps/saved_files_service.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/strings/string_split.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/grit/generated_resources.h"
@@ -229,9 +230,9 @@ void AppInfoPermissionsPanel::CreatePermissionsList() {
 
   // Add regular and host permission messages.
   for (const auto& message : GetActivePermissionMessages()) {
-    permissions_list->AddPermissionBullets(
-        message.message, message.submessages, gfx::ELIDE_MIDDLE,
-        base::Closure());
+    permissions_list->AddPermissionBullets(message.message(),
+                                           message.submessages(),
+                                           gfx::ELIDE_MIDDLE, base::Closure());
   }
 
   // Add USB devices, if the app has any.
@@ -261,9 +262,9 @@ bool AppInfoPermissionsPanel::HasActivePermissionMessages() const {
   return !GetActivePermissionMessages().empty();
 }
 
-extensions::PermissionMessageStrings
+extensions::PermissionMessages
 AppInfoPermissionsPanel::GetActivePermissionMessages() const {
-  return app_->permissions_data()->GetPermissionMessageStrings();
+  return app_->permissions_data()->GetPermissionMessages();
 }
 
 int AppInfoPermissionsPanel::GetRetainedFileCount() const {

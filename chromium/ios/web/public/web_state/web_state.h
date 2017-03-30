@@ -5,10 +5,13 @@
 #ifndef IOS_WEB_PUBLIC_WEB_STATE_WEB_STATE_H_
 #define IOS_WEB_PUBLIC_WEB_STATE_WEB_STATE_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/memory/weak_ptr.h"
 #include "base/supports_user_data.h"
 #include "ios/web/public/referrer.h"
 #include "ios/web/public/web_state/url_verification_constants.h"
@@ -45,6 +48,8 @@ class BrowserState;
 class NavigationManager;
 class WebInterstitial;
 class WebStateObserver;
+class WebStatePolicyDecider;
+class WebStateWeakPtrFactory;
 
 // Core interface for interaction with the web.
 class WebState : public base::SupportsUserData {
@@ -118,8 +123,15 @@ class WebState : public base::SupportsUserData {
   // Returns true if the current page is a web view with HTML.
   virtual bool ContentIsHTML() const = 0;
 
+  // Returns the current navigation title. This could be the title of the page
+  // if it is available or the URL.
+  virtual const base::string16& GetTitle() const = 0;
+
   // Returns true if the current page is loading.
   virtual bool IsLoading() const = 0;
+
+  // Whether this instance is in the process of being destroyed.
+  virtual bool IsBeingDestroyed() const = 0;
 
   // Gets the URL currently being displayed in the URL bar, if there is one.
   // This URL might be a pending navigation that hasn't committed yet, so it is
@@ -192,6 +204,7 @@ class WebState : public base::SupportsUserData {
 
  protected:
   friend class WebStateObserver;
+  friend class WebStatePolicyDecider;
 
   // Adds and removes observers for page navigation notifications. The order in
   // which notifications are sent to observers is undefined. Clients must be
@@ -200,7 +213,22 @@ class WebState : public base::SupportsUserData {
   virtual void AddObserver(WebStateObserver* observer) = 0;
   virtual void RemoveObserver(WebStateObserver* observer) = 0;
 
+  // Adds and removes policy deciders for navigation actions. The order in which
+  // deciders are called is undefined, and will stop on the first decider that
+  // refuses a navigation. Clients must be sure to remove the deciders before
+  // they go away.
+  virtual void AddPolicyDecider(WebStatePolicyDecider* decider) = 0;
+  virtual void RemovePolicyDecider(WebStatePolicyDecider* decider) = 0;
+
   WebState() {}
+
+ private:
+  friend class WebStateWeakPtrFactory;  // For AsWeakPtr.
+
+  // Returns a WeakPtr<WebState> to the current WebState. Must remain private
+  // and only call must be in WebStateWeakPtrFactory. Please consult that class
+  // for more details. Remove as part of http://crbug.com/556736.
+  virtual base::WeakPtr<WebState> AsWeakPtr() = 0;
 };
 
 }  // namespace web

@@ -5,16 +5,18 @@
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 
 #include <signal.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <sys/types.h>
-
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/histogram.h"
 #include "base/prefs/pref_registry_simple.h"
 #include "base/prefs/pref_service.h"
@@ -60,6 +62,7 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
+#include "chrome/browser/ui/webui/help/help_utils_chromeos.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/audio/cras_audio_handler.h"
@@ -75,7 +78,7 @@
 #include "chromeos/settings/cros_settings_provider.h"
 #include "chromeos/settings/timezone_settings.h"
 #include "chromeos/timezone/timezone_provider.h"
-#include "components/crash/app/breakpad_linux.h"
+#include "components/crash/content/app/breakpad_linux.h"
 #include "components/pairing/bluetooth_controller_pairing_controller.h"
 #include "components/pairing/bluetooth_host_pairing_controller.h"
 #include "components/pairing/shark_connection_listener.h"
@@ -138,6 +141,29 @@ bool IsRemoraRequisition() {
       ->browser_policy_connector_chromeos()
       ->GetDeviceCloudPolicyManager()
       ->IsRemoraRequisition();
+}
+
+// Checks if the device is a "Slave" device in the bootstrapping process.
+bool IsBootstrappingSlave() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      chromeos::switches::kOobeBootstrappingSlave);
+}
+
+// Checks if the device is a "Master" device in the bootstrapping process.
+bool IsBootstrappingMaster() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      chromeos::switches::kOobeBootstrappingMaster);
+}
+
+bool NetworkAllowUpdate(const chromeos::NetworkState* network) {
+  if (!network || !network->IsConnectedState())
+    return false;
+  if (network->type() == shill::kTypeBluetooth ||
+      (network->type() == shill::kTypeCellular &&
+       !help_utils_chromeos::IsUpdateOverCellularAllowed())) {
+    return false;
+  }
+  return true;
 }
 
 #if defined(GOOGLE_CHROME_BUILD)
@@ -270,10 +296,16 @@ void WizardController::Init(const std::string& first_screen_name) {
     }
   }
 
+  // If the device is a Master device in bootstrapping process (mostly for demo
+  // and test purpose), start the enrollment OOBE flow.
+  if (IsBootstrappingMaster())
+    connector->GetDeviceCloudPolicyManager()->SetDeviceEnrollmentAutoStart();
+
   // Use the saved screen preference from Local State.
   const std::string screen_pref =
       GetLocalState()->GetString(prefs::kOobeScreenPending);
-  if (is_out_of_box_ && !screen_pref.empty() && !IsHostPairingOobe() &&
+  if (is_out_of_box_ && !screen_pref.empty() && !IsRemoraPairingOobe() &&
+      !IsBootstrappingSlave() &&
       (first_screen_name.empty() ||
        first_screen_name == WizardController::kTestNoScreenName)) {
     first_screen_name_ = screen_pref;
@@ -585,8 +617,10 @@ void WizardController::OnUpdateCompleted() {
                             ->browser_policy_connector_chromeos()
                             ->GetDeviceCloudPolicyManager()
                             ->IsSharkRequisition();
-  if (is_shark) {
+  if (is_shark || IsBootstrappingMaster()) {
     ShowControllerPairingScreen();
+  } else if (IsBootstrappingSlave() && shark_controller_detected_) {
+    ShowHostPairingScreen();
   } else {
     ShowAutoEnrollmentCheckScreen();
   }
@@ -733,10 +767,6 @@ void WizardController::OnControllerPairingFinished() {
   ShowAutoEnrollmentCheckScreen();
 }
 
-void WizardController::OnHostPairingFinished() {
-  InitiateOOBEUpdate();
-}
-
 void WizardController::OnAutoEnrollmentCheckCompleted() {
   // Check whether the device is disabled. OnDeviceDisabledChecked() will be
   // invoked when the result of this check is known. Until then, the current
@@ -795,7 +825,7 @@ void WizardController::PerformPostEulaActions() {
       NetworkStateHandler::kDefaultCheckPortalList);
   host_->GetAutoEnrollmentController()->Start();
   host_->PrewarmAuthentication();
-  NetworkPortalDetector::Get()->Enable(true);
+  network_portal_detector::GetInstance()->Enable(true);
 }
 
 void WizardController::PerformOOBECompletedActions() {
@@ -921,7 +951,7 @@ void WizardController::AdvanceToScreen(const std::string& screen_name) {
   } else if (screen_name != kTestNoScreenName) {
     if (is_out_of_box_) {
       time_oobe_started_ = base::Time::Now();
-      if (IsHostPairingOobe()) {
+      if (IsRemoraPairingOobe() || IsSlavePairingOobe()) {
         ShowHostPairingScreen();
       } else if (CanShowHIDDetectionScreen()) {
         hid_screen_ = GetScreen(kHIDDetectionScreenName);
@@ -1019,9 +1049,6 @@ void WizardController::OnExit(BaseScreen& /* screen */,
     case CONTROLLER_PAIRING_FINISHED:
       OnControllerPairingFinished();
       break;
-    case HOST_PAIRING_FINISHED:
-      OnHostPairingFinished();
-      break;
     default:
       NOTREACHED();
   }
@@ -1046,14 +1073,24 @@ bool WizardController::GetUsageStatisticsReporting() const {
   return usage_statistics_reporting_;
 }
 
+void WizardController::SetHostNetwork() {
+  if (!shark_controller_)
+    return;
+  NetworkScreen* network_screen = NetworkScreen::Get(this);
+  std::string onc_spec;
+  network_screen->GetConnectedWifiNetwork(&onc_spec);
+  if (!onc_spec.empty())
+    shark_controller_->SetHostNetwork(onc_spec);
+}
+
 void WizardController::SetHostConfiguration() {
-  if (shark_controller_) {
-    NetworkScreen* network_screen = NetworkScreen::Get(this);
-    shark_controller_->SetHostConfiguration(
-        true,  // Eula must be accepted before we get this far.
-        network_screen->GetApplicationLocale(), network_screen->GetTimezone(),
-        GetUsageStatisticsReporting(), network_screen->GetInputMethod());
-  }
+  if (!shark_controller_)
+    return;
+  NetworkScreen* network_screen = NetworkScreen::Get(this);
+  shark_controller_->SetHostConfiguration(
+      true,  // Eula must be accepted before we get this far.
+      network_screen->GetApplicationLocale(), network_screen->GetTimezone(),
+      GetUsageStatisticsReporting(), network_screen->GetInputMethod());
 }
 
 void WizardController::ConfigureHostRequested(
@@ -1069,14 +1106,34 @@ void WizardController::ConfigureHostRequested(
   SetUsageStatisticsReporting(send_reports);
 
   NetworkScreen* network_screen = NetworkScreen::Get(this);
-  network_screen->SetApplicationLocale(lang);
+  network_screen->SetApplicationLocaleAndInputMethod(lang, keyboard_layout);
   network_screen->SetTimezone(timezone);
-  network_screen->SetInputMethod(keyboard_layout);
+
+  // Don't block the OOBE update and the following enrollment process if there
+  // is available and valid network already.
+  const chromeos::NetworkState* network_state = chromeos::NetworkHandler::Get()
+                                                    ->network_state_handler()
+                                                    ->DefaultNetwork();
+  if (NetworkAllowUpdate(network_state))
+    InitiateOOBEUpdate();
 }
 
 void WizardController::AddNetworkRequested(const std::string& onc_spec) {
   NetworkScreen* network_screen = NetworkScreen::Get(this);
-  network_screen->CreateNetworkFromOnc(onc_spec);
+  const chromeos::NetworkState* network_state = chromeos::NetworkHandler::Get()
+                                                    ->network_state_handler()
+                                                    ->DefaultNetwork();
+
+  if (NetworkAllowUpdate(network_state)) {
+    network_screen->CreateAndConnectNetworkFromOnc(
+        onc_spec, base::Bind(&base::DoNothing), base::Bind(&base::DoNothing));
+  } else {
+    network_screen->CreateAndConnectNetworkFromOnc(
+        onc_spec, base::Bind(&WizardController::InitiateOOBEUpdate,
+                             weak_factory_.GetWeakPtr()),
+        base::Bind(&WizardController::OnSetHostNetworkFailed,
+                   weak_factory_.GetWeakPtr()));
+  }
 }
 
 void WizardController::OnEnableDebuggingScreenRequested() {
@@ -1270,19 +1327,23 @@ bool WizardController::SetOnTimeZoneResolvedForTesting(
   return true;
 }
 
-bool WizardController::IsHostPairingOobe() const {
+bool WizardController::IsRemoraPairingOobe() const {
   return IsRemoraRequisition() &&
          (base::CommandLine::ForCurrentProcess()->HasSwitch(
               switches::kHostPairingOobe) ||
           shark_controller_detected_);
 }
 
+bool WizardController::IsSlavePairingOobe() const {
+  return IsBootstrappingSlave() && shark_controller_detected_;
+}
+
 void WizardController::MaybeStartListeningForSharkConnection() {
-  if (!IsRemoraRequisition())
+  if (!IsRemoraRequisition() && !IsBootstrappingSlave())
     return;
 
   // We shouldn't be here if we are running pairing OOBE already.
-  DCHECK(!IsHostPairingOobe());
+  DCHECK(!IsRemoraPairingOobe() && !IsSlavePairingOobe());
 
   if (!shark_connection_listener_) {
     shark_connection_listener_.reset(
@@ -1295,11 +1356,16 @@ void WizardController::MaybeStartListeningForSharkConnection() {
 void WizardController::OnSharkConnected(
     scoped_ptr<pairing_chromeos::HostPairingController> remora_controller) {
   VLOG(1) << "OnSharkConnected";
-  remora_controller_ = remora_controller.Pass();
+  remora_controller_ = std::move(remora_controller);
   base::MessageLoop::current()->DeleteSoon(
       FROM_HERE, shark_connection_listener_.release());
   shark_controller_detected_ = true;
   ShowHostPairingScreen();
+}
+
+void WizardController::OnSetHostNetworkFailed() {
+  remora_controller_->OnNetworkConnectivityChanged(
+      pairing_chromeos::HostPairingController::CONNECTIVITY_NONE);
 }
 
 void WizardController::StartEnrollmentScreen() {
@@ -1317,8 +1383,7 @@ void WizardController::StartEnrollmentScreen() {
   }
 
   EnrollmentScreen* screen = EnrollmentScreen::Get(this);
-  screen->SetParameters(effective_config, shark_controller_.get(),
-                        remora_controller_.get());
+  screen->SetParameters(effective_config, shark_controller_.get());
   SetStatusAreaVisible(true);
   SetCurrentScreen(screen);
 }

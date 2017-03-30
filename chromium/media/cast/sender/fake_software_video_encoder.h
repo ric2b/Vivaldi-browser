@@ -5,6 +5,8 @@
 #ifndef MEDIA_CAST_SENDER_FAKE_SOFTWARE_VIDEO_ENCODER_H_
 #define MEDIA_CAST_SENDER_FAKE_SOFTWARE_VIDEO_ENCODER_H_
 
+#include <stdint.h>
+
 #include "media/cast/cast_config.h"
 #include "media/cast/sender/software_video_encoder.h"
 #include "ui/gfx/geometry/size.h"
@@ -22,16 +24,14 @@ class FakeSoftwareVideoEncoder : public SoftwareVideoEncoder {
   void Encode(const scoped_refptr<media::VideoFrame>& video_frame,
               const base::TimeTicks& reference_time,
               SenderEncodedFrame* encoded_frame) final;
-  void UpdateRates(uint32 new_bitrate) final;
+  void UpdateRates(uint32_t new_bitrate) final;
   void GenerateKeyFrame() final;
-  void LatestFrameIdToReference(uint32 frame_id) final;
 
  private:
   VideoSenderConfig video_config_;
   gfx::Size last_frame_size_;
   bool next_frame_is_key_;
-  uint32 frame_id_;
-  uint32 frame_id_to_reference_;
+  uint32_t frame_id_;
   int frame_size_;
 };
 

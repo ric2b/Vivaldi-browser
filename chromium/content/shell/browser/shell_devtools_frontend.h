@@ -5,8 +5,8 @@
 #ifndef CONTENT_SHELL_BROWSER_SHELL_DEVTOOLS_FRONTEND_H_
 #define CONTENT_SHELL_BROWSER_SHELL_DEVTOOLS_FRONTEND_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -27,7 +27,6 @@ class Shell;
 class WebContents;
 
 class ShellDevToolsFrontend : public WebContentsObserver,
-                              public DevToolsFrontendHost::Delegate,
                               public DevToolsAgentHostClient,
                               public net::URLFetcherDelegate {
  public:
@@ -63,10 +62,7 @@ class ShellDevToolsFrontend : public WebContentsObserver,
   void DocumentAvailableInMainFrame() override;
   void WebContentsDestroyed() override;
 
-  // content::DevToolsFrontendHost::Delegate implementation.
-  void HandleMessageFromDevToolsFrontend(const std::string& message) override;
-  void HandleMessageFromDevToolsFrontendToBackend(
-      const std::string& message) override;
+  void HandleMessageFromDevToolsFrontend(const std::string& message);
 
   // net::URLFetcherDelegate overrides.
   void OnURLFetchComplete(const net::URLFetcher* source) override;

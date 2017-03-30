@@ -4,6 +4,8 @@
 
 #include "remoting/host/oauth_token_getter_impl.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/strings/string_util.h"
@@ -27,20 +29,17 @@ OAuthTokenGetterImpl::OAuthTokenGetterImpl(
     scoped_ptr<OAuthCredentials> oauth_credentials,
     const scoped_refptr<net::URLRequestContextGetter>&
         url_request_context_getter,
-    bool auto_refresh,
-    bool verify_email)
-    : oauth_credentials_(oauth_credentials.Pass()),
+    bool auto_refresh)
+    : oauth_credentials_(std::move(oauth_credentials)),
       gaia_oauth_client_(
           new gaia::GaiaOAuthClient(url_request_context_getter.get())),
-      url_request_context_getter_(url_request_context_getter),
-      verify_email_(verify_email) {
+      url_request_context_getter_(url_request_context_getter) {
   if (auto_refresh) {
-    refresh_timer_.reset(new base::OneShotTimer<OAuthTokenGetterImpl>());
+    refresh_timer_.reset(new base::OneShotTimer());
   }
 }
 
-OAuthTokenGetterImpl::~OAuthTokenGetterImpl() {
-}
+OAuthTokenGetterImpl::~OAuthTokenGetterImpl() {}
 
 void OAuthTokenGetterImpl::OnGetTokensResponse(const std::string& user_email,
                                                const std::string& access_token,
@@ -67,7 +66,7 @@ void OAuthTokenGetterImpl::OnRefreshTokenResponse(
                           &OAuthTokenGetterImpl::RefreshOAuthToken);
   }
 
-  if (verify_email_ && !email_verified_) {
+  if (!oauth_credentials_->is_service_account && !email_verified_) {
     gaia_oauth_client_->GetUserEmail(access_token, kMaxRetries, this);
   } else {
     refreshing_oauth_token_ = false;
@@ -137,7 +136,8 @@ void OAuthTokenGetterImpl::CallWithToken(const TokenCallback& on_access_token) {
   DCHECK(CalledOnValidThread());
   bool need_new_auth_token = auth_token_expiry_time_.is_null() ||
                              base::Time::Now() >= auth_token_expiry_time_ ||
-                             (verify_email_ && !email_verified_);
+                             (!oauth_credentials_->is_service_account &&
+                              !email_verified_);
 
   if (need_new_auth_token) {
     pending_callbacks_.push(on_access_token);
@@ -147,6 +147,11 @@ void OAuthTokenGetterImpl::CallWithToken(const TokenCallback& on_access_token) {
     on_access_token.Run(SUCCESS, oauth_credentials_->login,
                         oauth_access_token_);
   }
+}
+
+void OAuthTokenGetterImpl::InvalidateCache() {
+  DCHECK(CalledOnValidThread());
+  auth_token_expiry_time_ = base::Time();
 }
 
 void OAuthTokenGetterImpl::RefreshOAuthToken() {

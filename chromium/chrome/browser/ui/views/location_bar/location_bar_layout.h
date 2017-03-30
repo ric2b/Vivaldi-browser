@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_LOCATION_BAR_LOCATION_BAR_LAYOUT_H_
 #define CHROME_BROWSER_UI_VIEWS_LOCATION_BAR_LOCATION_BAR_LAYOUT_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 
 namespace gfx {
@@ -26,7 +27,7 @@ class LocationBarLayout {
     RIGHT_EDGE,
   };
 
-  LocationBarLayout(Position position, int item_edit_padding);
+  LocationBarLayout(Position position, int item_padding, int item_edit_padding);
   virtual ~LocationBarLayout();
 
   // Add a decoration, specifying:
@@ -75,6 +76,9 @@ class LocationBarLayout {
   // LEFT_EDGE means decorations are added from left to right and stacked on
   // the left of the omnibox, RIGHT_EDGE means the opposite.
   Position position_;
+
+  // The default padding between items.
+  int item_padding_;
 
   // The padding between the last decoration and the edit box.
   int item_edit_padding_;

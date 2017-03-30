@@ -4,6 +4,8 @@
 
 #include "net/socket/client_socket_pool_base.h"
 
+#include <stdint.h>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -11,6 +13,7 @@
 #include "base/callback.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
@@ -149,8 +152,8 @@ class MockClientSocket : public StreamSocket {
     was_used_to_convey_data_ = true;
     return len;
   }
-  int SetReceiveBufferSize(int32 size) override { return OK; }
-  int SetSendBufferSize(int32 size) override { return OK; }
+  int SetReceiveBufferSize(int32_t size) override { return OK; }
+  int SetSendBufferSize(int32_t size) override { return OK; }
 
   // StreamSocket implementation.
   int Connect(const CompletionCallback& callback) override {
@@ -186,6 +189,10 @@ class MockClientSocket : public StreamSocket {
   }
   void ClearConnectionAttempts() override {}
   void AddConnectionAttempts(const ConnectionAttempts& attempts) override {}
+  int64_t GetTotalReceivedBytes() const override {
+    NOTIMPLEMENTED();
+    return 0;
+  }
 
  private:
   bool connected_;
@@ -525,7 +532,7 @@ class TestClientSocketPool : public ClientSocketPool {
   void ReleaseSocket(const std::string& group_name,
                      scoped_ptr<StreamSocket> socket,
                      int id) override {
-    base_.ReleaseSocket(group_name, socket.Pass(), id);
+    base_.ReleaseSocket(group_name, std::move(socket), id);
   }
 
   void FlushWithError(int error) override { base_.FlushWithError(error); }
@@ -634,7 +641,7 @@ class TestConnectJobDelegate : public ConnectJob::Delegate {
     EXPECT_EQ(socket == NULL, result != OK);
     have_result_ = true;
     if (waiting_for_result_)
-      base::MessageLoop::current()->Quit();
+      base::MessageLoop::current()->QuitWhenIdle();
   }
 
   int WaitForResult() {
@@ -720,7 +727,9 @@ class ClientSocketPoolBaseTest : public testing::Test {
 
   TestSocketRequest* request(int i) { return test_base_.request(i); }
   size_t requests_size() const { return test_base_.requests_size(); }
-  ScopedVector<TestSocketRequest>* requests() { return test_base_.requests(); }
+  std::vector<scoped_ptr<TestSocketRequest>>* requests() {
+    return test_base_.requests();
+  }
   size_t completion_count() const { return test_base_.completion_count(); }
 
   TestNetLog net_log_;
@@ -2205,8 +2214,14 @@ TEST_F(ClientSocketPoolBaseTest, DisableCleanupTimerReuse) {
       entries, 1, NetLog::TYPE_SOCKET_POOL_REUSED_AN_EXISTING_SOCKET));
 }
 
+#if defined(OS_IOS)
+// TODO(droger): Enable this test (crbug.com/512595).
+#define MAYBE_DisableCleanupTimerNoReuse DISABLED_DisableCleanupTimerNoReuse
+#else
+#define MAYBE_DisableCleanupTimerNoReuse DisableCleanupTimerNoReuse
+#endif
 // Make sure we cleanup old unused sockets when the cleanup timer is disabled.
-TEST_F(ClientSocketPoolBaseTest, DisableCleanupTimerNoReuse) {
+TEST_F(ClientSocketPoolBaseTest, MAYBE_DisableCleanupTimerNoReuse) {
   // Disable cleanup timer.
   internal::ClientSocketPoolBaseHelper::set_cleanup_timer_enabled(false);
 
@@ -3651,7 +3666,7 @@ TEST_F(ClientSocketPoolBaseTest, PreconnectWithoutBackupJob) {
   // *would* complete if it were created.
   connect_job_factory_->set_job_type(TestConnectJob::kMockPendingJob);
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::MessageLoop::QuitClosure(),
+      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       base::TimeDelta::FromSeconds(1));
   base::MessageLoop::current()->Run();
   EXPECT_FALSE(pool_->HasGroup("a"));

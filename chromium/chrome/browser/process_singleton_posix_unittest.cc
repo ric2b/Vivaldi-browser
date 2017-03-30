@@ -5,7 +5,9 @@
 #include "chrome/browser/process_singleton.h"
 
 #include <fcntl.h>
+#include <limits.h>
 #include <signal.h>
+#include <stddef.h>
 #include <sys/types.h>
 #include <sys/un.h>
 #include <sys/wait.h>
@@ -27,6 +29,7 @@
 #include "base/test/test_timeouts.h"
 #include "base/test/thread_test_helper.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_constants.h"
 #include "content/public/test/test_browser_thread.h"
 #include "net/base/net_util.h"

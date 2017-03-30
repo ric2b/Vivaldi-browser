@@ -4,7 +4,10 @@
 
 #include "components/resource_provider/file_utils.h"
 
+#include <stddef.h>
+
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -26,8 +29,8 @@ TEST(FileUtilsTest, InvalidAppPath) {
   };
 
   for (size_t i = 0; i < arraysize(invalid_cases); ++i) {
-    const GURL url(invalid_cases[i].url);
-    base::FilePath resulting_path(GetPathForApplicationUrl(url));
+    base::FilePath resulting_path(GetPathForApplicationUrl(
+        invalid_cases[i].url));
     EXPECT_TRUE(resulting_path.empty()) << "i=" << i
                                         << " input=" << invalid_cases[i].url
                                         << " result=" << resulting_path.value();
@@ -50,7 +53,7 @@ TEST(FileUtilsTest, InvalidResourcePath) {
       {"bar//baz/"},
   };
 
-  const base::FilePath app_path(GetPathForApplicationUrl(GURL("mojo:test")));
+  const base::FilePath app_path(GetPathForApplicationUrl("mojo:test"));
   ASSERT_FALSE(app_path.empty());
 
   for (size_t i = 0; i < arraysize(invalid_cases); ++i) {
@@ -63,7 +66,7 @@ TEST(FileUtilsTest, InvalidResourcePath) {
 }
 
 TEST(FileUtilsTest, ValidPaths) {
-  const base::FilePath app_path(GetPathForApplicationUrl(GURL("mojo:test")));
+  const base::FilePath app_path(GetPathForApplicationUrl("mojo:test"));
   ASSERT_FALSE(app_path.empty());
 
   // Trivial single path element.

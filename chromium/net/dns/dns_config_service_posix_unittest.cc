@@ -18,6 +18,13 @@
 #include "base/android/path_utils.h"
 #endif  // defined(OS_ANDROID)
 
+// Required for inet_pton()
+#if defined(OS_WIN)
+#include <winsock2.h>
+#else
+#include <arpa/inet.h>
+#endif
+
 namespace net {
 
 #if !defined(OS_ANDROID)
@@ -40,6 +47,10 @@ const char* const kNameserversIPv6[] = {
     "::FFFF:129.144.52.38",
 };
 #endif
+
+void DummyConfigCallback(const DnsConfig& config) {
+  // Do nothing
+}
 
 // Fills in |res| with sane configuration.
 void InitializeResState(res_state res) {
@@ -164,6 +175,16 @@ TEST(DnsConfigServicePosixTest, RejectEmptyNameserver) {
             internal::ConvertResStateToDnsConfig(res, &config));
 }
 
+TEST(DnsConfigServicePosixTest, DestroyWhileJobsWorking) {
+  // Regression test to verify crash does not occur if DnsConfigServicePosix
+  // instance is destroyed while SerialWorker jobs have posted to worker pool.
+  scoped_ptr<internal::DnsConfigServicePosix> service(
+      new internal::DnsConfigServicePosix());
+  service->ReadConfig(base::Bind(&DummyConfigCallback));
+  service.reset();
+  base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(1000));
+}
+
 }  // namespace
 
 #else  // OS_ANDROID
@@ -181,7 +202,7 @@ class DnsConfigServicePosixTest : public testing::Test {
   void OnConfigChanged(const DnsConfig& config) {
     EXPECT_TRUE(config.IsValid());
     seen_config_ = true;
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 
   void WriteMockHostsFile(const char* hosts_string) {
@@ -196,6 +217,10 @@ class DnsConfigServicePosixTest : public testing::Test {
     test_config_.nameservers.push_back(
         IPEndPoint(dns_number, dns_protocol::kDefaultPort));
     service_->SetDnsConfigForTesting(&test_config_);
+  }
+
+  void MockHostsFilePath(const char* file_path) {
+    service_->SetHostsFilePathForTesting(file_path);
   }
 
   void SetUp() override {
@@ -226,7 +251,7 @@ class DnsConfigServicePosixTest : public testing::Test {
   void StartWatching() {
     creation_time_ = base::Time::Now();
     service_.reset(new DnsConfigServicePosix());
-    service_->file_path_hosts_ = temp_file_.value().c_str();
+    MockHostsFilePath(temp_file_.value().c_str());
     MockDNSConfig("8.8.8.8");
     seen_config_ = false;
     service_->WatchConfig(base::Bind(

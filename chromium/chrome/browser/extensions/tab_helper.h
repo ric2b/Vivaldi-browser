@@ -8,6 +8,7 @@
 #include <set>
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -23,13 +24,10 @@
 #include "extensions/browser/extension_function_dispatcher.h"
 #include "extensions/browser/script_execution_observer.h"
 #include "extensions/browser/script_executor.h"
-//#include "extensions/common/extension_messages.h"
 #include "extensions/common/stack_frame.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
 class FaviconDownloader;
-
-struct ExtensionHostMsg_ContentsFromId_Params;
 
 namespace content {
 struct LoadCommittedDetails;

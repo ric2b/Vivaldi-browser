@@ -5,14 +5,17 @@
 #ifndef UI_BASE_IME_CHROMEOS_MOCK_IME_ENGINE_HANDLER_H_
 #define UI_BASE_IME_CHROMEOS_MOCK_IME_ENGINE_HANDLER_H_
 
-#include "ui/base/ime/chromeos/ime_bridge.h"
+#include <stddef.h>
+#include <stdint.h>
+
+#include "ui/base/ime/ime_engine_handler_interface.h"
 #include "ui/base/ime/ui_base_ime_export.h"
 #include "ui/events/event.h"
 
 namespace chromeos {
 
 class UI_BASE_IME_EXPORT MockIMEEngineHandler
-    : public IMEEngineHandlerInterface {
+    : public ui::IMEEngineHandlerInterface {
  public:
   MockIMEEngineHandler();
   ~MockIMEEngineHandler() override;
@@ -25,11 +28,12 @@ class UI_BASE_IME_EXPORT MockIMEEngineHandler
   void Reset() override;
   bool IsInterestedInKeyEvent() const override;
   void ProcessKeyEvent(const ui::KeyEvent& key_event,
-                       const KeyEventDoneCallback& callback) override;
-  void CandidateClicked(uint32 index) override;
+                       KeyEventDoneCallback& callback) override;
+  void CandidateClicked(uint32_t index) override;
   void SetSurroundingText(const std::string& text,
-                          uint32 cursor_pos,
-                          uint32 anchor_pos) override;
+                          uint32_t cursor_pos,
+                          uint32_t anchor_pos,
+                          uint32_t offset_pos) override;
   void SetCompositionBounds(const std::vector<gfx::Rect>& bounds) override;
 
   int focus_in_call_count() const { return focus_in_call_count_; }
@@ -54,11 +58,11 @@ class UI_BASE_IME_EXPORT MockIMEEngineHandler
     return last_set_surrounding_text_;
   }
 
-  uint32 last_set_surrounding_cursor_pos() const {
+  uint32_t last_set_surrounding_cursor_pos() const {
     return last_set_surrounding_cursor_pos_;
   }
 
-  uint32 last_set_surrounding_anchor_pos() const {
+  uint32_t last_set_surrounding_anchor_pos() const {
     return last_set_surrounding_anchor_pos_;
   }
 
@@ -70,6 +74,53 @@ class UI_BASE_IME_EXPORT MockIMEEngineHandler
     return last_passed_callback_;
   }
 
+  bool SetComposition(int context_id,
+                      const char* text,
+                      int selection_start,
+                      int selection_end,
+                      int cursor,
+                      const std::vector<SegmentInfo>& segments,
+                      std::string* error) override;
+
+  bool ClearComposition(int context_id, std::string* error) override;
+
+  bool CommitText(int context_id,
+                  const char* text,
+                  std::string* error) override;
+
+  bool SendKeyEvents(int context_id,
+                     const std::vector<KeyboardEvent>& events) override;
+
+  bool IsActive() const override;
+
+  const std::string& GetActiveComponentId() const override;
+
+  bool DeleteSurroundingText(int context_id,
+                             int offset,
+                             size_t number_of_chars,
+                             std::string* error) override;
+
+  const CandidateWindowProperty& GetCandidateWindowProperty() const override;
+
+  void SetCandidateWindowProperty(
+      const CandidateWindowProperty& property) override {}
+
+  bool SetCandidateWindowVisible(bool visible, std::string* error) override;
+
+  bool SetCandidates(int context_id,
+                     const std::vector<Candidate>& candidates,
+                     std::string* error) override;
+
+  bool SetCursorPosition(int context_id,
+                         int candidate_id,
+                         std::string* error) override;
+
+  bool SetMenuItems(const std::vector<MenuItem>& items) override;
+
+  bool UpdateMenuItems(const std::vector<MenuItem>& items) override;
+
+  void HideInputView() override {}
+
  private:
   int focus_in_call_count_;
   int focus_out_call_count_;
@@ -79,10 +130,12 @@ class UI_BASE_IME_EXPORT MockIMEEngineHandler
   InputContext last_text_input_context_;
   std::string last_activated_property_;
   std::string last_set_surrounding_text_;
-  uint32 last_set_surrounding_cursor_pos_;
-  uint32 last_set_surrounding_anchor_pos_;
+  uint32_t last_set_surrounding_cursor_pos_;
+  uint32_t last_set_surrounding_anchor_pos_;
   scoped_ptr<ui::KeyEvent> last_processed_key_event_;
   KeyEventDoneCallback last_passed_callback_;
+  std::string active_component_id_;
+  CandidateWindowProperty candidate_window_property_;
 };
 
 }  // namespace chromeos

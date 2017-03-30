@@ -15,10 +15,11 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.View.OnClickListener;
 
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.BookmarksBridge.BookmarkItem;
-import org.chromium.chrome.browser.BookmarksBridge.BookmarkModelObserver;
-import org.chromium.chrome.browser.enhanced_bookmarks.EnhancedBookmarksModel;
+import org.chromium.chrome.browser.bookmark.BookmarksBridge.BookmarkItem;
+import org.chromium.chrome.browser.bookmark.BookmarksBridge.BookmarkModelObserver;
+import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.widget.NumberRollView;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkType;
@@ -56,6 +57,21 @@ public class EnhancedBookmarkActionBar extends Toolbar implements EnhancedBookma
         inflateMenu(R.menu.eb_action_bar_menu);
         if (DeviceFormFactor.isTablet(context)) getMenu().removeItem(R.id.close_menu_id);
         setOnMenuItemClickListener(this);
+
+        getMenu()
+                .findItem(R.id.search_menu_id)
+                .setTitle(OfflinePageUtils.getStringId(
+                        R.string.enhanced_bookmark_action_bar_search));
+        getMenu()
+                .findItem(R.id.selection_mode_edit_menu_id)
+                .setTitle(OfflinePageUtils.getStringId(R.string.edit_bookmark));
+        getMenu()
+                .findItem(R.id.selection_mode_move_menu_id)
+                .setTitle(OfflinePageUtils.getStringId(R.string.enhanced_bookmark_action_bar_move));
+        getMenu()
+                .findItem(R.id.selection_mode_delete_menu_id)
+                .setTitle(OfflinePageUtils.getStringId(
+                        R.string.enhanced_bookmark_action_bar_delete));
     }
 
     @Override
@@ -79,22 +95,24 @@ public class EnhancedBookmarkActionBar extends Toolbar implements EnhancedBookma
 
     @Override
     public boolean onMenuItemClick(MenuItem menuItem) {
-        EnhancedBookmarksModel model = mDelegate.getModel();
         if (menuItem.getItemId() == R.id.edit_menu_id) {
             EnhancedBookmarkAddEditFolderActivity.startEditFolderActivity(getContext(),
                     mCurrentFolder.getId());
         } else if (menuItem.getItemId() == R.id.close_menu_id) {
-            mDelegate.finishActivityOnPhone();
+            EnhancedBookmarkUtils.finishActivityOnPhone(getContext());
+            return true;
+        } else if (menuItem.getItemId() == R.id.search_menu_id) {
+            mDelegate.openSearchUI();
             return true;
         } else if (menuItem.getItemId() == R.id.selection_mode_edit_menu_id) {
             List<BookmarkId> list = mDelegate.getSelectedBookmarks();
             assert list.size() == 1;
-            BookmarkItem item = model.getBookmarkById(list.get(0));
+            BookmarkItem item = mDelegate.getModel().getBookmarkById(list.get(0));
             if (item.isFolder()) {
                 EnhancedBookmarkAddEditFolderActivity.startEditFolderActivity(getContext(),
                         item.getId());
             } else {
-                EnhancedBookmarkUtils.startEditActivity(getContext(), item.getId());
+                EnhancedBookmarkUtils.startEditActivity(getContext(), item.getId(), null);
             }
             return true;
         } else if (menuItem.getItemId() == R.id.selection_mode_move_menu_id) {
@@ -181,6 +199,7 @@ public class EnhancedBookmarkActionBar extends Toolbar implements EnhancedBookma
     void showLoadingUi() {
         setTitle(null);
         setNavigationButton(NAVIGATION_BUTTON_NONE);
+        getMenu().findItem(R.id.search_menu_id).setVisible(false);
         getMenu().findItem(R.id.edit_menu_id).setVisible(false);
     }
 
@@ -190,19 +209,20 @@ public class EnhancedBookmarkActionBar extends Toolbar implements EnhancedBookma
     public void onEnhancedBookmarkDelegateInitialized(EnhancedBookmarkDelegate delegate) {
         mDelegate = delegate;
         mDelegate.addUIObserver(this);
-        delegate.getModel().addModelObserver(mBookmarkModelObserver);
+        delegate.getModel().addObserver(mBookmarkModelObserver);
     }
 
     @Override
     public void onDestroy() {
         mDelegate.removeUIObserver(this);
-        mDelegate.getModel().removeModelObserver(mBookmarkModelObserver);
+        mDelegate.getModel().removeObserver(mBookmarkModelObserver);
     }
 
     @Override
     public void onAllBookmarksStateSet() {
-        setTitle(R.string.enhanced_bookmark_title_bar_all_items);
+        setTitle(getTitleForAllItems());
         setNavigationButton(NAVIGATION_BUTTON_MENU);
+        getMenu().findItem(R.id.search_menu_id).setVisible(true);
         getMenu().findItem(R.id.edit_menu_id).setVisible(false);
     }
 
@@ -210,13 +230,14 @@ public class EnhancedBookmarkActionBar extends Toolbar implements EnhancedBookma
     public void onFolderStateSet(BookmarkId folder) {
         mCurrentFolder = mDelegate.getModel().getBookmarkById(folder);
 
+        getMenu().findItem(R.id.search_menu_id).setVisible(false);
         getMenu().findItem(R.id.edit_menu_id).setVisible(mCurrentFolder.isEditable());
 
         // If the parent folder is a top level node, we don't go up anymore.
         if (mDelegate.getModel().getTopLevelFolderParentIDs().contains(
                 mCurrentFolder.getParentId())) {
             if (TextUtils.isEmpty(mCurrentFolder.getTitle())) {
-                setTitle(R.string.enhanced_bookmark_title_bar_all_items);
+                setTitle(getTitleForAllItems());
             } else {
                 setTitle(mCurrentFolder.getTitle());
             }
@@ -225,6 +246,14 @@ public class EnhancedBookmarkActionBar extends Toolbar implements EnhancedBookma
             setTitle(mCurrentFolder.getTitle());
             setNavigationButton(NAVIGATION_BUTTON_BACK);
         }
+    }
+
+    @Override
+    public void onFilterStateSet(EnhancedBookmarkFilter filter) {
+        assert filter == EnhancedBookmarkFilter.OFFLINE_PAGES;
+        setTitle(R.string.enhanced_bookmark_title_bar_filter_offline_pages);
+        setNavigationButton(NAVIGATION_BUTTON_MENU);
+        getMenu().findItem(R.id.edit_menu_id).setVisible(false);
     }
 
     @Override
@@ -250,8 +279,8 @@ public class EnhancedBookmarkActionBar extends Toolbar implements EnhancedBookma
                 }
             }
 
-            setBackgroundColor(getResources().getColor(
-                    R.color.enhanced_bookmark_selection_action_bar_background));
+            setBackgroundColor(
+                    ApiCompatibilityUtils.getColor(getResources(), R.color.light_active_color));
 
             numberRollView.setVisibility(View.VISIBLE);
             if (!wasSelectionEnabled) numberRollView.setNumber(0, false);
@@ -259,13 +288,17 @@ public class EnhancedBookmarkActionBar extends Toolbar implements EnhancedBookma
         } else {
             getMenu().setGroupVisible(R.id.normal_menu_group, true);
             getMenu().setGroupVisible(R.id.selection_mode_menu_group, false);
-            setBackgroundColor(
-                    getResources().getColor(R.color.enhanced_bookmark_appbar_background));
+            setBackgroundColor(ApiCompatibilityUtils.getColor(getResources(),
+                    R.color.enhanced_bookmark_appbar_background));
 
             numberRollView.setVisibility(View.GONE);
             numberRollView.setNumber(0, false);
 
             mDelegate.notifyStateChange(this);
         }
+    }
+
+    private int getTitleForAllItems() {
+        return OfflinePageUtils.getStringId(R.string.enhanced_bookmark_title_bar_all_items);
     }
 }

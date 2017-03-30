@@ -4,7 +4,6 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/strings/string_util.h"
@@ -102,8 +101,11 @@ NetworkChangeNotifierChromeos::GetCurrentConnectionType() const {
   return connection_type_;
 }
 
-double NetworkChangeNotifierChromeos::GetCurrentMaxBandwidth() const {
-  return max_bandwidth_mbps_;
+void NetworkChangeNotifierChromeos::GetCurrentMaxBandwidthAndConnectionType(
+    double* max_bandwidth_mbps,
+    ConnectionType* connection_type) const {
+  *connection_type = connection_type_;
+  *max_bandwidth_mbps = max_bandwidth_mbps_;
 }
 
 void NetworkChangeNotifierChromeos::SuspendDone(
@@ -129,9 +131,10 @@ void NetworkChangeNotifierChromeos::DefaultNetworkChanged(
     NetworkChangeNotifier::NotifyObserversOfIPAddressChange();
   if (dns_changed)
     dns_config_service_->OnNetworkChange();
-  if (max_bandwidth_changed)
+  if (max_bandwidth_changed || connection_type_changed) {
     NetworkChangeNotifier::NotifyObserversOfMaxBandwidthChange(
-        max_bandwidth_mbps_);
+        max_bandwidth_mbps_, connection_type_);
+  }
 }
 
 void NetworkChangeNotifierChromeos::UpdateState(
@@ -211,9 +214,8 @@ void NetworkChangeNotifierChromeos::UpdateState(
     NET_LOG_EVENT(
         "NCNDefaultDNSServerChanged",
         base::StringPrintf(
-            "%s -> %s",
-            JoinString(dns_servers_, ",").c_str(),
-            JoinString(default_network->dns_servers(), ",").c_str()));
+            "%s -> %s", base::JoinString(dns_servers_, ",").c_str(),
+            base::JoinString(default_network->dns_servers(), ",").c_str()));
     *dns_changed = true;
   }
 

@@ -5,6 +5,7 @@
 #include "ash/system/audio/tray_audio.h"
 
 #include <cmath>
+#include <utility>
 
 #include "ash/ash_constants.h"
 #include "ash/display/display_manager.h"
@@ -43,7 +44,7 @@ namespace ash {
 TrayAudio::TrayAudio(SystemTray* system_tray,
                      scoped_ptr<system::TrayAudioDelegate> audio_delegate)
     : TrayImageItem(system_tray, IDR_AURA_UBER_TRAY_VOLUME_MUTE),
-      audio_delegate_(audio_delegate.Pass()),
+      audio_delegate_(std::move(audio_delegate)),
       volume_view_(NULL),
       pop_up_volume_view_(false) {
   Shell::GetInstance()->system_tray_notifier()->AddAudioObserver(this);
@@ -142,7 +143,7 @@ void TrayAudio::ChangeInternalSpeakerChannelMode() {
   // Swap left/right channel only if it is in Yoga mode.
   system::TrayAudioDelegate::AudioChannelMode channel_mode =
       system::TrayAudioDelegate::NORMAL;
-  if (gfx::Display::InternalDisplayId() != gfx::Display::kInvalidDisplayID) {
+  if (gfx::Display::HasInternalDisplay()) {
     const DisplayInfo& display_info =
         Shell::GetInstance()->display_manager()->GetDisplayInfo(
             gfx::Display::InternalDisplayId());
@@ -154,20 +155,20 @@ void TrayAudio::ChangeInternalSpeakerChannelMode() {
 }
 
 void TrayAudio::OnDisplayAdded(const gfx::Display& new_display) {
-  if (new_display.id() != gfx::Display::InternalDisplayId())
+  if (!new_display.IsInternal())
     return;
   ChangeInternalSpeakerChannelMode();
 }
 
 void TrayAudio::OnDisplayRemoved(const gfx::Display& old_display) {
-  if (old_display.id() != gfx::Display::InternalDisplayId())
+  if (!old_display.IsInternal())
     return;
   ChangeInternalSpeakerChannelMode();
 }
 
 void TrayAudio::OnDisplayMetricsChanged(const gfx::Display& display,
                                         uint32_t changed_metrics) {
-  if (display.id() != gfx::Display::InternalDisplayId())
+  if (!display.IsInternal())
     return;
 
   if (changed_metrics & gfx::DisplayObserver::DISPLAY_METRIC_ROTATION)

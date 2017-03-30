@@ -5,7 +5,7 @@
 #ifndef NET_URL_REQUEST_URL_REQUEST_CONTEXT_STORAGE_H_
 #define NET_URL_REQUEST_URL_REQUEST_CONTEXT_STORAGE_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "net/base/net_export.h"
@@ -15,10 +15,10 @@ namespace net {
 class CertVerifier;
 class ChannelIDService;
 class CookieStore;
-class FraudulentCertificateReporter;
 class FtpTransactionFactory;
 class HostResolver;
 class HttpAuthHandlerFactory;
+class HttpNetworkSession;
 class HttpServerProperties;
 class HttpTransactionFactory;
 class HttpUserAgentSettings;
@@ -29,6 +29,7 @@ class SdchManager;
 class SSLConfigService;
 class TransportSecurityState;
 class URLRequestContext;
+class URLRequestBackoffManager;
 class URLRequestJobFactory;
 class URLRequestThrottlerManager;
 
@@ -45,29 +46,38 @@ class NET_EXPORT URLRequestContextStorage {
   // These setters will set both the member variables and call the setter on the
   // URLRequestContext object. In all cases, ownership is passed to |this|.
 
-  void set_net_log(NetLog* net_log);
+  void set_net_log(scoped_ptr<NetLog> net_log);
   void set_host_resolver(scoped_ptr<HostResolver> host_resolver);
-  void set_cert_verifier(CertVerifier* cert_verifier);
+  void set_cert_verifier(scoped_ptr<CertVerifier> cert_verifier);
   void set_channel_id_service(scoped_ptr<ChannelIDService> channel_id_service);
-  void set_fraudulent_certificate_reporter(
-      FraudulentCertificateReporter* fraudulent_certificate_reporter);
   void set_http_auth_handler_factory(
-      HttpAuthHandlerFactory* http_auth_handler_factory);
-  void set_proxy_service(ProxyService* proxy_service);
+      scoped_ptr<HttpAuthHandlerFactory> http_auth_handler_factory);
+  void set_proxy_service(scoped_ptr<ProxyService> proxy_service);
   void set_ssl_config_service(SSLConfigService* ssl_config_service);
-  void set_network_delegate(NetworkDelegate* network_delegate);
+  void set_network_delegate(scoped_ptr<NetworkDelegate> network_delegate);
   void set_http_server_properties(
       scoped_ptr<HttpServerProperties> http_server_properties);
   void set_cookie_store(CookieStore* cookie_store);
   void set_transport_security_state(
-      TransportSecurityState* transport_security_state);
+      scoped_ptr<TransportSecurityState> transport_security_state);
+  void set_http_network_session(
+      scoped_ptr<HttpNetworkSession> http_network_session);
   void set_http_transaction_factory(
-      HttpTransactionFactory* http_transaction_factory);
-  void set_job_factory(URLRequestJobFactory* job_factory);
-  void set_throttler_manager(URLRequestThrottlerManager* throttler_manager);
+      scoped_ptr<HttpTransactionFactory> http_transaction_factory);
+  void set_job_factory(scoped_ptr<URLRequestJobFactory> job_factory);
+  void set_throttler_manager(
+      scoped_ptr<URLRequestThrottlerManager> throttler_manager);
+  void set_backoff_manager(
+      scoped_ptr<URLRequestBackoffManager> backoff_manager);
   void set_http_user_agent_settings(
-      HttpUserAgentSettings* http_user_agent_settings);
+      scoped_ptr<HttpUserAgentSettings> http_user_agent_settings);
   void set_sdch_manager(scoped_ptr<SdchManager> sdch_manager);
+
+  // Everything else can be access through the URLRequestContext, but this
+  // cannot.  Having an accessor for it makes usage a little cleaner.
+  HttpNetworkSession* http_network_session() const {
+    return http_network_session_.get();
+  }
 
  private:
   // We use a raw pointer to prevent reference cycles, since
@@ -81,7 +91,6 @@ class NET_EXPORT URLRequestContextStorage {
   scoped_ptr<CertVerifier> cert_verifier_;
   // The ChannelIDService must outlive the HttpTransactionFactory.
   scoped_ptr<ChannelIDService> channel_id_service_;
-  scoped_ptr<FraudulentCertificateReporter> fraudulent_certificate_reporter_;
   scoped_ptr<HttpAuthHandlerFactory> http_auth_handler_factory_;
   scoped_ptr<ProxyService> proxy_service_;
   // TODO(willchan): Remove refcounting on these members.
@@ -92,9 +101,14 @@ class NET_EXPORT URLRequestContextStorage {
   scoped_refptr<CookieStore> cookie_store_;
   scoped_ptr<TransportSecurityState> transport_security_state_;
 
+  // Not actually pointed at by the URLRequestContext, but may be used (but not
+  // owned) by the HttpTransactionFactory.
+  scoped_ptr<HttpNetworkSession> http_network_session_;
+
   scoped_ptr<HttpTransactionFactory> http_transaction_factory_;
   scoped_ptr<URLRequestJobFactory> job_factory_;
   scoped_ptr<URLRequestThrottlerManager> throttler_manager_;
+  scoped_ptr<URLRequestBackoffManager> backoff_manager_;
   scoped_ptr<SdchManager> sdch_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(URLRequestContextStorage);

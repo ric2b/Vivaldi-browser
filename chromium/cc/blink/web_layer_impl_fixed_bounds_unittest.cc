@@ -4,6 +4,7 @@
 
 #include <vector>
 #include "cc/blink/web_layer_impl_fixed_bounds.h"
+#include "cc/layers/layer_settings.h"
 #include "cc/layers/picture_image_layer.h"
 #include "cc/test/fake_layer_tree_host.h"
 #include "cc/test/geometry_test_utils.h"
@@ -68,10 +69,10 @@ TEST(WebLayerImplFixedBoundsTest, BoundsScaleSimple) {
 }
 
 void ExpectEqualLayerRectsInTarget(cc::Layer* layer1, cc::Layer* layer2) {
-  gfx::RectF layer1_rect_in_target(layer1->bounds());
+  gfx::RectF layer1_rect_in_target(gfx::SizeF(layer1->bounds()));
   layer1->draw_transform().TransformRect(&layer1_rect_in_target);
 
-  gfx::RectF layer2_rect_in_target(layer2->bounds());
+  gfx::RectF layer2_rect_in_target(gfx::SizeF(layer2->bounds()));
   layer2->draw_transform().TransformRect(&layer2_rect_in_target);
 
   EXPECT_FLOAT_RECT_EQ(layer1_rect_in_target, layer2_rect_in_target);
@@ -112,9 +113,8 @@ void CompareFixedBoundsLayerAndNormalLayer(const WebFloatPoint& anchor_point,
   host->SetRootLayer(root_layer->layer());
 
   {
-    cc::RenderSurfaceLayerList render_surface_layer_list;
-    cc::LayerTreeHostCommon::CalcDrawPropsMainInputsForTesting inputs(
-        root_layer->layer(), kDeviceViewportSize, &render_surface_layer_list);
+    cc::LayerTreeHostCommon::CalcDrawPropsMainInputs inputs(
+        root_layer->layer(), kDeviceViewportSize);
     inputs.device_scale_factor = kDeviceScaleFactor;
     inputs.page_scale_factor = kPageScaleFactor;
     inputs.page_scale_layer = root_layer->layer(),
@@ -129,9 +129,8 @@ void CompareFixedBoundsLayerAndNormalLayer(const WebFloatPoint& anchor_point,
       gfx::Size(fixed_bounds.width() / 2, fixed_bounds.height() * 2));
 
   {
-    cc::RenderSurfaceLayerList render_surface_layer_list;
-    cc::LayerTreeHostCommon::CalcDrawPropsMainInputsForTesting inputs(
-        root_layer->layer(), kDeviceViewportSize, &render_surface_layer_list);
+    cc::LayerTreeHostCommon::CalcDrawPropsMainInputs inputs(
+        root_layer->layer(), kDeviceViewportSize);
     inputs.device_scale_factor = kDeviceScaleFactor;
     inputs.page_scale_factor = kPageScaleFactor;
     inputs.page_scale_layer = root_layer->layer(),

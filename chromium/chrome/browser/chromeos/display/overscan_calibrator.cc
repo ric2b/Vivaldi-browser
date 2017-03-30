@@ -4,12 +4,19 @@
 
 #include "chrome/browser/chromeos/display/overscan_calibrator.h"
 
-#include "ash/display/display_controller.h"
+#include <stdint.h>
+
+#include <limits>
+
 #include "ash/display/display_info.h"
 #include "ash/display/display_manager.h"
+#include "ash/display/window_tree_host_manager.h"
 #include "ash/shell.h"
 #include "ash/shell_window_ids.h"
 #include "base/callback.h"
+#include "third_party/skia/include/core/SkColor.h"
+#include "third_party/skia/include/core/SkPaint.h"
+#include "third_party/skia/include/core/SkPath.h"
 #include "ui/aura/window.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/paint_recorder.h"
@@ -22,10 +29,10 @@ namespace {
 const float kArrowOpacity = 0.8;
 
 // The height in pixel for the arrows to show the overscan calibration.
-const int kCalibrationArrowHeight = 50;
+const int kCalibrationArrowHeight = 70;
 
 // The gap between the boundary and calibration arrows.
-const int kArrowGapWidth = 20;
+const int kArrowGapWidth = 0;
 
 // Draw the arrow for the overscan calibration to |canvas|.
 void DrawTriangle(int x_offset,
@@ -35,15 +42,19 @@ void DrawTriangle(int x_offset,
   // Draw triangular arrows.
   SkPaint content_paint;
   content_paint.setStyle(SkPaint::kFill_Style);
-  content_paint.setColor(SkColorSetA(SK_ColorBLACK, kuint8max * kArrowOpacity));
+  content_paint.setColor(SkColorSetA(
+      SK_ColorBLACK, std::numeric_limits<uint8_t>::max() * kArrowOpacity));
   SkPaint border_paint;
   border_paint.setStyle(SkPaint::kStroke_Style);
-  border_paint.setColor(SkColorSetA(SK_ColorWHITE, kuint8max * kArrowOpacity));
+  border_paint.setColor(SkColorSetA(
+      SK_ColorWHITE, std::numeric_limits<uint8_t>::max() * kArrowOpacity));
 
   SkPath base_path;
-  base_path.moveTo(0, SkIntToScalar(-kCalibrationArrowHeight));
-  base_path.lineTo(SkIntToScalar(-kCalibrationArrowHeight), 0);
-  base_path.lineTo(SkIntToScalar(kCalibrationArrowHeight), 0);
+  base_path.moveTo(0, 0);
+  base_path.lineTo(SkIntToScalar(-kCalibrationArrowHeight),
+                   SkIntToScalar(-kCalibrationArrowHeight));
+  base_path.lineTo(SkIntToScalar(kCalibrationArrowHeight),
+                   SkIntToScalar(-kCalibrationArrowHeight));
   base_path.close();
 
   SkPath path;
@@ -68,15 +79,16 @@ OverscanCalibrator::OverscanCalibrator(
       committed_(false) {
   // Undo the overscan calibration temporarily so that the user can see
   // dark boundary and current overscan region.
-  ash::Shell::GetInstance()->display_controller()->SetOverscanInsets(
+  ash::Shell::GetInstance()->window_tree_host_manager()->SetOverscanInsets(
       display_.id(), gfx::Insets());
 
   ash::DisplayInfo info =
       ash::Shell::GetInstance()->display_manager()->GetDisplayInfo(
           display_.id());
 
-  aura::Window* root = ash::Shell::GetInstance()->display_controller()->
-      GetRootWindowForDisplayId(display_.id());
+  aura::Window* root = ash::Shell::GetInstance()
+                           ->window_tree_host_manager()
+                           ->GetRootWindowForDisplayId(display_.id());
   ui::Layer* parent_layer =
       ash::Shell::GetContainer(root, ash::kShellWindowId_OverlayContainer)
           ->layer();
@@ -92,13 +104,13 @@ OverscanCalibrator::~OverscanCalibrator() {
   // Overscan calibration has finished without commit, so the display has to
   // be the original offset.
   if (!committed_) {
-    ash::Shell::GetInstance()->display_controller()->SetOverscanInsets(
+    ash::Shell::GetInstance()->window_tree_host_manager()->SetOverscanInsets(
         display_.id(), initial_insets_);
   }
 }
 
 void OverscanCalibrator::Commit() {
-  ash::Shell::GetInstance()->display_controller()->SetOverscanInsets(
+  ash::Shell::GetInstance()->window_tree_host_manager()->SetOverscanInsets(
       display_.id(), insets_);
   committed_ = true;
 }

@@ -93,13 +93,16 @@ var tests = [
 ];
 
 var currentTest = 0;
+var done = false;
 
 function test() {
   runNextTest();
 }
 
+var testFilter;
+
 function runNextTest() {
-  var filter = window.location.hash.slice(1);
+  var filter = testFilter | window.location.hash.slice(1);
   var test, f;
   while (currentTest < tests.length) {
     test = tests[currentTest];
@@ -122,6 +125,7 @@ function onAllTestsComplete() {
   var overallDuration = window.performance.now() - overallTestStartTime;
   automation.addResult("OverallTestDuration", overallDuration);
   automation.setDone();
+  done = true;
 }
 
 // This is the only test that includes database creation and deletion in its

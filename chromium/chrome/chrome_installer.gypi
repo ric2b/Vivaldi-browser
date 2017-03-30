@@ -5,14 +5,14 @@
 {
   'variables': {
     'lastchange_path': '../build/util/LASTCHANGE',
-    'libpeer_target_type%': 'static_library',
-    'branding_dir': 'app/theme/<(branding_path_component)',
-    'branding_dir_100': 'app/theme/default_100_percent/<(branding_path_component)',
+    'branding_dir': '<(VIVALDI)/app/resources/theme/vivaldi',
+    'branding_dir_100': '<(VIVALDI)/app/resources/theme/default_100_percent/vivaldi',
   },
   'conditions': [
     ['OS=="win"', {
       'targets': [
         {
+          # GN version: //chrome/installer/gcapi
           'target_name': 'gcapi_dll',
           'type': 'loadable_module',
           'dependencies': [
@@ -27,12 +27,14 @@
           ],
         },
         {
+          # GN version: //chrome/installer/gcapi:lib
           'target_name': 'gcapi_lib',
           'type': 'static_library',
           'dependencies': [
             'installer_util',
             '../base/base.gyp:base',
             '../chrome/chrome.gyp:launcher_support',
+            '../components/components.gyp:variations',
             '../google_update/google_update.gyp:google_update',
           ],
           'include_dirs': [
@@ -46,112 +48,114 @@
             'installer/gcapi/gcapi_reactivation.cc',
             'installer/gcapi/gcapi_reactivation.h',
           ],
-          # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-          'msvs_disabled_warnings': [ 4267, ],
         },
-        #{
-        #  'target_name': 'gcapi_test',
-        #  'type': 'executable',
-        #  'dependencies': [
-        #    'common',
-        #    'gcapi_dll',
-        #    'gcapi_lib',
-        #    'installer_util',
-        #    '../base/base.gyp:base',
-        #    '../base/base.gyp:test_support_base',
-        #    '../testing/gtest.gyp:gtest',
-        #  ],
-        #  'include_dirs': [
-        #    '..',
-        #  ],
-        #  'sources': [
-        #    'installer/gcapi/gcapi_last_run_test.cc',
-        #    'installer/gcapi/gcapi_omaha_experiment_test.cc',
-        #    'installer/gcapi/gcapi_reactivation_test.cc',
-        #    'installer/gcapi/gcapi_test.cc',
-        #    'installer/gcapi/gcapi_test.rc',
-        #    'installer/gcapi/gcapi_test_registry_overrider.cc',
-        #    'installer/gcapi/gcapi_test_registry_overrider.h',
-        #    'installer/gcapi/resource.h',
-        #  ],
-        #},
-        #{
-        #  # GN version: //chrome/installer/util:installer_util_unittests
-        #  'target_name': 'installer_util_unittests',
-        #  'type': 'executable',
-        #  'dependencies': [
-        #    'installer_util',
-        #    'installer_util_strings',
-        #    'installer/upgrade_test.gyp:alternate_version_generator_lib',
-        #    '../base/base.gyp:base',
-        #    '../base/base.gyp:base_i18n',
-        #    '../base/base.gyp:test_support_base',
-        #    '../chrome/chrome.gyp:chrome_version_resources',
-        #    '../content/content.gyp:content_common',
-        #    '../testing/gmock.gyp:gmock',
-        #    '../testing/gtest.gyp:gtest',
-        #  ],
-        #  'include_dirs': [
-        #    '..',
-        #  ],
-        #  'sources': [
-        #    # List duplicated in GN build.
-        #    '<(SHARED_INTERMEDIATE_DIR)/chrome_version/other_version.rc',
-        #    '<(SHARED_INTERMEDIATE_DIR)/chrome/installer/util/installer_util_strings.rc',
-        #    'installer/setup/compat_checks_unittest.cc',
-        #    'installer/setup/setup_constants.cc',
-        #    'installer/util/advanced_firewall_manager_win_unittest.cc',
-        #    'installer/util/beacons_unittest.cc',
-        #    'installer/util/callback_work_item_unittest.cc',
-        #    'installer/util/channel_info_unittest.cc',
-        #    'installer/util/copy_tree_work_item_unittest.cc',
-        #    'installer/util/create_dir_work_item_unittest.cc',
-        #    'installer/util/create_reg_key_work_item_unittest.cc',
-        #    'installer/util/delete_after_reboot_helper_unittest.cc',
-        #    'installer/util/delete_reg_key_work_item_unittest.cc',
-        #    'installer/util/delete_reg_value_work_item_unittest.cc',
-        #    'installer/util/delete_tree_work_item_unittest.cc',
-        #    'installer/util/duplicate_tree_detector_unittest.cc',
-        #    'installer/util/fake_installation_state.h',
-        #    'installer/util/fake_product_state.h',
-        #    'installer/util/google_update_settings_unittest.cc',
-        #    'installer/util/install_util_unittest.cc',
-        #    'installer/util/installation_validation_helper.cc',
-        #    'installer/util/installation_validation_helper.h',
-        #    'installer/util/installation_validator_unittest.cc',
-        #    'installer/util/installer_state_unittest.cc',
-        #    'installer/util/installer_util_test_common.cc',
-        #    'installer/util/installer_util_test_common.h',
-        #    'installer/util/language_selector_unittest.cc',
-        #    'installer/util/legacy_firewall_manager_win_unittest.cc',
-        #    'installer/util/logging_installer_unittest.cc',
-        #    'installer/util/lzma_util_unittest.cc',
-        #    'installer/util/master_preferences_unittest.cc',
-        #    'installer/util/move_tree_work_item_unittest.cc',
-        #    'installer/util/product_state_unittest.cc',
-        #    'installer/util/product_unittest.cc',
-        #    'installer/util/product_unittest.h',
-        #    'installer/util/registry_key_backup_unittest.cc',
-        #    'installer/util/registry_test_data.cc',
-        #    'installer/util/registry_test_data.h',
-        #    'installer/util/run_all_unittests.cc',
-        #    'installer/util/self_cleaning_temp_dir_unittest.cc',
-        #    'installer/util/set_reg_value_work_item_unittest.cc',
-        #    'installer/util/shell_util_unittest.cc',
-        #    'installer/util/test_app_registration_data.cc',
-        #    'installer/util/test_app_registration_data.h',
-        #    'installer/util/uninstall_metrics_unittest.cc',
-        #    'installer/util/wmi_unittest.cc',
-        #    'installer/util/work_item_list_unittest.cc',
-        #  ],
-        #  'msvs_settings': {
-        #    'VCManifestTool': {
-        #      'AdditionalManifestFiles': [
-        #        '$(ProjectDir)\\installer\\mini_installer\\mini_installer.exe.manifest',
-        #      ],
-        #    },
-        #  },
-        #},
+        {
+          # GN version: //chrome/installer/gcapi:gcapi_test
+          'target_name': 'gcapi_test',
+          'type': 'executable',
+          'dependencies': [
+            'common',
+            'gcapi_dll',
+            'gcapi_lib',
+            'installer_util',
+            '../base/base.gyp:base',
+            '../base/base.gyp:test_support_base',
+            '../components/components.gyp:variations',
+            '../testing/gtest.gyp:gtest',
+          ],
+          'include_dirs': [
+            '..',
+          ],
+          'sources': [
+            'installer/gcapi/gcapi_last_run_test.cc',
+            'installer/gcapi/gcapi_omaha_experiment_test.cc',
+            'installer/gcapi/gcapi_reactivation_test.cc',
+            'installer/gcapi/gcapi_test.cc',
+            'installer/gcapi/gcapi_test.rc',
+            'installer/gcapi/gcapi_test_registry_overrider.cc',
+            'installer/gcapi/gcapi_test_registry_overrider.h',
+            'installer/gcapi/resource.h',
+          ],
+        },
+        {
+          # GN version: //chrome/installer/util:installer_util_unittests
+          'target_name': 'installer_util_unittests',
+          'type': 'executable',
+          'dependencies': [
+            'installer_util',
+            'installer_util_strings',
+            'installer/upgrade_test.gyp:alternate_version_generator_lib',
+            '../base/base.gyp:base',
+            '../base/base.gyp:base_i18n',
+            '../base/base.gyp:test_support_base',
+            '../chrome/chrome.gyp:chrome_version_resources',
+            '../components/components.gyp:variations',
+            '../content/content.gyp:content_common',
+            '../testing/gmock.gyp:gmock',
+            '../testing/gtest.gyp:gtest',
+          ],
+          'include_dirs': [
+            '..',
+          ],
+          'sources': [
+            # List duplicated in GN build.
+            '<(SHARED_INTERMEDIATE_DIR)/chrome_version/other_version.rc',
+            '<(SHARED_INTERMEDIATE_DIR)/chrome/installer/util/installer_util_strings.rc',
+            'installer/setup/compat_checks_unittest.cc',
+            'installer/setup/setup_constants.cc',
+            'installer/util/advanced_firewall_manager_win_unittest.cc',
+            'installer/util/beacons_unittest.cc',
+            'installer/util/callback_work_item_unittest.cc',
+            'installer/util/channel_info_unittest.cc',
+            'installer/util/copy_tree_work_item_unittest.cc',
+            'installer/util/create_dir_work_item_unittest.cc',
+            'installer/util/create_reg_key_work_item_unittest.cc',
+            'installer/util/delete_after_reboot_helper_unittest.cc',
+            'installer/util/delete_reg_key_work_item_unittest.cc',
+            'installer/util/delete_reg_value_work_item_unittest.cc',
+            'installer/util/delete_tree_work_item_unittest.cc',
+            'installer/util/duplicate_tree_detector_unittest.cc',
+            'installer/util/fake_installation_state.h',
+            'installer/util/fake_product_state.h',
+            'installer/util/google_update_settings_unittest.cc',
+            'installer/util/install_util_unittest.cc',
+            'installer/util/installation_validation_helper.cc',
+            'installer/util/installation_validation_helper.h',
+            'installer/util/installation_validator_unittest.cc',
+            'installer/util/installer_state_unittest.cc',
+            'installer/util/installer_util_test_common.cc',
+            'installer/util/installer_util_test_common.h',
+            'installer/util/language_selector_unittest.cc',
+            'installer/util/legacy_firewall_manager_win_unittest.cc',
+            'installer/util/logging_installer_unittest.cc',
+            'installer/util/lzma_file_allocator_unittest.cc',
+            'installer/util/lzma_util_unittest.cc',
+            'installer/util/master_preferences_unittest.cc',
+            'installer/util/move_tree_work_item_unittest.cc',
+            'installer/util/product_state_unittest.cc',
+            'installer/util/product_unittest.cc',
+            'installer/util/registry_key_backup_unittest.cc',
+            'installer/util/registry_test_data.cc',
+            'installer/util/registry_test_data.h',
+            'installer/util/run_all_unittests.cc',
+            "installer/util/scoped_user_protocol_entry_unittest.cc",
+            'installer/util/self_cleaning_temp_dir_unittest.cc',
+            'installer/util/set_reg_value_work_item_unittest.cc',
+            'installer/util/shell_util_unittest.cc',
+            'installer/util/test_app_registration_data.cc',
+            'installer/util/test_app_registration_data.h',
+            'installer/util/uninstall_metrics_unittest.cc',
+            'installer/util/wmi_unittest.cc',
+            'installer/util/work_item_list_unittest.cc',
+          ],
+          'msvs_settings': {
+            'VCManifestTool': {
+              'AdditionalManifestFiles': [
+                '$(ProjectDir)\\installer\\mini_installer\\mini_installer.exe.manifest',
+              ],
+            },
+          },
+        },
         {
           # GN version: //chrome/installer/util:strings
           'target_name': 'installer_util_strings',
@@ -161,7 +165,7 @@
               'action_name': 'installer_util_strings',
               'variables': {
                 'create_string_rc_py': 'installer/util/prebuild/create_string_rc.py',
-                'brand_strings': '<(branding_path_component)_strings',
+                'brand_strings': 'google_chrome_strings',
                 'gen_dir': '<(SHARED_INTERMEDIATE_DIR)/chrome/installer/util',
               },
 
@@ -208,15 +212,49 @@
           ],
         },
         {
-          'target_name': 'setup',
-          'type': 'executable',
+          # GN version: //chrome/installer/setup:lib
+          'target_name': 'setup_lib',
+          'type': 'static_library',
           'dependencies': [
-            'chrome_version_header',
             'installer_util',
             'installer_util_strings',
             '../base/base.gyp:base',
-            '../breakpad/breakpad.gyp:breakpad_handler',
+            '../chrome/common_constants.gyp:version_header',
+            '../components/components.gyp:crash_component_breakpad_to_be_deleted',
+          ],
+          'include_dirs': [
+            '..',
+            '<(INTERMEDIATE_DIR)',
+          ],
+          'sources': [
+            'installer/setup/app_launcher_installer.cc',
+            'installer/setup/app_launcher_installer.h',
+            'installer/setup/archive_patch_helper.cc',
+            'installer/setup/archive_patch_helper.h',
+            'installer/setup/install.cc',
+            'installer/setup/install.h',
+            'installer/setup/install_worker.cc',
+            'installer/setup/install_worker.h',
+            'installer/setup/installer_crash_reporter_client.cc',
+            'installer/setup/installer_crash_reporter_client.h',
+            'installer/setup/installer_crash_reporting.cc',
+            'installer/setup/installer_crash_reporting.h',
+            'installer/setup/setup_constants.cc',
+            'installer/setup/setup_constants.h',
+            'installer/setup/setup_util.cc',
+            'installer/setup/setup_util.h',
+            'installer/setup/update_active_setup_version_work_item.cc',
+            'installer/setup/update_active_setup_version_work_item.h',
+          ],
+        },
+        {
+          # GN version: //chrome/installer/setup
+          'target_name': 'setup',
+          'type': 'executable',
+          'dependencies': [
+            'setup_lib',
             '../chrome/common_constants.gyp:common_constants',
+            '../chrome/common_constants.gyp:version_header',
             '../chrome_elf/chrome_elf.gyp:chrome_elf_constants',
             '../rlz/rlz.gyp:rlz_lib',
             '../third_party/zlib/zlib.gyp:zlib',
@@ -226,40 +264,16 @@
             '<(INTERMEDIATE_DIR)',
             '<(SHARED_INTERMEDIATE_DIR)/setup',
           ],
-          'direct_dependent_settings': {
-            'include_dirs': [
-              '<(SHARED_INTERMEDIATE_DIR)/setup',
-            ],
-          },
           'sources': [
             '<(SHARED_INTERMEDIATE_DIR)/chrome/installer/util/installer_util_strings.rc',
-            'installer/mini_installer/chrome.release',
-            'installer/setup/app_launcher_installer.cc',
-            'installer/setup/app_launcher_installer.h',
-            'installer/setup/archive_patch_helper.cc',
-            'installer/setup/archive_patch_helper.h',
-            'installer/setup/install.cc',
-            'installer/setup/install.h',
-            'installer/setup/install_worker.cc',
-            'installer/setup/install_worker.h',
             'installer/setup/setup.ico',
             'installer/setup/setup.rc',
-            'installer/setup/setup_constants.cc',
-            'installer/setup/setup_constants.h',
             'installer/setup/setup_exe_version.rc.version',
             'installer/setup/setup_main.cc',
             'installer/setup/setup_main.h',
             'installer/setup/setup_resource.h',
-            'installer/setup/setup_util.cc',
-            'installer/setup/setup_util.h',
             'installer/setup/uninstall.cc',
             'installer/setup/uninstall.h',
-            'installer/setup/update_active_setup_version_work_item.cc',
-            'installer/setup/update_active_setup_version_work_item.h',
-            'installer/util/vivaldi_install_dialog.h',
-            'installer/util/vivaldi_install_dialog.cc',
-            'installer/util/vivaldi_progress_dialog.h',
-            'installer/util/vivaldi_progress_dialog.cc',
           ],
           'msvs_settings': {
             'VCLinkerTool': {
@@ -271,8 +285,6 @@
               ],
             },
           },
-          # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-          'msvs_disabled_warnings': [ 4267, ],
           'rules': [
             {
               'rule_name': 'setup_version',
@@ -302,7 +314,7 @@
                 '<@(_outputs)',
               ],
               'process_outputs_as_sources': 1,
-              'message': 'Generating version information',
+              'message': 'Generating version information'
             },
           ],
           'conditions': [
@@ -313,72 +325,59 @@
                 },
               },
             }],
-            [ 'branding == "vivaldi"', {
-              'variables': {
-                 'branding_dir': 'app/theme/vivaldi',
-                 'branding_dir_100': 'app/theme/default_100_percent/vivaldi',
-              },
-            }],
           ],
         },
-        #{
-        #  # GN version: //chrome/installer/setup:setup_unittests
-        #  'target_name': 'setup_unittests',
-        #  'type': 'executable',
-        #  'dependencies': [
-        #    'installer_util',
-        #    'installer_util_strings',
-        #    '../base/base.gyp:base',
-        #    '../base/base.gyp:base_i18n',
-        #    '../base/base.gyp:test_support_base',
-        #    '../testing/gmock.gyp:gmock',
-        #    '../testing/gtest.gyp:gtest',
-        #  ],
-        #  'include_dirs': [
-        #    '..',
-        #    '<(INTERMEDIATE_DIR)',
-        #  ],
-        #  # TODO(robertshield): Move the items marked with "Move to lib"
-        #  # below into a separate lib and then link both setup.exe and
-        #  # setup_unittests.exe against that.
-        #  'sources': [
-        #    '<(SHARED_INTERMEDIATE_DIR)/chrome/installer/util/installer_util_strings.rc',
-        #    'installer/mini_installer/chrome.release',  # Move to lib
-        #    'installer/mini_installer/appid.h',
-        #    'installer/mini_installer/chrome_appid.cc',
-        #    'installer/mini_installer/configuration.cc',
-        #    'installer/mini_installer/configuration.h',
-        #    'installer/mini_installer/configuration_test.cc',
-        #    'installer/mini_installer/decompress.cc',
-        #    'installer/mini_installer/decompress.h',
-        #    'installer/mini_installer/decompress_test.cc',
-        #    'installer/mini_installer/mini_string.cc',
-        #    'installer/mini_installer/mini_string.h',
-        #    'installer/mini_installer/mini_string_test.cc',
-        #    'installer/setup/app_launcher_installer.cc',  # Move to lib
-        #    'installer/setup/app_launcher_installer.h',  # Move to lib
-        #    'installer/setup/archive_patch_helper.cc',  # Move to lib
-        #    'installer/setup/archive_patch_helper.h',   # Move to lib
-        #    'installer/setup/archive_patch_helper_unittest.cc',
-        #    'installer/setup/install.cc',               # Move to lib
-        #    'installer/setup/install.h',                # Move to lib
-        #    'installer/setup/install_unittest.cc',
-        #    'installer/setup/install_worker.cc',        # Move to lib
-        #    'installer/setup/install_worker.h',         # Move to lib
-        #    'installer/setup/install_worker_unittest.cc',
-        #    'installer/setup/run_all_unittests.cc',
-        #    'installer/setup/setup_constants.cc',       # Move to lib
-        #    'installer/setup/setup_constants.h',        # Move to lib
-        #    'installer/setup/setup_util.cc',
-        #    'installer/setup/setup_util_unittest.cc',
-        #    'installer/setup/setup_util_unittest.h',
-        #    'installer/setup/update_active_setup_version_work_item.cc',  # Move to lib
-        #    'installer/setup/update_active_setup_version_work_item.h',   # Move to lib
-        #    'installer/setup/update_active_setup_version_work_item_unittest.cc',
-        #  ],
-        #  # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-        #  'msvs_disabled_warnings': [ 4267, ],
-        #},
+        {
+          # GN version: //chrome/installer/setup:setup_unittests
+          'target_name': 'setup_unittests',
+          'type': 'executable',
+          'dependencies': [
+            'setup_lib',
+            '../base/base.gyp:base_i18n',
+            '../base/base.gyp:test_support_base',
+            '../testing/gmock.gyp:gmock',
+            '../testing/gtest.gyp:gtest',
+          ],
+          'include_dirs': [
+            '..',
+            '<(INTERMEDIATE_DIR)',
+          ],
+          'sources': [
+            '<(SHARED_INTERMEDIATE_DIR)/chrome/installer/util/installer_util_strings.rc',
+            'installer/mini_installer/appid.h',
+            'installer/mini_installer/chrome_appid.cc',
+            'installer/mini_installer/configuration.cc',
+            'installer/mini_installer/configuration.h',
+            'installer/mini_installer/configuration_test.cc',
+            'installer/mini_installer/decompress.cc',
+            'installer/mini_installer/decompress.h',
+            'installer/mini_installer/decompress_test.cc',
+            'installer/mini_installer/mini_installer_constants.cc',
+            'installer/mini_installer/mini_installer_constants.h',
+            'installer/mini_installer/mini_string.cc',
+            'installer/mini_installer/mini_string.h',
+            'installer/mini_installer/mini_string_test.cc',
+            'installer/mini_installer/regkey.cc',
+            'installer/mini_installer/regkey.h',
+            'installer/setup/archive_patch_helper_unittest.cc',
+            'installer/setup/install_unittest.cc',
+            'installer/setup/install_worker_unittest.cc',
+            'installer/setup/memory_unittest.cc',
+            'installer/setup/run_all_unittests.cc',
+            'installer/setup/setup_util_unittest.cc',
+            'installer/setup/setup_util_unittest.h',
+            'installer/setup/update_active_setup_version_work_item_unittest.cc',
+          ],
+          'conditions': [
+            ['win_use_allocator_shim==1', {
+              'dependencies': [
+                '<(allocator_target)',
+              ],
+            }],
+          ],
+          # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+          'msvs_disabled_warnings': [ 4267, ],
+        },
       ],
     }],
     ['OS=="win" and target_arch=="ia32"', {
@@ -413,20 +412,6 @@
       ],
     }],
     ['OS=="linux" and (branding == "Chrome" or branding=="vivaldi")', {
-      'conditions': [
-        ['branding == "vivaldi"', {
-            'variables': {
-              'branding_dir': 'app/theme/vivaldi',
-              'branding_dir_100': 'app/theme/default_100_percent/vivaldi',
-            },
-          }, {
-            'variables': {
-              # Always google_chrome since this only applies to branding==Chrome.
-              'branding_dir': 'app/theme/google_chrome',
-              'branding_dir_100': 'app/theme/default_100_percent/google_chrome',
-            },
-        }],
-      ],
       'variables': {
         'version' : '<!(python <(version_py_path) -f <(version_path) -f <(vivaldi_version_path) -t "@VIVALDI_MAJOR@.@VIVALDI_MINOR@.@VIVALDI_NIGHTLY@.<(vivaldi_global_build_number)")',
         'revision' : '<!(python ../build/util/lastchange.py --revision-only)',
@@ -483,10 +468,14 @@
         'flock_bash': ['bash'], 
         'deb_build': '<(PRODUCT_DIR)/installer/debian/build.sh',
         'rpm_build': '<(PRODUCT_DIR)/installer/rpm/build.sh',
+        # The script expects either "google_chrome" or "chromium" for -d,
+        # which is also what branding_path_component contains.
         'deb_cmd': ['<@(flock_bash)', '<(deb_build)', '-o' '<(PRODUCT_DIR)',
-                    '-b', '<(PRODUCT_DIR)', '-a', '<(target_arch)'],
+                    '-b', '<(PRODUCT_DIR)', '-a', '<(target_arch)',
+                    '-d', '<(branding_path_component)'],
         'rpm_cmd': ['<@(flock_bash)', '<(rpm_build)', '-o' '<(PRODUCT_DIR)',
-                    '-b', '<(PRODUCT_DIR)', '-a', '<(target_arch)'],
+                    '-b', '<(PRODUCT_DIR)', '-a', '<(target_arch)',
+                    '-d', '<(branding_path_component)'],
         'conditions': [
           ['branding == "Chrome"', {
             'packaging_files_common!': [
@@ -533,11 +522,6 @@
             'deb_arch': 'arm',
             'rpm_arch': 'arm',
           }],
-          ['libpeer_target_type!="static_library"', {
-            'packaging_files_binaries': [
-              '<(PRODUCT_DIR)/lib/libpeerconnection.so',
-            ],
-          }],
           ['asan==1', {
             'packaging_files_binaries': [
               '<(PRODUCT_DIR)/lib/libc++.so',
@@ -554,18 +538,21 @@
           # we only create packages for official builds.
           'copies': [
             {
+              # GN version: //chrome/installer/linux:deb_packaging_files
               'destination': '<(PRODUCT_DIR)/installer/debian/',
               'files': [
                 '<@(packaging_files_deb)',
               ]
             },
             {
+              # GN version: //chrome/installer/linux:rpm_packaging_files
               'destination': '<(PRODUCT_DIR)/installer/rpm/',
               'files': [
                 '<@(packaging_files_rpm)',
               ]
             },
             {
+              # GN version: //chrome/installer/linux:common_packaging_files
               'destination': '<(PRODUCT_DIR)/installer/common/',
               'files': [
                 '<@(packaging_files_common)',
@@ -573,8 +560,10 @@
             },
             # Additional theme resources needed for package building.
             {
+              # GN version: //chrome/installer/linux:theme_files
               'destination': '<(PRODUCT_DIR)/installer/theme/',
               'files': [
+                '<(branding_dir)/linux/product_logo_32.xpm',
                 '<(branding_dir_100)/product_logo_16.png',
                 '<(branding_dir)/product_logo_22.png',
                 '<(branding_dir)/product_logo_24.png',
@@ -583,13 +572,13 @@
                 '<(branding_dir)/product_logo_64.png',
                 '<(branding_dir)/product_logo_128.png',
                 '<(branding_dir)/product_logo_256.png',
-                '<(branding_dir)/product_logo_32.xpm',
-                '<(branding_dir)/BRANDING',
+                '<(VIVALDI)/app/resources/theme/vivaldi/BRANDING',
               ],
             },
           ],
           'actions': [
             {
+              # GN version: //chrome/installer/linux:save_build_info
               'action_name': 'save_build_info',
               'inputs': [
                 '<(branding_dir)/BRANDING',
@@ -615,6 +604,7 @@
           ],
         },
         {
+          # GN version: //chrome/installer/linux
           'target_name': 'linux_packages_all',
           'suppress_wildcard': 1,
           'type': 'none',
@@ -661,6 +651,7 @@
           ],
         },
         {
+          # GN version: //chrome/installer/linux:unstable
           'target_name': 'linux_packages_unstable',
           'suppress_wildcard': 1,
           'type': 'none',
@@ -677,6 +668,7 @@
           ],
         },
         {
+          # GN version: //chrome/installer/linux:beta
           'target_name': 'linux_packages_beta',
           'suppress_wildcard': 1,
           'type': 'none',
@@ -693,6 +685,7 @@
           ],
         },
         {
+          # GN version: //chrome/installer/linux:stable
           'target_name': 'linux_packages_stable',
           'suppress_wildcard': 1,
           'type': 'none',
@@ -711,17 +704,13 @@
         # TODO(mmoss) gyp looping construct would be handy here ...
         # These package actions are the same except for the 'channel' variable.
         {
+          # GN version: //chrome/installer/linux:asan
           'target_name': 'linux_packages_asan_deb',
           'suppress_wildcard': 1,
           'type': 'none',
           'dependencies': [
-            'vivaldi',
+            'chrome',
             'linux_installer_configs',
-          ],
-          'conditions': [
-            ['branding == "Chrome"', {
-                'dependencies!': ['vivaldi'],
-            }],
           ],
           'actions': [
             {
@@ -744,17 +733,13 @@
           ],
         },
         {
+          # GN version: //chrome/installer/linux:trunk
           'target_name': 'linux_packages_trunk_deb',
           'suppress_wildcard': 1,
           'type': 'none',
           'dependencies': [
-            'vivaldi',
+            'chrome',
             'linux_installer_configs',
-          ],
-          'conditions': [
-            ['branding == "Chrome"', {
-                'dependencies!': ['vivaldi'],
-            }],
           ],
           'actions': [
             {
@@ -777,11 +762,12 @@
           ],
         },
         {
+          # GN version: //chrome/installer/linux:unstable
           'target_name': 'linux_packages_unstable_deb',
           'suppress_wildcard': 1,
           'type': 'none',
           'dependencies': [
-            'vivaldi',
+            'chrome',
             'linux_installer_configs',
           ],
           'conditions': [
@@ -810,17 +796,13 @@
           ],
         },
         {
+          # GN version: //chrome/installer/linux:beta
           'target_name': 'linux_packages_beta_deb',
           'suppress_wildcard': 1,
           'type': 'none',
           'dependencies': [
-            'vivaldi',
+            'chrome',
             'linux_installer_configs',
-          ],
-          'conditions': [
-            ['branding == "Chrome"', {
-                'dependencies!': ['vivaldi'],
-            }],
           ],
           'actions': [
             {
@@ -843,22 +825,18 @@
           ],
         },
         {
+          # GN version: //chrome/installer/linux:stable
           'target_name': 'linux_packages_stable_deb',
           'suppress_wildcard': 1,
           'type': 'none',
           'dependencies': [
-            'vivaldi',
+            'chrome',
             'linux_installer_configs',
-          ],
-          'conditions': [
-            ['branding == "Chrome"', {
-                'dependencies!': ['vivaldi'],
-            }],
           ],
           'actions': [
             {
               'variables': {
-                'channel': 'preview',
+                'channel': 'stable',
               },
               'action_name': 'deb_packages_<(channel)',
               'process_outputs_as_sources': 1,
@@ -876,17 +854,13 @@
           ],
         },
         {
+          # GN version: //chrome/installer/linux:asan
           'target_name': 'linux_packages_asan_rpm',
           'suppress_wildcard': 1,
           'type': 'none',
           'dependencies': [
-            'vivaldi',
+            'chrome',
             'linux_installer_configs',
-          ],
-          'conditions': [
-            ['branding == "Chrome"', {
-                'dependencies!': ['vivaldi'],
-            }],
           ],
           'actions': [
             {
@@ -910,17 +884,13 @@
           ],
         },
         {
+          # GN version: //chrome/installer/linux:trunk
           'target_name': 'linux_packages_trunk_rpm',
           'suppress_wildcard': 1,
           'type': 'none',
           'dependencies': [
-            'vivaldi',
+            'chrome',
             'linux_installer_configs',
-          ],
-          'conditions': [
-            ['branding == "Chrome"', {
-                'dependencies!': ['vivaldi'],
-            }],
           ],
           'actions': [
             {
@@ -944,17 +914,13 @@
           ],
         },
         {
+          # GN version: //chrome/installer/linux:unstable
           'target_name': 'linux_packages_unstable_rpm',
           'suppress_wildcard': 1,
           'type': 'none',
           'dependencies': [
-            'vivaldi',
+            'chrome',
             'linux_installer_configs',
-          ],
-          'conditions': [
-            ['branding == "Chrome"', {
-                'dependencies!': ['vivaldi'],
-            }],
           ],
           'actions': [
             {
@@ -978,17 +944,13 @@
           ],
         },
         {
+          # GN version: //chrome/installer/linux:beta
           'target_name': 'linux_packages_beta_rpm',
           'suppress_wildcard': 1,
           'type': 'none',
           'dependencies': [
-            'vivaldi',
+            'chrome',
             'linux_installer_configs',
-          ],
-          'conditions': [
-            ['branding == "Chrome"', {
-                'dependencies!': ['vivaldi'],
-            }],
           ],
           'actions': [
             {
@@ -1012,22 +974,18 @@
           ],
         },
         {
+          # GN version: //chrome/installer/linux:stable
           'target_name': 'linux_packages_stable_rpm',
           'suppress_wildcard': 1,
           'type': 'none',
           'dependencies': [
-            'vivaldi',
+            'chrome',
             'linux_installer_configs',
-          ],
-          'conditions': [
-            ['branding == "Chrome"', {
-                'dependencies!': ['vivaldi'],
-            }],
           ],
           'actions': [
             {
               'variables': {
-                'channel': 'preview',
+                'channel': 'stable',
               },
               'action_name': 'rpm_packages_<(channel)',
               'process_outputs_as_sources': 1,
@@ -1116,6 +1074,7 @@
                 'installer/mac/dirpatcher.sh',
                 'installer/mac/dmgdiffer.sh',
                 'installer/mac/pkg-dmg',
+                'installer/mac/sign_installer_tools.sh',
               ],
               'conditions': [
                 ['mac_keystone==1', {
@@ -1182,7 +1141,7 @@
               'type': 'none',
               'dependencies': [
                 'installer_packaging',
-                'vivaldi'
+                'chrome'
               ],
               'includes': ['sign_mac_build.gypi']
             },
@@ -1190,5 +1149,35 @@
         }]
       ],
     }],  # OS=="mac"
+    ['OS=="win" and test_isolation_mode != "noop"', {
+      'targets': [
+        {
+          'target_name': 'installer_util_unittests_run',
+          'type': 'none',
+          'dependencies': [
+            'installer_util_unittests',
+          ],
+          'includes': [
+            '../build/isolate.gypi',
+          ],
+          'sources': [
+            'installer_util_unittests.isolate',
+          ],
+        },
+        {
+          'target_name': 'setup_unittests_run',
+          'type': 'none',
+          'dependencies': [
+            'setup_unittests',
+          ],
+          'includes': [
+            '../build/isolate.gypi',
+          ],
+          'sources': [
+            'setup_unittests.isolate',
+          ],
+        },
+      ],
+    }],
   ],
 }

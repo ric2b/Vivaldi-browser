@@ -5,6 +5,10 @@
 // End-to-end SDCH tests.  Uses the embedded test server to return SDCH
 // results
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/callback.h"
@@ -16,9 +20,11 @@
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_remover.h"
+#include "chrome/browser/browsing_data/browsing_data_remover_factory.h"
 #include "chrome/browser/browsing_data/browsing_data_remover_test_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -53,7 +59,7 @@
 namespace {
 
 typedef std::vector<net::test_server::HttpRequest> RequestVector;
-typedef std::map<std::string, std::string> HttpRequestHeaderMap;
+typedef net::test_server::HttpRequest::HeaderMap HttpRequestHeaderMap;
 
 // Credit Alfred, Lord Tennyson
 static const char kSampleData[] = "<html><body><pre>"
@@ -108,7 +114,7 @@ bool GetRequestHeader(const HttpRequestHeaderMap& map,
                       std::string* value) {
   for (HttpRequestHeaderMap::const_iterator it = map.begin();
        it != map.end(); ++it) {
-    if (!base::strcasecmp(it->first.c_str(), header)) {
+    if (base::EqualsCaseInsensitiveASCII(it->first, header)) {
       *value = it->second;
       return true;
     }
@@ -131,9 +137,8 @@ void SafeBase64Encode(const std::string& input_value, std::string* output) {
 class SdchResponseHandler {
  public:
   // Do initial preparation so that SDCH requests can be handled.
-  explicit SdchResponseHandler(std::string domain)
-      : cache_sdch_response_(false),
-        weak_ptr_factory_(this) {
+  explicit SdchResponseHandler(const std::string& domain)
+      : cache_sdch_response_(false), weak_ptr_factory_(this) {
     // Dictionary
     sdch_dictionary_contents_ = "Domain: ";
     sdch_dictionary_contents_ += domain;
@@ -170,7 +175,7 @@ class SdchResponseHandler {
       return false;
     base::StringTokenizer tokenizer(value, " ,");
     while (tokenizer.GetNext()) {
-      if (base::strcasecmp(tokenizer.token().c_str(), "sdch"))
+      if (base::EqualsCaseInsensitiveASCII(tokenizer.token(), "sdch"))
         return true;
     }
     return false;
@@ -227,7 +232,7 @@ class SdchResponseHandler {
          it != callbacks.end(); ++it) {
       it->Run();
     }
-    return response.Pass();
+    return std::move(response);
   }
 
   void WaitAndGetRequestVector(int num_requests,
@@ -400,10 +405,11 @@ class SdchBrowserTest : public InProcessBrowserTest,
   }
 
   void BrowsingDataRemoveAndWait(int remove_mask) {
-    BrowsingDataRemover* remover = BrowsingDataRemover::CreateForPeriod(
-        browser()->profile(), BrowsingDataRemover::LAST_HOUR);
+    BrowsingDataRemover* remover =
+        BrowsingDataRemoverFactory::GetForBrowserContext(browser()->profile());
     BrowsingDataRemoverCompletionObserver completion_observer(remover);
-    remover->Remove(remove_mask, BrowsingDataHelper::UNPROTECTED_WEB);
+    remover->Remove(BrowsingDataRemover::Period(BrowsingDataRemover::LAST_HOUR),
+                    remove_mask, BrowsingDataHelper::UNPROTECTED_WEB);
     completion_observer.BlockUntilCompletion();
   }
 
@@ -488,7 +494,7 @@ class SdchBrowserTest : public InProcessBrowserTest,
     run_loop.Run();
   }
 
-  uint16 test_server_port() { return test_server_.port(); }
+  uint16_t test_server_port() { return test_server_.port(); }
 
   void SetSdchCacheability(bool cache_sdch_response) {
     base::RunLoop run_loop;
@@ -600,7 +606,7 @@ class SdchBrowserTest : public InProcessBrowserTest,
     test_server_.RegisterRequestHandler(
         base::Bind(&SdchResponseHandler::HandleRequest,
                    base::Unretained(&response_handler_)));
-    CHECK(test_server_.InitializeAndWaitUntilReady());
+    CHECK(test_server_.Start());
     url_request_context_getter_ = browser()->profile()->GetRequestContext();
 
     content::BrowserThread::PostTask(
@@ -641,11 +647,11 @@ class SdchBrowserTest : public InProcessBrowserTest,
   void OnURLFetchComplete(const net::URLFetcher* source) override {
     url_fetch_complete_ = true;
     if (waiting_)
-      base::MessageLoopForUI::current()->Quit();
+      base::MessageLoopForUI::current()->QuitWhenIdle();
   }
 
   SdchResponseHandler response_handler_;
-  net::test_server::EmbeddedTestServer test_server_;
+  net::EmbeddedTestServer test_server_;
   scoped_refptr<net::URLRequestContextGetter> url_request_context_getter_;
   scoped_ptr<net::URLFetcher> fetcher_;
   bool url_fetch_complete_;

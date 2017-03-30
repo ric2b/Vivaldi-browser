@@ -10,6 +10,16 @@ class FileManagerJsTest : public FileManagerJsTestBase {
       base::FilePath(FILE_PATH_LITERAL("ui/file_manager/file_manager"))) {}
 };
 
+IN_PROC_BROWSER_TEST_F(FileManagerJsTest, ActionsSubmenuTest) {
+  RunTest(base::FilePath(
+      FILE_PATH_LITERAL("foreground/js/ui/actions_submenu_unittest.html")));
+}
+
+IN_PROC_BROWSER_TEST_F(FileManagerJsTest, ActionsModelTest) {
+  RunTest(base::FilePath(
+      FILE_PATH_LITERAL("foreground/js/actions_model_unittest.html")));
+}
+
 IN_PROC_BROWSER_TEST_F(FileManagerJsTest, NavigationListModelTest) {
   RunTest(base::FilePath(
       FILE_PATH_LITERAL("foreground/js/navigation_list_model_unittest.html")));
@@ -174,9 +184,9 @@ IN_PROC_BROWSER_TEST_F(FileManagerJsTest, ProvidersModel) {
       FILE_PATH_LITERAL("foreground/js/providers_model_unittest.html")));
 }
 
-IN_PROC_BROWSER_TEST_F(FileManagerJsTest, TooltipController) {
+IN_PROC_BROWSER_TEST_F(FileManagerJsTest, FilesTooltip) {
   RunTest(base::FilePath(
-      FILE_PATH_LITERAL("foreground/js/tooltip_controller_unittest.html")));
+      FILE_PATH_LITERAL("foreground/elements/files_tooltip_unittest.html")));
 }
 
 IN_PROC_BROWSER_TEST_F(FileManagerJsTest, SpinnerController) {

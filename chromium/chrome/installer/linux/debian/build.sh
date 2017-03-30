@@ -54,17 +54,17 @@ stage_install_debian() {
   # use update-alternatives for /usr/bin/vivaldi.
   local USR_BIN_SYMLINK_NAME="${PACKAGE}-${CHANNEL}"
 
-  if [ "$CHANNEL" == "preview" ]; then
-    local MENUNAME="${MENUNAME} (Beta)"
-  elif [ "$CHANNEL" != "stable" ]; then
+  if [ "$CHANNEL" != "stable" ]; then
     # This would ideally be compiled into the app, but that's a bit too
     # intrusive of a change for these limited use channels, so we'll just hack
     # it into the wrapper script. The user can still override since it seems to
     # work to specify --user-data-dir multiple times on the command line, with
     # the last occurrence winning.
-    local SXS_USER_DATA_DIR="\${XDG_CONFIG_HOME:-\${HOME}/.config}/${PACKAGE}-${CHANNEL}"
-    local DEFAULT_FLAGS="--user-data-dir=\"${SXS_USER_DATA_DIR}\""
-
+    # Extra work around for beta to use stable profile (needed until 1st final)
+    if [ "$CHANNEL" == "snapshot" ]; then
+      local SXS_USER_DATA_DIR="\${XDG_CONFIG_HOME:-\${HOME}/.config}/${PACKAGE}-${CHANNEL}"
+      local DEFAULT_FLAGS="--user-data-dir=\"${SXS_USER_DATA_DIR}\""
+    fi
     # Avoid file collisions between channels.
     local INSTALLDIR="${INSTALLDIR}-${CHANNEL}"
 
@@ -103,13 +103,9 @@ do_package() {
   echo "Packaging ${ARCHITECTURE}..."
   PREDEPENDS="$COMMON_PREDEPS"
   DEPENDS="${COMMON_DEPS}"
-  if [ "$CHANNEL" == "preview" ]; then
-    REPLACES="vivaldi-stable (<= 1.0.94.2-1)"
-    CONFLICTS="vivaldi-stable (<= 1.0.94.2-1)"
-    PROVIDES="www-browser, vivaldi-stable"
-  elif [ "$CHANNEL" == "stable" ]; then
-    REPLACES="vivaldi-preview"
-    CONFLICTS="vivaldi-preview"
+  if [ "$CHANNEL" == "stable" ]; then
+    REPLACES="vivaldi-preview, vivaldi-beta"
+    CONFLICTS="vivaldi-preview, vivaldi-beta"
     PROVIDES="www-browser"
   elif [ "$CHANNEL" == "snapshot" ]; then
     REPLACES="vivaldi-unstable (<= 1.0.94.2-1)"
@@ -142,28 +138,25 @@ cleanup() {
 
 usage() {
   echo "usage: $(basename $0) [-c channel] [-a target_arch] [-o 'dir'] "
-  echo "                      [-b 'dir']"
+  echo "                      [-b 'dir'] -d branding"
   echo "-c channel the package channel (trunk, asan, unstable, beta, stable)"
   echo "-a arch    package architecture (ia32 or x64)"
   echo "-o dir     package output directory [${OUTPUTDIR}]"
   echo "-b dir     build input directory    [${BUILDDIR}]"
+  echo "-d brand   either chromium or google_chrome"
   echo "-h         this help message"
 }
 
 # Check that the channel name is one of the allowable ones.
 verify_channel() {
   case $CHANNEL in
-    preview )
-      CHANNEL=preview
-      RELEASENOTES="https://www.vivaldi.com/"
-      ;;
     snapshot )
       CHANNEL=snapshot
       RELEASENOTES="https://www.vivaldi.com/"
       ;;
     stable )
       CHANNEL=stable
-      RELEASENOTES="https://www.vivaldi.com/search/label/Stable%20updates"
+      RELEASENOTES="https://www.vivaldi.com/"
       ;;
     unstable|dev|alpha )
       CHANNEL=unstable
@@ -189,7 +182,7 @@ verify_channel() {
 }
 
 process_opts() {
-  while getopts ":o:b:c:a:h" OPTNAME
+  while getopts ":o:b:c:a:d:h" OPTNAME
   do
     case $OPTNAME in
       o )
@@ -204,6 +197,9 @@ process_opts() {
         ;;
       a )
         TARGETARCH="$OPTARG"
+        ;;
+      d )
+        BRANDING="$OPTARG"
         ;;
       h )
         usage
@@ -252,9 +248,9 @@ source ${BUILDDIR}/installer/common/installer.include
 get_version_info
 VERSIONFULL="${VERSION}-${PACKAGE_RELEASE}"
 
-if [ "$CHROMIUM_BUILD" = "vivaldi" ]; then
+if [ "$BRANDING" = "vivaldi" ]; then
   source "${BUILDDIR}/installer/common/vivaldi.info"
-elif [ "$CHROMIUM_BUILD" = "_google_chrome" ]; then
+elif [ "$BRANDING_BUILD" = "_google_chrome" ]; then
   source "${BUILDDIR}/installer/common/google-chrome.info"
 else
   source "${BUILDDIR}/installer/common/chromium-browser.info"
@@ -262,8 +258,8 @@ fi
 eval $(sed -e "s/^\([^=]\+\)=\(.*\)$/export \1='\2'/" \
   "${BUILDDIR}/installer/theme/BRANDING")
 
-REPOCONFIG="deb http://repo.vivaldi.com/archive/deb/ stable main"
-SSLREPOCONFIG="deb https://repo.vivaldi.com/archive/deb/ stable main"
+REPOCONFIG="deb http://repo.vivaldi.com/$CHANNEL/deb/ stable main"
+SSLREPOCONFIG="deb https://repo.vivaldi.com/$CHANNEL/deb/ stable main"
 verify_channel
 
 # Some Debian packaging tools want these set.
@@ -320,8 +316,8 @@ rm -rf "$DUMMY_STAGING_DIR"
 # Additional dependencies not in the dpkg-shlibdeps output.
 # - Pull a more recent version of NSS than required by runtime linking, for
 #   security and stability updates in NSS.
-ADDITION_DEPS="ca-certificates, libappindicator1, libcurl3, \
-  libnss3 (>= 3.14.3), lsb-base (>=3.2), xdg-utils (>= 1.0.2), wget"
+ADDITION_DEPS="ca-certificates, fonts-liberation, libappindicator1, libcurl3, \
+  libnss3 (>= 3.14.3), xdg-utils (>= 1.0.2), wget"
 
 # Fix-up libnspr dependency due to renaming in Ubuntu (the old package still
 # exists, but it was moved to "universe" repository, which isn't installed by
@@ -354,11 +350,9 @@ cd "${OUTPUTDIR}"
 case "$TARGETARCH" in
   ia32 )
     export ARCHITECTURE="i386"
-    stage_install_debian
     ;;
   x64 )
     export ARCHITECTURE="amd64"
-    stage_install_debian
     ;;
   * )
     echo
@@ -367,5 +361,14 @@ case "$TARGETARCH" in
     exit 1
     ;;
 esac
+BASEREPOCONFIG="repo.vivaldi.com/archive/deb/ stable main"
+# Only use the default REPOCONFIG if it's unset (e.g. verify_channel might have
+# set it to an empty string)
+REPOCONFIG="${REPOCONFIG-deb [arch=${ARCHITECTURE}] http://${BASEREPOCONFIG}}"
+# Allowed configs include optional HTTPS support and explicit multiarch
+# platforms.
+REPOCONFIGREGEX="deb (\\\\[arch=[^]]*\\\\b${ARCHITECTURE}\\\\b[^]]*\\\\]"
+REPOCONFIGREGEX+="[[:space:]]*) https?://${BASEREPOCONFIG}"
+stage_install_debian
 
 do_package

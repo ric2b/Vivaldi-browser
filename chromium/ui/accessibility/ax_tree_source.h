@@ -5,9 +5,9 @@
 #ifndef UI_ACCESSIBILITY_AX_TREE_SOURCE_H_
 #define UI_ACCESSIBILITY_AX_TREE_SOURCE_H_
 
-#include <vector>
+#include <stdint.h>
 
-#include "ui/accessibility/ax_node_data.h"
+#include <vector>
 
 namespace ui {
 
@@ -19,20 +19,23 @@ namespace ui {
 // as an AXNodeData. This is the primary interface to use when
 // an accessibility tree will be sent over an IPC before being
 // consumed.
-template<typename AXNodeSource>
+template<typename AXNodeSource, typename AXNodeData, typename AXTreeData>
 class AXTreeSource {
  public:
   virtual ~AXTreeSource() {}
+
+  // Get the tree data.
+  virtual AXTreeData GetTreeData() const = 0;
 
   // Get the root of the tree.
   virtual AXNodeSource GetRoot() const = 0;
 
   // Get a node by its id. If no node by that id exists in the tree, return a
   // null node, i.e. one that will return false if you call IsValid on it.
-  virtual AXNodeSource GetFromId(int32 id) const = 0;
+  virtual AXNodeSource GetFromId(int32_t id) const = 0;
 
   // Return the id of a node. All ids must be positive integers.
-  virtual int32 GetId(AXNodeSource node) const = 0;
+  virtual int32_t GetId(AXNodeSource node) const = 0;
 
   // Append all children of |node| to |out_children|.
   virtual void GetChildren(AXNodeSource node,

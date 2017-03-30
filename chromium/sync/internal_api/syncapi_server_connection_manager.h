@@ -9,6 +9,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "sync/base/sync_export.h"
 #include "sync/engine/net/server_connection_manager.h"
@@ -47,7 +48,7 @@ class SyncAPIBridgedConnection : public ServerConnectionManager::Connection {
 // A ServerConnectionManager subclass used by the syncapi layer. We use a
 // subclass so that we can override MakePost() to generate a POST object using
 // an instance of the HttpPostProviderFactory class.
-class SYNC_EXPORT_PRIVATE SyncAPIServerConnectionManager
+class SYNC_EXPORT SyncAPIServerConnectionManager
     : public ServerConnectionManager {
  public:
   // Takes ownership of factory.
@@ -66,6 +67,8 @@ class SYNC_EXPORT_PRIVATE SyncAPIServerConnectionManager
                            VeryEarlyAbortPost);
   FRIEND_TEST_ALL_PREFIXES(SyncAPIServerConnectionManagerTest, EarlyAbortPost);
   FRIEND_TEST_ALL_PREFIXES(SyncAPIServerConnectionManagerTest, AbortPost);
+  FRIEND_TEST_ALL_PREFIXES(SyncAPIServerConnectionManagerTest,
+                           FailPostWithTimedOut);
 
   // A factory creating concrete HttpPostProviders for use whenever we need to
   // issue a POST to sync servers.

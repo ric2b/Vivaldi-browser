@@ -4,6 +4,8 @@
 
 #include "printing/metafile.h"
 
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/files/file.h"
@@ -27,7 +29,8 @@ bool Metafile::GetDataAsVector(std::vector<char>* buffer) const {
   buffer->resize(GetDataSize());
   if (buffer->empty())
     return false;
-  return GetData(&buffer->front(), base::checked_cast<uint32>(buffer->size()));
+  return GetData(&buffer->front(),
+                 base::checked_cast<uint32_t>(buffer->size()));
 }
 
 bool Metafile::SaveTo(base::File* file) const {

@@ -4,6 +4,8 @@
 
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_io_data.h"
 
+#include <stddef.h>
+
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/prefs/pref_service.h"
@@ -30,7 +32,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
-
 // Used only to verify that a wrapped network delegate gets called.
 class CountingNetworkDelegate : public net::NetworkDelegateImpl {
  public:
@@ -107,7 +108,7 @@ TEST_F(DataReductionProxyIODataTest, TestConstruction) {
       io_data->basic_url_request_context_getter_.get()->GetURLRequestContext();
   const net::HttpNetworkSession::Params* http_params =
       request_context->GetNetworkSessionParams();
-  EXPECT_TRUE(http_params->use_alternate_protocols);
+  EXPECT_TRUE(http_params->use_alternative_services);
   EXPECT_FALSE(http_params->enable_quic);
   net::NextProtoVector expected_protos =
       net::NextProtosWithSpdyAndQuic(false, false);
@@ -161,8 +162,7 @@ TEST_F(DataReductionProxyIODataTest, TestResetBadProxyListOnDisableDataSaver) {
           .SkipSettingsInitialization()
           .Build();
 
-  drp_test_context->pref_service()->SetBoolean(
-      prefs::kDataReductionProxyEnabled, true);
+  drp_test_context->SetDataReductionProxyEnabled(true);
   drp_test_context->InitSettings();
   DataReductionProxyIOData* io_data = drp_test_context->io_data();
   std::vector<net::ProxyServer> proxies;

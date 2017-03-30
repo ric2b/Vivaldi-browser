@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_util.h"
@@ -31,30 +34,21 @@ class VideoUtilTest : public testing::Test {
     u_stride_ = u_stride;
     v_stride_ = v_stride;
 
-    y_plane_.reset(new uint8[y_stride * height]);
-    u_plane_.reset(new uint8[u_stride * height / 2]);
-    v_plane_.reset(new uint8[v_stride * height / 2]);
+    y_plane_.reset(new uint8_t[y_stride * height]);
+    u_plane_.reset(new uint8_t[u_stride * height / 2]);
+    v_plane_.reset(new uint8_t[v_stride * height / 2]);
   }
 
   void CreateDestinationFrame(int width, int height) {
     gfx::Size size(width, height);
-    destination_frame_ =
-        VideoFrame::CreateFrame(VideoFrame::YV12, size, gfx::Rect(size), size,
-                                base::TimeDelta());
-  }
-
-  void CopyPlanes() {
-    CopyYPlane(y_plane_.get(), y_stride_, height_, destination_frame_.get());
-    CopyUPlane(
-        u_plane_.get(), u_stride_, height_ / 2, destination_frame_.get());
-    CopyVPlane(
-        v_plane_.get(), v_stride_, height_ / 2, destination_frame_.get());
+    destination_frame_ = VideoFrame::CreateFrame(
+        PIXEL_FORMAT_YV12, size, gfx::Rect(size), size, base::TimeDelta());
   }
 
  private:
-  scoped_ptr<uint8[]> y_plane_;
-  scoped_ptr<uint8[]> u_plane_;
-  scoped_ptr<uint8[]> v_plane_;
+  scoped_ptr<uint8_t[]> y_plane_;
+  scoped_ptr<uint8_t[]> u_plane_;
+  scoped_ptr<uint8_t[]> v_plane_;
 
   int height_;
   int y_stride_;
@@ -66,182 +60,117 @@ class VideoUtilTest : public testing::Test {
   DISALLOW_COPY_AND_ASSIGN(VideoUtilTest);
 };
 
-TEST_F(VideoUtilTest, CopyPlane_Exact) {
-  CreateSourceFrame(16, 16, 16, 8, 8);
-  CreateDestinationFrame(16, 16);
-  CopyPlanes();
-}
+TEST_F(VideoUtilTest, GetNaturalSize) {
+  gfx::Size visible_size(320, 240);
 
-TEST_F(VideoUtilTest, CopyPlane_SmallerSource) {
-  CreateSourceFrame(8, 8, 8, 4, 4);
-  CreateDestinationFrame(16, 16);
-  CopyPlanes();
-}
+  // Test 0 sizes.
+  EXPECT_EQ(gfx::Size(0, 0), GetNaturalSize(gfx::Size(0, 0), 1, 1));
+  EXPECT_EQ(gfx::Size(0, 1), GetNaturalSize(gfx::Size(0, 1), 1, 1));
+  EXPECT_EQ(gfx::Size(1, 0), GetNaturalSize(gfx::Size(1, 0), 1, 1));
 
-TEST_F(VideoUtilTest, CopyPlane_SmallerDestination) {
-  CreateSourceFrame(16, 16, 16, 8, 8);
-  CreateDestinationFrame(8, 8);
-  CopyPlanes();
+  // Test abnormal ratios.
+  EXPECT_EQ(gfx::Size(0, 0), GetNaturalSize(visible_size, 0, 0));
+  EXPECT_EQ(gfx::Size(0, 0), GetNaturalSize(visible_size, 1, 0));
+  EXPECT_EQ(gfx::Size(0, 0), GetNaturalSize(visible_size, 1, -1));
+  EXPECT_EQ(gfx::Size(0, 0), GetNaturalSize(visible_size, -1, 1));
+
+  // Test normal sizes and ratios.
+  EXPECT_EQ(gfx::Size(0, 240), GetNaturalSize(visible_size, 0, 1));
+  EXPECT_EQ(gfx::Size(320, 240), GetNaturalSize(visible_size, 1, 1));
+  EXPECT_EQ(gfx::Size(640, 240), GetNaturalSize(visible_size, 2, 1));
+  EXPECT_EQ(gfx::Size(160, 240), GetNaturalSize(visible_size, 1, 2));
+  EXPECT_EQ(gfx::Size(427, 240), GetNaturalSize(visible_size, 4, 3));
+  EXPECT_EQ(gfx::Size(240, 240), GetNaturalSize(visible_size, 3, 4));
+  EXPECT_EQ(gfx::Size(569, 240), GetNaturalSize(visible_size, 16, 9));
+  EXPECT_EQ(gfx::Size(180, 240), GetNaturalSize(visible_size, 9, 16));
+
+  // Test some random ratios.
+  EXPECT_EQ(gfx::Size(495, 240), GetNaturalSize(visible_size, 17, 11));
+  EXPECT_EQ(gfx::Size(207, 240), GetNaturalSize(visible_size, 11, 17));
 }
 
 namespace {
 
-uint8 src6x4[] = {
-  0,  1,  2,  3,  4,  5,
-  6,  7,  8,  9, 10, 11,
- 12, 13, 14, 15, 16, 17,
- 18, 19, 20, 21, 22, 23
-};
+uint8_t src6x4[] = {0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11,
+                    12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23};
 
 // Target images, name pattern target_rotation_flipV_flipH.
-uint8* target6x4_0_n_n = src6x4;
+uint8_t* target6x4_0_n_n = src6x4;
 
-uint8 target6x4_0_n_y[] = {
-  5,  4,  3,  2,  1,  0,
- 11, 10,  9,  8,  7,  6,
- 17, 16, 15, 14, 13, 12,
- 23, 22, 21, 20, 19, 18
-};
+uint8_t target6x4_0_n_y[] = {5,  4,  3,  2,  1,  0,  11, 10, 9,  8,  7,  6,
+                             17, 16, 15, 14, 13, 12, 23, 22, 21, 20, 19, 18};
 
-uint8 target6x4_0_y_n[] = {
- 18, 19, 20, 21, 22, 23,
- 12, 13, 14, 15, 16, 17,
-  6,  7,  8,  9, 10, 11,
-  0,  1,  2,  3,  4,  5
-};
+uint8_t target6x4_0_y_n[] = {18, 19, 20, 21, 22, 23, 12, 13, 14, 15, 16, 17,
+                             6,  7,  8,  9,  10, 11, 0,  1,  2,  3,  4,  5};
 
-uint8 target6x4_0_y_y[] = {
- 23, 22, 21, 20, 19, 18,
- 17, 16, 15, 14, 13, 12,
- 11, 10,  9,  8,  7,  6,
-  5,  4,  3,  2,  1,  0
-};
+uint8_t target6x4_0_y_y[] = {23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12,
+                             11, 10, 9,  8,  7,  6,  5,  4,  3,  2,  1,  0};
 
-uint8 target6x4_90_n_n[] = {
- 255, 19, 13,  7,  1, 255,
- 255, 20, 14,  8,  2, 255,
- 255, 21, 15,  9,  3, 255,
- 255, 22, 16, 10,  4, 255
-};
+uint8_t target6x4_90_n_n[] = {255, 19, 13, 7, 1, 255, 255, 20, 14, 8,  2, 255,
+                              255, 21, 15, 9, 3, 255, 255, 22, 16, 10, 4, 255};
 
-uint8 target6x4_90_n_y[] = {
- 255,  1,  7, 13, 19, 255,
- 255,  2,  8, 14, 20, 255,
- 255,  3,  9, 15, 21, 255,
- 255,  4, 10, 16, 22, 255
-};
+uint8_t target6x4_90_n_y[] = {255, 1, 7, 13, 19, 255, 255, 2, 8,  14, 20, 255,
+                              255, 3, 9, 15, 21, 255, 255, 4, 10, 16, 22, 255};
 
-uint8 target6x4_90_y_n[] = {
- 255, 22, 16, 10,  4, 255,
- 255, 21, 15,  9,  3, 255,
- 255, 20, 14,  8,  2, 255,
- 255, 19, 13,  7,  1, 255
-};
+uint8_t target6x4_90_y_n[] = {255, 22, 16, 10, 4, 255, 255, 21, 15, 9, 3, 255,
+                              255, 20, 14, 8,  2, 255, 255, 19, 13, 7, 1, 255};
 
-uint8 target6x4_90_y_y[] = {
- 255,  4, 10, 16, 22, 255,
- 255,  3,  9, 15, 21, 255,
- 255,  2,  8, 14, 20, 255,
- 255,  1,  7, 13, 19, 255
-};
+uint8_t target6x4_90_y_y[] = {255, 4, 10, 16, 22, 255, 255, 3, 9, 15, 21, 255,
+                              255, 2, 8,  14, 20, 255, 255, 1, 7, 13, 19, 255};
 
-uint8* target6x4_180_n_n = target6x4_0_y_y;
-uint8* target6x4_180_n_y = target6x4_0_y_n;
-uint8* target6x4_180_y_n = target6x4_0_n_y;
-uint8* target6x4_180_y_y = target6x4_0_n_n;
+uint8_t* target6x4_180_n_n = target6x4_0_y_y;
+uint8_t* target6x4_180_n_y = target6x4_0_y_n;
+uint8_t* target6x4_180_y_n = target6x4_0_n_y;
+uint8_t* target6x4_180_y_y = target6x4_0_n_n;
 
-uint8* target6x4_270_n_n = target6x4_90_y_y;
-uint8* target6x4_270_n_y = target6x4_90_y_n;
-uint8* target6x4_270_y_n = target6x4_90_n_y;
-uint8* target6x4_270_y_y = target6x4_90_n_n;
+uint8_t* target6x4_270_n_n = target6x4_90_y_y;
+uint8_t* target6x4_270_n_y = target6x4_90_y_n;
+uint8_t* target6x4_270_y_n = target6x4_90_n_y;
+uint8_t* target6x4_270_y_y = target6x4_90_n_n;
 
-uint8 src4x6[] = {
-  0,  1,  2,  3,
-  4,  5,  6,  7,
-  8,  9, 10, 11,
- 12, 13, 14, 15,
- 16, 17, 18, 19,
- 20, 21, 22, 23
-};
+uint8_t src4x6[] = {0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11,
+                    12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23};
 
-uint8* target4x6_0_n_n = src4x6;
+uint8_t* target4x6_0_n_n = src4x6;
 
-uint8 target4x6_0_n_y[] = {
-  3,  2,  1,  0,
-  7,  6,  5,  4,
- 11, 10,  9,  8,
- 15, 14, 13, 12,
- 19, 18, 17, 16,
- 23, 22, 21, 20
-};
+uint8_t target4x6_0_n_y[] = {3,  2,  1,  0,  7,  6,  5,  4,  11, 10, 9,  8,
+                             15, 14, 13, 12, 19, 18, 17, 16, 23, 22, 21, 20};
 
-uint8 target4x6_0_y_n[] = {
- 20, 21, 22, 23,
- 16, 17, 18, 19,
- 12, 13, 14, 15,
-  8,  9, 10, 11,
-  4,  5,  6,  7,
-  0,  1,  2,  3
-};
+uint8_t target4x6_0_y_n[] = {20, 21, 22, 23, 16, 17, 18, 19, 12, 13, 14, 15,
+                             8,  9,  10, 11, 4,  5,  6,  7,  0,  1,  2,  3};
 
-uint8 target4x6_0_y_y[] = {
- 23, 22, 21, 20,
- 19, 18, 17, 16,
- 15, 14, 13, 12,
- 11, 10,  9,  8,
-  7,  6,  5,  4,
-  3,  2,  1,  0
-};
+uint8_t target4x6_0_y_y[] = {23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12,
+                             11, 10, 9,  8,  7,  6,  5,  4,  3,  2,  1,  0};
 
-uint8 target4x6_90_n_n[] = {
- 255, 255, 255, 255,
-  16,  12,   8,   4,
-  17,  13,   9,   5,
-  18,  14,  10,   6,
-  19,  15,  11,   7,
- 255, 255, 255, 255
-};
+uint8_t target4x6_90_n_n[] = {255, 255, 255, 255, 16,  12,  8,   4,
+                              17,  13,  9,   5,   18,  14,  10,  6,
+                              19,  15,  11,  7,   255, 255, 255, 255};
 
-uint8 target4x6_90_n_y[] = {
- 255, 255, 255, 255,
-   4,   8,  12,  16,
-   5,   9,  13,  17,
-   6,  10,  14,  18,
-   7,  11,  15,  19,
- 255, 255, 255, 255
-};
+uint8_t target4x6_90_n_y[] = {255, 255, 255, 255, 4,   8,   12,  16,
+                              5,   9,   13,  17,  6,   10,  14,  18,
+                              7,   11,  15,  19,  255, 255, 255, 255};
 
-uint8 target4x6_90_y_n[] = {
- 255, 255, 255, 255,
-  19,  15,  11,   7,
-  18,  14,  10,   6,
-  17,  13,   9,   5,
-  16,  12,   8,   4,
- 255, 255, 255, 255
-};
+uint8_t target4x6_90_y_n[] = {255, 255, 255, 255, 19,  15,  11,  7,
+                              18,  14,  10,  6,   17,  13,  9,   5,
+                              16,  12,  8,   4,   255, 255, 255, 255};
 
-uint8 target4x6_90_y_y[] = {
- 255, 255, 255, 255,
-   7,  11,  15,  19,
-   6,  10,  14,  18,
-   5,   9,  13,  17,
-   4,   8,  12,  16,
- 255, 255, 255, 255
-};
+uint8_t target4x6_90_y_y[] = {255, 255, 255, 255, 7,   11,  15,  19,
+                              6,   10,  14,  18,  5,   9,   13,  17,
+                              4,   8,   12,  16,  255, 255, 255, 255};
 
-uint8* target4x6_180_n_n = target4x6_0_y_y;
-uint8* target4x6_180_n_y = target4x6_0_y_n;
-uint8* target4x6_180_y_n = target4x6_0_n_y;
-uint8* target4x6_180_y_y = target4x6_0_n_n;
+uint8_t* target4x6_180_n_n = target4x6_0_y_y;
+uint8_t* target4x6_180_n_y = target4x6_0_y_n;
+uint8_t* target4x6_180_y_n = target4x6_0_n_y;
+uint8_t* target4x6_180_y_y = target4x6_0_n_n;
 
-uint8* target4x6_270_n_n = target4x6_90_y_y;
-uint8* target4x6_270_n_y = target4x6_90_y_n;
-uint8* target4x6_270_y_n = target4x6_90_n_y;
-uint8* target4x6_270_y_y = target4x6_90_n_n;
+uint8_t* target4x6_270_n_n = target4x6_90_y_y;
+uint8_t* target4x6_270_n_y = target4x6_90_y_n;
+uint8_t* target4x6_270_y_n = target4x6_90_n_y;
+uint8_t* target4x6_270_y_y = target4x6_90_n_n;
 
 struct VideoRotationTestData {
-  uint8* src;
-  uint8* target;
+  uint8_t* src;
+  uint8_t* target;
   int width;
   int height;
   int rotation;
@@ -297,15 +226,15 @@ class VideoUtilRotationTest
     : public testing::TestWithParam<VideoRotationTestData> {
  public:
   VideoUtilRotationTest() {
-    dest_.reset(new uint8[GetParam().width * GetParam().height]);
+    dest_.reset(new uint8_t[GetParam().width * GetParam().height]);
   }
 
   virtual ~VideoUtilRotationTest() {}
 
-  uint8* dest_plane() { return dest_.get(); }
+  uint8_t* dest_plane() { return dest_.get(); }
 
  private:
-  scoped_ptr<uint8[]> dest_;
+  scoped_ptr<uint8_t[]> dest_;
 
   DISALLOW_COPY_AND_ASSIGN(VideoUtilRotationTest);
 };
@@ -315,7 +244,7 @@ TEST_P(VideoUtilRotationTest, Rotate) {
   EXPECT_TRUE((rotation >= 0) && (rotation < 360) && (rotation % 90 == 0));
 
   int size = GetParam().width * GetParam().height;
-  uint8* dest = dest_plane();
+  uint8_t* dest = dest_plane();
   memset(dest, 255, size);
 
   RotatePlaneByPixels(GetParam().src, dest, GetParam().width,
@@ -396,9 +325,8 @@ TEST_F(VideoUtilTest, LetterboxYUV) {
   int width = 40;
   int height = 30;
   gfx::Size size(width, height);
-  scoped_refptr<VideoFrame> frame(
-      VideoFrame::CreateFrame(VideoFrame::YV12, size, gfx::Rect(size), size,
-                              base::TimeDelta()));
+  scoped_refptr<VideoFrame> frame(VideoFrame::CreateFrame(
+      PIXEL_FORMAT_YV12, size, gfx::Rect(size), size, base::TimeDelta()));
 
   for (int left_margin = 0; left_margin <= 10; left_margin += 10) {
     for (int right_margin = 0; right_margin <= 10; right_margin += 10) {

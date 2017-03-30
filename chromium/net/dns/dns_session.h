@@ -5,12 +5,14 @@
 #ifndef NET_DNS_DNS_SESSION_H_
 #define NET_DNS_DNS_SESSION_H_
 
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/memory/scoped_vector.h"
 #include "base/metrics/bucket_ranges.h"
 #include "base/time/time.h"
 #include "net/base/net_export.h"
@@ -66,7 +68,7 @@ class NET_EXPORT_PRIVATE DnsSession
   NetLog* net_log() const { return net_log_; }
 
   // Return the next random query ID.
-  uint16 NextQueryId() const;
+  uint16_t NextQueryId() const;
 
   // Return the index of the first configured server to use on first attempt.
   unsigned NextFirstServerIndex();
@@ -131,7 +133,7 @@ class NET_EXPORT_PRIVATE DnsSession
   struct ServerStats;
 
   // Track runtime statistics of each DNS server.
-  ScopedVector<ServerStats> server_stats_;
+  std::vector<scoped_ptr<ServerStats>> server_stats_;
 
   // Buckets shared for all |ServerStats::rtt_histogram|.
   struct RttBuckets : public base::BucketRanges {

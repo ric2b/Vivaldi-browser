@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "apps/switches.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/json/json_string_value_serializer.h"
@@ -15,6 +16,7 @@
 #include "base/profiler/scoped_profile.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/component_extensions_whitelist/whitelist.h"
 #include "chrome/browser/extensions/data_deleter.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -23,16 +25,20 @@
 #include "chrome/browser/search/hotword_service.h"
 #include "chrome/browser/search/hotword_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/chrome_version_info.h"
 #include "chrome/common/extensions/extension_constants.h"
+#include "chrome/common/features.h"
+#include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/crx_file/id_util.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/browser/signin_manager_base.h"
+#include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/plugin_service.h"
+#include "content/public/common/content_switches.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_l10n_util.h"
@@ -41,6 +47,9 @@
 #include "grit/browser_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+
+#include "app/vivaldi_apptools.h"
+#include "app/vivaldi_resources.h"
 
 #if defined(OS_CHROMEOS)
 #include "ash/system/chromeos/devicetype_utils.h"
@@ -62,10 +71,6 @@
 #include "content/public/browser/storage_partition.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "storage/browser/fileapi/file_system_context.h"
-#endif
-
-#if defined(ENABLE_APP_LIST)
-#include "chrome/grit/chromium_strings.h"
 #endif
 
 #if defined(ENABLE_APP_LIST) && defined(OS_CHROMEOS)
@@ -108,7 +113,7 @@ LoadManifestOnFileThread(
   bool localized = extension_l10n_util::LocalizeExtension(
       root_directory, manifest.get(), &error);
   CHECK(localized) << error;
-  return manifest.Pass();
+  return manifest;
 }
 
 bool IsNormalSession() {
@@ -162,7 +167,7 @@ void ComponentLoader::LoadAll() {
 base::DictionaryValue* ComponentLoader::ParseManifest(
     const std::string& manifest_contents) const {
   JSONStringValueDeserializer deserializer(manifest_contents);
-  scoped_ptr<base::Value> manifest(deserializer.Deserialize(NULL, NULL));
+  scoped_ptr<base::Value> manifest = deserializer.Deserialize(NULL, NULL);
 
   if (!manifest.get() || !manifest->IsType(base::Value::TYPE_DICTIONARY)) {
     LOG(ERROR) << "Failed to parse extension manifest.";
@@ -388,7 +393,7 @@ void ComponentLoader::AddVivaldiApp() {
 }
 
 void ComponentLoader::AddGoogleNowExtension() {
-#if defined(ENABLE_GOOGLE_NOW)
+#if BUILDFLAG(ENABLE_GOOGLE_NOW)
   const char kEnablePrefix[] = "Enable";
   const char kFieldTrialName[] = "GoogleNow";
   std::string enable_prefix(kEnablePrefix);
@@ -400,7 +405,7 @@ void ComponentLoader::AddGoogleNowExtension() {
 
   // Enable the feature on trybots and trunk builds.
   bool enabled_via_trunk_build =
-      chrome::VersionInfo::GetChannel() == chrome::VersionInfo::CHANNEL_UNKNOWN;
+      chrome::GetChannel() == version_info::Channel::UNKNOWN;
 
   bool is_authenticated =
       SigninManagerFactory::GetForProfile(profile_)->IsAuthenticated();
@@ -424,7 +429,7 @@ void ComponentLoader::AddGoogleNowExtension() {
   } else {
     DeleteData(google_now_manifest_id, root_directory);
   }
-#endif  // defined(ENABLE_GOOGLE_NOW)
+#endif  // BUILDFLAG(ENABLE_GOOGLE_NOW)
 }
 
 #if defined(OS_CHROMEOS)
@@ -532,8 +537,7 @@ void ComponentLoader::EnableBackgroundExtensionsForTesting() {
 void ComponentLoader::AddDefaultComponentExtensions(
     bool skip_session_components) {
   bool is_vivaldi =
-      base::CommandLine::ForCurrentProcess()->IsRunningVivaldi() &&
-      !base::CommandLine::ForCurrentProcess()->IsDebuggingVivaldi();
+      vivaldi::IsVivaldiRunning() && !vivaldi::IsDebuggingVivaldi();
 
   // Do not add component extensions that have background pages here -- add them
   // to AddDefaultComponentExtensionsWithBackgroundPages.
@@ -562,25 +566,26 @@ void ComponentLoader::AddDefaultComponentExtensions(
 #else  // !defined(OS_CHROMEOS)
   DCHECK(!skip_session_components);
   if (!is_vivaldi) {
-    Add(IDR_BOOKMARKS_MANIFEST,
-        base::FilePath(FILE_PATH_LITERAL("bookmark_manager")));
-    // Cloud Print component app. Not required on Chrome OS.
-    Add(IDR_CLOUDPRINT_MANIFEST,
-        base::FilePath(FILE_PATH_LITERAL("cloud_print")));
+  Add(IDR_BOOKMARKS_MANIFEST,
+      base::FilePath(FILE_PATH_LITERAL("bookmark_manager")));
+  // Cloud Print component app. Not required on Chrome OS.
+  Add(IDR_CLOUDPRINT_MANIFEST,
+      base::FilePath(FILE_PATH_LITERAL("cloud_print")));
   }
 #endif
 
   if (!skip_session_components) {
     AddWebStoreApp();
     if (!is_vivaldi) {
-      AddChromeApp();
+    AddChromeApp();
     }
   }
 
   AddKeyboardApp();
 
-  if (base::CommandLine::ForCurrentProcess()->IsRunningVivaldi() &&
-      !base::CommandLine::ForCurrentProcess()->IsDebuggingVivaldi()) {
+  if (vivaldi::IsVivaldiRunning() && !vivaldi::IsDebuggingVivaldi() &&
+      !base::CommandLine::ForCurrentProcess()->HasSwitch(
+          apps::kLoadAndLaunchApp)) {
     AddVivaldiApp();
   }
 
@@ -594,6 +599,9 @@ void ComponentLoader::AddDefaultComponentExtensions(
 
 void ComponentLoader::AddDefaultComponentExtensionsForKioskMode(
     bool skip_session_components) {
+  // Do not add component extensions that have background pages here -- add them
+  // to AddDefaultComponentExtensionsWithBackgroundPagesForKioskMode.
+
   // No component extension for kiosk app launch splash screen.
   if (skip_session_components)
     return;
@@ -603,6 +611,8 @@ void ComponentLoader::AddDefaultComponentExtensionsForKioskMode(
 
   // Add virtual keyboard.
   AddKeyboardApp();
+
+  AddDefaultComponentExtensionsWithBackgroundPagesForKioskMode();
 
 #if defined(ENABLE_PLUGINS)
   Add(pdf_extension_util::GetManifest(),
@@ -614,8 +624,8 @@ void ComponentLoader::AddDefaultComponentExtensionsWithBackgroundPages(
     bool skip_session_components) {
   const base::CommandLine* command_line =
       base::CommandLine::ForCurrentProcess();
-  bool is_vivaldi =
-      command_line->IsRunningVivaldi() && !command_line->IsDebuggingVivaldi();
+  bool is_vivaldi = vivaldi::IsVivaldiRunning() &&
+                   !vivaldi::IsDebuggingVivaldi();
 
   // Component extensions with background pages are not enabled during tests
   // because they generate a lot of background behavior that can interfere.
@@ -658,8 +668,8 @@ void ComponentLoader::AddDefaultComponentExtensionsWithBackgroundPages(
 
 #if defined(ENABLE_SETTINGS_APP)
     if (!is_vivaldi) {
-      Add(IDR_SETTINGS_APP_MANIFEST,
-          base::FilePath(FILE_PATH_LITERAL("settings_app")));
+    Add(IDR_SETTINGS_APP_MANIFEST,
+        base::FilePath(FILE_PATH_LITERAL("settings_app")));
     }
 #endif
   }
@@ -686,9 +696,6 @@ void ComponentLoader::AddDefaultComponentExtensionsWithBackgroundPages(
     Add(IDR_FIRST_RUN_DIALOG_MANIFEST,
         base::FilePath(FILE_PATH_LITERAL("chromeos/first_run/app")));
 
-    Add(IDR_NETWORK_CONFIGURATION_MANIFEST,
-        base::FilePath(FILE_PATH_LITERAL("chromeos/network_configuration")));
-
     Add(IDR_CONNECTIVITY_DIAGNOSTICS_MANIFEST,
         base::FilePath(extension_misc::kConnectivityDiagnosticsPath));
     Add(IDR_CONNECTIVITY_DIAGNOSTICS_LAUNCHER_MANIFEST,
@@ -711,6 +718,23 @@ void ComponentLoader::AddDefaultComponentExtensionsWithBackgroundPages(
 
   Add(IDR_CRYPTOTOKEN_MANIFEST,
       base::FilePath(FILE_PATH_LITERAL("cryptotoken")));
+}
+
+void ComponentLoader::
+    AddDefaultComponentExtensionsWithBackgroundPagesForKioskMode() {
+  const base::CommandLine* command_line =
+      base::CommandLine::ForCurrentProcess();
+
+  // Component extensions with background pages are not enabled during tests
+  // because they generate a lot of background behavior that can interfere.
+  if (!enable_background_extensions_during_testing &&
+      (command_line->HasSwitch(switches::kTestType) ||
+       command_line->HasSwitch(
+           switches::kDisableComponentExtensionsWithBackgroundPages))) {
+    return;
+  }
+
+  AddHangoutServicesExtension();
 }
 
 void ComponentLoader::DeleteData(int manifest_resource_id,

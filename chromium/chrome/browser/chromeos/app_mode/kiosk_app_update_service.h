@@ -7,8 +7,8 @@
 
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager_observer.h"
@@ -68,7 +68,7 @@ class KioskAppUpdateService : public KeyedService,
   std::string app_id_;
 
   // After we detect an upgrade we start a one-short timer to force restart.
-  base::OneShotTimer<KioskAppUpdateService> restart_timer_;
+  base::OneShotTimer restart_timer_;
 
   system::AutomaticRebootManager* automatic_reboot_manager_;  // Not owned.
 
@@ -87,7 +87,7 @@ class KioskAppUpdateServiceFactory : public BrowserContextKeyedServiceFactory {
   static KioskAppUpdateServiceFactory* GetInstance();
 
  private:
-  friend struct DefaultSingletonTraits<KioskAppUpdateServiceFactory>;
+  friend struct base::DefaultSingletonTraits<KioskAppUpdateServiceFactory>;
 
   KioskAppUpdateServiceFactory();
   ~KioskAppUpdateServiceFactory() override;

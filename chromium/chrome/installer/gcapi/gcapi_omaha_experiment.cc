@@ -4,7 +4,6 @@
 
 #include "chrome/installer/gcapi/gcapi_omaha_experiment.h"
 
-#include "base/basictypes.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -12,8 +11,8 @@
 #include "base/time/time.h"
 #include "chrome/installer/gcapi/gcapi.h"
 #include "chrome/installer/util/google_update_constants.h"
-#include "chrome/installer/util/google_update_experiment_util.h"
 #include "chrome/installer/util/google_update_settings.h"
+#include "components/variations/variations_experiment_util.h"
 
 namespace {
 
@@ -42,9 +41,10 @@ bool SetExperimentLabel(const wchar_t* brand_code,
   }
 
   // Split the original labels by the label separator.
-  std::vector<base::string16> entries;
-  base::SplitString(original_labels, google_update::kExperimentLabelSeparator,
-                    &entries);
+  std::vector<base::string16> entries = base::SplitString(
+      original_labels,
+      base::string16(1, variations::kExperimentLabelSeparator),
+      base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
   // Keep all labels, but the one we want to add/replace.
   base::string16 label_and_separator(label);
@@ -55,7 +55,7 @@ bool SetExperimentLabel(const wchar_t* brand_code,
         !base::StartsWith(entry, label_and_separator,
                           base::CompareCase::SENSITIVE)) {
       new_labels += entry;
-      new_labels += google_update::kExperimentLabelSeparator;
+      new_labels += variations::kExperimentLabelSeparator;
     }
   }
 
@@ -90,7 +90,7 @@ base::string16 GetGCAPIExperimentLabel(const wchar_t* brand_code,
                       label.c_str(),
                       brand_code,
                       GetCurrentRlzWeek(instance_time),
-                      installer::BuildExperimentDateString(
+                      variations::BuildExperimentDateString(
                           instance_time).c_str());
   return gcapi_experiment_label;
 }

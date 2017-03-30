@@ -9,8 +9,8 @@
 
 #include <list>
 
-#include "base/basictypes.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 
 // This template can be used for the StartFetching methods of the browsing data
@@ -19,9 +19,7 @@
 template <typename T>
 class BrowsingDataHelperCallback {
  public:
-  BrowsingDataHelperCallback()
-      : has_result_(false) {
-  }
+  BrowsingDataHelperCallback() {}
 
   const std::list<T>& result() {
     base::MessageLoop::current()->Run();
@@ -32,11 +30,11 @@ class BrowsingDataHelperCallback {
   void callback(const std::list<T>& info) {
     result_ = info;
     has_result_ = true;
-    base::MessageLoop::current()->Quit();
+    base::MessageLoop::current()->QuitWhenIdle();
   }
 
  private:
-  bool has_result_;
+  bool has_result_ = false;
   std::list<T> result_;
 
   DISALLOW_COPY_AND_ASSIGN(BrowsingDataHelperCallback);

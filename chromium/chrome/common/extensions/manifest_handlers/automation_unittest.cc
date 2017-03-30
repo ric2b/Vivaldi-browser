@@ -6,6 +6,7 @@
 #include "chrome/common/extensions/manifest_handlers/automation.h"
 #include "chrome/common/extensions/manifest_tests/chrome_manifest_test.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/version_info/version_info.h"
 #include "extensions/common/error_utils.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/permissions/permission_message_test_util.h"
@@ -17,7 +18,7 @@ namespace extensions {
 
 class AutomationManifestTest : public ChromeManifestTest {
  public:
-  AutomationManifestTest() : channel_(chrome::VersionInfo::CHANNEL_UNKNOWN) {}
+  AutomationManifestTest() : channel_(version_info::Channel::UNKNOWN) {}
 
  protected:
   AutomationInfo* GetAutomationInfo(scoped_refptr<Extension> extension) {

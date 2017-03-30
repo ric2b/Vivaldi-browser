@@ -5,6 +5,8 @@
 #ifndef NET_DNS_MDNS_CLIENT_IMPL_H_
 #define NET_DNS_MDNS_CLIENT_IMPL_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <queue>
 #include <string>
@@ -12,7 +14,9 @@
 #include <vector>
 
 #include "base/cancelable_callback.h"
-#include "base/memory/scoped_vector.h"
+#include "base/gtest_prod_util.h"
+#include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "net/base/io_buffer.h"
 #include "net/base/ip_endpoint.h"
@@ -34,7 +38,8 @@ class MDnsSocketFactoryImpl : public MDnsSocketFactory {
   MDnsSocketFactoryImpl() {}
   ~MDnsSocketFactoryImpl() override{};
 
-  void CreateSockets(ScopedVector<DatagramServerSocket>* sockets) override;
+  void CreateSockets(
+      std::vector<scoped_ptr<DatagramServerSocket>>* sockets) override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MDnsSocketFactoryImpl);
@@ -96,7 +101,7 @@ class NET_EXPORT_PRIVATE MDnsConnection {
   void OnError(int rv);
 
   // Only socket handlers which successfully bound and started are kept.
-  ScopedVector<SocketHandler> socket_handlers_;
+  std::vector<scoped_ptr<SocketHandler>> socket_handlers_;
 
   Delegate* delegate_;
 
@@ -122,14 +127,15 @@ class NET_EXPORT_PRIVATE MDnsClientImpl : public MDnsClient {
     bool Init(MDnsSocketFactory* socket_factory);
 
     // Send a query with a specific rrtype and name. Returns true on success.
-    bool SendQuery(uint16 rrtype, std::string name);
+    bool SendQuery(uint16_t rrtype, const std::string& name);
 
     // Add/remove a listener to the list of listeners.
     void AddListener(MDnsListenerImpl* listener);
     void RemoveListener(MDnsListenerImpl* listener);
 
     // Query the cache for records of a specific type and name.
-    void QueryCache(uint16 rrtype, const std::string& name,
+    void QueryCache(uint16_t rrtype,
+                    const std::string& name,
                     std::vector<const RecordParsed*>* records) const;
 
     // Parse the response and alert relevant listeners.
@@ -140,7 +146,7 @@ class NET_EXPORT_PRIVATE MDnsClientImpl : public MDnsClient {
    private:
     FRIEND_TEST_ALL_PREFIXES(MDnsTest, CacheCleanupWithShortTTL);
 
-    typedef std::pair<std::string, uint16> ListenerKey;
+    typedef std::pair<std::string, uint16_t> ListenerKey;
     typedef std::map<ListenerKey, base::ObserverList<MDnsListenerImpl>*>
         ListenerMap;
 
@@ -181,12 +187,12 @@ class NET_EXPORT_PRIVATE MDnsClientImpl : public MDnsClient {
 
   // MDnsClient implementation:
   scoped_ptr<MDnsListener> CreateListener(
-      uint16 rrtype,
+      uint16_t rrtype,
       const std::string& name,
       MDnsListener::Delegate* delegate) override;
 
   scoped_ptr<MDnsTransaction> CreateTransaction(
-      uint16 rrtype,
+      uint16_t rrtype,
       const std::string& name,
       int flags,
       const MDnsTransaction::ResultCallback& callback) override;
@@ -214,7 +220,7 @@ class NET_EXPORT_PRIVATE MDnsClientImpl : public MDnsClient {
 class MDnsListenerImpl : public MDnsListener,
                          public base::SupportsWeakPtr<MDnsListenerImpl> {
  public:
-  MDnsListenerImpl(uint16 rrtype,
+  MDnsListenerImpl(uint16_t rrtype,
                    const std::string& name,
                    base::Clock* clock,
                    MDnsListener::Delegate* delegate,
@@ -230,7 +236,7 @@ class MDnsListenerImpl : public MDnsListener,
 
   const std::string& GetName() const override;
 
-  uint16 GetType() const override;
+  uint16_t GetType() const override;
 
   MDnsListener::Delegate* delegate() { return delegate_; }
 
@@ -245,14 +251,14 @@ class MDnsListenerImpl : public MDnsListener,
   void ScheduleNextRefresh();
   void DoRefresh();
 
-  uint16 rrtype_;
+  uint16_t rrtype_;
   std::string name_;
   base::Clock* clock_;
   MDnsClientImpl* client_;
   MDnsListener::Delegate* delegate_;
 
   base::Time last_update_;
-  uint32 ttl_;
+  uint32_t ttl_;
   bool started_;
   bool active_refresh_;
 
@@ -264,7 +270,7 @@ class MDnsTransactionImpl : public base::SupportsWeakPtr<MDnsTransactionImpl>,
                             public MDnsTransaction,
                             public MDnsListener::Delegate {
  public:
-  MDnsTransactionImpl(uint16 rrtype,
+  MDnsTransactionImpl(uint16_t rrtype,
                       const std::string& name,
                       int flags,
                       const MDnsTransaction::ResultCallback& callback,
@@ -275,7 +281,7 @@ class MDnsTransactionImpl : public base::SupportsWeakPtr<MDnsTransactionImpl>,
   bool Start() override;
 
   const std::string& GetName() const override;
-  uint16 GetType() const override;
+  uint16_t GetType() const override;
 
   // MDnsListener::Delegate implementation:
   void OnRecordUpdate(MDnsListener::UpdateType update,
@@ -308,7 +314,7 @@ class MDnsTransactionImpl : public base::SupportsWeakPtr<MDnsTransactionImpl>,
   // or if it fails to send a query.
   bool QueryAndListen();
 
-  uint16 rrtype_;
+  uint16_t rrtype_;
   std::string name_;
   MDnsTransaction::ResultCallback callback_;
 

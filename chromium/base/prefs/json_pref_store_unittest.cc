@@ -4,10 +4,15 @@
 
 #include "base/prefs/json_pref_store.h"
 
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
@@ -73,12 +78,12 @@ void InterceptingPrefFilter::FilterOnLoad(
     const PostFilterOnLoadCallback& post_filter_on_load_callback,
     scoped_ptr<base::DictionaryValue> pref_store_contents) {
   post_filter_on_load_callback_ = post_filter_on_load_callback;
-  intercepted_prefs_ = pref_store_contents.Pass();
+  intercepted_prefs_ = std::move(pref_store_contents);
 }
 
 void InterceptingPrefFilter::ReleasePrefs() {
   EXPECT_FALSE(post_filter_on_load_callback_.is_null());
-  post_filter_on_load_callback_.Run(intercepted_prefs_.Pass(), false);
+  post_filter_on_load_callback_.Run(std::move(intercepted_prefs_), false);
   post_filter_on_load_callback_.Reset();
 }
 
@@ -228,7 +233,7 @@ void RunBasicJsonPrefStoreTest(JsonPrefStore* pref_store,
       WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS);
   EXPECT_TRUE(pref_store->GetValue(kLongIntPref, &actual));
   EXPECT_TRUE(actual->GetAsString(&string_value));
-  int64 value;
+  int64_t value;
   base::StringToInt64(string_value, &value);
   EXPECT_EQ(214748364842LL, value);
 
@@ -348,7 +353,7 @@ TEST_F(JsonPrefStoreTest, RemoveClearsEmptyParent) {
 
   scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue);
   dict->SetString("key", "value");
-  pref_store->SetValue("dict", dict.Pass(),
+  pref_store->SetValue("dict", std::move(dict),
                        WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS);
 
   pref_store->RemoveValue("dict.key",
@@ -392,8 +397,9 @@ TEST_F(JsonPrefStoreTest, ReadWithInterceptor) {
       new InterceptingPrefFilter());
   InterceptingPrefFilter* raw_intercepting_pref_filter_ =
       intercepting_pref_filter.get();
-  scoped_refptr<JsonPrefStore> pref_store = new JsonPrefStore(
-      input_file, message_loop_.task_runner(), intercepting_pref_filter.Pass());
+  scoped_refptr<JsonPrefStore> pref_store =
+      new JsonPrefStore(input_file, message_loop_.task_runner(),
+                        std::move(intercepting_pref_filter));
 
   ASSERT_EQ(PersistentPrefStore::PREF_READ_ERROR_ASYNCHRONOUS_TASK_INCOMPLETE,
             pref_store->ReadPrefs());
@@ -437,8 +443,9 @@ TEST_F(JsonPrefStoreTest, ReadAsyncWithInterceptor) {
       new InterceptingPrefFilter());
   InterceptingPrefFilter* raw_intercepting_pref_filter_ =
       intercepting_pref_filter.get();
-  scoped_refptr<JsonPrefStore> pref_store = new JsonPrefStore(
-      input_file, message_loop_.task_runner(), intercepting_pref_filter.Pass());
+  scoped_refptr<JsonPrefStore> pref_store =
+      new JsonPrefStore(input_file, message_loop_.task_runner(),
+                        std::move(intercepting_pref_filter));
 
   MockPrefStoreObserver mock_observer;
   pref_store->AddObserver(&mock_observer);
@@ -673,7 +680,7 @@ TEST_F(JsonPrefStoreTest, WriteCountHistogramTestBasic) {
       base::TimeDelta::FromSeconds(10),
       base::FilePath(FILE_PATH_LITERAL("/tmp/Local State")),
       scoped_ptr<base::Clock>(test_clock));
-  int32 report_interval =
+  int32_t report_interval =
       JsonPrefStore::WriteCountHistogram::kHistogramWriteReportIntervalMins;
 
   histogram.RecordWriteOccured();
@@ -697,7 +704,7 @@ TEST_F(JsonPrefStoreTest, WriteCountHistogramTestSinglePeriod) {
       base::TimeDelta::FromSeconds(10),
       base::FilePath(FILE_PATH_LITERAL("/tmp/Local State")),
       scoped_ptr<base::Clock>(test_clock));
-  int32 report_interval =
+  int32_t report_interval =
       JsonPrefStore::WriteCountHistogram::kHistogramWriteReportIntervalMins;
 
   histogram.RecordWriteOccured();
@@ -736,7 +743,7 @@ TEST_F(JsonPrefStoreTest, WriteCountHistogramTestMultiplePeriods) {
       base::TimeDelta::FromSeconds(10),
       base::FilePath(FILE_PATH_LITERAL("/tmp/Local State")),
       scoped_ptr<base::Clock>(test_clock));
-  int32 report_interval =
+  int32_t report_interval =
       JsonPrefStore::WriteCountHistogram::kHistogramWriteReportIntervalMins;
 
   histogram.RecordWriteOccured();
@@ -775,7 +782,7 @@ TEST_F(JsonPrefStoreTest, WriteCountHistogramTestPeriodWithGaps) {
       base::TimeDelta::FromSeconds(10),
       base::FilePath(FILE_PATH_LITERAL("/tmp/Local State")),
       scoped_ptr<base::Clock>(test_clock));
-  int32 report_interval =
+  int32_t report_interval =
       JsonPrefStore::WriteCountHistogram::kHistogramWriteReportIntervalMins;
 
   // 1 write in the first period.

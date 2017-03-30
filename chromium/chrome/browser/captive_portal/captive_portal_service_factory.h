@@ -5,8 +5,8 @@
 #ifndef CHROME_BROWSER_CAPTIVE_PORTAL_CAPTIVE_PORTAL_SERVICE_FACTORY_H_
 #define CHROME_BROWSER_CAPTIVE_PORTAL_CAPTIVE_PORTAL_SERVICE_FACTORY_H_
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
@@ -28,7 +28,7 @@ class CaptivePortalServiceFactory : public BrowserContextKeyedServiceFactory {
  private:
   friend class CaptivePortalBrowserTest;
   friend class CaptivePortalServiceTest;
-  friend struct DefaultSingletonTraits<CaptivePortalServiceFactory>;
+  friend struct base::DefaultSingletonTraits<CaptivePortalServiceFactory>;
 
   CaptivePortalServiceFactory();
   ~CaptivePortalServiceFactory() override;

@@ -20,6 +20,7 @@
 #include "ash/system/tray/hover_highlight_view.h"
 #include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/system_tray_delegate.h"
+#include "ash/system/tray/throbber_view.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_details_view.h"
 #include "ash/system/tray/tray_popup_header_button.h"
@@ -30,7 +31,9 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "chromeos/chromeos_switches.h"
+#include "chromeos/login/login_state.h"
 #include "chromeos/network/device_state.h"
+#include "chromeos/network/managed_network_configuration_handler.h"
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
 #include "grit/ash_resources.h"
@@ -47,14 +50,18 @@
 #include "ui/chromeos/network/network_list.h"
 #include "ui/chromeos/network/network_list_view_base.h"
 #include "ui/chromeos/resources/grit/ui_chromeos_resources.h"
+#include "ui/compositor/layer.h"
+#include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/views/bubble/bubble_delegate.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
+#include "ui/views/layout/layout_manager.h"
 #include "ui/views/widget/widget.h"
 
 using chromeos::DeviceState;
+using chromeos::LoginState;
 using chromeos::NetworkHandler;
 using chromeos::NetworkState;
 using chromeos::NetworkStateHandler;
@@ -89,6 +96,23 @@ views::View* CreateInfoBubbleLine(const base::string16& text_label,
   return view;
 }
 
+bool PolicyProhibitsUnmanaged() {
+  if (!LoginState::IsInitialized() || !LoginState::Get()->IsUserLoggedIn())
+    return false;
+  bool policy_prohibites_unmanaged = false;
+  const base::DictionaryValue* global_network_config =
+      NetworkHandler::Get()
+          ->managed_network_configuration_handler()
+          ->GetGlobalConfigFromPolicy(
+              std::string() /* no username hash, device policy */);
+  if (global_network_config) {
+    global_network_config->GetBooleanWithoutPathExpansion(
+        ::onc::global_network_config::kAllowOnlyPolicyNetworksToConnect,
+        &policy_prohibites_unmanaged);
+  }
+  return policy_prohibites_unmanaged;
+}
+
 }  // namespace
 
 //------------------------------------------------------------------------------
@@ -120,6 +144,109 @@ class NetworkStateListDetailedView::InfoBubble
 };
 
 //------------------------------------------------------------------------------
+
+// A throbber button that can also be clicked on.
+class ThrobberButton : public ThrobberView {
+ public:
+  explicit ThrobberButton(NetworkStateListDetailedView* owner)
+      : owner_(owner) {}
+  ~ThrobberButton() override {}
+
+  // views::View
+  bool OnMousePressed(const ui::MouseEvent& event) override {
+    return owner_->ThrobberPressed(this, event);
+  }
+
+ private:
+  NetworkStateListDetailedView* owner_;
+
+  DISALLOW_COPY_AND_ASSIGN(ThrobberButton);
+};
+
+//------------------------------------------------------------------------------
+
+const int kFadeIconMs = 500;
+
+// A TrayPopupHeaderButton that fades in/out when shown/hidden.
+class InfoIcon : public TrayPopupHeaderButton {
+ public:
+  explicit InfoIcon(views::ButtonListener* listener)
+      : TrayPopupHeaderButton(listener,
+                              IDR_AURA_UBER_TRAY_NETWORK_INFO,
+                              IDR_AURA_UBER_TRAY_NETWORK_INFO,
+                              IDR_AURA_UBER_TRAY_NETWORK_INFO_HOVER,
+                              IDR_AURA_UBER_TRAY_NETWORK_INFO_HOVER,
+                              IDS_ASH_STATUS_TRAY_NETWORK_INFO) {
+    SetPaintToLayer(true);
+    layer()->SetFillsBoundsOpaquely(false);
+    layer()->SetOpacity(1.0);
+  }
+  ~InfoIcon() override {}
+
+  // views::View
+  void SetVisible(bool visible) override {
+    layer()->GetAnimator()->StopAnimating();  // Stop any previous animation.
+    ui::ScopedLayerAnimationSettings animation(layer()->GetAnimator());
+    animation.SetTransitionDuration(
+        base::TimeDelta::FromMilliseconds(kFadeIconMs));
+    layer()->SetOpacity(visible ? 1.0 : 0.0);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(InfoIcon);
+};
+
+//------------------------------------------------------------------------------
+
+// Special layout to overlap the scanning throbber and the info button.
+class InfoThrobberLayout : public views::LayoutManager {
+ public:
+  InfoThrobberLayout() {}
+  ~InfoThrobberLayout() override {}
+
+  // views::LayoutManager
+  void Layout(views::View* host) override {
+    gfx::Size max_size(GetMaxChildSize(host));
+    // Center each child view within |max_size|.
+    for (int i = 0; i < host->child_count(); ++i) {
+      views::View* child = host->child_at(i);
+      if (!child->visible())
+        continue;
+      gfx::Size child_size = child->GetPreferredSize();
+      gfx::Point origin;
+      origin.set_x((max_size.width() - child_size.width()) / 2);
+      origin.set_y((max_size.height() - child_size.height()) / 2);
+      gfx::Rect bounds(origin, child_size);
+      bounds.Inset(-host->GetInsets());
+      child->SetBoundsRect(bounds);
+    }
+  }
+
+  gfx::Size GetPreferredSize(const views::View* host) const override {
+    gfx::Point origin;
+    gfx::Rect rect(origin, GetMaxChildSize(host));
+    rect.Inset(-host->GetInsets());
+    return rect.size();
+  }
+
+ private:
+  gfx::Size GetMaxChildSize(const views::View* host) const {
+    int width = 0, height = 0;
+    for (int i = 0; i < host->child_count(); ++i) {
+      const views::View* child = host->child_at(i);
+      if (!child->visible())
+        continue;
+      gfx::Size child_size = child->GetPreferredSize();
+      width = std::max(width, child_size.width());
+      height = std::max(height, child_size.width());
+    }
+    return gfx::Size(width, height);
+  }
+
+  DISALLOW_COPY_AND_ASSIGN(InfoThrobberLayout);
+};
+
+//------------------------------------------------------------------------------
 // NetworkStateListDetailedView
 
 NetworkStateListDetailedView::NetworkStateListDetailedView(
@@ -129,6 +256,7 @@ NetworkStateListDetailedView::NetworkStateListDetailedView(
     : NetworkDetailedView(owner),
       list_type_(list_type),
       login_(login),
+      wifi_scanning_(false),
       info_icon_(nullptr),
       button_wifi_(nullptr),
       button_mobile_(nullptr),
@@ -137,7 +265,8 @@ NetworkStateListDetailedView::NetworkStateListDetailedView(
       other_mobile_(nullptr),
       settings_(nullptr),
       proxy_settings_(nullptr),
-      info_bubble_(nullptr) {
+      info_bubble_(nullptr),
+      scanning_throbber_(nullptr) {
   if (list_type == LIST_TYPE_VPN) {
     // Use a specialized class to list VPNs.
     network_list_view_.reset(new VPNListView(this));
@@ -163,19 +292,19 @@ void NetworkStateListDetailedView::Update() {
 
 void NetworkStateListDetailedView::Init() {
   Reset();
-  info_icon_ = NULL;
-  button_wifi_ = NULL;
-  button_mobile_ = NULL;
-  other_wifi_ = NULL;
-  turn_on_wifi_ = NULL;
-  other_mobile_ = NULL;
-  settings_ = NULL;
-  proxy_settings_ = NULL;
+  info_icon_ = nullptr;
+  button_wifi_ = nullptr;
+  button_mobile_ = nullptr;
+  other_wifi_ = nullptr;
+  turn_on_wifi_ = nullptr;
+  other_mobile_ = nullptr;
+  settings_ = nullptr;
+  proxy_settings_ = nullptr;
+  scanning_throbber_ = nullptr;
 
   CreateScrollableList();
   CreateNetworkExtra();
   CreateHeaderEntry();
-  CreateHeaderButtons();
 
   network_list_view_->set_container(scroll_content());
   Update();
@@ -231,6 +360,14 @@ void NetworkStateListDetailedView::ButtonPressed(views::Button* sender,
   }
 }
 
+bool NetworkStateListDetailedView::ThrobberPressed(views::View* sender,
+                                                   const ui::Event& event) {
+  if (sender != scanning_throbber_)
+    return false;
+  ToggleInfoBubble();
+  return true;
+}
+
 void NetworkStateListDetailedView::OnViewClicked(views::View* sender) {
   // If the info bubble was visible, close it when some other item is clicked.
   ResetInfoBubble();
@@ -270,10 +407,10 @@ void NetworkStateListDetailedView::OnViewClicked(views::View* sender) {
 
 void NetworkStateListDetailedView::CreateHeaderEntry() {
   CreateSpecialRow(IDS_ASH_STATUS_TRAY_NETWORK, this);
-}
 
-void NetworkStateListDetailedView::CreateHeaderButtons() {
   if (list_type_ != LIST_TYPE_VPN) {
+    NetworkStateHandler* network_state_handler =
+        NetworkHandler::Get()->network_state_handler();
     button_wifi_ = new TrayPopupHeaderButton(
         this, IDR_AURA_UBER_TRAY_WIFI_ENABLED, IDR_AURA_UBER_TRAY_WIFI_DISABLED,
         IDR_AURA_UBER_TRAY_WIFI_ENABLED_HOVER,
@@ -283,6 +420,12 @@ void NetworkStateListDetailedView::CreateHeaderButtons() {
     button_wifi_->SetToggledTooltipText(
         l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_ENABLE_WIFI));
     footer()->AddButton(button_wifi_);
+    if (network_state_handler->IsTechnologyProhibited(
+            NetworkTypePattern::WiFi())) {
+      button_wifi_->SetState(views::Button::STATE_DISABLED);
+      button_wifi_->SetToggledTooltipText(l10n_util::GetStringUTF16(
+          IDS_ASH_STATUS_TRAY_NETWORK_TECHNOLOGY_ENFORCED_BY_POLICY));
+    }
 
     button_mobile_ =
         new TrayPopupHeaderButton(this, IDR_AURA_UBER_TRAY_CELLULAR_ENABLED,
@@ -294,16 +437,29 @@ void NetworkStateListDetailedView::CreateHeaderButtons() {
         l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_DISABLE_MOBILE));
     button_mobile_->SetToggledTooltipText(
         l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_ENABLE_MOBILE));
+    if (network_state_handler->IsTechnologyProhibited(
+            NetworkTypePattern::Cellular())) {
+      button_mobile_->SetState(views::Button::STATE_DISABLED);
+      button_mobile_->SetToggledTooltipText(l10n_util::GetStringUTF16(
+          IDS_ASH_STATUS_TRAY_NETWORK_TECHNOLOGY_ENFORCED_BY_POLICY));
+    }
     footer()->AddButton(button_mobile_);
   }
 
-  info_icon_ = new TrayPopupHeaderButton(
-      this, IDR_AURA_UBER_TRAY_NETWORK_INFO, IDR_AURA_UBER_TRAY_NETWORK_INFO,
-      IDR_AURA_UBER_TRAY_NETWORK_INFO_HOVER,
-      IDR_AURA_UBER_TRAY_NETWORK_INFO_HOVER, IDS_ASH_STATUS_TRAY_NETWORK_INFO);
-  info_icon_->SetTooltipText(
+  views::View* info_throbber_container = new views::View();
+  InfoThrobberLayout* info_throbber_layout = new InfoThrobberLayout;
+  info_throbber_container->SetLayoutManager(info_throbber_layout);
+  footer()->AddView(info_throbber_container, true /* add_separator */);
+
+  info_icon_ = new InfoIcon(this);
+  info_throbber_container->AddChildView(info_icon_);
+
+  scanning_throbber_ = new ThrobberButton(this);
+  // Since the throbber is added last, it will be "on top" of the info button,
+  // so it gets the info tooltip.
+  scanning_throbber_->SetTooltipText(
       l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_NETWORK_INFO));
-  footer()->AddButton(info_icon_);
+  info_throbber_container->AddChildView(scanning_throbber_);
 }
 
 void NetworkStateListDetailedView::CreateNetworkExtra() {
@@ -323,9 +479,20 @@ void NetworkStateListDetailedView::CreateNetworkExtra() {
     other_wifi_ = new TrayPopupLabelButton(
         this, rb.GetLocalizedString(IDS_ASH_STATUS_TRAY_OTHER_WIFI));
     bottom_row->AddChildView(other_wifi_);
+    if (PolicyProhibitsUnmanaged()) {
+      other_wifi_->SetEnabled(false);
+      other_wifi_->SetTooltipText(l10n_util::GetStringUTF16(
+          IDS_ASH_STATUS_TRAY_NETWORK_PROHIBITED_OTHER));
+    }
 
     turn_on_wifi_ = new TrayPopupLabelButton(
         this, rb.GetLocalizedString(IDS_ASH_STATUS_TRAY_TURN_ON_WIFI));
+    if (NetworkHandler::Get()->network_state_handler()->IsTechnologyProhibited(
+            NetworkTypePattern::WiFi())) {
+      turn_on_wifi_->SetState(views::Button::STATE_DISABLED);
+      turn_on_wifi_->SetTooltipText(l10n_util::GetStringUTF16(
+          IDS_ASH_STATUS_TRAY_NETWORK_TECHNOLOGY_ENFORCED_BY_POLICY));
+    }
     bottom_row->AddChildView(turn_on_wifi_);
 
     other_mobile_ = new TrayPopupLabelButton(
@@ -335,7 +502,7 @@ void NetworkStateListDetailedView::CreateNetworkExtra() {
 
   CreateSettingsEntry();
 
-  // Both settings_ and proxy_settings_ can be NULL. This happens when
+  // Both settings_ and proxy_settings_ can be null. This happens when
   // we're logged in but showing settings page is not enabled.
   // Example: supervised user creation flow where user session is active
   // but all action happens on the login window.
@@ -357,7 +524,26 @@ void NetworkStateListDetailedView::UpdateHeaderButtons() {
     UpdateTechnologyButton(button_mobile_, NetworkTypePattern::Mobile());
   }
   if (proxy_settings_)
-    proxy_settings_->SetEnabled(handler->DefaultNetwork() != NULL);
+    proxy_settings_->SetEnabled(handler->DefaultNetwork() != nullptr);
+
+  // Update Wifi Scanning throbber.
+  bool scanning =
+      NetworkHandler::Get()->network_state_handler()->GetScanningByType(
+          NetworkTypePattern::WiFi());
+  if (scanning != wifi_scanning_) {
+    wifi_scanning_ = scanning;
+    if (scanning) {
+      info_icon_->SetVisible(false);
+      scanning_throbber_->Start();
+      scanning_throbber_->SetTooltipText(
+          l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_WIFI_SCANNING_MESSAGE));
+    } else {
+      scanning_throbber_->Stop();
+      scanning_throbber_->SetTooltipText(
+          l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_NETWORK_INFO));
+      info_icon_->SetVisible(true);
+    }
+  }
 
   static_cast<views::View*>(footer())->Layout();
 }
@@ -404,7 +590,7 @@ void NetworkStateListDetailedView::UpdateNetworkExtra() {
   if (login_ == user::LOGGED_IN_LOCKED)
     return;
 
-  View* layout_parent = NULL;  // All these buttons have the same parent.
+  View* layout_parent = nullptr;  // All these buttons have the same parent.
   NetworkStateHandler* handler = NetworkHandler::Get()->network_state_handler();
   if (other_wifi_) {
     DCHECK(turn_on_wifi_);
@@ -491,22 +677,27 @@ bool NetworkStateListDetailedView::ResetInfoBubble() {
   if (!info_bubble_)
     return false;
   info_bubble_->GetWidget()->Close();
-  info_bubble_ = NULL;
+  info_bubble_ = nullptr;
   return true;
 }
 
 void NetworkStateListDetailedView::OnInfoBubbleDestroyed() {
-  info_bubble_ = NULL;
+  info_bubble_ = nullptr;
 }
 
 views::View* NetworkStateListDetailedView::CreateNetworkInfoView() {
   ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
   NetworkStateHandler* handler = NetworkHandler::Get()->network_state_handler();
 
-  std::string ip_address("0.0.0.0");
+  std::string ip_address, ipv6_address;
   const NetworkState* network = handler->DefaultNetwork();
-  if (network)
-    ip_address = network->ip_address();
+  if (network) {
+    const DeviceState* device = handler->GetDeviceState(network->device_path());
+    if (device) {
+      ip_address = device->GetIpAddressByType(shill::kTypeIPv4);
+      ipv6_address = device->GetIpAddressByType(shill::kTypeIPv6);
+    }
+  }
 
   views::View* container = new views::View;
   container->SetLayoutManager(
@@ -527,6 +718,10 @@ views::View* NetworkStateListDetailedView::CreateNetworkInfoView() {
   if (!ip_address.empty()) {
     container->AddChildView(CreateInfoBubbleLine(
         bundle.GetLocalizedString(IDS_ASH_STATUS_TRAY_IP), ip_address));
+  }
+  if (!ipv6_address.empty()) {
+    container->AddChildView(CreateInfoBubbleLine(
+        bundle.GetLocalizedString(IDS_ASH_STATUS_TRAY_IPV6), ipv6_address));
   }
   if (!ethernet_address.empty()) {
     container->AddChildView(CreateInfoBubbleLine(
@@ -615,6 +810,7 @@ views::View* NetworkStateListDetailedView::CreateViewForNetwork(
   view->SetBorder(
       views::Border::CreateEmptyBorder(0, kTrayPopupPaddingHorizontal, 0, 0));
   views::View* controlled_icon = CreateControlledByExtensionView(info);
+  view->set_tooltip(info.tooltip);
   if (controlled_icon)
     view->AddChildView(controlled_icon);
   return view;
@@ -635,6 +831,7 @@ void NetworkStateListDetailedView::UpdateViewForNetwork(
   HoverHighlightView* highlight = static_cast<HoverHighlightView*>(view);
   highlight->AddIconAndLabel(info.image, info.label, info.highlight);
   views::View* controlled_icon = CreateControlledByExtensionView(info);
+  highlight->set_tooltip(info.tooltip);
   if (controlled_icon)
     view->AddChildView(controlled_icon);
 }

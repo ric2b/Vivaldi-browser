@@ -7,8 +7,8 @@
 
 #include <map>
 
-#include "base/basictypes.h"
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "content/public/browser/devtools_agent_host.h"
 
@@ -42,7 +42,7 @@ class CONTENT_EXPORT SharedWorkerDevToolsManager {
   void RemoveInspectedWorkerData(WorkerId id);
 
  private:
-  friend struct DefaultSingletonTraits<SharedWorkerDevToolsManager>;
+  friend struct base::DefaultSingletonTraits<SharedWorkerDevToolsManager>;
   friend class SharedWorkerDevToolsAgentHost;
   friend class SharedWorkerDevToolsManagerTest;
   FRIEND_TEST_ALL_PREFIXES(SharedWorkerDevToolsManagerTest, BasicTest);

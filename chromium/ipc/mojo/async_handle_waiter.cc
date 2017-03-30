@@ -9,6 +9,7 @@
 #include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "third_party/mojo/src/mojo/edk/embedder/embedder.h"
 
 namespace IPC {
@@ -86,6 +87,11 @@ class AsyncHandleWaiter::Context
   }
 
   void DidProcessIOEvent() override {
+    // This object could have been constructed in another's class's
+    // DidProcessIOEvent.
+    if (io_loop_level_== 0)
+      return;
+
     DCHECK_GE(io_loop_level_, 1);
 
     // Leaving a nested loop.

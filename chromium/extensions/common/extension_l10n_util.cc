@@ -4,11 +4,14 @@
 
 #include "extensions/common/extension_l10n_util.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <set>
 #include <string>
 #include <vector>
 
+#include "app/vivaldi_apptools.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/json/json_file_value_serializer.h"
@@ -39,7 +42,8 @@ base::DictionaryValue* LoadMessageFile(const base::FilePath& locale_path,
   base::FilePath file =
       locale_path.AppendASCII(locale).Append(extensions::kMessagesFilename);
   JSONFileValueDeserializer messages_deserializer(file);
-  base::Value* dictionary = messages_deserializer.Deserialize(NULL, error);
+  scoped_ptr<base::DictionaryValue> dictionary = base::DictionaryValue::From(
+      messages_deserializer.Deserialize(NULL, error));
   if (!dictionary) {
     if (error->empty()) {
       // JSONFileValueSerializer just returns NULL if file cannot be found. It
@@ -54,7 +58,7 @@ base::DictionaryValue* LoadMessageFile(const base::FilePath& locale_path,
     }
   }
 
-  return static_cast<base::DictionaryValue*>(dictionary);
+  return dictionary.release();
 }
 
 // Localizes manifest value of string type for a given key.
@@ -285,23 +289,8 @@ bool AddLocale(const std::set<std::string>& chrome_locales,
   // locales.
   if (locale_name.find(".") == 0)
     return true;
-  if (chrome_locales.find(locale_name) == chrome_locales.end()
-// Need to update this when adding languages to Vivaldi that are 'unsupported'
-// in Chromium.
-// Keep this list in sync with ui/base/resource/resource_bundle.cc
-      && locale_name != "be"
-      && locale_name != "eo"
-      && locale_name != "fy"
-      && locale_name != "gl"
-      && locale_name != "hy"
-      && locale_name != "io"
-      && locale_name != "is"
-      && locale_name != "jbo"
-      && locale_name != "ku"
-      && locale_name != "mk"
-      && locale_name != "sq"
-      && locale_name != "nn"
-     ) {
+  if (chrome_locales.find(locale_name) == chrome_locales.end() &&
+       !vivaldi::IsVivaldiExtraLocale(locale_name)) {
     // Warn if there is an extension locale that's not in the Chrome list,
     // but don't fail.
     DLOG(WARNING) << base::StringPrintf("Supplied locale %s is not supported.",
@@ -367,6 +356,7 @@ bool GetValidLocales(const base::FilePath& locale_path,
     }
     if (!AddLocale(
             chrome_locales, locale_folder, locale_name, valid_locales, error)) {
+      valid_locales->clear();
       return false;
     }
   }
@@ -383,7 +373,6 @@ extensions::MessageBundle* LoadMessageCatalogs(
     const base::FilePath& locale_path,
     const std::string& default_locale,
     const std::string& application_locale,
-    const std::set<std::string>& valid_locales,
     std::string* error) {
   std::vector<std::string> all_fallback_locales;
   GetAllFallbackLocales(
@@ -392,7 +381,9 @@ extensions::MessageBundle* LoadMessageCatalogs(
   std::vector<linked_ptr<base::DictionaryValue> > catalogs;
   for (size_t i = 0; i < all_fallback_locales.size(); ++i) {
     // Skip all parent locales that are not supplied.
-    if (valid_locales.find(all_fallback_locales[i]) == valid_locales.end())
+    base::FilePath this_locale_path =
+        locale_path.AppendASCII(all_fallback_locales[i]);
+    if (!base::PathExists(this_locale_path))
       continue;
     linked_ptr<base::DictionaryValue> catalog(
         LoadMessageFile(locale_path, all_fallback_locales[i], error));

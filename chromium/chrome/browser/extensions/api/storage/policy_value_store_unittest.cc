@@ -7,11 +7,13 @@
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "components/policy/core/common/external_data_fetcher.h"
 #include "components/policy/core/common/policy_map.h"
+#include "components/policy/core/common/policy_types.h"
 #include "content/public/test/test_browser_thread.h"
 #include "extensions/browser/api/storage/settings_observer.h"
 #include "extensions/browser/value_store/leveldb_value_store.h"
@@ -27,6 +29,7 @@ namespace extensions {
 namespace {
 
 const char kTestExtensionId[] = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const char kDatabaseUMAClientName[] = "Test";
 
 class MockSettingsObserver : public SettingsObserver {
  public:
@@ -42,9 +45,11 @@ class MockSettingsObserver : public SettingsObserver {
 class MutablePolicyValueStore : public PolicyValueStore {
  public:
   explicit MutablePolicyValueStore(const base::FilePath& path)
-      : PolicyValueStore(kTestExtensionId,
-                         make_scoped_refptr(new SettingsObserverList()),
-                         scoped_ptr<ValueStore>(new LeveldbValueStore(path))) {}
+      : PolicyValueStore(
+            kTestExtensionId,
+            make_scoped_refptr(new SettingsObserverList()),
+            make_scoped_ptr(
+                new LeveldbValueStore(kDatabaseUMAClientName, path))) {}
   ~MutablePolicyValueStore() override {}
 
   WriteResult Set(WriteOptions options,
@@ -94,10 +99,9 @@ class PolicyValueStoreTest : public testing::Test {
     observers_ = new SettingsObserverList();
     observers_->AddObserver(&observer_);
     store_.reset(new PolicyValueStore(
-        kTestExtensionId,
-        observers_,
-        scoped_ptr<ValueStore>(
-            new LeveldbValueStore(scoped_temp_dir_.path()))));
+        kTestExtensionId, observers_,
+        make_scoped_ptr(new LeveldbValueStore(kDatabaseUMAClientName,
+                                              scoped_temp_dir_.path()))));
   }
 
   void TearDown() override {
@@ -118,13 +122,14 @@ TEST_F(PolicyValueStoreTest, DontProvideRecommendedPolicies) {
   policy::PolicyMap policies;
   base::FundamentalValue expected(123);
   policies.Set("must", policy::POLICY_LEVEL_MANDATORY,
-               policy::POLICY_SCOPE_USER, expected.DeepCopy(), NULL);
+               policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
+               expected.DeepCopy(), nullptr);
   policies.Set("may", policy::POLICY_LEVEL_RECOMMENDED,
-               policy::POLICY_SCOPE_USER,
+               policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
                new base::FundamentalValue(456), NULL);
   store_->SetCurrentPolicy(policies);
   ValueStore::ReadResult result = store_->Get();
-  ASSERT_FALSE(result->HasError());
+  ASSERT_TRUE(result->status().ok());
   EXPECT_EQ(1u, result->settings().size());
   base::Value* value = NULL;
   EXPECT_FALSE(result->settings().Get("may", &value));
@@ -136,17 +141,17 @@ TEST_F(PolicyValueStoreTest, ReadOnly) {
   ValueStore::WriteOptions options = ValueStore::DEFAULTS;
 
   base::StringValue string_value("value");
-  EXPECT_TRUE(store_->Set(options, "key", string_value)->HasError());
+  EXPECT_FALSE(store_->Set(options, "key", string_value)->status().ok());
 
   base::DictionaryValue dict;
   dict.SetString("key", "value");
-  EXPECT_TRUE(store_->Set(options, dict)->HasError());
+  EXPECT_FALSE(store_->Set(options, dict)->status().ok());
 
-  EXPECT_TRUE(store_->Remove("key")->HasError());
+  EXPECT_FALSE(store_->Remove("key")->status().ok());
   std::vector<std::string> keys;
   keys.push_back("key");
-  EXPECT_TRUE(store_->Remove(keys)->HasError());
-  EXPECT_TRUE(store_->Clear()->HasError());
+  EXPECT_FALSE(store_->Remove(keys)->status().ok());
+  EXPECT_FALSE(store_->Clear()->status().ok());
 }
 
 TEST_F(PolicyValueStoreTest, NotifyOnChanges) {
@@ -163,7 +168,7 @@ TEST_F(PolicyValueStoreTest, NotifyOnChanges) {
 
   policy::PolicyMap policies;
   policies.Set("aaa", policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
-               value.DeepCopy(), NULL);
+               policy::POLICY_SOURCE_CLOUD, value.DeepCopy(), nullptr);
   store_->SetCurrentPolicy(policies);
   loop_.RunUntilIdle();
   Mock::VerifyAndClearExpectations(&observer_);
@@ -179,7 +184,7 @@ TEST_F(PolicyValueStoreTest, NotifyOnChanges) {
   }
 
   policies.Set("bbb", policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
-               value.DeepCopy(), NULL);
+               policy::POLICY_SOURCE_CLOUD, value.DeepCopy(), nullptr);
   store_->SetCurrentPolicy(policies);
   loop_.RunUntilIdle();
   Mock::VerifyAndClearExpectations(&observer_);
@@ -197,7 +202,7 @@ TEST_F(PolicyValueStoreTest, NotifyOnChanges) {
   }
 
   policies.Set("bbb", policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
-               new_value.DeepCopy(), NULL);
+               policy::POLICY_SOURCE_CLOUD, new_value.DeepCopy(), nullptr);
   store_->SetCurrentPolicy(policies);
   loop_.RunUntilIdle();
   Mock::VerifyAndClearExpectations(&observer_);

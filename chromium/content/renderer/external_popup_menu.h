@@ -7,7 +7,8 @@
 
 #include <vector>
 
-#include "base/basictypes.h"
+#include "base/macros.h"
+#include "build/build_config.h"
 #include "third_party/WebKit/public/web/WebExternalPopupMenu.h"
 #include "third_party/WebKit/public/web/WebPopupMenuInfo.h"
 #include "ui/gfx/geometry/point_f.h"
@@ -42,8 +43,8 @@ class ExternalPopupMenu : public blink::WebExternalPopupMenu {
 #endif
 
   // blink::WebExternalPopupMenu implementation:
-  virtual void show(const blink::WebRect& bounds);
-  virtual void close();
+  void show(const blink::WebRect& bounds) override;
+  void close() override;
 
  private:
   RenderFrameImpl* render_frame_;

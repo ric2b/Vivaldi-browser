@@ -4,6 +4,8 @@
 
 #include "chrome/test/chromedriver/commands.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <list>
 #include <utility>
@@ -89,7 +91,7 @@ void OnGetSession(const base::WeakPtr<size_t>& session_remaining_count,
   (*session_remaining_count)--;
 
   scoped_ptr<base::DictionaryValue> session(new base::DictionaryValue());
-  session->Set("sessionId", new base::StringValue(session_id));
+  session->Set("id", new base::StringValue(session_id));
   session->Set("capabilities", value->DeepCopy());
   session_list->Append(session.release());
 
@@ -111,7 +113,7 @@ void ExecuteGetSessions(const Command& session_capabilities_command,
   scoped_ptr<base::ListValue> session_list(new base::ListValue());
 
   if (!get_remaining_count) {
-    callback.Run(Status(kOk), session_list.Pass(), session_id);
+    callback.Run(Status(kOk), std::move(session_list), session_id);
     return;
   }
 
@@ -133,7 +135,7 @@ void ExecuteGetSessions(const Command& session_capabilities_command,
   base::MessageLoop::current()->SetNestableTasksAllowed(true);
   run_loop.Run();
 
-  callback.Run(Status(kOk), session_list.Pass(), session_id);
+  callback.Run(Status(kOk), std::move(session_list), session_id);
 }
 
 namespace {

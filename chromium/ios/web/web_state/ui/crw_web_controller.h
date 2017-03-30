@@ -9,9 +9,9 @@
 
 #include "base/memory/scoped_ptr.h"
 #import "ios/web/net/crw_request_tracker_delegate.h"
-#import "ios/web/public/web_state/crw_web_delegate.h"
 #import "ios/web/public/web_state/crw_web_user_interface_delegate.h"
 #import "ios/web/public/web_state/js/crw_js_injection_evaluator.h"
+#import "ios/web/public/web_state/ui/crw_web_delegate.h"
 #include "ios/web/public/web_state/url_verification_constants.h"
 #import "ios/web/web_state/ui/crw_touch_tracking_recognizer.h"
 
@@ -185,12 +185,6 @@ class WebStateImpl;
 
 // Loads the URL indicated by current session state.
 - (void)loadCurrentURL;
-// Updates UIWebView's URL and urlOnStartLoading_ during back/forward navigation
-// over pushed URLs. Needed so that sites that depend on URL params/fragment
-// continue to work correctly and checks for the URL don't incorrectly trigger
-// -pageChanged calls.
-- (void)finishPushStateNavigationToURL:(const GURL&)url
-                       withStateObject:(NSString*)stateObject;
 // Loads the HTML into the page.
 - (void)loadHTML:(NSString*)html;
 // Loads HTML in the page and presents it as if it was originating from an
@@ -228,6 +222,12 @@ class WebStateImpl;
 - (void)requirePageReconstruction;
 
 - (void)reinitializeWebViewAndReload:(BOOL)reload;
+
+// Requires that the next display reload the page, using a placeholder while
+// loading. This could be used, e.g., to handle a crash in a WebController that
+// is not currently visible.
+// TODO(stuartmorgan): When revisiting the methods above, revisit this as well.
+- (void)requirePageReload;
 
 // Sets the closed property to true for the child window with the given name.
 - (void)childWindowClosed:(NSString*)windowName;
@@ -300,8 +300,8 @@ class WebStateImpl;
 - (void)restoreStateAfterURLRejection;
 
 // Helper method called at the end of history navigation methods goBack,
-// goForward, and goDelta. Determines whether to load a new URL or call
-// |finishPushStateNavigationToURL:withStateObject:|. |fromEntry| is the
+// goForward, and goDelta.  Loads a new URL if the current entry is not from a
+// pushState() navigation from |fromEntry|. |fromEntry| is the
 // CRWSessionEntry that was the current entry prior to the navigation.
 // TODO(rohitrao): This is only exposed so Tab can call it temporarily.  Remove
 // as soon as all the Tab calls have moved into CRWWebController.

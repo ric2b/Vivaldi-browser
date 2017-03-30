@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <string>
 #include <utility>
 #include <vector>
@@ -22,38 +25,36 @@
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/invalidation/fake_invalidation_service.h"
 #include "chrome/browser/invalidation/profile_invalidation_provider_factory.h"
-#include "chrome/browser/prefs/pref_service_syncable.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
-#include "chrome/browser/signin/fake_profile_oauth2_token_service.h"
 #include "chrome/browser/signin/fake_profile_oauth2_token_service_builder.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/sync/abstract_profile_sync_service_test.h"
-#include "chrome/browser/sync/glue/sync_backend_host.h"
-#include "chrome/browser/sync/glue/typed_url_change_processor.h"
-#include "chrome/browser/sync/glue/typed_url_data_type_controller.h"
-#include "chrome/browser/sync/glue/typed_url_model_associator.h"
-#include "chrome/browser/sync/profile_sync_components_factory.h"
-#include "chrome/browser/sync/profile_sync_components_factory_mock.h"
-#include "chrome/browser/sync/profile_sync_service.h"
+#include "chrome/browser/sync/chrome_sync_client.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/profile_sync_test_util.h"
 #include "chrome/browser/sync/test_profile_sync_service.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/history/core/browser/history_backend.h"
 #include "components/history/core/browser/history_backend_client.h"
 #include "components/history/core/browser/history_backend_notifier.h"
 #include "components/history/core/browser/history_db_task.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_types.h"
+#include "components/history/core/browser/typed_url_data_type_controller.h"
 #include "components/invalidation/impl/profile_invalidation_provider.h"
 #include "components/invalidation/public/invalidation_service.h"
 #include "components/keyed_service/core/refcounted_keyed_service.h"
 #include "components/signin/core/browser/account_tracker_service.h"
+#include "components/signin/core/browser/fake_profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/sync_driver/data_type_error_handler_mock.h"
+#include "components/sync_driver/sync_api_component_factory_mock.h"
+#include "components/syncable_prefs/pref_service_syncable.h"
 #include "content/public/browser/notification_service.h"
 #include "google_apis/gaia/gaia_constants.h"
 #include "sync/internal_api/public/read_node.h"
@@ -66,11 +67,10 @@
 
 using base::Thread;
 using base::Time;
-using browser_sync::TypedUrlChangeProcessor;
 using browser_sync::TypedUrlDataTypeController;
-using browser_sync::TypedUrlModelAssociator;
 using history::HistoryBackend;
 using history::HistoryBackendNotifier;
+using history::TypedUrlSyncableService;
 using history::URLID;
 using history::URLRow;
 using syncer::syncable::WriteTransaction;
@@ -136,6 +136,8 @@ class HistoryServiceMock : public history::HistoryService {
 
   MOCK_METHOD0(Shutdown, void());
 
+  MOCK_CONST_METHOD0(GetTypedUrlSyncableService, TypedUrlSyncableService*());
+
   void ShutdownBaseService() { history::HistoryService::Shutdown(); }
 
   void set_task_runner(
@@ -170,13 +172,21 @@ scoped_ptr<KeyedService> BuildHistoryService(content::BrowserContext* profile) {
   return scoped_ptr<KeyedService>(new HistoryServiceMock);
 }
 
-class TestTypedUrlModelAssociator : public TypedUrlModelAssociator {
+class TestTypedUrlSyncableService : public TypedUrlSyncableService {
+  // TODO(gangwu): remove TestProfileSyncService or even remove whole test
+  // suite, and make sure typed_url_syncable_service_unittest.cc and the various
+  // typed url integration tests.
  public:
-  TestTypedUrlModelAssociator(
-      ProfileSyncService* sync_service,
-      history::HistoryBackend* history_backend,
-      sync_driver::DataTypeErrorHandler* error_handler) :
-      TypedUrlModelAssociator(sync_service, history_backend, error_handler) {}
+  TestTypedUrlSyncableService(history::HistoryBackend* history_backend)
+      : TypedUrlSyncableService(history_backend) {}
+
+  static void WriteToSyncNode(const history::URLRow& url,
+                              const history::VisitVector& visits,
+                              syncer::WriteNode* node) {
+    sync_pb::TypedUrlSpecifics typed_url;
+    WriteToTypedUrlSpecifics(url, visits, &typed_url);
+    node->SetTypedUrlSpecifics(typed_url);
+  }
 
  protected:
   // Don't clear error stats - that way we can verify their values in our
@@ -189,19 +199,9 @@ ACTION_P2(ShutdownHistoryService, thread, service) {
   delete thread;
 }
 
-ACTION_P6(MakeTypedUrlSyncComponents,
-              profile,
-              service,
-              hb,
-              dtc,
-              error_handler,
-              model_associator) {
-  *model_associator =
-      new TestTypedUrlModelAssociator(service, hb, error_handler);
-  TypedUrlChangeProcessor* change_processor =
-      new TypedUrlChangeProcessor(profile, *model_associator, hb, dtc);
-  return ProfileSyncComponentsFactory::SyncComponents(*model_associator,
-                                                      change_processor);
+ACTION_P2(ReturnTypedUrlSyncableService, hb, syncable_service) {
+  syncable_service->reset(new TestTypedUrlSyncableService(hb));
+  return syncable_service->get();
 }
 
 class ProfileSyncServiceTypedUrlTest : public AbstractProfileSyncServiceTest {
@@ -209,16 +209,13 @@ class ProfileSyncServiceTypedUrlTest : public AbstractProfileSyncServiceTest {
   void AddTypedUrlSyncNode(const history::URLRow& url,
                            const history::VisitVector& visits) {
     syncer::WriteTransaction trans(FROM_HERE, sync_service_->GetUserShare());
-    syncer::ReadNode typed_url_root(&trans);
-    ASSERT_EQ(syncer::BaseNode::INIT_OK,
-              typed_url_root.InitTypeRoot(syncer::TYPED_URLS));
 
     syncer::WriteNode node(&trans);
     std::string tag = url.url().spec();
     syncer::WriteNode::InitUniqueByCreationResult result =
-        node.InitUniqueByCreation(syncer::TYPED_URLS, typed_url_root, tag);
+        node.InitUniqueByCreation(syncer::TYPED_URLS, tag);
     ASSERT_EQ(syncer::WriteNode::INIT_SUCCESS, result);
-    TypedUrlModelAssociator::WriteToSyncNode(url, visits, &node);
+    TestTypedUrlSyncableService::WriteToSyncNode(url, visits, &node);
   }
 
  protected:
@@ -236,7 +233,7 @@ class ProfileSyncServiceTypedUrlTest : public AbstractProfileSyncServiceTest {
         BuildAutoIssuingFakeProfileOAuth2TokenService));
     profile_ = profile_manager_.CreateTestingProfile(
         kTestProfileName,
-        scoped_ptr<PrefServiceSyncable>(),
+        scoped_ptr<syncable_prefs::PrefServiceSyncable>(),
         base::UTF8ToUTF16(kTestProfileName),
         0,
         std::string(),
@@ -261,8 +258,7 @@ class ProfileSyncServiceTypedUrlTest : public AbstractProfileSyncServiceTest {
     AbstractProfileSyncServiceTest::TearDown();
   }
 
-  TypedUrlModelAssociator* StartSyncService(const base::Closure& callback) {
-    TypedUrlModelAssociator* model_associator = NULL;
+  TypedUrlSyncableService* StartSyncService(const base::Closure& callback) {
     if (!sync_service_) {
       std::string account_id =
             AccountTrackerServiceFactory::GetForProfile(profile_)
@@ -271,20 +267,18 @@ class ProfileSyncServiceTypedUrlTest : public AbstractProfileSyncServiceTest {
       signin->SetAuthenticatedAccountInfo("gaia_id", "test");
       sync_service_ = TestProfileSyncService::BuildAutoStartAsyncInit(profile_,
                                                                       callback);
-      ProfileSyncComponentsFactoryMock* components =
-          sync_service_->components_factory_mock();
-      TypedUrlDataTypeController* data_type_controller =
-          new TypedUrlDataTypeController(components, profile_, sync_service_);
+      data_type_controller = new TypedUrlDataTypeController(
+          base::ThreadTaskRunnerHandle::Get(), base::Bind(&base::DoNothing),
+          sync_service_->GetSyncClient(), prefs::kSavingBrowserHistoryDisabled);
+      SyncApiComponentFactoryMock* components =
+          sync_service_->GetSyncApiComponentFactoryMock();
 
-      EXPECT_CALL(*components, CreateTypedUrlSyncComponents(_, _, _)).
-          WillOnce(MakeTypedUrlSyncComponents(profile_,
-                                              sync_service_,
-                                              history_backend_.get(),
-                                              data_type_controller,
-                                              &error_handler_,
-                                              &model_associator));
       EXPECT_CALL(*components, CreateDataTypeManager(_, _, _, _, _)).
           WillOnce(ReturnNewDataTypeManager());
+
+      EXPECT_CALL(*history_service_, GetTypedUrlSyncableService())
+          .WillOnce(ReturnTypedUrlSyncableService(history_backend_.get(),
+                                                  &syncable_service_));
 
       ProfileOAuth2TokenService* oauth2_token_service =
           ProfileOAuth2TokenServiceFactory::GetForProfile(profile_);
@@ -295,7 +289,7 @@ class ProfileSyncServiceTypedUrlTest : public AbstractProfileSyncServiceTest {
       sync_service_->Initialize();
       base::MessageLoop::current()->Run();
     }
-    return model_associator;
+    return syncable_service_.get();
   }
 
   void GetTypedUrlsFromSyncDB(history::URLRows* urls) {
@@ -306,7 +300,7 @@ class ProfileSyncServiceTypedUrlTest : public AbstractProfileSyncServiceTest {
         syncer::BaseNode::INIT_OK)
       return;
 
-    int64 child_id = typed_url_root.GetFirstChildId();
+    int64_t child_id = typed_url_root.GetFirstChildId();
     while (child_id != syncer::kInvalidId) {
       syncer::ReadNode child_node(&trans);
       if (child_node.InitByIdLookup(child_id) != syncer::BaseNode::INIT_OK)
@@ -373,7 +367,8 @@ class ProfileSyncServiceTypedUrlTest : public AbstractProfileSyncServiceTest {
                                 favicon_urls));
   }
 
-  static bool URLsEqual(history::URLRow& lhs, history::URLRow& rhs) {
+  static bool URLsEqual(const history::URLRow& lhs,
+                        const history::URLRow& rhs) {
     // Only verify the fields we explicitly sync (i.e. don't verify typed_count
     // or visit_count because we rely on the history DB to manage those values
     // and they are left unchanged by HistoryBackendMock).
@@ -386,7 +381,7 @@ class ProfileSyncServiceTypedUrlTest : public AbstractProfileSyncServiceTest {
   static history::URLRow MakeTypedUrlEntry(const char* url,
                                            const char* title,
                                            int typed_count,
-                                           int64 last_visit,
+                                           int64_t last_visit,
                                            bool hidden,
                                            history::VisitVector* visits) {
     // Give each URL a unique ID, to mimic the behavior of the real database.
@@ -411,6 +406,8 @@ class ProfileSyncServiceTypedUrlTest : public AbstractProfileSyncServiceTest {
   scoped_refptr<HistoryBackendMock> history_backend_;
   HistoryServiceMock* history_service_;
   sync_driver::DataTypeErrorHandlerMock error_handler_;
+  TypedUrlDataTypeController* data_type_controller;
+  scoped_ptr<TestTypedUrlSyncableService> syncable_service_;
 };
 
 void AddTypedUrlEntries(ProfileSyncServiceTypedUrlTest* test,
@@ -425,19 +422,19 @@ void AddTypedUrlEntries(ProfileSyncServiceTypedUrlTest* test,
   }
 }
 
-} // namespace
+}  // namespace
 
 TEST_F(ProfileSyncServiceTypedUrlTest, EmptyNativeEmptySync) {
   EXPECT_CALL((*history_backend_.get()), GetAllTypedURLs(_)).
       WillOnce(Return(true));
   SetIdleChangeProcessorExpectations();
   CreateRootHelper create_root(this, syncer::TYPED_URLS);
-  TypedUrlModelAssociator* associator =
+  TypedUrlSyncableService* syncable_service =
       StartSyncService(create_root.callback());
   history::URLRows sync_entries;
   GetTypedUrlsFromSyncDB(&sync_entries);
   EXPECT_EQ(0U, sync_entries.size());
-  ASSERT_EQ(0, associator->GetErrorPercentage());
+  ASSERT_EQ(0, syncable_service->GetErrorPercentage());
 }
 
 TEST_F(ProfileSyncServiceTypedUrlTest, HasNativeEmptySync) {
@@ -452,13 +449,13 @@ TEST_F(ProfileSyncServiceTypedUrlTest, HasNativeEmptySync) {
       WillRepeatedly(DoAll(SetArgumentPointee<2>(visits), Return(true)));
   SetIdleChangeProcessorExpectations();
   CreateRootHelper create_root(this, syncer::TYPED_URLS);
-  TypedUrlModelAssociator* associator =
+  TypedUrlSyncableService* syncable_service =
       StartSyncService(create_root.callback());
   history::URLRows sync_entries;
   GetTypedUrlsFromSyncDB(&sync_entries);
   ASSERT_EQ(1U, sync_entries.size());
   EXPECT_TRUE(URLsEqual(entries[0], sync_entries[0]));
-  ASSERT_EQ(0, associator->GetErrorPercentage());
+  ASSERT_EQ(0, syncable_service->GetErrorPercentage());
 }
 
 TEST_F(ProfileSyncServiceTypedUrlTest, HasNativeErrorReadingVisits) {
@@ -949,8 +946,8 @@ TEST_F(ProfileSyncServiceTypedUrlTest, FailWriteToHistoryBackend) {
   native_entries.push_back(native_entry);
   EXPECT_CALL((*history_backend_.get()), GetAllTypedURLs(_)).
       WillOnce(DoAll(SetArgumentPointee<0>(native_entries), Return(true)));
-  EXPECT_CALL((*history_backend_.get()), GetURL(_, _)).
-      WillOnce(DoAll(SetArgumentPointee<1>(native_entry), Return(true)));
+  EXPECT_CALL((*history_backend_.get()), GetURL(_, _))
+      .WillOnce(DoAll(SetArgumentPointee<1>(native_entry), Return(false)));
   EXPECT_CALL((*history_backend_.get()), GetMostRecentVisitsForURL(_, _, _)).
       WillRepeatedly(DoAll(SetArgumentPointee<2>(native_visits), Return(true)));
   EXPECT_CALL((*history_backend_.get()),
@@ -961,7 +958,7 @@ TEST_F(ProfileSyncServiceTypedUrlTest, FailWriteToHistoryBackend) {
 
   EXPECT_CALL((*history_backend_.get()), UpdateURL(_, _)).
       WillRepeatedly(Return(false));
-  TypedUrlModelAssociator* associator =
+  TypedUrlSyncableService* syncable_service =
       StartSyncService(base::Bind(&AddTypedUrlEntries, this, sync_entries));
   // Errors writing to the DB should be recorded, but should not cause an
   // unrecoverable error.
@@ -970,8 +967,8 @@ TEST_F(ProfileSyncServiceTypedUrlTest, FailWriteToHistoryBackend) {
           syncer::TYPED_URLS));
   // Some calls should have succeeded, so the error percentage should be
   // somewhere > 0 and < 100.
-  ASSERT_NE(0, associator->GetErrorPercentage());
-  ASSERT_NE(100, associator->GetErrorPercentage());
+  ASSERT_NE(0, syncable_service->GetErrorPercentage());
+  ASSERT_NE(100, syncable_service->GetErrorPercentage());
 }
 
 TEST_F(ProfileSyncServiceTypedUrlTest, FailToGetTypedURLs) {
@@ -990,12 +987,6 @@ TEST_F(ProfileSyncServiceTypedUrlTest, FailToGetTypedURLs) {
   history::URLRows sync_entries;
   sync_entries.push_back(sync_entry);
 
-  EXPECT_CALL(error_handler_, CreateAndUploadError(_, _, _)).
-              WillOnce(Return(syncer::SyncError(
-                                  FROM_HERE,
-                                  syncer::SyncError::DATATYPE_ERROR,
-                                  "Unit test",
-                                  syncer::TYPED_URLS)));
   StartSyncService(base::Bind(&AddTypedUrlEntries, this, sync_entries));
   // Errors getting typed URLs will cause an unrecoverable error (since we can
   // do *nothing* in that case).

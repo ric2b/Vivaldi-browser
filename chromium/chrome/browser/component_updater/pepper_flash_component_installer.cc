@@ -15,6 +15,7 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/path_service.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -36,6 +37,10 @@
 #include "flapper_version.h"  // In SHARED_INTERMEDIATE_DIR.  NOLINT
 #include "ppapi/shared_impl/ppapi_permissions.h"
 
+#if defined(OS_LINUX)
+#include "chrome/common/component_flash_hint_file_linux.h"
+#endif  // defined(OS_LINUX)
+
 using content::BrowserThread;
 using content::PluginService;
 
@@ -43,7 +48,7 @@ namespace component_updater {
 
 namespace {
 
-#if defined(GOOGLE_CHROME_BUILD) && !defined(OS_LINUX)
+#if defined(GOOGLE_CHROME_BUILD)
 // CRX hash. The extension id is: mimojjlkmoijpicakmndhoigimigcmbb.
 const uint8_t kSha2Hash[] = {0xc8, 0xce, 0x99, 0xba, 0xce, 0x89, 0xf8, 0x20,
                              0xac, 0xd3, 0x7e, 0x86, 0x8c, 0x86, 0x2c, 0x11,
@@ -53,17 +58,6 @@ const uint8_t kSha2Hash[] = {0xc8, 0xce, 0x99, 0xba, 0xce, 0x89, 0xf8, 0x20,
 // If we don't have a Pepper Flash component, this is the version we claim.
 const char kNullVersion[] = "0.0.0.0";
 
-#endif  // defined(GOOGLE_CHROME_BUILD) && !defined(OS_LINUX)
-
-// The base directory on Windows looks like:
-// <profile>\AppData\Local\Google\Chrome\User Data\PepperFlash\.
-base::FilePath GetPepperFlashBaseDirectory() {
-  base::FilePath result;
-  PathService::Get(chrome::DIR_COMPONENT_UPDATED_PEPPER_FLASH_PLUGIN, &result);
-  return result;
-}
-
-#if defined(GOOGLE_CHROME_BUILD) && !defined(OS_LINUX)
 // Pepper Flash plugins have the version encoded in the path itself
 // so we need to enumerate the directories to find the full path.
 // On success, |latest_dir| returns something like:
@@ -74,7 +68,12 @@ bool GetPepperFlashDirectory(base::FilePath* latest_dir,
                              Version* latest_version,
                              std::vector<base::FilePath>* older_dirs) {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
-  base::FilePath base_dir = GetPepperFlashBaseDirectory();
+  base::FilePath base_dir;
+  if (!PathService::Get(chrome::DIR_COMPONENT_UPDATED_PEPPER_FLASH_PLUGIN,
+                        &base_dir)) {
+    return false;
+  }
+
   bool found = false;
   base::FileEnumerator file_enumerator(
       base_dir, false, base::FileEnumerator::DIRECTORIES);
@@ -99,8 +98,9 @@ bool GetPepperFlashDirectory(base::FilePath* latest_dir,
   }
   return found;
 }
-#endif  // defined(GOOGLE_CHROME_BUILD) && !defined(OS_LINUX)
+#endif  // defined(GOOGLE_CHROME_BUILD)
 
+#if !defined(OS_LINUX) || defined(GOOGLE_CHROME_BUILD)
 bool MakePepperFlashPluginInfo(const base::FilePath& flash_path,
                                const Version& flash_version,
                                bool out_of_process,
@@ -177,6 +177,7 @@ void RegisterPepperFlashWithChrome(const base::FilePath& path,
       plugin_info.ToWebPluginInfo(), true);
   PluginService::GetInstance()->RefreshPlugins();
 }
+#endif  // !defined(OS_LINUX) || defined(GOOGLE_CHROME_BUILD)
 
 }  // namespace
 
@@ -219,24 +220,46 @@ bool PepperFlashComponentInstaller::Install(
     return false;
   if (current_version_.CompareTo(version) > 0)
     return false;
-  if (!base::PathExists(unpack_path.Append(chrome::kPepperFlashPluginFilename)))
+  const base::FilePath unpacked_plugin =
+      unpack_path.Append(chrome::kPepperFlashPluginFilename);
+  if (!base::PathExists(unpacked_plugin))
     return false;
   // Passed the basic tests. Time to install it.
-  base::FilePath path =
-      GetPepperFlashBaseDirectory().AppendASCII(version.GetString());
+  base::FilePath path;
+  if (!PathService::Get(chrome::DIR_COMPONENT_UPDATED_PEPPER_FLASH_PLUGIN,
+                        &path)) {
+    return false;
+  }
+  path = path.AppendASCII(version.GetString());
   if (base::PathExists(path))
     return false;
+  current_version_ = version;
+
   if (!base::Move(unpack_path, path))
     return false;
+#if defined(OS_LINUX)
+  const base::FilePath flash_path =
+      path.Append(chrome::kPepperFlashPluginFilename);
+  // Populate the component updated flash hint file so that the zygote can
+  // locate and preload the latest version of flash.
+  if (!component_flash_hint_file::RecordFlashUpdate(flash_path, flash_path,
+                                                    version.GetString())) {
+    if (!base::DeleteFile(path, true))
+      LOG(ERROR) << "Hint file creation failed, but unable to delete "
+                    "installed flash plugin.";
+    return false;
+  }
+#else
   // Installation is done. Now tell the rest of chrome. Both the path service
-  // and to the plugin service.
-  current_version_ = version;
+  // and to the plugin service. On Linux, a restart is required to use the new
+  // Flash version, so we do not do this.
   PathService::Override(chrome::DIR_PEPPER_FLASH_PLUGIN, path);
   path = path.Append(chrome::kPepperFlashPluginFilename);
   BrowserThread::PostTask(
       BrowserThread::UI,
       FROM_HERE,
       base::Bind(&RegisterPepperFlashWithChrome, path, version));
+#endif  // !defined(OS_LINUX)
   return true;
 }
 
@@ -254,7 +277,7 @@ bool PepperFlashComponentInstaller::Uninstall() {
 
 namespace {
 
-#if defined(GOOGLE_CHROME_BUILD) && !defined(OS_LINUX)
+#if defined(GOOGLE_CHROME_BUILD)
 void FinishPepperFlashUpdateRegistration(ComponentUpdateService* cus,
                                          const Version& version) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -269,7 +292,12 @@ void FinishPepperFlashUpdateRegistration(ComponentUpdateService* cus,
 
 void StartPepperFlashUpdateRegistration(ComponentUpdateService* cus) {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
-  base::FilePath path = GetPepperFlashBaseDirectory();
+  base::FilePath path;
+  if (!PathService::Get(chrome::DIR_COMPONENT_UPDATED_PEPPER_FLASH_PLUGIN,
+                        &path)) {
+    return;
+  }
+
   if (!base::PathExists(path)) {
     if (!base::CreateDirectory(path)) {
       NOTREACHED() << "Could not create Pepper Flash directory.";
@@ -311,12 +339,12 @@ void StartPepperFlashUpdateRegistration(ComponentUpdateService* cus) {
     base::DeleteFile(*iter, true);
   }
 }
-#endif  // defined(GOOGLE_CHROME_BUILD) && !defined(OS_LINUX)
+#endif  // defined(GOOGLE_CHROME_BUILD)
 
 }  // namespace
 
 void RegisterPepperFlashComponent(ComponentUpdateService* cus) {
-#if defined(GOOGLE_CHROME_BUILD) && !defined(OS_LINUX)
+#if defined(GOOGLE_CHROME_BUILD)
   // Component updated flash supersedes bundled flash therefore if that one
   // is disabled then this one should never install.
   base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
@@ -325,7 +353,7 @@ void RegisterPepperFlashComponent(ComponentUpdateService* cus) {
   BrowserThread::PostTask(BrowserThread::FILE,
                           FROM_HERE,
                           base::Bind(&StartPepperFlashUpdateRegistration, cus));
-#endif
+#endif  // defined(GOOGLE_CHROME_BUILD)
 }
 
 }  // namespace component_updater

@@ -4,6 +4,7 @@
 
 #include "net/tools/quic/test_tools/server_thread.h"
 
+#include "net/quic/test_tools/crypto_test_utils.h"
 #include "net/tools/quic/quic_dispatcher.h"
 #include "net/tools/quic/test_tools/quic_server_peer.h"
 

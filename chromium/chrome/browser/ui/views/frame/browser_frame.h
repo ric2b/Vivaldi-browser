@@ -7,6 +7,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
 #include "ui/views/context_menu_controller.h"
@@ -63,8 +64,10 @@ class BrowserFrame
   // Returns the inset of the topmost view in the client view from the top of
   // the non-client view. The topmost view depends on the window type. The
   // topmost view is the tab strip for tabbed browser windows, the toolbar for
-  // popups, the web contents for app windows and varies for fullscreen windows
-  int GetTopInset() const;
+  // popups, the web contents for app windows and varies for fullscreen windows.
+  // If |restored| is true, this is calculated as if the window was restored,
+  // regardless of its current state.
+  int GetTopInset(bool restored) const;
 
   // Returns the amount that the theme background should be inset.
   int GetThemeBackgroundXInset() const;
@@ -94,12 +97,15 @@ class BrowserFrame
   void GetWindowPlacement(gfx::Rect* bounds,
                           ui::WindowShowState* show_state) const;
 
+  // Called when BrowserView creates all it's child views.
+  void OnBrowserViewInitViewsComplete();
+
   // Overridden from views::Widget:
   views::internal::RootView* CreateRootView() override;
   views::NonClientFrameView* CreateNonClientFrameView() override;
   bool GetAccelerator(int command_id,
                       ui::Accelerator* accelerator) const override;
-  ui::ThemeProvider* GetThemeProvider() const override;
+  const ui::ThemeProvider* GetThemeProvider() const override;
   void SchedulePaintInRect(const gfx::Rect& rect) override;
   void OnNativeWidgetActivationChanged(bool active) override;
 
@@ -108,14 +114,11 @@ class BrowserFrame
                               const gfx::Point& p,
                               ui::MenuSourceType source_type) override;
 
-  // Returns true if we should leave any offset at the frame caption. Typically
-  // when the frame is maximized/full screen we want to leave no offset at the
-  // top.
-  bool ShouldLeaveOffsetNearTopBorder();
-
   AvatarMenuButton* GetAvatarMenuButton();
 
+#if defined(FRAME_AVATAR_BUTTON)
   NewAvatarButton* GetNewAvatarMenuButton();
+#endif
 
   // Returns the menu model. BrowserFrame owns the returned model.
   // Note that in multi user mode this will upon each call create a new model.
@@ -146,7 +149,7 @@ class BrowserFrame
   // and |owned_theme_provider_| is null (as ThemeServices lifetime is managed
   // externally).
   scoped_ptr<ui::ThemeProvider> owned_theme_provider_;
-  ui::ThemeProvider* theme_provider_;
+  const ui::ThemeProvider* theme_provider_;
 
   scoped_ptr<ui::EventHandler> browser_command_handler_;
 

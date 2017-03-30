@@ -4,15 +4,18 @@
 
 #include "components/omnibox/browser/shortcuts_backend.h"
 
+#include <stddef.h>
+
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/autocomplete/shortcuts_backend_factory.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
+#include "chrome/test/base/search_test_utils.h"
 #include "chrome/test/base/testing_profile.h"
-#include "chrome/test/base/ui_test_utils.h"
 #include "components/omnibox/browser/shortcuts_database.h"
 #include "components/search_engines/template_url_service.h"
 #include "content/public/test/test_browser_thread.h"
@@ -126,7 +129,7 @@ void ShortcutsBackendTest::SetUp() {
       &profile_, &TemplateURLServiceFactory::BuildInstanceFor);
   TemplateURLService* template_url_service =
       TemplateURLServiceFactory::GetForProfile(&profile_);
-  ui_test_utils::WaitForTemplateURLServiceToLoad(template_url_service);
+  search_test_utils::WaitForTemplateURLServiceToLoad(template_url_service);
 }
 
 void ShortcutsBackendTest::TearDown() {
@@ -136,7 +139,7 @@ void ShortcutsBackendTest::TearDown() {
 
 void ShortcutsBackendTest::OnShortcutsLoaded() {
   load_notified_ = true;
-  base::MessageLoop::current()->Quit();
+  base::MessageLoop::current()->QuitWhenIdle();
 }
 
 void ShortcutsBackendTest::OnShortcutsChanged() {

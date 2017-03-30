@@ -5,6 +5,7 @@
 #ifndef NET_QUIC_TEST_TOOLS_MOCK_QUIC_DISPATCHER_H_
 #define NET_QUIC_TEST_TOOLS_MOCK_QUIC_DISPATCHER_H_
 
+#include "base/macros.h"
 #include "net/base/ip_endpoint.h"
 #include "net/quic/crypto/quic_crypto_server_config.h"
 #include "net/quic/quic_config.h"
@@ -19,14 +20,14 @@ class MockQuicDispatcher : public tools::QuicDispatcher {
  public:
   MockQuicDispatcher(const QuicConfig& config,
                      const QuicCryptoServerConfig* crypto_config,
-                     PacketWriterFactory* packet_writer_factory,
                      QuicConnectionHelperInterface* helper);
 
   ~MockQuicDispatcher() override;
 
-  MOCK_METHOD3(ProcessPacket, void(const IPEndPoint& server_address,
-                                   const IPEndPoint& client_address,
-                                   const QuicEncryptedPacket& packet));
+  MOCK_METHOD3(ProcessPacket,
+               void(const IPEndPoint& server_address,
+                    const IPEndPoint& client_address,
+                    const QuicEncryptedPacket& packet));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockQuicDispatcher);

@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "net/quic/crypto/crypto_handshake.h"
 #include "net/quic/crypto/crypto_protocol.h"
 #include "net/quic/quic_crypto_client_stream.h"
@@ -35,13 +36,12 @@ class MockCryptoClientStream : public QuicCryptoClientStream {
     COLD_START,
   };
 
-  MockCryptoClientStream(
-      const QuicServerId& server_id,
-      QuicClientSessionBase* session,
-      ProofVerifyContext* verify_context,
-      QuicCryptoClientConfig* crypto_config,
-      HandshakeMode handshake_mode,
-      const ProofVerifyDetails* proof_verify_details_);
+  MockCryptoClientStream(const QuicServerId& server_id,
+                         QuicClientSessionBase* session,
+                         ProofVerifyContext* verify_context,
+                         QuicCryptoClientConfig* crypto_config,
+                         HandshakeMode handshake_mode,
+                         const ProofVerifyDetails* proof_verify_details_);
   ~MockCryptoClientStream() override;
 
   // CryptoFramerVisitorInterface implementation.

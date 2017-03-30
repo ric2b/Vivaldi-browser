@@ -4,6 +4,8 @@
 
 #include "remoting/protocol/third_party_host_authenticator.h"
 
+#include <utility>
+
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/callback.h"
@@ -24,7 +26,7 @@ ThirdPartyHostAuthenticator::ThirdPartyHostAuthenticator(
     : ThirdPartyAuthenticatorBase(MESSAGE_READY),
       local_cert_(local_cert),
       key_pair_(key_pair),
-      token_validator_(token_validator.Pass()) {
+      token_validator_(std::move(token_validator)) {
 }
 
 ThirdPartyHostAuthenticator::~ThirdPartyHostAuthenticator() {

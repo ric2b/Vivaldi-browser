@@ -10,14 +10,23 @@
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram.h"
+#include "base/metrics/metrics_hashes.h"
+#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
 #include "base/values.h"
 
 namespace {
+
 // Initialize histogram statistics gathering system.
 base::LazyInstance<base::StatisticsRecorder>::Leaky g_statistics_recorder_ =
     LAZY_INSTANCE_INITIALIZER;
+
+bool HistogramNameLesser(const base::HistogramBase* a,
+                         const base::HistogramBase* b) {
+  return a->histogram_name() < b->histogram_name();
+}
+
 }  // namespace
 
 namespace base {
@@ -57,16 +66,28 @@ HistogramBase* StatisticsRecorder::RegisterOrDeleteDuplicate(
       histogram_to_return = histogram;
     } else {
       const std::string& name = histogram->histogram_name();
-      HistogramMap::iterator it = histograms_->find(HistogramNameRef(name));
+      uint64_t name_hash = histogram->name_hash();
+      HistogramMap::iterator it = histograms_->find(name_hash);
       if (histograms_->end() == it) {
-        (*histograms_)[HistogramNameRef(name)] = histogram;
+        (*histograms_)[name_hash] = histogram;
         ANNOTATE_LEAKING_OBJECT_PTR(histogram);  // see crbug.com/79322
+        // If there are callbacks for this histogram, we set the kCallbackExists
+        // flag.
+        auto callback_iterator = callbacks_->find(name);
+        if (callback_iterator != callbacks_->end()) {
+          if (!callback_iterator->second.is_null())
+            histogram->SetFlags(HistogramBase::kCallbackExists);
+          else
+            histogram->ClearFlags(HistogramBase::kCallbackExists);
+        }
         histogram_to_return = histogram;
       } else if (histogram == it->second) {
         // The histogram was registered before.
         histogram_to_return = histogram;
       } else {
         // We already have one histogram with this name.
+        DCHECK_EQ(histogram->histogram_name(),
+                  it->second->histogram_name()) << "hash collision";
         histogram_to_return = it->second;
         histogram_to_delete = histogram;
       }
@@ -128,6 +149,7 @@ void StatisticsRecorder::WriteHTMLGraph(const std::string& query,
 
   Histograms snapshot;
   GetSnapshot(query, &snapshot);
+  std::sort(snapshot.begin(), snapshot.end(), &HistogramNameLesser);
   for (const HistogramBase* histogram : snapshot) {
     histogram->WriteHTMLGraph(output);
     output->append("<br><hr><br>");
@@ -146,6 +168,7 @@ void StatisticsRecorder::WriteGraph(const std::string& query,
 
   Histograms snapshot;
   GetSnapshot(query, &snapshot);
+  std::sort(snapshot.begin(), snapshot.end(), &HistogramNameLesser);
   for (const HistogramBase* histogram : snapshot) {
     histogram->WriteAscii(output);
     output->append("\n");
@@ -190,7 +213,7 @@ void StatisticsRecorder::GetHistograms(Histograms* output) {
     return;
 
   for (const auto& entry : *histograms_) {
-    DCHECK_EQ(entry.first.name_, entry.second->histogram_name());
+    DCHECK_EQ(entry.first, entry.second->name_hash());
     output->push_back(entry.second);
   }
 }
@@ -219,10 +242,67 @@ HistogramBase* StatisticsRecorder::FindHistogram(const std::string& name) {
   if (histograms_ == NULL)
     return NULL;
 
-  HistogramMap::iterator it = histograms_->find(HistogramNameRef(name));
+  HistogramMap::iterator it = histograms_->find(HashMetricName(name));
   if (histograms_->end() == it)
     return NULL;
+  DCHECK_EQ(name, it->second->histogram_name()) << "hash collision";
   return it->second;
+}
+
+// static
+bool StatisticsRecorder::SetCallback(
+    const std::string& name,
+    const StatisticsRecorder::OnSampleCallback& cb) {
+  DCHECK(!cb.is_null());
+  if (lock_ == NULL)
+    return false;
+  base::AutoLock auto_lock(*lock_);
+  if (histograms_ == NULL)
+    return false;
+
+  if (ContainsKey(*callbacks_, name))
+    return false;
+  callbacks_->insert(std::make_pair(name, cb));
+
+  HistogramMap::iterator it = histograms_->find(HashMetricName(name));
+  if (it != histograms_->end()) {
+    DCHECK_EQ(name, it->second->histogram_name()) << "hash collision";
+    it->second->SetFlags(HistogramBase::kCallbackExists);
+  }
+
+  return true;
+}
+
+// static
+void StatisticsRecorder::ClearCallback(const std::string& name) {
+  if (lock_ == NULL)
+    return;
+  base::AutoLock auto_lock(*lock_);
+  if (histograms_ == NULL)
+    return;
+
+  callbacks_->erase(name);
+
+  // We also clear the flag from the histogram (if it exists).
+  HistogramMap::iterator it = histograms_->find(HashMetricName(name));
+  if (it != histograms_->end()) {
+    DCHECK_EQ(name, it->second->histogram_name()) << "hash collision";
+    it->second->ClearFlags(HistogramBase::kCallbackExists);
+  }
+}
+
+// static
+StatisticsRecorder::OnSampleCallback StatisticsRecorder::FindCallback(
+    const std::string& name) {
+  if (lock_ == NULL)
+    return OnSampleCallback();
+  base::AutoLock auto_lock(*lock_);
+  if (histograms_ == NULL)
+    return OnSampleCallback();
+
+  auto callback_iterator = callbacks_->find(name);
+  return callback_iterator != callbacks_->end() ? callback_iterator->second
+                                                : OnSampleCallback();
 }
 
 // private static
@@ -235,7 +315,7 @@ void StatisticsRecorder::GetSnapshot(const std::string& query,
     return;
 
   for (const auto& entry : *histograms_) {
-    if (entry.first.name_.find(query) != std::string::npos)
+    if (entry.second->histogram_name().find(query) != std::string::npos)
       snapshot->push_back(entry.second);
   }
 }
@@ -256,6 +336,7 @@ StatisticsRecorder::StatisticsRecorder() {
   }
   base::AutoLock auto_lock(*lock_);
   histograms_ = new HistogramMap;
+  callbacks_ = new CallbackMap;
   ranges_ = new RangesMap;
 
   if (VLOG_IS_ON(1))
@@ -274,14 +355,17 @@ StatisticsRecorder::~StatisticsRecorder() {
 
   // Clean up.
   scoped_ptr<HistogramMap> histograms_deleter;
+  scoped_ptr<CallbackMap> callbacks_deleter;
   scoped_ptr<RangesMap> ranges_deleter;
   // We don't delete lock_ on purpose to avoid having to properly protect
   // against it going away after we checked for NULL in the static methods.
   {
     base::AutoLock auto_lock(*lock_);
     histograms_deleter.reset(histograms_);
+    callbacks_deleter.reset(callbacks_);
     ranges_deleter.reset(ranges_);
     histograms_ = NULL;
+    callbacks_ = NULL;
     ranges_ = NULL;
   }
   // We are going to leak the histograms and the ranges.
@@ -290,6 +374,8 @@ StatisticsRecorder::~StatisticsRecorder() {
 
 // static
 StatisticsRecorder::HistogramMap* StatisticsRecorder::histograms_ = NULL;
+// static
+StatisticsRecorder::CallbackMap* StatisticsRecorder::callbacks_ = NULL;
 // static
 StatisticsRecorder::RangesMap* StatisticsRecorder::ranges_ = NULL;
 // static

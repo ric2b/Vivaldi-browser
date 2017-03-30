@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.enhancedbookmarks;
 
+import android.content.Intent;
+import android.net.Uri;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.text.TextUtils;
 import android.view.View;
@@ -13,12 +15,11 @@ import junit.framework.Assert;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.BookmarksBridge.BookmarkItem;
-import org.chromium.chrome.browser.BookmarksBridge.BookmarkModelObserver;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.UrlConstants;
-import org.chromium.chrome.browser.enhanced_bookmarks.EnhancedBookmarksModel;
+import org.chromium.chrome.browser.bookmark.BookmarksBridge.BookmarkItem;
+import org.chromium.chrome.browser.bookmark.BookmarksBridge.BookmarkModelObserver;
 import org.chromium.chrome.test.ChromeActivityTestCaseBase;
 import org.chromium.chrome.test.util.ActivityUtils;
 import org.chromium.chrome.test.util.BookmarkTestUtils;
@@ -37,7 +38,6 @@ import java.util.concurrent.TimeoutException;
 /**
  * Tests for the enhanced bookmark manager.
  */
-@CommandLineFlags.Add(ChromeSwitches.ENABLE_ENHANCED_BOOKMARKS + "=1")
 public class EnhancedBookmarkTest extends ChromeActivityTestCaseBase<ChromeActivity> {
 
     public EnhancedBookmarkTest() {
@@ -49,7 +49,7 @@ public class EnhancedBookmarkTest extends ChromeActivityTestCaseBase<ChromeActiv
     private static final String TEST_PAGE_TITLE = "The Google";
 
     private EnhancedBookmarksModel mBookmarkModel;
-    private EnhancedBookmarkRecyclerView mItemsContainer;
+    protected EnhancedBookmarkRecyclerView mItemsContainer;
 
     @Override
     public void startMainActivity() throws InterruptedException {
@@ -71,14 +71,14 @@ public class EnhancedBookmarkTest extends ChromeActivityTestCaseBase<ChromeActiv
             public void run() {
                 if (mBookmarkModel.isBookmarkModelLoaded()) loadedCallback.notifyCalled();
                 else {
-                    mBookmarkModel.addModelObserver(new BookmarkModelObserver() {
+                    mBookmarkModel.addObserver(new BookmarkModelObserver() {
                         @Override
                         public void bookmarkModelChanged() {}
 
                         @Override
                         public void bookmarkModelLoaded() {
                             loadedCallback.notifyCalled();
-                            mBookmarkModel.removeModelObserver(this);
+                            mBookmarkModel.removeObserver(this);
                         }
                     });
                 }
@@ -101,6 +101,28 @@ public class EnhancedBookmarkTest extends ChromeActivityTestCaseBase<ChromeActiv
             EnhancedBookmarkActivity activity = ActivityUtils.waitForActivity(getInstrumentation(),
                     EnhancedBookmarkActivity.class, new MenuUtils.MenuActivityTrigger(
                             getInstrumentation(), getActivity(), R.id.all_bookmarks_menu_id));
+            mItemsContainer = (EnhancedBookmarkRecyclerView) activity.findViewById(
+                    R.id.eb_items_container);
+        }
+    }
+
+    private void openBookmarkManager(final String url) throws InterruptedException {
+        if (DeviceFormFactor.isTablet(getActivity())) {
+            loadUrl(url);
+            mItemsContainer = (EnhancedBookmarkRecyclerView) getActivity().findViewById(
+                    R.id.eb_items_container);
+        } else {
+            // phone
+            EnhancedBookmarkActivity activity = ActivityUtils.waitForActivity(getInstrumentation(),
+                    EnhancedBookmarkActivity.class, new Runnable() {
+                        @Override
+                        public void run() {
+                            Intent intent = new Intent(getActivity(),
+                                    EnhancedBookmarkActivity.class);
+                            intent.setData(Uri.parse(url));
+                            getActivity().startActivity(intent);
+                        }
+                    });
             mItemsContainer = (EnhancedBookmarkRecyclerView) activity.findViewById(
                     R.id.eb_items_container);
         }
@@ -166,5 +188,65 @@ public class EnhancedBookmarkTest extends ChromeActivityTestCaseBase<ChromeActiv
             }
         });
         assertEquals(TEST_PAGE_TITLE, getActivity().getActivityTab().getTitle());
+    }
+
+    @SmallTest
+    public void testUrlComposition() {
+        BookmarkId mobileId = mBookmarkModel.getMobileFolderId();
+        BookmarkId bookmarkBarId = mBookmarkModel.getDesktopFolderId();
+        BookmarkId otherId = mBookmarkModel.getOtherFolderId();
+        assertEquals("chrome-native://bookmarks/folder/" + mobileId,
+                EnhancedBookmarkUIState.createFolderUrl(mobileId).toString());
+        assertEquals("chrome-native://bookmarks/folder/" + bookmarkBarId,
+                EnhancedBookmarkUIState.createFolderUrl(bookmarkBarId).toString());
+        assertEquals("chrome-native://bookmarks/folder/" + otherId,
+                EnhancedBookmarkUIState.createFolderUrl(otherId).toString());
+
+        assertEquals("chrome-native://bookmarks/filter/OFFLINE_PAGES", EnhancedBookmarkUIState
+                .createFilterUrl(EnhancedBookmarkFilter.OFFLINE_PAGES, true).toString());
+        assertEquals(
+                "chrome-native://bookmarks/filter/OFFLINE_PAGES?persist=0",
+                EnhancedBookmarkUIState.createFilterUrl(EnhancedBookmarkFilter.OFFLINE_PAGES,
+                        false).toString());
+    }
+
+    @SmallTest
+    public void testOpenBookmarkManager() throws InterruptedException {
+        openBookmarkManager();
+        EnhancedBookmarkDelegate delegate = mItemsContainer.getDelegateForTesting();
+        assertEquals(EnhancedBookmarkUIState.STATE_ALL_BOOKMARKS, delegate.getCurrentState());
+        assertEquals(UrlConstants.BOOKMARKS_URL,
+                EnhancedBookmarkUtils.getLastUsedUrl(getActivity()));
+    }
+
+    @SmallTest
+    @CommandLineFlags.Add(ChromeSwitches.ENABLE_OFFLINE_PAGES)
+    public void testOpenBookmarkManagerInOfflinePagePersist() throws InterruptedException {
+        EnhancedBookmarkUtils.setLastUsedUrl(getActivity(), UrlConstants.BOOKMARKS_URL);
+        String url = "chrome-native://bookmarks/filter/OFFLINE_PAGES";
+        openBookmarkManager(url);
+        EnhancedBookmarkDelegate delegate = mItemsContainer.getDelegateForTesting();
+        assertEquals(EnhancedBookmarkUIState.STATE_FILTER, delegate.getCurrentState());
+        assertEquals(url, EnhancedBookmarkUtils.getLastUsedUrl(getActivity()));
+    }
+
+    @SmallTest
+    @CommandLineFlags.Add(ChromeSwitches.ENABLE_OFFLINE_PAGES)
+    public void testOpenBookmarkManagerInOfflinePageNoPersist() throws InterruptedException {
+        EnhancedBookmarkUtils.setLastUsedUrl(getActivity(), UrlConstants.BOOKMARKS_URL);
+        String url = "chrome-native://bookmarks/filter/OFFLINE_PAGES?persist=0";
+        openBookmarkManager(url);
+        EnhancedBookmarkDelegate delegate = mItemsContainer.getDelegateForTesting();
+        assertEquals(EnhancedBookmarkUIState.STATE_FILTER, delegate.getCurrentState());
+        assertEquals(UrlConstants.BOOKMARKS_URL,
+                EnhancedBookmarkUtils.getLastUsedUrl(getActivity()));
+    }
+
+    @SmallTest
+    @CommandLineFlags.Add(ChromeSwitches.DISABLE_OFFLINE_PAGES)
+    public void testOpenBookmarkManagerInOfflinePageWhenDisabled() throws InterruptedException {
+        openBookmarkManager("chrome-native://bookmarks/filter/OFFLINE_PAGES");
+        EnhancedBookmarkDelegate delegate = mItemsContainer.getDelegateForTesting();
+        assertEquals(EnhancedBookmarkUIState.STATE_ALL_BOOKMARKS, delegate.getCurrentState());
     }
 }

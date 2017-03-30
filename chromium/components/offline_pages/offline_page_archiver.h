@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_OFFLINE_PAGES_OFFLINE_PAGE_ARCHIVER_H_
 #define COMPONENTS_OFFLINE_PAGES_OFFLINE_PAGE_ARCHIVER_H_
 
+#include <stdint.h>
+
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/strings/string16.h"
@@ -57,15 +59,15 @@ class OfflinePageArchiver {
   typedef base::Callback<void(OfflinePageArchiver* /* archiver */,
                               ArchiverResult /* result */,
                               const GURL& /* url */,
-                              const base::string16& /* title */,
                               const base::FilePath& /* file_path */,
-                              int64 /* file_size */)> CreateArchiveCallback;
+                              int64_t /* file_size */)> CreateArchiveCallback;
 
   virtual ~OfflinePageArchiver() {}
 
-  // Starts creating the archive. Once archive is created |callback| will be
-  // called with the result and additional information.
-  virtual void CreateArchive(const CreateArchiveCallback& callback) = 0;
+  // Starts creating the archive in the |archives_dir|. Once archive is created
+  // |callback| will be called with the result and additional information.
+  virtual void CreateArchive(const base::FilePath& archives_dir,
+                             const CreateArchiveCallback& callback) = 0;
 };
 
 }  // namespace offline_pages

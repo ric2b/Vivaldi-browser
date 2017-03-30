@@ -4,16 +4,25 @@
 
 #include "chrome/browser/ui/views/website_settings/website_settings_popup_view.h"
 
-#include <algorithm>
+#include <stddef.h>
 
+#include <algorithm>
+#include <vector>
+
+#include "base/i18n/rtl.h"
+#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/certificate_viewer.h"
+#include "chrome/browser/devtools/devtools_toggle_action.h"
+#include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/views/collected_cookies_views.h"
+#include "chrome/browser/ui/views/website_settings/chosen_object_view.h"
 #include "chrome/browser/ui/views/website_settings/permission_selector_view.h"
 #include "chrome/browser/ui/website_settings/website_settings.h"
 #include "chrome/browser/ui/website_settings/website_settings_utils.h"
@@ -33,6 +42,7 @@
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/image/image.h"
 #include "ui/resources/grit/ui_resources.h"
+#include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/menu_button.h"
 #include "ui/views/controls/button/menu_button_listener.h"
@@ -42,6 +52,7 @@
 #include "ui/views/controls/menu/menu_model_adapter.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/controls/separator.h"
+#include "ui/views/controls/styled_label.h"
 #include "ui/views/controls/tabbed_pane/tabbed_pane.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/grid_layout.h"
@@ -66,10 +77,6 @@ const int kConnectionSectionPaddingLeft = 18;
 const int kConnectionSectionPaddingTop = 16;
 const int kConnectionSectionPaddingRight = 18;
 
-// The text color that is used for the site identity status text, if the site's
-// identity was sucessfully verified.
-const SkColor kIdentityVerifiedTextColor = 0xFF298a27;
-
 // Left icon margin.
 const int kIconMarginLeft = 6;
 
@@ -77,7 +84,8 @@ const int kIconMarginLeft = 6;
 const int kHeaderMarginBottom = 10;
 const int kHeaderPaddingBottom = 12;
 const int kHeaderPaddingLeft = 18;
-const int kHeaderPaddingRight = 8;
+const int kHeaderPaddingRightForCloseButton = 8;
+const int kHeaderPaddingRightForText = kHeaderPaddingLeft;
 const int kHeaderPaddingTop = 12;
 
 // Spacing between the site identity label and the site identity status text in
@@ -89,7 +97,7 @@ const int kHeaderRowSpacing = 4;
 const int kLocationIconVerticalMargin = 5;
 
 // The max possible width of the popup.
-const int kMaxPopupWidth = 500;
+const int kMaxPopupWidth = 1000;
 
 // The margins between the popup border and the popup content.
 const int kPopupMarginTop = 4;
@@ -101,6 +109,7 @@ const int kPopupMarginRight = 0;
 const int kPermissionsSectionContentMinWidth = 300;
 const int kPermissionsSectionPaddingBottom = 6;
 const int kPermissionsSectionPaddingLeft = 18;
+const int kPermissionsSectionPaddingRight = 18;
 const int kPermissionsSectionPaddingTop = 16;
 
 // Space between the headline and the content of a section on the permissions
@@ -112,7 +121,6 @@ const int kPermissionsSectionHeadlineMarginBottom = 10;
 const int kPermissionsSectionRowSpacing = 2;
 
 const int kSiteDataIconColumnWidth = 20;
-const int kSiteDataSectionRowSpacing = 11;
 
 }  // namespace
 
@@ -121,7 +129,8 @@ const int kSiteDataSectionRowSpacing = 11;
 // identity check and the name of the site's identity.
 class PopupHeaderView : public views::View {
  public:
-  explicit PopupHeaderView(views::ButtonListener* close_button_listener);
+  explicit PopupHeaderView(views::ButtonListener* close_button_listener,
+                           views::StyledLabelListener* styled_label_listener);
   ~PopupHeaderView() override;
 
   // Sets the name of the site's identity.
@@ -131,11 +140,14 @@ class PopupHeaderView : public views::View {
   // |text_color|.
   void SetIdentityStatus(const base::string16& status_text, SkColor text_color);
 
+  int GetPreferredNameWidth() const;
+
  private:
   // The label that displays the name of the site's identity.
   views::Label* name_;
   // The label that displays the status of the identity check for this site.
-  views::Label* status_;
+  // Includes a link to open the DevTools Security panel.
+  views::StyledLabel* status_;
 
   DISALLOW_COPY_AND_ASSIGN(PopupHeaderView);
 };
@@ -145,13 +157,20 @@ class PopupHeaderView : public views::View {
 // displayed.
 class InternalPageInfoPopupView : public views::BubbleDelegateView {
  public:
-  explicit InternalPageInfoPopupView(views::View* anchor_view);
+  // If |anchor_view| is nullptr, or has no Widget, |parent_window| may be
+  // provided to ensure this bubble is closed when the parent closes.
+  InternalPageInfoPopupView(views::View* anchor_view,
+                            gfx::NativeView parent_window);
   ~InternalPageInfoPopupView() override;
 
   // views::BubbleDelegateView:
+  views::NonClientFrameView* CreateNonClientFrameView(
+      views::Widget* widget) override;
   void OnWidgetDestroying(views::Widget* widget) override;
 
  private:
+  friend class WebsiteSettingsPopupView;
+
   DISALLOW_COPY_AND_ASSIGN(InternalPageInfoPopupView);
 };
 
@@ -159,7 +178,9 @@ class InternalPageInfoPopupView : public views::BubbleDelegateView {
 // Popup Header
 ////////////////////////////////////////////////////////////////////////////////
 
-PopupHeaderView::PopupHeaderView(views::ButtonListener* close_button_listener)
+PopupHeaderView::PopupHeaderView(
+    views::ButtonListener* close_button_listener,
+    views::StyledLabelListener* styled_label_listener)
     : name_(nullptr), status_(nullptr) {
   views::GridLayout* layout = new views::GridLayout(this);
   SetLayoutManager(layout);
@@ -180,7 +201,7 @@ PopupHeaderView::PopupHeaderView(views::ButtonListener* close_button_listener)
                         views::GridLayout::USE_PREF,
                         0,
                         0);
-  column_set->AddPaddingColumn(0, kHeaderPaddingRight);
+  column_set->AddPaddingColumn(0, kHeaderPaddingRightForCloseButton);
 
   layout->AddPaddingRow(0, kHeaderPaddingTop);
 
@@ -203,10 +224,16 @@ PopupHeaderView::PopupHeaderView(views::ButtonListener* close_button_listener)
 
   layout->AddPaddingRow(0, kHeaderRowSpacing);
 
-  layout->StartRow(1, label_column);
-  status_ = new views::Label(base::string16());
-  status_->SetMultiLine(true);
-  status_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  const int label_column_status = 1;
+  views::ColumnSet* column_set_status =
+      layout->AddColumnSet(label_column_status);
+  column_set_status->AddPaddingColumn(0, kHeaderPaddingLeft);
+  column_set_status->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL,
+                               1, views::GridLayout::USE_PREF, 0, 0);
+  column_set_status->AddPaddingColumn(0, kHeaderPaddingRightForText);
+
+  layout->StartRow(0, label_column_status);
+  status_ = new views::StyledLabel(base::string16(), styled_label_listener);
   layout->AddView(status_,
                   1,
                   1,
@@ -219,32 +246,66 @@ PopupHeaderView::PopupHeaderView(views::ButtonListener* close_button_listener)
 PopupHeaderView::~PopupHeaderView() {
 }
 
+int PopupHeaderView::GetPreferredNameWidth() const {
+  return name_->GetPreferredSize().width();
+}
+
 void PopupHeaderView::SetIdentityName(const base::string16& name) {
   name_->SetText(name);
 }
 
 void PopupHeaderView::SetIdentityStatus(const base::string16& status,
                                         SkColor text_color) {
-  status_->SetText(status);
-  status_->SetEnabledColor(text_color);
+  base::string16 details_string =
+      l10n_util::GetStringUTF16(IDS_WEBSITE_SETTINGS_DETAILS_LINK);
+
+  std::vector<base::string16> subst;
+  subst.push_back(status);
+  subst.push_back(details_string);
+
+  std::vector<size_t> offsets;
+
+  base::string16 text = base::ReplaceStringPlaceholders(
+      base::ASCIIToUTF16("$1 $2"), subst, &offsets);
+  status_->SetText(text);
+  gfx::Range details_range(offsets[1], text.length());
+
+  views::StyledLabel::RangeStyleInfo link_style =
+      views::StyledLabel::RangeStyleInfo::CreateForLink();
+  link_style.font_style |= gfx::Font::FontStyle::UNDERLINE;
+  link_style.disable_line_wrapping = false;
+  // TODO(lgarron): Remove the following color override once the default link
+  // color for StyledLabel is fixed (https://crbug.com/556772).
+  link_style.color =
+      GetNativeTheme()->GetSystemColor(ui::NativeTheme::kColorId_LinkEnabled);
+
+  status_->AddStyleRange(details_range, link_style);
+
+  // Fit the styled label to occupy available width.
+  status_->SizeToFit(0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // InternalPageInfoPopupView
 ////////////////////////////////////////////////////////////////////////////////
 
-InternalPageInfoPopupView::InternalPageInfoPopupView(views::View* anchor_view)
+InternalPageInfoPopupView::InternalPageInfoPopupView(
+    views::View* anchor_view,
+    gfx::NativeView parent_window)
     : BubbleDelegateView(anchor_view, views::BubbleBorder::TOP_LEFT) {
+  set_parent_window(parent_window);
+
   // Compensate for built-in vertical padding in the anchor view's image.
   set_anchor_view_insets(gfx::Insets(kLocationIconVerticalMargin, 0,
                                      kLocationIconVerticalMargin, 0));
 
-  const int kSpacing = 4;
+  const int kSpacing = 16;
   SetLayoutManager(new views::BoxLayout(views::BoxLayout::kHorizontal, kSpacing,
                                         kSpacing, kSpacing));
+  set_margins(gfx::Insets());
   views::ImageView* icon_view = new views::ImageView();
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-  icon_view->SetImage(rb.GetImageSkiaNamed(IDR_PRODUCT_LOGO_26));
+  icon_view->SetImage(rb.GetImageSkiaNamed(IDR_PRODUCT_LOGO_16));
   AddChildView(icon_view);
 
   views::Label* label =
@@ -254,11 +315,20 @@ InternalPageInfoPopupView::InternalPageInfoPopupView(views::View* anchor_view)
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   AddChildView(label);
 
-  views::BubbleDelegateView::CreateBubble(this)->Show();
-  SizeToContents();
+  views::BubbleDelegateView::CreateBubble(this);
 }
 
 InternalPageInfoPopupView::~InternalPageInfoPopupView() {
+}
+
+views::NonClientFrameView* InternalPageInfoPopupView::CreateNonClientFrameView(
+    views::Widget* widget) {
+  views::BubbleFrameView* frame = static_cast<views::BubbleFrameView*>(
+      BubbleDelegateView::CreateNonClientFrameView(widget));
+  // 16px padding + half of icon width comes out to 24px.
+  frame->bubble_border()->set_arrow_offset(
+      24 + frame->bubble_border()->GetBorderThickness());
+  return frame;
 }
 
 void InternalPageInfoPopupView::OnWidgetDestroying(views::Widget* widget) {
@@ -273,51 +343,64 @@ WebsiteSettingsPopupView::~WebsiteSettingsPopupView() {
 }
 
 // static
-void WebsiteSettingsPopupView::ShowPopup(views::View* anchor_view,
-                                         Profile* profile,
-                                         content::WebContents* web_contents,
-                                         const GURL& url,
-                                         const content::SSLStatus& ssl,
-                                         Browser* browser) {
+void WebsiteSettingsPopupView::ShowPopup(
+    views::View* anchor_view,
+    const gfx::Rect& anchor_rect,
+    Profile* profile,
+    content::WebContents* web_contents,
+    const GURL& url,
+    const security_state::SecurityStateModel::SecurityInfo& security_info) {
   is_popup_showing = true;
+  gfx::NativeView parent_window =
+      anchor_view ? nullptr : web_contents->GetNativeView();
   if (InternalChromePage(url)) {
-    new InternalPageInfoPopupView(anchor_view);
+    // Use the concrete type so that |SetAnchorRect| can be called as a friend.
+    InternalPageInfoPopupView* popup =
+        new InternalPageInfoPopupView(anchor_view, parent_window);
+    if (!anchor_view)
+      popup->SetAnchorRect(anchor_rect);
+    popup->GetWidget()->Show();
   } else {
-    new WebsiteSettingsPopupView(anchor_view, profile, web_contents, url, ssl,
-                                 browser);
+    WebsiteSettingsPopupView* popup = new WebsiteSettingsPopupView(
+        anchor_view, parent_window, profile, web_contents, url, security_info);
+    if (!anchor_view)
+      popup->SetAnchorRect(anchor_rect);
+    popup->GetWidget()->Show();
   }
 }
 
+// Whole function added by Vivaldi
 // static
 void WebsiteSettingsPopupView::ShowPopupAtPos(gfx::Point anchor_pos,
-                                              Profile* profile,
-                                              content::WebContents* web_contents,
-                                              const GURL& url,
-                                              const content::SSLStatus& ssl,
-                                              Browser* browser,
-                                              gfx::NativeView parent) {
+          Profile* profile,
+          content::WebContents* web_contents,
+          const GURL& url,
+          const security_state::SecurityStateModel::SecurityInfo& security_info,
+          Browser* browser,
+          gfx::NativeView parent) {
   is_popup_showing = true;
   WebsiteSettingsPopupView* thispopup = new WebsiteSettingsPopupView(
-    NULL, profile, web_contents, url, ssl, browser);
-  thispopup->SetAnchorView(NULL);
+            NULL, web_contents->GetNativeView(),
+            profile, web_contents, url, security_info);
   thispopup->SetAnchorRect(gfx::Rect(anchor_pos, gfx::Size()));
-  thispopup->set_parent_window(parent);
+  thispopup->GetWidget()->Show();
 }
 
+// static
 bool WebsiteSettingsPopupView::IsPopupShowing() {
   return is_popup_showing;
 }
 
 WebsiteSettingsPopupView::WebsiteSettingsPopupView(
     views::View* anchor_view,
+    gfx::NativeView parent_window,
     Profile* profile,
     content::WebContents* web_contents,
     const GURL& url,
-    const content::SSLStatus& ssl,
-    Browser* browser)
-    : BubbleDelegateView(anchor_view, views::BubbleBorder::TOP_LEFT),
+    const security_state::SecurityStateModel::SecurityInfo& security_info)
+    : content::WebContentsObserver(web_contents),
+      BubbleDelegateView(anchor_view, views::BubbleBorder::TOP_LEFT),
       web_contents_(web_contents),
-      browser_(browser),
       header_(nullptr),
       tabbed_pane_(nullptr),
       permissions_tab_(nullptr),
@@ -333,6 +416,8 @@ WebsiteSettingsPopupView::WebsiteSettingsPopupView(
       help_center_link_(nullptr),
       connection_info_content_(nullptr),
       weak_factory_(this) {
+  set_parent_window(parent_window);
+
   // Compensate for built-in vertical padding in the anchor view's image.
   set_anchor_view_insets(gfx::Insets(kLocationIconVerticalMargin, 0,
                                      kLocationIconVerticalMargin, 0));
@@ -348,7 +433,7 @@ WebsiteSettingsPopupView::WebsiteSettingsPopupView(
                         0,
                         0);
 
-  header_ = new PopupHeaderView(this);
+  header_ = new PopupHeaderView(this, this);
   layout->StartRow(1, content_column);
   layout->AddView(header_);
 
@@ -357,10 +442,10 @@ WebsiteSettingsPopupView::WebsiteSettingsPopupView(
   layout->StartRow(1, content_column);
   layout->AddView(tabbed_pane_);
 
-  // Tabs must be added after the tabbed_pane_ was added to the views hierarchy.
-  // Adding the |tabbed_pane_| to the views hierarchy triggers the
+  // Tabs must be added after the |tabbed_pane_| was added to the views
+  // hierarchy. Adding the |tabbed_pane_| to the views hierarchy triggers the
   // initialization of the native tab UI element. If the native tab UI element
-  // is not initalized, adding a tab will result in a NULL pointer exception.
+  // is not initialized, adding a tab will result in a NULL pointer exception.
   permissions_tab_ = CreatePermissionsTab();
   tabbed_pane_->AddTabAtIndex(
       TAB_ID_PERMISSIONS,
@@ -377,19 +462,28 @@ WebsiteSettingsPopupView::WebsiteSettingsPopupView(
   set_margins(gfx::Insets(kPopupMarginTop, kPopupMarginLeft,
                           kPopupMarginBottom, kPopupMarginRight));
 
-  views::BubbleDelegateView::CreateBubble(this)->Show();
-  SizeToContents();
+  views::BubbleDelegateView::CreateBubble(this);
 
   presenter_.reset(new WebsiteSettings(
-      this, profile,
-      TabSpecificContentSettings::FromWebContents(web_contents),
-      InfoBarService::FromWebContents(web_contents), url, ssl,
-      content::CertStore::GetInstance()));
+      this, profile, TabSpecificContentSettings::FromWebContents(web_contents),
+      web_contents, url, security_info, content::CertStore::GetInstance()));
+}
+
+void WebsiteSettingsPopupView::RenderFrameDeleted(
+    content::RenderFrameHost* render_frame_host) {
+  if (render_frame_host == web_contents_->GetMainFrame()) {
+    GetWidget()->Close();
+  }
 }
 
 void WebsiteSettingsPopupView::OnPermissionChanged(
     const WebsiteSettingsUI::PermissionInfo& permission) {
   presenter_->OnSitePermissionChanged(permission.type, permission.setting);
+}
+
+void WebsiteSettingsPopupView::OnChosenObjectDeleted(
+    const WebsiteSettingsUI::ChosenObjectInfo& info) {
+  presenter_->OnSiteChosenObjectDeleted(info.ui_info, *info.object);
 }
 
 void WebsiteSettingsPopupView::OnWidgetDestroying(views::Widget* widget) {
@@ -443,7 +537,7 @@ gfx::Size WebsiteSettingsPopupView::GetPreferredSize() const {
 
   int height = 0;
   if (header_)
-    height += header_->GetPreferredSize().height();
+    height += header_->GetPreferredSize().height() + kHeaderMarginBottom;
   if (tabbed_pane_)
     height += tabbed_pane_->GetPreferredSize().height();
 
@@ -452,67 +546,103 @@ gfx::Size WebsiteSettingsPopupView::GetPreferredSize() const {
     width = std::max(width, site_data_content_->GetPreferredSize().width());
   if (permissions_content_)
     width = std::max(width, permissions_content_->GetPreferredSize().width());
-  width += kPermissionsSectionPaddingLeft;
+  if (header_)
+    width = std::max(width, header_->GetPreferredNameWidth());
+  width += kPermissionsSectionPaddingLeft + kPermissionsSectionPaddingRight;
   width = std::min(width, kMaxPopupWidth);
-
   return gfx::Size(width, height);
 }
 
 void WebsiteSettingsPopupView::SetCookieInfo(
     const CookieInfoList& cookie_info_list) {
-  site_data_content_->RemoveAllChildViews(true);
+  // |cookie_info_list| should only ever have 2 items: first- and third-party
+  // cookies.
+  DCHECK_EQ(cookie_info_list.size(), 2u);
+  base::string16 first_party_label_text;
+  base::string16 third_party_label_text;
+  for (const auto& i : cookie_info_list) {
+    if (i.is_first_party) {
+      first_party_label_text =
+          l10n_util::GetStringFUTF16(IDS_WEBSITE_SETTINGS_FIRST_PARTY_SITE_DATA,
+                                     base::IntToString16(i.allowed));
+    } else {
+      third_party_label_text =
+          l10n_util::GetStringFUTF16(IDS_WEBSITE_SETTINGS_THIRD_PARTY_SITE_DATA,
+                                     base::IntToString16(i.allowed));
+    }
+  }
 
-  views::GridLayout* layout = new views::GridLayout(site_data_content_);
-  site_data_content_->SetLayoutManager(layout);
+  if (!cookie_dialog_link_) {
+    cookie_dialog_link_ = new views::Link(first_party_label_text);
+    cookie_dialog_link_->set_listener(this);
+  } else {
+    cookie_dialog_link_->SetText(first_party_label_text);
+  }
 
-  const int site_data_content_column = 0;
-  views::ColumnSet* column_set =
-      layout->AddColumnSet(site_data_content_column);
-  column_set->AddColumn(views::GridLayout::FILL,
-                        views::GridLayout::FILL,
-                        1,
-                        views::GridLayout::FIXED,
-                        kSiteDataIconColumnWidth,
-                        0);
-  column_set->AddPaddingColumn(0, kIconMarginLeft);
-  column_set->AddColumn(views::GridLayout::FILL,
-                        views::GridLayout::FILL,
-                        1,
-                        views::GridLayout::USE_PREF,
-                        0,
-                        0);
+  views::GridLayout* layout =
+      static_cast<views::GridLayout*>(site_data_content_->GetLayoutManager());
+  if (!layout) {
+    layout = new views::GridLayout(site_data_content_);
+    site_data_content_->SetLayoutManager(layout);
 
-  layout->AddPaddingRow(1, 5);
-  for (CookieInfoList::const_iterator i(cookie_info_list.begin());
-       i != cookie_info_list.end();
-       ++i) {
-    base::string16 label_text = l10n_util::GetStringFUTF16(
-        IDS_WEBSITE_SETTINGS_SITE_DATA_STATS_LINE,
-        base::UTF8ToUTF16(i->cookie_source),
-        base::IntToString16(i->allowed),
-        base::IntToString16(i->blocked));
-    if (i != cookie_info_list.begin())
-      layout->AddPaddingRow(1, kSiteDataSectionRowSpacing);
+    const int site_data_content_column = 0;
+    views::ColumnSet* column_set =
+        layout->AddColumnSet(site_data_content_column);
+    column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL, 1,
+                          views::GridLayout::FIXED, kSiteDataIconColumnWidth,
+                          0);
+    column_set->AddPaddingColumn(0, kIconMarginLeft);
+    column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL, 1,
+                          views::GridLayout::USE_PREF, 0, 0);
+    // No padding. This third column is for |third_party_label_text| (see
+    // below),
+    // and the text needs to flow naturally from the |first_party_label_text|
+    // link.
+    column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL, 1,
+                          views::GridLayout::USE_PREF, 0, 0);
+
+    layout->AddPaddingRow(1, 5);
+
     layout->StartRow(1, site_data_content_column);
     WebsiteSettingsUI::PermissionInfo info;
     info.type = CONTENT_SETTINGS_TYPE_COOKIES;
     info.setting = CONTENT_SETTING_ALLOW;
+    info.is_incognito =
+        Profile::FromBrowserContext(web_contents_->GetBrowserContext())
+            ->IsOffTheRecord();
     views::ImageView* icon = new views::ImageView();
     const gfx::Image& image = WebsiteSettingsUI::GetPermissionIcon(info);
     icon->SetImage(image.ToImageSkia());
     layout->AddView(icon, 1, 1, views::GridLayout::CENTER,
                     views::GridLayout::CENTER);
-    layout->AddView(new views::Label(label_text), 1, 1,
+    layout->AddView(cookie_dialog_link_, 1, 1, views::GridLayout::CENTER,
+                    views::GridLayout::CENTER);
+    base::string16 comma = base::ASCIIToUTF16(", ");
+
+    layout->AddView(new views::Label(comma + third_party_label_text), 1, 1,
                     views::GridLayout::LEADING, views::GridLayout::CENTER);
+
+    layout->AddPaddingRow(1, 6);
   }
-  layout->AddPaddingRow(1, 6);
 
   layout->Layout(site_data_content_);
   SizeToContents();
 }
 
 void WebsiteSettingsPopupView::SetPermissionInfo(
-    const PermissionInfoList& permission_info_list) {
+    const PermissionInfoList& permission_info_list,
+    const ChosenObjectInfoList& chosen_object_info_list) {
+  // When a permission is changed, WebsiteSettings::OnSitePermissionChanged()
+  // calls this method with updated permissions. However, PermissionSelectorView
+  // will have already updated its state, so it's already reflected in the UI.
+  // In addition, if a permission is set to the default setting, WebsiteSettings
+  // removes it from |permission_info_list|, but the button should remain.
+  if (permissions_content_) {
+    STLDeleteContainerPointers(chosen_object_info_list.begin(),
+                               chosen_object_info_list.end());
+    return;
+  }
+
   permissions_content_ = new views::View();
   views::GridLayout* layout = new views::GridLayout(permissions_content_);
   permissions_content_->SetLayoutManager(layout);
@@ -534,19 +664,26 @@ void WebsiteSettingsPopupView::SetPermissionInfo(
                         views::GridLayout::USE_PREF,
                         0,
                         0);
-  for (PermissionInfoList::const_iterator permission =
-           permission_info_list.begin();
-       permission != permission_info_list.end();
-       ++permission) {
+  for (const auto& permission : permission_info_list) {
     layout->StartRow(1, content_column);
     PermissionSelectorView* selector = new PermissionSelectorView(
         web_contents_ ? web_contents_->GetURL() : GURL::EmptyGURL(),
-        *permission);
+        permission);
     selector->AddObserver(this);
     layout->AddView(selector,
                     1,
                     1,
                     views::GridLayout::LEADING,
+                    views::GridLayout::CENTER);
+    layout->AddPaddingRow(1, kPermissionsSectionRowSpacing);
+  }
+
+  for (auto object : chosen_object_info_list) {
+    layout->StartRow(1, content_column);
+    // The view takes ownership of the object info.
+    auto object_view = new ChosenObjectView(make_scoped_ptr(object));
+    object_view->AddObserver(this);
+    layout->AddView(object_view, 1, 1, views::GridLayout::LEADING,
                     views::GridLayout::CENTER);
     layout->AddPaddingRow(1, kPermissionsSectionRowSpacing);
   }
@@ -570,16 +707,9 @@ void WebsiteSettingsPopupView::SetPermissionInfo(
 
 void WebsiteSettingsPopupView::SetIdentityInfo(
     const IdentityInfo& identity_info) {
-  base::string16 identity_status_text = identity_info.GetIdentityStatusText();
-  SkColor text_color = SK_ColorBLACK;
-  if (identity_info.identity_status ==
-          WebsiteSettings::SITE_IDENTITY_STATUS_CERT ||
-      identity_info.identity_status ==
-          WebsiteSettings::SITE_IDENTITY_STATUS_EV_CERT) {
-    text_color = kIdentityVerifiedTextColor;
-  }
+  base::string16 identity_status_text = identity_info.GetSecuritySummary();
   header_->SetIdentityName(base::UTF8ToUTF16(identity_info.site_identity));
-  header_->SetIdentityStatus(identity_status_text, text_color);
+  header_->SetIdentityStatus(identity_status_text, SK_ColorBLACK);
 
   // The headline and the certificate dialog link of the site's identity
   // section is only displayed if the site's identity was verified. If the
@@ -635,15 +765,10 @@ views::View* WebsiteSettingsPopupView::CreatePermissionsTab() {
       new views::BoxLayout(views::BoxLayout::kVertical, 0, 0, 1));
 
   // Add cookies and site data section.
-  cookie_dialog_link_ = new views::Link(
-      l10n_util::GetStringUTF16(IDS_WEBSITE_SETTINGS_SHOW_SITE_DATA));
-  cookie_dialog_link_->set_listener(this);
   site_data_content_ = new views::View();
-  views::View* site_data_section =
-      CreateSection(l10n_util::GetStringUTF16(
-                        IDS_WEBSITE_SETTINGS_TITLE_SITE_DATA),
-                    site_data_content_,
-                    cookie_dialog_link_);
+  views::View* site_data_section = CreateSection(
+      l10n_util::GetStringUTF16(IDS_WEBSITE_SETTINGS_TITLE_SITE_DATA),
+      site_data_content_, NULL);
   pane->AddChildView(site_data_section);
 
   return pane;
@@ -749,7 +874,6 @@ void WebsiteSettingsPopupView::ResetConnectionSection(
                         0);
   column_set->AddPaddingColumn(0, kConnectionSectionPaddingRight);
 
-
   layout->AddPaddingRow(0, kConnectionSectionPaddingTop);
   layout->StartRow(1, 0);
 
@@ -820,12 +944,9 @@ void WebsiteSettingsPopupView::HandleLinkClickedAsync(views::Link* source) {
         WebsiteSettings::WEBSITE_SETTINGS_CERTIFICATE_DIALOG_OPENED);
     ShowCertificateViewerByID(web_contents_, parent, cert_id_);
   } else if (source == help_center_link_) {
-    browser_->OpenURL(
-        content::OpenURLParams(GURL(chrome::kPageInfoHelpCenterURL),
-                               content::Referrer(),
-                               NEW_FOREGROUND_TAB,
-                               ui::PAGE_TRANSITION_LINK,
-                               false));
+    web_contents_->OpenURL(content::OpenURLParams(
+        GURL(chrome::kPageInfoHelpCenterURL), content::Referrer(),
+        NEW_FOREGROUND_TAB, ui::PAGE_TRANSITION_LINK, false));
     presenter_->RecordWebsiteSettingsAction(
         WebsiteSettings::WEBSITE_SETTINGS_CONNECTION_HELP_OPENED);
   } else if (source == site_settings_link_) {
@@ -833,7 +954,7 @@ void WebsiteSettingsPopupView::HandleLinkClickedAsync(views::Link* source) {
     // for now. But on Android, it opens a page specific to a given origin that
     // shows all of the settings for that origin. If/when that's available on
     // desktop we should link to that here, too.
-    browser_->OpenURL(content::OpenURLParams(
+    web_contents_->OpenURL(content::OpenURLParams(
         GURL(chrome::kChromeUIContentSettingsURL), content::Referrer(),
         NEW_FOREGROUND_TAB, ui::PAGE_TRANSITION_LINK, false));
     presenter_->RecordWebsiteSettingsAction(
@@ -841,4 +962,13 @@ void WebsiteSettingsPopupView::HandleLinkClickedAsync(views::Link* source) {
   } else {
     NOTREACHED();
   }
+}
+
+void WebsiteSettingsPopupView::StyledLabelLinkClicked(views::StyledLabel* label,
+                                                      const gfx::Range& range,
+                                                      int event_flags) {
+  presenter_->RecordWebsiteSettingsAction(
+      WebsiteSettings::WEBSITE_SETTINGS_SECURITY_DETAILS_OPENED);
+  DevToolsWindow::OpenDevToolsWindow(web_contents_,
+                                     DevToolsToggleAction::ShowSecurityPanel());
 }

@@ -5,11 +5,11 @@
 #ifndef CHROME_BROWSER_PUSH_MESSAGING_PUSH_MESSAGING_APP_IDENTIFIER_H_
 #define CHROME_BROWSER_PUSH_MESSAGING_PUSH_MESSAGING_APP_IDENTIFIER_H_
 
+#include <stddef.h>
 #include <stdint.h>
 #include <string>
 #include <vector>
 
-#include "base/basictypes.h"
 #include "base/gtest_prod_util.h"
 #include "base/logging.h"
 #include "url/gurl.h"
@@ -53,6 +53,10 @@ class PushMessagingAppIdentifier {
   // Returns all the PushMessagingAppIdentifiers currently registered for the
   // given |profile|.
   static std::vector<PushMessagingAppIdentifier> GetAll(Profile* profile);
+
+  // Returns the number of PushMessagingAppIdentifiers currently registered for
+  // the given |profile|.
+  static size_t GetCount(Profile* profile);
 
   ~PushMessagingAppIdentifier();
 

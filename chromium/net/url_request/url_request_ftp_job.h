@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "net/base/auth.h"
 #include "net/base/net_export.h"
@@ -71,7 +72,7 @@ class NET_EXPORT_PRIVATE URLRequestFtpJob : public URLRequestJob {
 
   // TODO(ibrar):  Yet to give another look at this function.
   UploadProgress GetUploadProgress() const override;
-  bool ReadRawData(IOBuffer* buf, int buf_size, int* bytes_read) override;
+  int ReadRawData(IOBuffer* buf, int buf_size) override;
 
   void HandleAuthNeededResponse();
 

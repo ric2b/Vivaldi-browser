@@ -5,8 +5,11 @@
 #ifndef CHROME_BROWSER_BACKGROUND_BACKGROUND_CONTENTS_H_
 #define CHROME_BROWSER_BACKGROUND_BACKGROUND_CONTENTS_H_
 
+#include <stdint.h>
+
 #include <string>
 
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
 #include "content/public/browser/notification_observer.h"
@@ -54,8 +57,9 @@ class BackgroundContents : public extensions::DeferredStartRenderHost,
 
   BackgroundContents(
       content::SiteInstance* site_instance,
-      int routing_id,
-      int main_frame_routing_id,
+      int32_t routing_id,
+      int32_t main_frame_routing_id,
+      int32_t main_frame_widget_routing_id,
       Delegate* delegate,
       const std::string& partition_id,
       content::SessionStorageNamespace* session_storage_namespace);

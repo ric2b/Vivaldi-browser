@@ -2,27 +2,34 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "content/common/gpu/gpu_channel.h"
+
+#include <utility>
+
 #if defined(OS_WIN)
 #include <windows.h>
 #endif
 
-#include "content/common/gpu/gpu_channel.h"
-
 #include <algorithm>
-#include <queue>
+#include <deque>
+#include <set>
 #include <vector>
 
+#include "base/atomicops.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
+#include "base/synchronization/lock.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "content/common/gpu/gpu_channel_manager.h"
 #include "content/common/gpu/gpu_memory_buffer_factory.h"
 #include "content/common/gpu/gpu_messages.h"
@@ -32,7 +39,7 @@
 #include "gpu/command_buffer/common/value_state.h"
 #include "gpu/command_buffer/service/gpu_scheduler.h"
 #include "gpu/command_buffer/service/image_factory.h"
-#include "gpu/command_buffer/service/mailbox_manager_impl.h"
+#include "gpu/command_buffer/service/mailbox_manager.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/command_buffer/service/valuebuffer_manager.h"
 #include "ipc/ipc_channel.h"
@@ -55,452 +62,594 @@ namespace {
 
 // Number of milliseconds between successive vsync. Many GL commands block
 // on vsync, so thresholds for preemption should be multiples of this.
-const int64 kVsyncIntervalMs = 17;
+const int64_t kVsyncIntervalMs = 17;
 
 // Amount of time that we will wait for an IPC to be processed before
 // preempting. After a preemption, we must wait this long before triggering
 // another preemption.
-const int64 kPreemptWaitTimeMs = 2 * kVsyncIntervalMs;
+const int64_t kPreemptWaitTimeMs = 2 * kVsyncIntervalMs;
 
 // Once we trigger a preemption, the maximum duration that we will wait
 // before clearing the preemption.
-const int64 kMaxPreemptTimeMs = kVsyncIntervalMs;
+const int64_t kMaxPreemptTimeMs = kVsyncIntervalMs;
 
 // Stop the preemption once the time for the longest pending IPC drops
 // below this threshold.
-const int64 kStopPreemptThresholdMs = kVsyncIntervalMs;
+const int64_t kStopPreemptThresholdMs = kVsyncIntervalMs;
 
 }  // anonymous namespace
 
-// This filter does three things:
-// - it counts and timestamps each message forwarded to the channel
-//   so that we can preempt other channels if a message takes too long to
-//   process. To guarantee fairness, we must wait a minimum amount of time
-//   before preempting and we limit the amount of time that we can preempt in
-//   one shot (see constants above).
-// - it handles the GpuCommandBufferMsg_InsertSyncPoint message on the IO
-//   thread, generating the sync point ID and responding immediately, and then
-//   posting a task to insert the GpuCommandBufferMsg_RetireSyncPoint message
-//   into the channel's queue.
-// - it generates mailbox names for clients of the GPU process on the IO thread.
-class GpuChannelMessageFilter : public IPC::MessageFilter {
- public:
-  GpuChannelMessageFilter(
-      base::WeakPtr<GpuChannel> gpu_channel,
-      scoped_refptr<gpu::SyncPointManager> sync_point_manager,
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-      bool future_sync_points)
-      : preemption_state_(IDLE),
-        gpu_channel_(gpu_channel),
-        sender_(NULL),
-        sync_point_manager_(sync_point_manager),
-        task_runner_(task_runner),
-        messages_forwarded_to_channel_(0),
-        a_stub_is_descheduled_(false),
-        future_sync_points_(future_sync_points) {}
+scoped_refptr<GpuChannelMessageQueue> GpuChannelMessageQueue::Create(
+    const base::WeakPtr<GpuChannel>& gpu_channel,
+    base::SingleThreadTaskRunner* task_runner,
+    gpu::SyncPointManager* sync_point_manager) {
+  return new GpuChannelMessageQueue(gpu_channel, task_runner,
+                                    sync_point_manager);
+}
 
-  void OnFilterAdded(IPC::Sender* sender) override {
-    DCHECK(!sender_);
-    sender_ = sender;
+scoped_refptr<gpu::SyncPointOrderData>
+GpuChannelMessageQueue::GetSyncPointOrderData() {
+  return sync_point_order_data_;
+}
+
+GpuChannelMessageQueue::GpuChannelMessageQueue(
+    const base::WeakPtr<GpuChannel>& gpu_channel,
+    base::SingleThreadTaskRunner* task_runner,
+    gpu::SyncPointManager* sync_point_manager)
+    : enabled_(true),
+      sync_point_order_data_(gpu::SyncPointOrderData::Create()),
+      gpu_channel_(gpu_channel),
+      task_runner_(task_runner),
+      sync_point_manager_(sync_point_manager) {}
+
+GpuChannelMessageQueue::~GpuChannelMessageQueue() {
+  DCHECK(channel_messages_.empty());
+}
+
+uint32_t GpuChannelMessageQueue::GetUnprocessedOrderNum() const {
+  return sync_point_order_data_->unprocessed_order_num();
+}
+
+uint32_t GpuChannelMessageQueue::GetProcessedOrderNum() const {
+  return sync_point_order_data_->processed_order_num();
+}
+
+void GpuChannelMessageQueue::PushBackMessage(const IPC::Message& message) {
+  base::AutoLock auto_lock(channel_messages_lock_);
+  if (enabled_)
+    PushMessageHelper(make_scoped_ptr(new GpuChannelMessage(message)));
+}
+
+bool GpuChannelMessageQueue::GenerateSyncPointMessage(
+    const IPC::Message& message,
+    bool retire_sync_point,
+    uint32_t* sync_point) {
+  DCHECK_EQ((uint32_t)GpuCommandBufferMsg_InsertSyncPoint::ID, message.type());
+  DCHECK(sync_point);
+  base::AutoLock auto_lock(channel_messages_lock_);
+  if (enabled_) {
+    *sync_point = sync_point_manager_->GenerateSyncPoint();
+
+    scoped_ptr<GpuChannelMessage> msg(new GpuChannelMessage(message));
+    msg->retire_sync_point = retire_sync_point;
+    msg->sync_point = *sync_point;
+
+    PushMessageHelper(std::move(msg));
+    return true;
+  }
+  return false;
+}
+
+bool GpuChannelMessageQueue::HasQueuedMessages() const {
+  base::AutoLock auto_lock(channel_messages_lock_);
+  return !channel_messages_.empty();
+}
+
+base::TimeTicks GpuChannelMessageQueue::GetNextMessageTimeTick() const {
+  base::AutoLock auto_lock(channel_messages_lock_);
+  if (!channel_messages_.empty())
+    return channel_messages_.front()->time_received;
+  return base::TimeTicks();
+}
+
+GpuChannelMessage* GpuChannelMessageQueue::GetNextMessage() const {
+  base::AutoLock auto_lock(channel_messages_lock_);
+  if (!channel_messages_.empty()) {
+    DCHECK_GT(channel_messages_.front()->order_number,
+              sync_point_order_data_->processed_order_num());
+    DCHECK_LE(channel_messages_.front()->order_number,
+              sync_point_order_data_->unprocessed_order_num());
+
+    return channel_messages_.front();
+  }
+  return nullptr;
+}
+
+void GpuChannelMessageQueue::BeginMessageProcessing(
+    const GpuChannelMessage* msg) {
+  sync_point_order_data_->BeginProcessingOrderNumber(msg->order_number);
+}
+
+void GpuChannelMessageQueue::PauseMessageProcessing(
+    const GpuChannelMessage* msg) {
+  sync_point_order_data_->PauseProcessingOrderNumber(msg->order_number);
+}
+
+bool GpuChannelMessageQueue::MessageProcessed() {
+  base::AutoLock auto_lock(channel_messages_lock_);
+  DCHECK(!channel_messages_.empty());
+  scoped_ptr<GpuChannelMessage> msg(channel_messages_.front());
+  channel_messages_.pop_front();
+  sync_point_order_data_->FinishProcessingOrderNumber(msg->order_number);
+  return !channel_messages_.empty();
+}
+
+void GpuChannelMessageQueue::DeleteAndDisableMessages() {
+  {
+    base::AutoLock auto_lock(channel_messages_lock_);
+    DCHECK(enabled_);
+    enabled_ = false;
   }
 
-  void OnFilterRemoved() override {
-    DCHECK(sender_);
-    sender_ = NULL;
+  // We guarantee that the queues will no longer be modified after enabled_
+  // is set to false, it is now safe to modify the queue without the lock.
+  // All public facing modifying functions check enabled_ while all
+  // private modifying functions DCHECK(enabled_) to enforce this.
+  while (!channel_messages_.empty()) {
+    scoped_ptr<GpuChannelMessage> msg(channel_messages_.front());
+    channel_messages_.pop_front();
+    // This needs to clean up both GpuCommandBufferMsg_InsertSyncPoint and
+    // GpuCommandBufferMsg_RetireSyncPoint messages, safer to just check
+    // if we have a sync point number here.
+    if (msg->sync_point)
+      sync_point_manager_->RetireSyncPoint(msg->sync_point);
   }
 
-  bool OnMessageReceived(const IPC::Message& message) override {
-    DCHECK(sender_);
+  if (sync_point_order_data_) {
+    sync_point_order_data_->Destroy();
+    sync_point_order_data_ = nullptr;
+  }
+}
 
-    bool handled = false;
-    if ((message.type() == GpuCommandBufferMsg_RetireSyncPoint::ID) &&
-        !future_sync_points_) {
-      DLOG(ERROR) << "Untrusted client should not send "
-                     "GpuCommandBufferMsg_RetireSyncPoint message";
+void GpuChannelMessageQueue::ScheduleHandleMessage() {
+  task_runner_->PostTask(FROM_HERE,
+                         base::Bind(&GpuChannel::HandleMessage, gpu_channel_));
+}
+
+void GpuChannelMessageQueue::PushMessageHelper(
+    scoped_ptr<GpuChannelMessage> msg) {
+  channel_messages_lock_.AssertAcquired();
+  DCHECK(enabled_);
+
+  msg->order_number = sync_point_order_data_->GenerateUnprocessedOrderNumber(
+      sync_point_manager_);
+  msg->time_received = base::TimeTicks::Now();
+
+  bool had_messages = !channel_messages_.empty();
+  channel_messages_.push_back(msg.release());
+  if (!had_messages)
+    ScheduleHandleMessage();
+}
+
+GpuChannelMessageFilter::GpuChannelMessageFilter(
+    const base::WeakPtr<GpuChannel>& gpu_channel,
+    GpuChannelMessageQueue* message_queue,
+    base::SingleThreadTaskRunner* task_runner,
+    gpu::PreemptionFlag* preempting_flag,
+    bool future_sync_points)
+    : preemption_state_(IDLE),
+      gpu_channel_(gpu_channel),
+      message_queue_(message_queue),
+      sender_(nullptr),
+      peer_pid_(base::kNullProcessId),
+      task_runner_(task_runner),
+      preempting_flag_(preempting_flag),
+      a_stub_is_descheduled_(false),
+      future_sync_points_(future_sync_points) {}
+
+GpuChannelMessageFilter::~GpuChannelMessageFilter() {}
+
+void GpuChannelMessageFilter::OnFilterAdded(IPC::Sender* sender) {
+  DCHECK(!sender_);
+  sender_ = sender;
+  timer_ = make_scoped_ptr(new base::OneShotTimer);
+  for (scoped_refptr<IPC::MessageFilter>& filter : channel_filters_) {
+    filter->OnFilterAdded(sender_);
+  }
+}
+
+void GpuChannelMessageFilter::OnFilterRemoved() {
+  DCHECK(sender_);
+  for (scoped_refptr<IPC::MessageFilter>& filter : channel_filters_) {
+    filter->OnFilterRemoved();
+  }
+  sender_ = nullptr;
+  peer_pid_ = base::kNullProcessId;
+  timer_ = nullptr;
+}
+
+void GpuChannelMessageFilter::OnChannelConnected(int32_t peer_pid) {
+  DCHECK(peer_pid_ == base::kNullProcessId);
+  peer_pid_ = peer_pid;
+  for (scoped_refptr<IPC::MessageFilter>& filter : channel_filters_) {
+    filter->OnChannelConnected(peer_pid);
+  }
+}
+
+void GpuChannelMessageFilter::OnChannelError() {
+  for (scoped_refptr<IPC::MessageFilter>& filter : channel_filters_) {
+    filter->OnChannelError();
+  }
+}
+
+void GpuChannelMessageFilter::OnChannelClosing() {
+  for (scoped_refptr<IPC::MessageFilter>& filter : channel_filters_) {
+    filter->OnChannelClosing();
+  }
+}
+
+void GpuChannelMessageFilter::AddChannelFilter(
+    scoped_refptr<IPC::MessageFilter> filter) {
+  channel_filters_.push_back(filter);
+  if (sender_)
+    filter->OnFilterAdded(sender_);
+  if (peer_pid_ != base::kNullProcessId)
+    filter->OnChannelConnected(peer_pid_);
+}
+
+void GpuChannelMessageFilter::RemoveChannelFilter(
+    scoped_refptr<IPC::MessageFilter> filter) {
+  if (sender_)
+    filter->OnFilterRemoved();
+  channel_filters_.erase(
+      std::find(channel_filters_.begin(), channel_filters_.end(), filter));
+}
+
+bool GpuChannelMessageFilter::OnMessageReceived(const IPC::Message& message) {
+  DCHECK(sender_);
+
+  if (message.should_unblock() || message.is_reply()) {
+    DLOG(ERROR) << "Unexpected message type";
+    return true;
+  }
+
+  if (message.type() == GpuChannelMsg_Nop::ID) {
+    IPC::Message* reply = IPC::SyncMessage::GenerateReply(&message);
+    Send(reply);
+    return true;
+  }
+
+  for (scoped_refptr<IPC::MessageFilter>& filter : channel_filters_) {
+    if (filter->OnMessageReceived(message)) {
+      return true;
+    }
+  }
+
+  bool handled = false;
+  if ((message.type() == GpuCommandBufferMsg_RetireSyncPoint::ID) &&
+      !future_sync_points_) {
+    DLOG(ERROR) << "Untrusted client should not send "
+                   "GpuCommandBufferMsg_RetireSyncPoint message";
+    return true;
+  }
+
+  if (message.type() == GpuCommandBufferMsg_InsertSyncPoint::ID) {
+    base::Tuple<bool> params;
+    IPC::Message* reply = IPC::SyncMessage::GenerateReply(&message);
+    if (!GpuCommandBufferMsg_InsertSyncPoint::ReadSendParam(&message,
+                                                            &params)) {
+      reply->set_reply_error();
+      Send(reply);
+      return true;
+    }
+    bool retire_sync_point = base::get<0>(params);
+    if (!future_sync_points_ && !retire_sync_point) {
+      DLOG(ERROR) << "Untrusted contexts can't create future sync points";
+      reply->set_reply_error();
+      Send(reply);
       return true;
     }
 
-    if (message.type() == GpuCommandBufferMsg_InsertSyncPoint::ID) {
-      base::Tuple<bool> retire;
-      IPC::Message* reply = IPC::SyncMessage::GenerateReply(&message);
-      if (!GpuCommandBufferMsg_InsertSyncPoint::ReadSendParam(&message,
-                                                              &retire)) {
-        reply->set_reply_error();
-        Send(reply);
-        return true;
-      }
-      if (!future_sync_points_ && !base::get<0>(retire)) {
-        LOG(ERROR) << "Untrusted contexts can't create future sync points";
-        reply->set_reply_error();
-        Send(reply);
-        return true;
-      }
-      uint32 sync_point = sync_point_manager_->GenerateSyncPoint();
-      GpuCommandBufferMsg_InsertSyncPoint::WriteReplyParams(reply, sync_point);
+    // Message queue must handle the entire sync point generation because the
+    // message queue could be disabled from the main thread during generation.
+    uint32_t sync_point = 0u;
+    if (!message_queue_->GenerateSyncPointMessage(message, retire_sync_point,
+                                                  &sync_point)) {
+      DLOG(ERROR) << "GpuChannel has been destroyed.";
+      reply->set_reply_error();
       Send(reply);
-      task_runner_->PostTask(
-          FROM_HERE,
-          base::Bind(&GpuChannelMessageFilter::InsertSyncPointOnMainThread,
-                     gpu_channel_, sync_point_manager_, message.routing_id(),
-                     base::get<0>(retire), sync_point));
-      handled = true;
+      return true;
     }
 
-    // All other messages get processed by the GpuChannel.
-    messages_forwarded_to_channel_++;
-    if (preempting_flag_.get())
-      pending_messages_.push(PendingMessage(messages_forwarded_to_channel_));
-    UpdatePreemptionState();
-
-    return handled;
+    DCHECK_NE(sync_point, 0u);
+    GpuCommandBufferMsg_InsertSyncPoint::WriteReplyParams(reply, sync_point);
+    Send(reply);
+    handled = true;
   }
 
-  void MessageProcessed(uint64 messages_processed) {
-    while (!pending_messages_.empty() &&
-           pending_messages_.front().message_number <= messages_processed)
-      pending_messages_.pop();
-    UpdatePreemptionState();
-  }
-
-  void SetPreemptingFlagAndSchedulingState(
-      gpu::PreemptionFlag* preempting_flag,
-      bool a_stub_is_descheduled) {
-    preempting_flag_ = preempting_flag;
-    a_stub_is_descheduled_ = a_stub_is_descheduled;
-  }
-
-  void UpdateStubSchedulingState(bool a_stub_is_descheduled) {
-    a_stub_is_descheduled_ = a_stub_is_descheduled;
-    UpdatePreemptionState();
-  }
-
-  bool Send(IPC::Message* message) {
-    return sender_->Send(message);
-  }
-
- protected:
-  ~GpuChannelMessageFilter() override {}
-
- private:
-  enum PreemptionState {
-    // Either there's no other channel to preempt, there are no messages
-    // pending processing, or we just finished preempting and have to wait
-    // before preempting again.
-    IDLE,
-    // We are waiting kPreemptWaitTimeMs before checking if we should preempt.
-    WAITING,
-    // We can preempt whenever any IPC processing takes more than
-    // kPreemptWaitTimeMs.
-    CHECKING,
-    // We are currently preempting (i.e. no stub is descheduled).
-    PREEMPTING,
-    // We would like to preempt, but some stub is descheduled.
-    WOULD_PREEMPT_DESCHEDULED,
-  };
-
-  PreemptionState preemption_state_;
-
-  // Maximum amount of time that we can spend in PREEMPTING.
-  // It is reset when we transition to IDLE.
-  base::TimeDelta max_preemption_time_;
-
-  struct PendingMessage {
-    uint64 message_number;
-    base::TimeTicks time_received;
-
-    explicit PendingMessage(uint64 message_number)
-        : message_number(message_number),
-          time_received(base::TimeTicks::Now()) {
-    }
-  };
-
-  void UpdatePreemptionState() {
-    switch (preemption_state_) {
-      case IDLE:
-        if (preempting_flag_.get() && !pending_messages_.empty())
-          TransitionToWaiting();
-        break;
-      case WAITING:
-        // A timer will transition us to CHECKING.
-        DCHECK(timer_.IsRunning());
-        break;
-      case CHECKING:
-        if (!pending_messages_.empty()) {
-          base::TimeDelta time_elapsed =
-              base::TimeTicks::Now() - pending_messages_.front().time_received;
-          if (time_elapsed.InMilliseconds() < kPreemptWaitTimeMs) {
-            // Schedule another check for when the IPC may go long.
-            timer_.Start(
-                FROM_HERE,
-                base::TimeDelta::FromMilliseconds(kPreemptWaitTimeMs) -
-                    time_elapsed,
-                this, &GpuChannelMessageFilter::UpdatePreemptionState);
-          } else {
-            if (a_stub_is_descheduled_)
-              TransitionToWouldPreemptDescheduled();
-            else
-              TransitionToPreempting();
-          }
-        }
-        break;
-      case PREEMPTING:
-        // A TransitionToIdle() timer should always be running in this state.
-        DCHECK(timer_.IsRunning());
-        if (a_stub_is_descheduled_)
-          TransitionToWouldPreemptDescheduled();
-        else
-          TransitionToIdleIfCaughtUp();
-        break;
-      case WOULD_PREEMPT_DESCHEDULED:
-        // A TransitionToIdle() timer should never be running in this state.
-        DCHECK(!timer_.IsRunning());
-        if (!a_stub_is_descheduled_)
-          TransitionToPreempting();
-        else
-          TransitionToIdleIfCaughtUp();
-        break;
-      default:
-        NOTREACHED();
-    }
-  }
-
-  void TransitionToIdleIfCaughtUp() {
-    DCHECK(preemption_state_ == PREEMPTING ||
-           preemption_state_ == WOULD_PREEMPT_DESCHEDULED);
-    if (pending_messages_.empty()) {
-      TransitionToIdle();
+  // Forward all other messages to the GPU Channel.
+  if (!handled) {
+    if (message.type() == GpuCommandBufferMsg_WaitForTokenInRange::ID ||
+        message.type() == GpuCommandBufferMsg_WaitForGetOffsetInRange::ID) {
+      task_runner_->PostTask(FROM_HERE,
+                             base::Bind(&GpuChannel::HandleOutOfOrderMessage,
+                                        gpu_channel_, message));
     } else {
-      base::TimeDelta time_elapsed =
-          base::TimeTicks::Now() - pending_messages_.front().time_received;
-      if (time_elapsed.InMilliseconds() < kStopPreemptThresholdMs)
-        TransitionToIdle();
+      message_queue_->PushBackMessage(message);
     }
+    handled = true;
   }
 
-  void TransitionToIdle() {
-    DCHECK(preemption_state_ == PREEMPTING ||
-           preemption_state_ == WOULD_PREEMPT_DESCHEDULED);
-    // Stop any outstanding timer set to force us from PREEMPTING to IDLE.
-    timer_.Stop();
+  UpdatePreemptionState();
+  return handled;
+}
 
-    preemption_state_ = IDLE;
-    preempting_flag_->Reset();
-    TRACE_COUNTER_ID1("gpu", "GpuChannel::Preempting", this, 0);
+void GpuChannelMessageFilter::OnMessageProcessed() {
+  UpdatePreemptionState();
+}
 
-    UpdatePreemptionState();
+void GpuChannelMessageFilter::UpdateStubSchedulingState(
+    bool a_stub_is_descheduled) {
+  a_stub_is_descheduled_ = a_stub_is_descheduled;
+  UpdatePreemptionState();
+}
+
+bool GpuChannelMessageFilter::Send(IPC::Message* message) {
+  return sender_->Send(message);
+}
+
+void GpuChannelMessageFilter::UpdatePreemptionState() {
+  switch (preemption_state_) {
+    case IDLE:
+      if (preempting_flag_.get() && message_queue_->HasQueuedMessages())
+        TransitionToWaiting();
+      break;
+    case WAITING:
+      // A timer will transition us to CHECKING.
+      DCHECK(timer_->IsRunning());
+      break;
+    case CHECKING: {
+      base::TimeTicks time_tick = message_queue_->GetNextMessageTimeTick();
+      if (!time_tick.is_null()) {
+        base::TimeDelta time_elapsed = base::TimeTicks::Now() - time_tick;
+        if (time_elapsed.InMilliseconds() < kPreemptWaitTimeMs) {
+          // Schedule another check for when the IPC may go long.
+          timer_->Start(FROM_HERE,
+                        base::TimeDelta::FromMilliseconds(kPreemptWaitTimeMs) -
+                            time_elapsed,
+                        this, &GpuChannelMessageFilter::UpdatePreemptionState);
+        } else {
+          if (a_stub_is_descheduled_)
+            TransitionToWouldPreemptDescheduled();
+          else
+            TransitionToPreempting();
+        }
+      }
+    } break;
+    case PREEMPTING:
+      // A TransitionToIdle() timer should always be running in this state.
+      DCHECK(timer_->IsRunning());
+      if (a_stub_is_descheduled_)
+        TransitionToWouldPreemptDescheduled();
+      else
+        TransitionToIdleIfCaughtUp();
+      break;
+    case WOULD_PREEMPT_DESCHEDULED:
+      // A TransitionToIdle() timer should never be running in this state.
+      DCHECK(!timer_->IsRunning());
+      if (!a_stub_is_descheduled_)
+        TransitionToPreempting();
+      else
+        TransitionToIdleIfCaughtUp();
+      break;
+    default:
+      NOTREACHED();
   }
+}
 
-  void TransitionToWaiting() {
-    DCHECK_EQ(preemption_state_, IDLE);
-    DCHECK(!timer_.IsRunning());
-
-    preemption_state_ = WAITING;
-    timer_.Start(
-        FROM_HERE,
-        base::TimeDelta::FromMilliseconds(kPreemptWaitTimeMs),
-        this, &GpuChannelMessageFilter::TransitionToChecking);
+void GpuChannelMessageFilter::TransitionToIdleIfCaughtUp() {
+  DCHECK(preemption_state_ == PREEMPTING ||
+         preemption_state_ == WOULD_PREEMPT_DESCHEDULED);
+  base::TimeTicks next_tick = message_queue_->GetNextMessageTimeTick();
+  if (next_tick.is_null()) {
+    TransitionToIdle();
+  } else {
+    base::TimeDelta time_elapsed = base::TimeTicks::Now() - next_tick;
+    if (time_elapsed.InMilliseconds() < kStopPreemptThresholdMs)
+      TransitionToIdle();
   }
+}
 
-  void TransitionToChecking() {
-    DCHECK_EQ(preemption_state_, WAITING);
-    DCHECK(!timer_.IsRunning());
+void GpuChannelMessageFilter::TransitionToIdle() {
+  DCHECK(preemption_state_ == PREEMPTING ||
+         preemption_state_ == WOULD_PREEMPT_DESCHEDULED);
+  // Stop any outstanding timer set to force us from PREEMPTING to IDLE.
+  timer_->Stop();
 
-    preemption_state_ = CHECKING;
-    max_preemption_time_ = base::TimeDelta::FromMilliseconds(kMaxPreemptTimeMs);
-    UpdatePreemptionState();
-  }
+  preemption_state_ = IDLE;
+  preempting_flag_->Reset();
+  TRACE_COUNTER_ID1("gpu", "GpuChannel::Preempting", this, 0);
 
-  void TransitionToPreempting() {
-    DCHECK(preemption_state_ == CHECKING ||
-           preemption_state_ == WOULD_PREEMPT_DESCHEDULED);
-    DCHECK(!a_stub_is_descheduled_);
+  UpdatePreemptionState();
+}
 
+void GpuChannelMessageFilter::TransitionToWaiting() {
+  DCHECK_EQ(preemption_state_, IDLE);
+  DCHECK(!timer_->IsRunning());
+
+  preemption_state_ = WAITING;
+  timer_->Start(FROM_HERE,
+                base::TimeDelta::FromMilliseconds(kPreemptWaitTimeMs), this,
+                &GpuChannelMessageFilter::TransitionToChecking);
+}
+
+void GpuChannelMessageFilter::TransitionToChecking() {
+  DCHECK_EQ(preemption_state_, WAITING);
+  DCHECK(!timer_->IsRunning());
+
+  preemption_state_ = CHECKING;
+  max_preemption_time_ = base::TimeDelta::FromMilliseconds(kMaxPreemptTimeMs);
+  UpdatePreemptionState();
+}
+
+void GpuChannelMessageFilter::TransitionToPreempting() {
+  DCHECK(preemption_state_ == CHECKING ||
+         preemption_state_ == WOULD_PREEMPT_DESCHEDULED);
+  DCHECK(!a_stub_is_descheduled_);
+
+  // Stop any pending state update checks that we may have queued
+  // while CHECKING.
+  if (preemption_state_ == CHECKING)
+    timer_->Stop();
+
+  preemption_state_ = PREEMPTING;
+  preempting_flag_->Set();
+  TRACE_COUNTER_ID1("gpu", "GpuChannel::Preempting", this, 1);
+
+  timer_->Start(FROM_HERE, max_preemption_time_, this,
+                &GpuChannelMessageFilter::TransitionToIdle);
+
+  UpdatePreemptionState();
+}
+
+void GpuChannelMessageFilter::TransitionToWouldPreemptDescheduled() {
+  DCHECK(preemption_state_ == CHECKING || preemption_state_ == PREEMPTING);
+  DCHECK(a_stub_is_descheduled_);
+
+  if (preemption_state_ == CHECKING) {
     // Stop any pending state update checks that we may have queued
     // while CHECKING.
-    if (preemption_state_ == CHECKING)
-      timer_.Stop();
-
-    preemption_state_ = PREEMPTING;
-    preempting_flag_->Set();
-    TRACE_COUNTER_ID1("gpu", "GpuChannel::Preempting", this, 1);
-
-    timer_.Start(
-       FROM_HERE,
-       max_preemption_time_,
-       this, &GpuChannelMessageFilter::TransitionToIdle);
-
-    UpdatePreemptionState();
-  }
-
-  void TransitionToWouldPreemptDescheduled() {
-    DCHECK(preemption_state_ == CHECKING ||
-           preemption_state_ == PREEMPTING);
-    DCHECK(a_stub_is_descheduled_);
-
-    if (preemption_state_ == CHECKING) {
-      // Stop any pending state update checks that we may have queued
-      // while CHECKING.
-      timer_.Stop();
-    } else {
-      // Stop any TransitionToIdle() timers that we may have queued
-      // while PREEMPTING.
-      timer_.Stop();
-      max_preemption_time_ = timer_.desired_run_time() - base::TimeTicks::Now();
-      if (max_preemption_time_ < base::TimeDelta()) {
-        TransitionToIdle();
-        return;
-      }
+    timer_->Stop();
+  } else {
+    // Stop any TransitionToIdle() timers that we may have queued
+    // while PREEMPTING.
+    timer_->Stop();
+    max_preemption_time_ = timer_->desired_run_time() - base::TimeTicks::Now();
+    if (max_preemption_time_ < base::TimeDelta()) {
+      TransitionToIdle();
+      return;
     }
-
-    preemption_state_ = WOULD_PREEMPT_DESCHEDULED;
-    preempting_flag_->Reset();
-    TRACE_COUNTER_ID1("gpu", "GpuChannel::Preempting", this, 0);
-
-    UpdatePreemptionState();
   }
 
-  static void InsertSyncPointOnMainThread(
-      base::WeakPtr<GpuChannel> gpu_channel,
-      scoped_refptr<gpu::SyncPointManager> manager,
-      int32 routing_id,
-      bool retire,
-      uint32 sync_point) {
-    // This function must ensure that the sync point will be retired. Normally
-    // we'll find the stub based on the routing ID, and associate the sync point
-    // with it, but if that fails for any reason (channel or stub already
-    // deleted, invalid routing id), we need to retire the sync point
-    // immediately.
-    if (gpu_channel) {
-      GpuCommandBufferStub* stub = gpu_channel->LookupCommandBuffer(routing_id);
-      if (stub) {
-        stub->AddSyncPoint(sync_point);
-        if (retire) {
-          GpuCommandBufferMsg_RetireSyncPoint message(routing_id, sync_point);
-          gpu_channel->OnMessageReceived(message);
-        }
-        return;
-      } else {
-        gpu_channel->MessageProcessed();
-      }
-    }
-    manager->RetireSyncPoint(sync_point);
-  }
+  preemption_state_ = WOULD_PREEMPT_DESCHEDULED;
+  preempting_flag_->Reset();
+  TRACE_COUNTER_ID1("gpu", "GpuChannel::Preempting", this, 0);
 
-  // NOTE: this weak pointer is never dereferenced on the IO thread, it's only
-  // passed through - therefore the WeakPtr assumptions are respected.
-  base::WeakPtr<GpuChannel> gpu_channel_;
-  IPC::Sender* sender_;
-  scoped_refptr<gpu::SyncPointManager> sync_point_manager_;
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
-  scoped_refptr<gpu::PreemptionFlag> preempting_flag_;
+  UpdatePreemptionState();
+}
 
-  std::queue<PendingMessage> pending_messages_;
+GpuChannel::StreamState::StreamState(int32_t id, GpuStreamPriority priority)
+    : id_(id), priority_(priority) {}
 
-  // Count of the number of IPCs forwarded to the GpuChannel.
-  uint64 messages_forwarded_to_channel_;
+GpuChannel::StreamState::~StreamState() {}
 
-  base::OneShotTimer<GpuChannelMessageFilter> timer_;
+void GpuChannel::StreamState::AddRoute(int32_t route_id) {
+  routes_.insert(route_id);
+}
+void GpuChannel::StreamState::RemoveRoute(int32_t route_id) {
+  routes_.erase(route_id);
+}
 
-  bool a_stub_is_descheduled_;
+bool GpuChannel::StreamState::HasRoute(int32_t route_id) const {
+  return routes_.find(route_id) != routes_.end();
+}
 
-  // True if this channel can create future sync points.
-  bool future_sync_points_;
-};
+bool GpuChannel::StreamState::HasRoutes() const {
+  return !routes_.empty();
+}
 
 GpuChannel::GpuChannel(GpuChannelManager* gpu_channel_manager,
+                       gpu::SyncPointManager* sync_point_manager,
                        GpuWatchdog* watchdog,
                        gfx::GLShareGroup* share_group,
                        gpu::gles2::MailboxManager* mailbox,
+                       gpu::PreemptionFlag* preempting_flag,
+                       base::SingleThreadTaskRunner* task_runner,
+                       base::SingleThreadTaskRunner* io_task_runner,
                        int client_id,
-                       bool software,
-                       bool allow_future_sync_points)
+                       uint64_t client_tracing_id,
+                       bool allow_future_sync_points,
+                       bool allow_real_time_streams)
     : gpu_channel_manager_(gpu_channel_manager),
-      messages_processed_(0),
+      sync_point_manager_(sync_point_manager),
+      channel_id_(IPC::Channel::GenerateVerifiedChannelID("gpu")),
+      preempting_flag_(preempting_flag),
       client_id_(client_id),
-      share_group_(share_group ? share_group : new gfx::GLShareGroup),
-      mailbox_manager_(mailbox ? mailbox : new gpu::gles2::MailboxManagerImpl),
+      client_tracing_id_(client_tracing_id),
+      task_runner_(task_runner),
+      io_task_runner_(io_task_runner),
+      share_group_(share_group),
+      mailbox_manager_(mailbox),
+      subscription_ref_set_(new gpu::gles2::SubscriptionRefSet),
+      pending_valuebuffer_state_(new gpu::ValueStateMap),
       watchdog_(watchdog),
-      software_(software),
-      handle_messages_scheduled_(false),
-      currently_processing_message_(NULL),
       num_stubs_descheduled_(0),
       allow_future_sync_points_(allow_future_sync_points),
+      allow_real_time_streams_(allow_real_time_streams),
       weak_factory_(this) {
   DCHECK(gpu_channel_manager);
   DCHECK(client_id);
 
-  channel_id_ = IPC::Channel::GenerateVerifiedChannelID("gpu");
-  const base::CommandLine* command_line =
-      base::CommandLine::ForCurrentProcess();
-  log_messages_ = command_line->HasSwitch(switches::kLogPluginMessages);
+  message_queue_ = GpuChannelMessageQueue::Create(
+      weak_factory_.GetWeakPtr(), task_runner, sync_point_manager);
 
-  subscription_ref_set_ = new gpu::gles2::SubscriptionRefSet();
+  filter_ = new GpuChannelMessageFilter(
+      weak_factory_.GetWeakPtr(), message_queue_.get(), task_runner,
+      preempting_flag, allow_future_sync_points);
+
   subscription_ref_set_->AddObserver(this);
 }
 
 GpuChannel::~GpuChannel() {
-  STLDeleteElements(&deferred_messages_);
+  // Clear stubs first because of dependencies.
+  stubs_.clear();
+
+  message_queue_->DeleteAndDisableMessages();
+
   subscription_ref_set_->RemoveObserver(this);
   if (preempting_flag_.get())
     preempting_flag_->Reset();
-
-  base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
-      this);
 }
 
-void GpuChannel::Init(base::SingleThreadTaskRunner* io_task_runner,
-                      base::WaitableEvent* shutdown_event,
-                      IPC::AttachmentBroker* broker) {
-  DCHECK(!channel_.get());
+IPC::ChannelHandle GpuChannel::Init(base::WaitableEvent* shutdown_event) {
+  DCHECK(shutdown_event);
+  DCHECK(!channel_);
 
-  // Map renderer ID to a (single) channel to that process.
+  IPC::ChannelHandle channel_handle(channel_id_);
+
   channel_ =
-      IPC::SyncChannel::Create(channel_id_, IPC::Channel::MODE_SERVER, this,
-                               io_task_runner, false, shutdown_event, broker);
-
-  filter_ = new GpuChannelMessageFilter(
-      weak_factory_.GetWeakPtr(), gpu_channel_manager_->sync_point_manager(),
-      base::ThreadTaskRunnerHandle::Get(), allow_future_sync_points_);
-  io_task_runner_ = io_task_runner;
-  channel_->AddFilter(filter_.get());
-  pending_valuebuffer_state_ = new gpu::ValueStateMap();
-
-  base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
-      this, base::ThreadTaskRunnerHandle::Get());
-}
-
-std::string GpuChannel::GetChannelName() {
-  return channel_id_;
-}
+      IPC::SyncChannel::Create(channel_handle, IPC::Channel::MODE_SERVER, this,
+                               io_task_runner_, false, shutdown_event);
 
 #if defined(OS_POSIX)
-base::ScopedFD GpuChannel::TakeRendererFileDescriptor() {
-  if (!channel_) {
-    NOTREACHED();
-    return base::ScopedFD();
-  }
-  return channel_->TakeClientFileDescriptor();
+  // On POSIX, pass the renderer-side FD. Also mark it as auto-close so
+  // that it gets closed after it has been sent.
+  base::ScopedFD renderer_fd = channel_->TakeClientFileDescriptor();
+  DCHECK(renderer_fd.is_valid());
+  channel_handle.socket = base::FileDescriptor(std::move(renderer_fd));
+#endif
+
+  channel_->AddFilter(filter_.get());
+
+  return channel_handle;
 }
-#endif  // defined(OS_POSIX)
+
+base::ProcessId GpuChannel::GetClientPID() const {
+  return channel_->GetPeerPID();
+}
+
+uint32_t GpuChannel::GetProcessedOrderNum() const {
+  return message_queue_->GetProcessedOrderNum();
+}
+
+uint32_t GpuChannel::GetUnprocessedOrderNum() const {
+  return message_queue_->GetUnprocessedOrderNum();
+}
 
 bool GpuChannel::OnMessageReceived(const IPC::Message& message) {
-  if (log_messages_) {
-    DVLOG(1) << "received message @" << &message << " on channel @" << this
-             << " with type " << message.type();
-  }
-
-  if (message.type() == GpuCommandBufferMsg_WaitForTokenInRange::ID ||
-      message.type() == GpuCommandBufferMsg_WaitForGetOffsetInRange::ID) {
-    // Move Wait commands to the head of the queue, so the renderer
-    // doesn't have to wait any longer than necessary.
-    deferred_messages_.push_front(new IPC::Message(message));
-  } else {
-    deferred_messages_.push_back(new IPC::Message(message));
-  }
-
-  OnScheduled();
-
-  return true;
+  // All messages should be pushed to channel_messages_ and handled separately.
+  NOTREACHED();
+  return false;
 }
 
 void GpuChannel::OnChannelError() {
@@ -511,10 +660,9 @@ bool GpuChannel::Send(IPC::Message* message) {
   // The GPU process must never send a synchronous IPC message to the renderer
   // process. This could result in deadlock.
   DCHECK(!message->is_sync());
-  if (log_messages_) {
-    DVLOG(1) << "sending message @" << message << " on channel @" << this
-             << " with type " << message->type();
-  }
+
+  DVLOG(1) << "sending message @" << message << " on channel @" << this
+           << " with type " << message->type();
 
   if (!channel_) {
     delete message;
@@ -534,33 +682,12 @@ void GpuChannel::OnRemoveSubscription(unsigned int target) {
       new GpuHostMsg_RemoveSubscription(client_id_, target));
 }
 
-void GpuChannel::RequeueMessage() {
-  DCHECK(currently_processing_message_);
-  deferred_messages_.push_front(
-      new IPC::Message(*currently_processing_message_));
-  messages_processed_--;
-  currently_processing_message_ = NULL;
-}
-
-void GpuChannel::OnScheduled() {
-  if (handle_messages_scheduled_)
-    return;
-  // Post a task to handle any deferred messages. The deferred message queue is
-  // not emptied here, which ensures that OnMessageReceived will continue to
-  // defer newly received messages until the ones in the queue have all been
-  // handled by HandleMessage. HandleMessage is invoked as a
-  // task to prevent reentrancy.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::Bind(&GpuChannel::HandleMessage, weak_factory_.GetWeakPtr()));
-  handle_messages_scheduled_ = true;
-}
-
-void GpuChannel::StubSchedulingChanged(bool scheduled) {
+void GpuChannel::OnStubSchedulingChanged(GpuCommandBufferStub* stub,
+                                         bool scheduled) {
   bool a_stub_was_descheduled = num_stubs_descheduled_ > 0;
   if (scheduled) {
     num_stubs_descheduled_--;
-    OnScheduled();
+    ScheduleHandleMessage();
   } else {
     num_stubs_descheduled_++;
   }
@@ -579,54 +706,63 @@ void GpuChannel::StubSchedulingChanged(bool scheduled) {
 
 CreateCommandBufferResult GpuChannel::CreateViewCommandBuffer(
     const gfx::GLSurfaceHandle& window,
-    int32 surface_id,
     const GPUCreateCommandBufferConfig& init_params,
-    int32 route_id) {
-  TRACE_EVENT1("gpu",
-               "GpuChannel::CreateViewCommandBuffer",
-               "surface_id",
-               surface_id);
+    int32_t route_id) {
+  TRACE_EVENT1("gpu", "GpuChannel::CreateViewCommandBuffer", "route_id",
+               route_id);
 
-  GpuCommandBufferStub* share_group = stubs_.Lookup(init_params.share_group_id);
+  int32_t share_group_id = init_params.share_group_id;
+  GpuCommandBufferStub* share_group = stubs_.get(share_group_id);
 
-  // Virtualize compositor contexts on OS X to prevent performance regressions
-  // when enabling FCM.
-  // http://crbug.com/180463
-  bool use_virtualized_gl_context = false;
-#if defined(OS_MACOSX)
-  use_virtualized_gl_context = true;
-#endif
+  if (!share_group && share_group_id != MSG_ROUTING_NONE)
+    return CREATE_COMMAND_BUFFER_FAILED;
 
-  scoped_ptr<GpuCommandBufferStub> stub(
-      new GpuCommandBufferStub(this,
-                               share_group,
-                               window,
-                               mailbox_manager_.get(),
-                               subscription_ref_set_.get(),
-                               pending_valuebuffer_state_.get(),
-                               gfx::Size(),
-                               disallowed_features_,
-                               init_params.attribs,
-                               init_params.gpu_preference,
-                               use_virtualized_gl_context,
-                               route_id,
-                               surface_id,
-                               watchdog_,
-                               software_,
-                               init_params.active_url));
-  if (preempted_flag_.get())
-    stub->SetPreemptByFlag(preempted_flag_);
+  int32_t stream_id = init_params.stream_id;
+  GpuStreamPriority stream_priority = init_params.stream_priority;
+
+  if (share_group && stream_id != share_group->stream_id())
+    return CREATE_COMMAND_BUFFER_FAILED;
+
+  if (!allow_real_time_streams_ &&
+      stream_priority == GpuStreamPriority::REAL_TIME)
+    return CREATE_COMMAND_BUFFER_FAILED;
+
+  auto stream_it = streams_.find(stream_id);
+  if (stream_it != streams_.end() &&
+      stream_priority != GpuStreamPriority::INHERIT &&
+      stream_priority != stream_it->second.priority()) {
+    return CREATE_COMMAND_BUFFER_FAILED;
+  }
+
+  bool offscreen = false;
+  scoped_ptr<GpuCommandBufferStub> stub(new GpuCommandBufferStub(
+      this, sync_point_manager_, task_runner_.get(), share_group, window,
+      mailbox_manager_.get(), preempted_flag_.get(),
+      subscription_ref_set_.get(), pending_valuebuffer_state_.get(),
+      gfx::Size(), disallowed_features_, init_params.attribs,
+      init_params.gpu_preference, stream_id, route_id, offscreen, watchdog_,
+      init_params.active_url));
+
   if (!router_.AddRoute(route_id, stub.get())) {
     DLOG(ERROR) << "GpuChannel::CreateViewCommandBuffer(): "
                    "failed to add route";
     return CREATE_COMMAND_BUFFER_FAILED_AND_CHANNEL_LOST;
   }
-  stubs_.AddWithID(stub.release(), route_id);
+
+  if (stream_it != streams_.end()) {
+    stream_it->second.AddRoute(route_id);
+  } else {
+    StreamState stream(stream_id, stream_priority);
+    stream.AddRoute(route_id);
+    streams_.insert(std::make_pair(stream_id, stream));
+  }
+
+  stubs_.set(route_id, std::move(stub));
   return CREATE_COMMAND_BUFFER_SUCCEEDED;
 }
 
-GpuCommandBufferStub* GpuChannel::LookupCommandBuffer(int32 route_id) {
-  return stubs_.Lookup(route_id);
+GpuCommandBufferStub* GpuChannel::LookupCommandBuffer(int32_t route_id) {
+  return stubs_.get(route_id);
 }
 
 void GpuChannel::LoseAllContexts() {
@@ -634,40 +770,22 @@ void GpuChannel::LoseAllContexts() {
 }
 
 void GpuChannel::MarkAllContextsLost() {
-  for (StubMap::Iterator<GpuCommandBufferStub> it(&stubs_);
-       !it.IsAtEnd(); it.Advance()) {
-    it.GetCurrentValue()->MarkContextLost();
-  }
+  for (auto& kv : stubs_)
+    kv.second->MarkContextLost();
 }
 
-bool GpuChannel::AddRoute(int32 route_id, IPC::Listener* listener) {
+bool GpuChannel::AddRoute(int32_t route_id, IPC::Listener* listener) {
   return router_.AddRoute(route_id, listener);
 }
 
-void GpuChannel::RemoveRoute(int32 route_id) {
+void GpuChannel::RemoveRoute(int32_t route_id) {
   router_.RemoveRoute(route_id);
-}
-
-gpu::PreemptionFlag* GpuChannel::GetPreemptionFlag() {
-  if (!preempting_flag_.get()) {
-    preempting_flag_ = new gpu::PreemptionFlag;
-    io_task_runner_->PostTask(
-        FROM_HERE,
-        base::Bind(
-            &GpuChannelMessageFilter::SetPreemptingFlagAndSchedulingState,
-            filter_, preempting_flag_, num_stubs_descheduled_ > 0));
-  }
-  return preempting_flag_.get();
 }
 
 void GpuChannel::SetPreemptByFlag(
     scoped_refptr<gpu::PreemptionFlag> preempted_flag) {
+  DCHECK(stubs_.empty());
   preempted_flag_ = preempted_flag;
-
-  for (StubMap::Iterator<GpuCommandBufferStub> it(&stubs_);
-       !it.IsAtEnd(); it.Advance()) {
-    it.GetCurrentValue()->SetPreemptByFlag(preempted_flag_);
-  }
 }
 
 void GpuChannel::OnDestroy() {
@@ -694,63 +812,112 @@ bool GpuChannel::OnControlMessageReceived(const IPC::Message& msg) {
   return handled;
 }
 
+scoped_refptr<gpu::SyncPointOrderData> GpuChannel::GetSyncPointOrderData() {
+  return message_queue_->GetSyncPointOrderData();
+}
+
 void GpuChannel::HandleMessage() {
-  handle_messages_scheduled_ = false;
-  if (deferred_messages_.empty())
+  // If we have been preempted by another channel, just post a task to wake up.
+  if (preempted_flag_ && preempted_flag_->IsSet()) {
+    ScheduleHandleMessage();
+    return;
+  }
+
+  GpuChannelMessage* m = message_queue_->GetNextMessage();
+
+  // TODO(sunnyps): This could be a DCHECK maybe?
+  if (!m)
     return;
 
-  IPC::Message* m = NULL;
-  GpuCommandBufferStub* stub = NULL;
+  const IPC::Message& message = m->message;
+  message_queue_->BeginMessageProcessing(m);
+  int32_t routing_id = message.routing_id();
+  GpuCommandBufferStub* stub = stubs_.get(routing_id);
 
-  m = deferred_messages_.front();
-  stub = stubs_.Lookup(m->routing_id());
-  if (stub) {
-    if (!stub->IsScheduled())
-      return;
-    if (stub->IsPreempted()) {
-      OnScheduled();
-      return;
-    }
-  }
+  DCHECK(!stub || stub->IsScheduled());
 
-  scoped_ptr<IPC::Message> message(m);
-  deferred_messages_.pop_front();
-  bool message_processed = true;
+  DVLOG(1) << "received message @" << &message << " on channel @" << this
+           << " with type " << message.type();
 
-  currently_processing_message_ = message.get();
-  bool result;
-  if (message->routing_id() == MSG_ROUTING_CONTROL)
-    result = OnControlMessageReceived(*message);
-  else
-    result = router_.RouteMessage(*message);
-  currently_processing_message_ = NULL;
+  bool handled = false;
 
-  if (!result) {
-    // Respond to sync messages even if router failed to route.
-    if (message->is_sync()) {
-      IPC::Message* reply = IPC::SyncMessage::GenerateReply(&*message);
-      reply->set_reply_error();
-      Send(reply);
-    }
-  } else {
-    // If the command buffer becomes unscheduled as a result of handling the
-    // message but still has more commands to process, synthesize an IPC
-    // message to flush that command buffer.
+  if (routing_id == MSG_ROUTING_CONTROL) {
+    handled = OnControlMessageReceived(message);
+  } else if (message.type() == GpuCommandBufferMsg_InsertSyncPoint::ID) {
+    // TODO(dyen): Temporary handling of old sync points.
+    // This must ensure that the sync point will be retired. Normally we'll
+    // find the stub based on the routing ID, and associate the sync point
+    // with it, but if that fails for any reason (channel or stub already
+    // deleted, invalid routing id), we need to retire the sync point
+    // immediately.
     if (stub) {
-      if (stub->HasUnprocessedCommands()) {
-        deferred_messages_.push_front(new GpuCommandBufferMsg_Rescheduled(
-            stub->route_id()));
-        message_processed = false;
-      }
+      stub->InsertSyncPoint(m->sync_point, m->retire_sync_point);
+    } else {
+      sync_point_manager_->RetireSyncPoint(m->sync_point);
     }
+    handled = true;
+  } else {
+    handled = router_.RouteMessage(message);
   }
-  if (message_processed)
-    MessageProcessed();
 
-  if (!deferred_messages_.empty()) {
-    OnScheduled();
+  // Respond to sync messages even if router failed to route.
+  if (!handled && message.is_sync()) {
+    IPC::Message* reply = IPC::SyncMessage::GenerateReply(&message);
+    reply->set_reply_error();
+    Send(reply);
+    handled = true;
+  }
+
+  // A command buffer may be descheduled or preempted but only in the middle of
+  // a flush. In this case we should not pop the message from the queue.
+  if (stub && stub->HasUnprocessedCommands()) {
+    DCHECK_EQ((uint32_t)GpuCommandBufferMsg_AsyncFlush::ID, message.type());
+    message_queue_->PauseMessageProcessing(m);
+    // If the stub is still scheduled then we were preempted and need to
+    // schedule a wakeup otherwise some other event will wake us up e.g. sync
+    // point completion. No DCHECK for preemption flag because that can change
+    // any time.
+    if (stub->IsScheduled())
+      ScheduleHandleMessage();
+    return;
+  }
+
+  if (message_queue_->MessageProcessed())
+    ScheduleHandleMessage();
+
+  if (preempting_flag_) {
+    io_task_runner_->PostTask(
+        FROM_HERE,
+        base::Bind(&GpuChannelMessageFilter::OnMessageProcessed, filter_));
   }
 }
+
+void GpuChannel::ScheduleHandleMessage() {
+  task_runner_->PostTask(FROM_HERE, base::Bind(&GpuChannel::HandleMessage,
+                                               weak_factory_.GetWeakPtr()));
+}
+
+void GpuChannel::HandleOutOfOrderMessage(const IPC::Message& msg) {
+  switch (msg.type()) {
+    case GpuCommandBufferMsg_WaitForGetOffsetInRange::ID:
+    case GpuCommandBufferMsg_WaitForTokenInRange::ID:
+      router_.RouteMessage(msg);
+      break;
+    default:
+      NOTREACHED();
+  }
+}
+
+#if defined(OS_ANDROID)
+const GpuCommandBufferStub* GpuChannel::GetOneStub() const {
+  for (const auto& kv : stubs_) {
+    const GpuCommandBufferStub* stub = kv.second;
+    if (stub->decoder() && !stub->decoder()->WasContextLost())
+      return stub;
+  }
+  return nullptr;
+}
+#endif
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
 void GpuChannel::OnNewMediaPipeline(
@@ -758,13 +925,20 @@ void GpuChannel::OnNewMediaPipeline(
     int32_t gpu_video_accelerator_factories_route_id) {
   GpuCommandBufferStub* command_buffer = nullptr;
 
+  const base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
+  if (!cmd_line->HasSwitch(switches::kDisableAcceleratedVideoDecode) &&
+      cmd_line->HasSwitch(switches::kEnablePlatformAcceleratedVideoDecoding)) {
+    command_buffer =
+        LookupCommandBuffer(gpu_video_accelerator_factories_route_id);
+  }
+
   IPCMediaPipeline* ipc_media_pipeline =
       new IPCMediaPipeline(this, route_id, command_buffer);
   AddRoute(route_id, ipc_media_pipeline);
   media_pipelines_.AddWithID(ipc_media_pipeline, route_id);
 }
 
-void GpuChannel::OnDestroyMediaPipeline(int32 route_id) {
+void GpuChannel::OnDestroyMediaPipeline(int32_t route_id) {
   RemoveRoute(route_id);
   media_pipelines_.Remove(route_id);
 }
@@ -773,74 +947,101 @@ void GpuChannel::OnDestroyMediaPipeline(int32 route_id) {
 void GpuChannel::OnCreateOffscreenCommandBuffer(
     const gfx::Size& size,
     const GPUCreateCommandBufferConfig& init_params,
-    int32 route_id,
+    int32_t route_id,
     bool* succeeded) {
-  TRACE_EVENT0("gpu", "GpuChannel::OnCreateOffscreenCommandBuffer");
-  GpuCommandBufferStub* share_group = stubs_.Lookup(init_params.share_group_id);
+  TRACE_EVENT1("gpu", "GpuChannel::OnCreateOffscreenCommandBuffer", "route_id",
+               route_id);
 
+  int32_t share_group_id = init_params.share_group_id;
+  GpuCommandBufferStub* share_group = stubs_.get(share_group_id);
+
+  if (!share_group && share_group_id != MSG_ROUTING_NONE) {
+    *succeeded = false;
+    return;
+  }
+
+  int32_t stream_id = init_params.stream_id;
+  GpuStreamPriority stream_priority = init_params.stream_priority;
+
+  if (share_group && stream_id != share_group->stream_id()) {
+    *succeeded = false;
+    return;
+  }
+
+  if (!allow_real_time_streams_ &&
+      stream_priority == GpuStreamPriority::REAL_TIME) {
+    *succeeded = false;
+    return;
+  }
+
+  auto stream_it = streams_.find(stream_id);
+  if (stream_it != streams_.end() &&
+      stream_priority != GpuStreamPriority::INHERIT &&
+      stream_priority != stream_it->second.priority()) {
+    *succeeded = false;
+    return;
+  }
+
+  bool offscreen = true;
   scoped_ptr<GpuCommandBufferStub> stub(new GpuCommandBufferStub(
-      this,
-      share_group,
-      gfx::GLSurfaceHandle(),
-      mailbox_manager_.get(),
-      subscription_ref_set_.get(),
-      pending_valuebuffer_state_.get(),
-      size,
-      disallowed_features_,
-      init_params.attribs,
-      init_params.gpu_preference,
-      false,
-      route_id,
-      0,
-      watchdog_,
-      software_,
+      this, sync_point_manager_, task_runner_.get(), share_group,
+      gfx::GLSurfaceHandle(), mailbox_manager_.get(), preempted_flag_.get(),
+      subscription_ref_set_.get(), pending_valuebuffer_state_.get(), size,
+      disallowed_features_, init_params.attribs, init_params.gpu_preference,
+      init_params.stream_id, route_id, offscreen, watchdog_,
       init_params.active_url));
-  if (preempted_flag_.get())
-    stub->SetPreemptByFlag(preempted_flag_);
+
   if (!router_.AddRoute(route_id, stub.get())) {
     DLOG(ERROR) << "GpuChannel::OnCreateOffscreenCommandBuffer(): "
                    "failed to add route";
     *succeeded = false;
     return;
   }
-  stubs_.AddWithID(stub.release(), route_id);
-  TRACE_EVENT1("gpu", "GpuChannel::OnCreateOffscreenCommandBuffer",
-               "route_id", route_id);
+
+  if (stream_it != streams_.end()) {
+    stream_it->second.AddRoute(route_id);
+  } else {
+    StreamState stream(stream_id, stream_priority);
+    stream.AddRoute(route_id);
+    streams_.insert(std::make_pair(stream_id, stream));
+  }
+
+  stubs_.set(route_id, std::move(stub));
   *succeeded = true;
 }
 
-void GpuChannel::OnDestroyCommandBuffer(int32 route_id) {
+void GpuChannel::OnDestroyCommandBuffer(int32_t route_id) {
   TRACE_EVENT1("gpu", "GpuChannel::OnDestroyCommandBuffer",
                "route_id", route_id);
 
-  GpuCommandBufferStub* stub = stubs_.Lookup(route_id);
+  scoped_ptr<GpuCommandBufferStub> stub = stubs_.take_and_erase(route_id);
+
   if (!stub)
     return;
-  bool need_reschedule = (stub && !stub->IsScheduled());
+
   router_.RemoveRoute(route_id);
-  stubs_.Remove(route_id);
+
+  int32_t stream_id = stub->stream_id();
+  auto stream_it = streams_.find(stream_id);
+  DCHECK(stream_it != streams_.end());
+  stream_it->second.RemoveRoute(route_id);
+  if (!stream_it->second.HasRoutes())
+    streams_.erase(stream_it);
+
   // In case the renderer is currently blocked waiting for a sync reply from the
   // stub, we need to make sure to reschedule the GpuChannel here.
-  if (need_reschedule) {
+  if (!stub->IsScheduled()) {
     // This stub won't get a chance to reschedule, so update the count now.
-    StubSchedulingChanged(true);
+    OnStubSchedulingChanged(stub.get(), true);
   }
 }
 
-void GpuChannel::OnCreateJpegDecoder(int32 route_id, IPC::Message* reply_msg) {
+void GpuChannel::OnCreateJpegDecoder(int32_t route_id,
+                                     IPC::Message* reply_msg) {
   if (!jpeg_decoder_) {
     jpeg_decoder_.reset(new GpuJpegDecodeAccelerator(this, io_task_runner_));
   }
   jpeg_decoder_->AddClient(route_id, reply_msg);
-}
-
-void GpuChannel::MessageProcessed() {
-  messages_processed_++;
-  if (preempting_flag_.get()) {
-    io_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&GpuChannelMessageFilter::MessageProcessed,
-                              filter_, messages_processed_));
-  }
 }
 
 void GpuChannel::CacheShader(const std::string& key,
@@ -850,40 +1051,55 @@ void GpuChannel::CacheShader(const std::string& key,
 }
 
 void GpuChannel::AddFilter(IPC::MessageFilter* filter) {
-  channel_->AddFilter(filter);
+  io_task_runner_->PostTask(
+      FROM_HERE, base::Bind(&GpuChannelMessageFilter::AddChannelFilter,
+                            filter_, make_scoped_refptr(filter)));
 }
 
 void GpuChannel::RemoveFilter(IPC::MessageFilter* filter) {
-  channel_->RemoveFilter(filter);
+  io_task_runner_->PostTask(
+      FROM_HERE, base::Bind(&GpuChannelMessageFilter::RemoveChannelFilter,
+                            filter_, make_scoped_refptr(filter)));
 }
 
-uint64 GpuChannel::GetMemoryUsage() {
-  uint64 size = 0;
-  for (StubMap::Iterator<GpuCommandBufferStub> it(&stubs_);
-       !it.IsAtEnd(); it.Advance()) {
-    size += it.GetCurrentValue()->GetMemoryUsage();
+uint64_t GpuChannel::GetMemoryUsage() {
+  // Collect the unique memory trackers in use by the |stubs_|.
+  std::set<gpu::gles2::MemoryTracker*> unique_memory_trackers;
+  for (auto& kv : stubs_)
+    unique_memory_trackers.insert(kv.second->GetMemoryTracker());
+
+  // Sum the memory usage for all unique memory trackers.
+  uint64_t size = 0;
+  for (auto* tracker : unique_memory_trackers) {
+    size += gpu_channel_manager()->gpu_memory_manager()->GetTrackerMemoryUsage(
+        tracker);
   }
+
   return size;
 }
 
-scoped_refptr<gfx::GLImage> GpuChannel::CreateImageForGpuMemoryBuffer(
+scoped_refptr<gl::GLImage> GpuChannel::CreateImageForGpuMemoryBuffer(
     const gfx::GpuMemoryBufferHandle& handle,
     const gfx::Size& size,
-    gfx::GpuMemoryBuffer::Format format,
-    uint32 internalformat) {
+    gfx::BufferFormat format,
+    uint32_t internalformat) {
   switch (handle.type) {
     case gfx::SHARED_MEMORY_BUFFER: {
-      scoped_refptr<gfx::GLImageSharedMemory> image(
-          new gfx::GLImageSharedMemory(size, internalformat));
-      if (!image->Initialize(handle, format))
-        return scoped_refptr<gfx::GLImage>();
+      if (!base::IsValueInRangeForNumericType<size_t>(handle.stride))
+        return nullptr;
+      scoped_refptr<gl::GLImageSharedMemory> image(
+          new gl::GLImageSharedMemory(size, internalformat));
+      if (!image->Initialize(handle.handle, handle.id, format, handle.offset,
+                             handle.stride)) {
+        return nullptr;
+      }
 
       return image;
     }
     default: {
       GpuChannelManager* manager = gpu_channel_manager();
       if (!manager->gpu_memory_buffer_factory())
-        return scoped_refptr<gfx::GLImage>();
+        return nullptr;
 
       return manager->gpu_memory_buffer_factory()
           ->AsImageFactory()
@@ -899,20 +1115,6 @@ scoped_refptr<gfx::GLImage> GpuChannel::CreateImageForGpuMemoryBuffer(
 void GpuChannel::HandleUpdateValueState(
     unsigned int target, const gpu::ValueState& state) {
   pending_valuebuffer_state_->UpdateState(target, state);
-}
-
-bool GpuChannel::OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd) {
-  auto dump_name = GetChannelName();
-  std::replace(dump_name.begin(), dump_name.end(), '.', '_');
-
-  base::trace_event::MemoryAllocatorDump* dump =
-      pmd->CreateAllocatorDump(base::StringPrintf("gl/%s", dump_name.c_str()));
-
-  dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
-                  base::trace_event::MemoryAllocatorDump::kUnitsBytes,
-                  GetMemoryUsage());
-
-  return true;
 }
 
 }  // namespace content

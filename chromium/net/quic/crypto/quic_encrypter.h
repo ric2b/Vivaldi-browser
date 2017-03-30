@@ -5,6 +5,8 @@
 #ifndef NET_QUIC_CRYPTO_QUIC_ENCRYPTER_H_
 #define NET_QUIC_CRYPTO_QUIC_ENCRYPTER_H_
 
+#include <stddef.h>
+
 #include "net/base/net_export.h"
 #include "net/quic/quic_protocol.h"
 
@@ -26,24 +28,27 @@ class NET_EXPORT_PRIVATE QuicEncrypter {
   // false on failure.
   //
   // NOTE: The nonce prefix is the client_write_iv or server_write_iv
-  // derived from the master secret. A 64-bit packet sequence number will
+  // derived from the master secret. A 64-bit packet number will
   // be appended to form the nonce.
   //
   //                          <------------ 64 bits ----------->
   //   +---------------------+----------------------------------+
-  //   |    Fixed prefix     |      Packet sequence number      |
+  //   |    Fixed prefix     |      packet number      |
   //   +---------------------+----------------------------------+
   //                          Nonce format
   //
   // The security of the nonce format requires that QUIC never reuse a
-  // packet sequence number, even when retransmitting a lost packet.
+  // packet number, even when retransmitting a lost packet.
   virtual bool SetNoncePrefix(base::StringPiece nonce_prefix) = 0;
 
-  // Returns a newly created QuicData object containing the encrypted
-  // |plaintext| as well as a MAC over both |plaintext| and |associated_data|,
-  // or nullptr if there is an error. |sequence_number| is appended to the
-  // |nonce_prefix| value provided in SetNoncePrefix() to form the nonce.
-  virtual bool EncryptPacket(QuicPacketSequenceNumber sequence_number,
+  // Writes encrypted |plaintext| and a MAC over |plaintext| and
+  // |associated_data| into output. Sets |output_length| to the number of
+  // bytes written. Returns true on success or false if there was an error.
+  // |packet_number| is appended to the |nonce_prefix| value provided in
+  // SetNoncePrefix() to form the nonce. |output| must not overlap with
+  // |associated_data|. If |output| overlaps with |plaintext| then
+  // |plaintext| must be <= |output|.
+  virtual bool EncryptPacket(QuicPacketNumber packet_number,
                              base::StringPiece associated_data,
                              base::StringPiece plaintext,
                              char* output,

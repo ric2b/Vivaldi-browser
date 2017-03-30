@@ -2,17 +2,35 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 from telemetry.page import page as page_module
+from telemetry.page import shared_page_state
 from telemetry import story
+
+
+class BrowserStartupSharedState(shared_page_state.SharedPageState):
+  """Shared state that restarts the browser for every single story."""
+
+  def __init__(self, test, finder_options, story_set):
+    super(BrowserStartupSharedState, self).__init__(
+        test, finder_options, story_set)
+
+  def DidRunStory(self, results):
+    super(BrowserStartupSharedState, self).DidRunStory(results)
+    self._StopBrowser()
 
 
 class StartedPage(page_module.Page):
 
-  def __init__(self, url, startup_url, page_set):
+  def __init__(self, url, page_set):
     super(StartedPage, self).__init__(
-        url=url, page_set=page_set, startup_url=startup_url)
+        url=url, page_set=page_set, startup_url=url,
+        shared_page_state_class=BrowserStartupSharedState)
     self.archive_data_file = 'data/startup_pages.json'
 
   def RunNavigateSteps(self, action_runner):
+    # Do not call super.RunNavigateSteps() to avoid reloading the page that has
+    # already been opened with startup_url.
+
+    # TODO(gabadie): Get rid of this (crbug.com/555504)
     action_runner.Wait(10)
 
   def RunPageInteractions(self, action_runner):
@@ -20,12 +38,11 @@ class StartedPage(page_module.Page):
 
 
 class StartupPagesPageSet(story.StorySet):
+  """Pages for testing starting Chrome with a URL.
 
-  """ Pages for testing starting Chrome with a URL.
   Note that this file can't be used with record_wpr, since record_wpr requires
   a true navigate step, which we do not want for startup testing. Instead use
-  record_wpr startup_pages_record to record data for this test.
-  """
+  record_wpr startup_pages_record to record data for this test."""
 
   def __init__(self):
     super(StartupPagesPageSet, self).__init__(
@@ -33,9 +50,8 @@ class StartupPagesPageSet(story.StorySet):
         cloud_storage_bucket=story.PARTNER_BUCKET)
 
     # Typical page.
-    self.AddStory(StartedPage('about:blank', 'about:blank', self))
+    self.AddStory(StartedPage('about:blank', self))
     # Typical page.
-    self.AddStory(StartedPage('http://bbc.co.uk', 'http://bbc.co.uk', self))
+    self.AddStory(StartedPage('http://bbc.co.uk', self))
     # Horribly complex page - stress test!
-    self.AddStory(StartedPage(
-        'http://kapook.com', 'http://kapook.com', self))
+    self.AddStory(StartedPage('http://kapook.com', self))

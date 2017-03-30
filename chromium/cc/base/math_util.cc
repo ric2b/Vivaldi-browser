@@ -26,18 +26,19 @@ const float MathUtil::kPiFloat = 3.14159265358979323846f;
 static HomogeneousCoordinate ProjectHomogeneousPoint(
     const gfx::Transform& transform,
     const gfx::PointF& p) {
+  SkMScalar z =
+      -(transform.matrix().get(2, 0) * p.x() +
+        transform.matrix().get(2, 1) * p.y() + transform.matrix().get(2, 3)) /
+      transform.matrix().get(2, 2);
+
   // In this case, the layer we are trying to project onto is perpendicular to
   // ray (point p and z-axis direction) that we are trying to project. This
   // happens when the layer is rotated so that it is infinitesimally thin, or
   // when it is co-planar with the camera origin -- i.e. when the layer is
   // invisible anyway.
-  if (!transform.matrix().get(2, 2))
+  if (!std::isfinite(z))
     return HomogeneousCoordinate(0.0, 0.0, 0.0, 1.0);
 
-  SkMScalar z = -(transform.matrix().get(2, 0) * p.x() +
-             transform.matrix().get(2, 1) * p.y() +
-             transform.matrix().get(2, 3)) /
-             transform.matrix().get(2, 2);
   HomogeneousCoordinate result(p.x(), p.y(), z, 1.0);
   transform.matrix().mapMScalars(result.vec, result.vec);
   return result;
@@ -126,7 +127,14 @@ gfx::Rect MathUtil::MapEnclosingClippedRect(const gfx::Transform& transform,
                          static_cast<int>(transform.matrix().getFloat(1, 3)));
     return src_rect + offset;
   }
-  return gfx::ToEnclosingRect(MapClippedRect(transform, gfx::RectF(src_rect)));
+  gfx::RectF mapped_rect = MapClippedRect(transform, gfx::RectF(src_rect));
+
+  // gfx::ToEnclosingRect crashes if called on a RectF with any NaN coordinate.
+  if (std::isnan(mapped_rect.x()) || std::isnan(mapped_rect.y()) ||
+      std::isnan(mapped_rect.right()) || std::isnan(mapped_rect.bottom()))
+    return gfx::Rect();
+
+  return gfx::ToEnclosingRect(mapped_rect);
 }
 
 gfx::RectF MathUtil::MapClippedRect(const gfx::Transform& transform,
@@ -166,8 +174,15 @@ gfx::Rect MathUtil::ProjectEnclosingClippedRect(const gfx::Transform& transform,
                          static_cast<int>(transform.matrix().getFloat(1, 3)));
     return src_rect + offset;
   }
-  return gfx::ToEnclosingRect(
-      ProjectClippedRect(transform, gfx::RectF(src_rect)));
+  gfx::RectF projected_rect =
+      ProjectClippedRect(transform, gfx::RectF(src_rect));
+
+  // gfx::ToEnclosingRect crashes if called on a RectF with any NaN coordinate.
+  if (std::isnan(projected_rect.x()) || std::isnan(projected_rect.y()) ||
+      std::isnan(projected_rect.right()) || std::isnan(projected_rect.bottom()))
+    return gfx::Rect();
+
+  return gfx::ToEnclosingRect(projected_rect);
 }
 
 gfx::RectF MathUtil::ProjectClippedRect(const gfx::Transform& transform,
@@ -201,7 +216,7 @@ gfx::Rect MathUtil::MapEnclosedRectWith2dAxisAlignedTransform(
   if (transform.IsIdentityOrTranslation()) {
     gfx::Vector2dF offset(transform.matrix().getFloat(0, 3),
                           transform.matrix().getFloat(1, 3));
-    return gfx::ToEnclosedRect(rect + offset);
+    return gfx::ToEnclosedRect(gfx::RectF(rect) + offset);
   }
 
   SkMScalar quad[2 * 2];  // input: 2 x 2D points
@@ -694,7 +709,7 @@ scoped_ptr<base::Value> MathUtil::AsValue(const gfx::Size& s) {
   scoped_ptr<base::DictionaryValue> res(new base::DictionaryValue());
   res->SetDouble("width", s.width());
   res->SetDouble("height", s.height());
-  return res.Pass();
+  return std::move(res);
 }
 
 scoped_ptr<base::Value> MathUtil::AsValue(const gfx::Rect& r) {
@@ -703,7 +718,7 @@ scoped_ptr<base::Value> MathUtil::AsValue(const gfx::Rect& r) {
   res->AppendInteger(r.y());
   res->AppendInteger(r.width());
   res->AppendInteger(r.height());
-  return res.Pass();
+  return std::move(res);
 }
 
 bool MathUtil::FromValue(const base::Value* raw_value, gfx::Rect* out_rect) {
@@ -731,7 +746,7 @@ scoped_ptr<base::Value> MathUtil::AsValue(const gfx::PointF& pt) {
   scoped_ptr<base::ListValue> res(new base::ListValue());
   res->AppendDouble(pt.x());
   res->AppendDouble(pt.y());
-  return res.Pass();
+  return std::move(res);
 }
 
 void MathUtil::AddToTracedValue(const char* name,
@@ -760,6 +775,15 @@ void MathUtil::AddToTracedValue(const char* name,
   res->AppendInteger(r.y());
   res->AppendInteger(r.width());
   res->AppendInteger(r.height());
+  res->EndArray();
+}
+
+void MathUtil::AddToTracedValue(const char* name,
+                                const gfx::Point& pt,
+                                base::trace_event::TracedValue* res) {
+  res->BeginArray(name);
+  res->AppendInteger(pt.x());
+  res->AppendInteger(pt.y());
   res->EndArray();
 }
 

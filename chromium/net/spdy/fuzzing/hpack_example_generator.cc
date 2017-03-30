@@ -8,8 +8,9 @@
 #include "base/files/file_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "net/spdy/fuzzing/hpack_fuzz_util.h"
-#include "net/spdy/hpack_constants.h"
-#include "net/spdy/hpack_encoder.h"
+#include "net/spdy/hpack/hpack_constants.h"
+#include "net/spdy/hpack/hpack_encoder.h"
+#include "net/spdy/spdy_protocol.h"
 
 namespace {
 
@@ -58,7 +59,7 @@ int main(int argc, char** argv) {
   net::HpackEncoder encoder(net::ObtainHpackHuffmanTable());
 
   for (int i = 0; i != example_count; ++i) {
-    map<string, string> headers =
+    net::SpdyHeaderBlock headers =
         HpackFuzzUtil::NextGeneratedHeaderSet(&context);
 
     string buffer;

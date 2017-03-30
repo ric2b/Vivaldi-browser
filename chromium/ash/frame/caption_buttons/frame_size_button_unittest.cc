@@ -4,6 +4,7 @@
 
 #include "ash/frame/caption_buttons/frame_size_button.h"
 
+#include "ash/ash_layout_constants.h"
 #include "ash/frame/caption_buttons/frame_caption_button.h"
 #include "ash/frame/caption_buttons/frame_caption_button_container_view.h"
 #include "ash/shell.h"
@@ -17,6 +18,7 @@
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/display.h"
 #include "ui/gfx/screen.h"
+#include "ui/gfx/vector_icons_public.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 
@@ -57,14 +59,14 @@ class TestWidgetDelegate : public views::WidgetDelegateView {
       caption_button_container_ =
           new FrameCaptionButtonContainerView(GetWidget());
 
-      // Set arbitrary images for the container's buttons so that the buttons
-      // have non-empty sizes.
+      // Set arbitrary images for the button icons and assign the default
+      // caption button size.
+      caption_button_container_->SetButtonSize(
+          GetAshLayoutSize(AshLayoutSize::NON_BROWSER_CAPTION_BUTTON));
       for (int icon = 0; icon < CAPTION_BUTTON_ICON_COUNT; ++icon) {
-        caption_button_container_->SetButtonImages(
+        caption_button_container_->SetButtonImage(
             static_cast<CaptionButtonIcon>(icon),
-            IDR_AURA_WINDOW_CONTROL_ICON_CLOSE,
-            IDR_AURA_WINDOW_CONTROL_BACKGROUND_H,
-            IDR_AURA_WINDOW_CONTROL_BACKGROUND_P);
+            gfx::VectorIconId::WINDOW_CONTROL_CLOSE);
       }
 
       AddChildView(caption_button_container_);

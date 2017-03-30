@@ -4,11 +4,15 @@
 
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_get_keys_operation.h"
 
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/bind.h"
 #include "base/logging.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_key_manager.h"
+#include "components/proximity_auth/logging/logging.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 
 namespace chromeos {
@@ -32,8 +36,8 @@ void EasyUnlockGetKeysOperation::Start() {
 }
 
 void EasyUnlockGetKeysOperation::GetKeyData() {
-  std::string canonicalized =
-      gaia::CanonicalizeEmail(user_context_.GetUserID());
+  const std::string canonicalized =
+      gaia::CanonicalizeEmail(user_context_.GetAccountId().GetUserEmail());
   cryptohome::Identification id(canonicalized);
   cryptohome::HomedirMethods::GetInstance()->GetKeyDataEx(
       id,
@@ -56,7 +60,7 @@ void EasyUnlockGetKeysOperation::OnGetKeyData(
       return;
     }
 
-    LOG(ERROR) << "Easy unlock failed to get key data, code=" << return_code;
+    PA_LOG(ERROR) << "Easy unlock failed to get key data, code=" << return_code;
     callback_.Run(false, EasyUnlockDeviceKeyDataList());
     return;
   }
@@ -74,6 +78,20 @@ void EasyUnlockGetKeysOperation::OnGetKeyData(
         device.bluetooth_address = *entry.bytes;
       else
         NOTREACHED();
+    } else if (entry.name == kEasyUnlockKeyMetaNameBluetoothType) {
+      if (entry.number) {
+        if (*entry.number >=
+            static_cast<int64_t>(
+                EasyUnlockDeviceKeyData::NUM_BLUETOOTH_TYPES)) {
+          PA_LOG(ERROR) << "Invalid Bluetooth type: " << *entry.number;
+        } else {
+          device.bluetooth_type =
+              static_cast<EasyUnlockDeviceKeyData::BluetoothType>(
+                  *entry.number);
+        }
+      } else {
+        NOTREACHED();
+      }
     } else if (entry.name == kEasyUnlockKeyMetaNamePubKey) {
       if (entry.bytes)
         device.public_key = *entry.bytes;
@@ -95,8 +113,8 @@ void EasyUnlockGetKeysOperation::OnGetKeyData(
       else
         NOTREACHED();
     } else {
-      LOG(WARNING) << "Unknown Easy unlock key data entry, name="
-                   << entry.name;
+      PA_LOG(WARNING) << "Unknown Easy unlock key data entry, name="
+                      << entry.name;
     }
   }
   devices_.push_back(device);

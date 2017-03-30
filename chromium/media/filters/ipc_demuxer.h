@@ -25,6 +25,7 @@ namespace media {
 
 class IPCDemuxerStream;
 class IPCMediaPipelineHost;
+class MediaLog;
 struct PlatformAudioConfig;
 struct PlatformMediaTimeInfo;
 struct PlatformVideoConfig;
@@ -39,11 +40,12 @@ class MEDIA_EXPORT IPCDemuxer : public Demuxer {
              DataSource* data_source,
              scoped_ptr<IPCMediaPipelineHost> ipc_media_pipeline_host,
              const std::string& content_type,
-             const GURL& url);
+             const GURL& url,
+             const scoped_refptr<MediaLog>& media_log);
   ~IPCDemuxer() override;
 
-  // Checks if the content is supported by the IPCDemuxer.
-  static bool IsSupported(const std::string& content_type, const GURL& url);
+  // Checks if the content is supported by this demuxer.
+  static bool CanPlayType(const std::string& content_type, const GURL& url);
 
   // Demuxer implementation.
   //
@@ -58,6 +60,7 @@ class MEDIA_EXPORT IPCDemuxer : public Demuxer {
   DemuxerStream* GetStream(DemuxerStream::Type type) override;
   base::TimeDelta GetStartTime() const override;
   base::Time GetTimelineOffset() const override;
+  int64_t GetMemoryUsage() const override;
 
   // Used to tell the demuxer that a seek request is about to arrive on the
   // media thread.  This lets the demuxer drop everything it was doing and
@@ -89,6 +92,8 @@ class MEDIA_EXPORT IPCDemuxer : public Demuxer {
   scoped_ptr<IPCMediaPipelineHost> ipc_media_pipeline_host_;
   scoped_ptr<IPCDemuxerStream> audio_stream_;
   scoped_ptr<IPCDemuxerStream> video_stream_;
+
+  scoped_refptr<MediaLog> media_log_;
 
   base::WeakPtrFactory<IPCDemuxer> weak_ptr_factory_;
 

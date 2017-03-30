@@ -4,6 +4,8 @@
 
 #include "components/signin/core/browser/signin_metrics.h"
 
+#include <limits.h>
+
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
@@ -19,6 +21,23 @@ DifferentPrimaryAccounts ComparePrimaryAccounts(bool primary_accounts_same,
   if (pre_count_gaia_cookies == 0)
     return NO_COOKIE_PRESENT;
   return COOKIE_AND_TOKEN_PRIMARIES_DIFFERENT;
+}
+
+void LogSigninAccessPointStarted(AccessPoint access_point) {
+  UMA_HISTOGRAM_ENUMERATION("Signin.SigninStartedAccessPoint",
+                            static_cast<int>(access_point),
+                            static_cast<int>(AccessPoint::ACCESS_POINT_MAX));
+}
+
+void LogSigninAccessPointCompleted(AccessPoint access_point) {
+  UMA_HISTOGRAM_ENUMERATION("Signin.SigninCompletedAccessPoint",
+                            static_cast<int>(access_point),
+                            static_cast<int>(AccessPoint::ACCESS_POINT_MAX));
+}
+
+void LogSigninReason(Reason reason) {
+  UMA_HISTOGRAM_ENUMERATION("Signin.SigninReason", static_cast<int>(reason),
+                            static_cast<int>(Reason::REASON_MAX));
 }
 
 void LogSigninAccountReconciliation(int total_number_accounts,
@@ -53,6 +72,15 @@ void LogSigninAccountReconciliation(int total_number_accounts,
   }
 }
 
+void LogSigninAccountReconciliationDuration(base::TimeDelta duration,
+                                            bool successful) {
+  if (successful) {
+    UMA_HISTOGRAM_TIMES("Signin.Reconciler.Duration.Success", duration);
+  } else {
+    UMA_HISTOGRAM_TIMES("Signin.Reconciler.Duration.Failure", duration);
+  }
+}
+
 void LogSigninProfile(bool is_first_run, base::Time install_date) {
   // Track whether or not the user signed in during the first run of Chrome.
   UMA_HISTOGRAM_BOOLEAN("Signin.DuringFirstRun", is_first_run);
@@ -62,10 +90,6 @@ void LogSigninProfile(bool is_first_run, base::Time install_date) {
   base::TimeDelta elapsed_time = base::Time::Now() - install_date;
   UMA_HISTOGRAM_COUNTS("Signin.ElapsedTimeFromInstallToSignin",
                        elapsed_time.InMinutes());
-}
-
-void LogSigninSource(Source source) {
-  UMA_HISTOGRAM_ENUMERATION("Signin.SigninSource", source, HISTOGRAM_MAX);
 }
 
 void LogSigninAddAccount() {
@@ -129,6 +153,12 @@ void LogBrowsingSessionDuration(const base::Time& previous_activity_time) {
 void LogAccountReconcilorStateOnGaiaResponse(AccountReconcilorState state) {
   UMA_HISTOGRAM_ENUMERATION("Signin.AccountReconcilorState.OnGaiaResponse",
                             state, ACCOUNT_RECONCILOR_HISTOGRAM_COUNT);
+}
+
+void LogAccountEquality(AccountEquality equality) {
+  UMA_HISTOGRAM_ENUMERATION("Signin.AccountEquality",
+                            static_cast<int>(equality),
+                            static_cast<int>(AccountEquality::HISTOGRAM_COUNT));
 }
 
 }  // namespace signin_metrics

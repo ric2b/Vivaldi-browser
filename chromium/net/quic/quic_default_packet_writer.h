@@ -5,7 +5,9 @@
 #ifndef NET_QUIC_QUIC_DEFAULT_PACKET_WRITER_H_
 #define NET_QUIC_QUIC_DEFAULT_PACKET_WRITER_H_
 
-#include "base/basictypes.h"
+#include <stddef.h>
+
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "net/base/ip_endpoint.h"
 #include "net/quic/quic_connection.h"
@@ -17,12 +19,11 @@ namespace net {
 
 struct WriteResult;
 
-// Chrome specific packet writer which uses a DatagramClientSocket for writing
-// data.
+// Chrome specific packet writer which uses a datagram Socket for writing data.
 class NET_EXPORT_PRIVATE QuicDefaultPacketWriter : public QuicPacketWriter {
  public:
   QuicDefaultPacketWriter();
-  explicit QuicDefaultPacketWriter(DatagramClientSocket* socket);
+  explicit QuicDefaultPacketWriter(Socket* socket);
   ~QuicDefaultPacketWriter() override;
 
   // QuicPacketWriter
@@ -33,19 +34,16 @@ class NET_EXPORT_PRIVATE QuicDefaultPacketWriter : public QuicPacketWriter {
   bool IsWriteBlockedDataBuffered() const override;
   bool IsWriteBlocked() const override;
   void SetWritable() override;
+  QuicByteCount GetMaxPacketSize(const IPEndPoint& peer_address) const override;
 
   void OnWriteComplete(int rv);
-  void SetConnection(QuicConnection* connection) {
-    connection_ = connection;
-  }
+  void SetConnection(QuicConnection* connection) { connection_ = connection; }
 
  protected:
-  void set_write_blocked(bool is_blocked) {
-    write_blocked_ = is_blocked;
-  }
+  void set_write_blocked(bool is_blocked) { write_blocked_ = is_blocked; }
 
  private:
-  DatagramClientSocket* socket_;
+  Socket* socket_;
   QuicConnection* connection_;
 
   // Whether a write is currently in flight.

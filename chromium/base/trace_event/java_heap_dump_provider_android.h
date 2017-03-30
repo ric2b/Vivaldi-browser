@@ -5,6 +5,7 @@
 #ifndef BASE_TRACE_EVENT_JAVA_HEAP_DUMP_PROVIDER_ANDROID_H_
 #define BASE_TRACE_EVENT_JAVA_HEAP_DUMP_PROVIDER_ANDROID_H_
 
+#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/trace_event/memory_dump_provider.h"
 
@@ -17,7 +18,8 @@ class BASE_EXPORT JavaHeapDumpProvider : public MemoryDumpProvider {
   static JavaHeapDumpProvider* GetInstance();
 
   // MemoryDumpProvider implementation.
-  bool OnMemoryDump(ProcessMemoryDump* pmd) override;
+  bool OnMemoryDump(const MemoryDumpArgs& args,
+                    ProcessMemoryDump* pmd) override;
 
  private:
   friend struct DefaultSingletonTraits<JavaHeapDumpProvider>;

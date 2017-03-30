@@ -4,6 +4,9 @@
 
 #include "content/common/gpu/media/fake_video_decode_accelerator.h"
 
+#include <stddef.h>
+#include <string.h>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/thread_task_runner_handle.h"
@@ -17,7 +20,7 @@
 
 namespace content {
 
-static const uint32 kDefaultTextureTarget = GL_TEXTURE_2D;
+static const uint32_t kDefaultTextureTarget = GL_TEXTURE_2D;
 // Must be at least 2 since the rendering helper will switch between textures
 // and if there is only one, it will wait for the next one that will never come.
 // Must also be an even number as otherwise there won't be the same amount of
@@ -41,13 +44,18 @@ FakeVideoDecodeAccelerator::FakeVideoDecodeAccelerator(
 FakeVideoDecodeAccelerator::~FakeVideoDecodeAccelerator() {
 }
 
-bool FakeVideoDecodeAccelerator::Initialize(media::VideoCodecProfile profile,
+bool FakeVideoDecodeAccelerator::Initialize(const Config& config,
                                             Client* client) {
   DCHECK(child_task_runner_->BelongsToCurrentThread());
-  if (profile == media::VIDEO_CODEC_PROFILE_UNKNOWN) {
+  if (config.profile == media::VIDEO_CODEC_PROFILE_UNKNOWN) {
     LOG(ERROR) << "unknown codec profile";
     return false;
   }
+  if (config.is_encrypted) {
+    NOTREACHED() << "encrypted streams are not supported";
+    return false;
+  }
+
   // V4L2VideoDecodeAccelerator waits until first decode call to ask for buffers
   // This class asks for it on initialization instead.
   client_ = client;
@@ -73,13 +81,15 @@ void FakeVideoDecodeAccelerator::AssignPictureBuffers(
   DCHECK(!(buffers.size()%2));
 
   // Save buffers and mark all buffers as ready for use.
-  scoped_ptr<uint8[]> white_data(
-      new uint8[frame_buffer_size_.width() * frame_buffer_size_.height() * 4]);
+  scoped_ptr<uint8_t[]> white_data(
+      new uint8_t[frame_buffer_size_.width() * frame_buffer_size_.height() *
+                  4]);
   memset(white_data.get(),
          UINT8_MAX,
          frame_buffer_size_.width() * frame_buffer_size_.height() * 4);
-  scoped_ptr<uint8[]> black_data(
-      new uint8[frame_buffer_size_.width() * frame_buffer_size_.height() * 4]);
+  scoped_ptr<uint8_t[]> black_data(
+      new uint8_t[frame_buffer_size_.width() * frame_buffer_size_.height() *
+                  4]);
   memset(black_data.get(),
          0,
          frame_buffer_size_.width() * frame_buffer_size_.height() * 4);
@@ -90,7 +100,7 @@ void FakeVideoDecodeAccelerator::AssignPictureBuffers(
   for (size_t index = 0; index < buffers.size(); ++index) {
     glBindTexture(GL_TEXTURE_2D, buffers[index].texture_id());
     // Every other frame white and the rest black.
-    uint8* data = index%2 ? white_data.get():black_data.get();
+    uint8_t* data = index % 2 ? white_data.get() : black_data.get();
     glTexImage2D(GL_TEXTURE_2D,
                  0,
                  GL_RGBA,
@@ -112,7 +122,7 @@ void FakeVideoDecodeAccelerator::AssignPictureBuffers(
                             weak_this_factory_.GetWeakPtr()));
 }
 
-void FakeVideoDecodeAccelerator::ReusePictureBuffer(int32 picture_buffer_id) {
+void FakeVideoDecodeAccelerator::ReusePictureBuffer(int32_t picture_buffer_id) {
   free_output_buffers_.push(picture_buffer_id);
   child_task_runner_->PostTask(
       FROM_HERE, base::Bind(&FakeVideoDecodeAccelerator::DoPictureReady,

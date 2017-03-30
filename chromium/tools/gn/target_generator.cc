@@ -4,6 +4,8 @@
 
 #include "tools/gn/target_generator.h"
 
+#include <stddef.h>
+
 #include "tools/gn/action_target_generator.h"
 #include "tools/gn/binary_target_generator.h"
 #include "tools/gn/build_settings.h"
@@ -100,6 +102,10 @@ void TargetGenerator::GenerateTarget(Scope* scope,
   } else if (output_type == functions::kGroup) {
     GroupTargetGenerator generator(target.get(), scope, function_call, err);
     generator.Run();
+  } else if (output_type == functions::kLoadableModule) {
+    BinaryTargetGenerator generator(target.get(), scope, function_call,
+                                    Target::LOADABLE_MODULE, err);
+    generator.Run();
   } else if (output_type == functions::kSharedLibrary) {
     BinaryTargetGenerator generator(target.get(), scope, function_call,
                                     Target::SHARED_LIBRARY, err);
@@ -113,8 +119,8 @@ void TargetGenerator::GenerateTarget(Scope* scope,
                                     Target::STATIC_LIBRARY, err);
     generator.Run();
   } else {
-    *err = Err(function_call, "Not a known output type",
-               "I am very confused.");
+    *err = Err(function_call, "Not a known target type",
+               "I am very confused by the target type \"" + output_type + "\"");
   }
 
   if (err->has_error())
@@ -183,17 +189,11 @@ bool TargetGenerator::FillDependentConfigs() {
   if (!FillGenericConfigs(variables::kAllDependentConfigs,
                           &target_->all_dependent_configs()))
     return false;
+
   if (!FillGenericConfigs(variables::kPublicConfigs,
                           &target_->public_configs()))
     return false;
 
-  // "public_configs" was previously named "direct_dependent_configs", fall
-  // back to that if public_configs was undefined.
-  if (!scope_->GetValue(variables::kPublicConfigs, false)) {
-    if (!FillGenericConfigs("direct_dependent_configs",
-                            &target_->public_configs()))
-      return false;
-  }
   return true;
 }
 
@@ -253,10 +253,6 @@ bool TargetGenerator::FillDependencies() {
       return false;
   }
 
-  // This is a list of dependent targets to have their configs fowarded, so
-  // it goes here rather than in FillConfigs.
-  if (!FillForwardDependentConfigs())
-    return false;
   return true;
 }
 
@@ -362,17 +358,6 @@ bool TargetGenerator::FillGenericDeps(const char* var_name,
   if (value) {
     ExtractListOfLabels(*value, scope_->GetSourceDir(),
                         ToolchainLabelForScope(scope_), dest, err_);
-  }
-  return !err_->has_error();
-}
-
-bool TargetGenerator::FillForwardDependentConfigs() {
-  const Value* value = scope_->GetValue(
-      variables::kForwardDependentConfigsFrom, true);
-  if (value) {
-    ExtractListOfUniqueLabels(*value, scope_->GetSourceDir(),
-                              ToolchainLabelForScope(scope_),
-                              &target_->forward_dependent_configs(), err_);
   }
   return !err_->has_error();
 }

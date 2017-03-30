@@ -4,6 +4,9 @@
 
 #include "chrome/browser/extensions/api/autofill_private/autofill_private_api.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "base/guid.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -108,8 +111,6 @@ void PopulateAddressComponents(
       case i18n::addressinput::RECIPIENT:
         component->field =
             autofill_private::AddressField::ADDRESS_FIELD_FULL_NAME;
-        component->placeholder.reset(new std::string(
-            l10n_util::GetStringUTF8(IDS_AUTOFILL_FIELD_LABEL_ADD_NAME)));
         break;
     }
 
@@ -405,7 +406,7 @@ ExtensionFunction::ResponseAction
   RemoveDuplicatePhoneNumberAtIndex(
       params->index_of_new_number, params->country_code, phoneNumbers.get());
 
-  return RespondNow(OneArgument(phoneNumbers.Pass()));
+  return RespondNow(OneArgument(std::move(phoneNumbers)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

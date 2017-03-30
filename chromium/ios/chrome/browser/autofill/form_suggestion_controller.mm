@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/autofill/form_suggestion_controller.h"
 
+#include "base/ios/ios_util.h"
 #include "base/ios/weak_nsobject.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/scoped_block.h"
@@ -11,14 +12,15 @@
 #include "base/memory/scoped_ptr.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/autofill/core/browser/autofill_field_trial_ios.h"
 #include "components/autofill/core/browser/autofill_popup_delegate.h"
-#include "components/autofill/ios/browser/autofill_field_trial_ios.h"
 #import "components/autofill/ios/browser/form_suggestion.h"
 #import "ios/chrome/browser/autofill/form_input_accessory_view_controller.h"
 #import "ios/chrome/browser/autofill/form_suggestion_provider.h"
 #import "ios/chrome/browser/autofill/form_suggestion_view.h"
 #import "ios/chrome/browser/passwords/password_generation_utils.h"
-#include "ios/web/public/url_scheme_util.h"
+#include "ios/chrome/browser/ui/ui_util.h"
+#import "ios/web/public/url_scheme_util.h"
 #import "ios/web/public/web_state/crw_web_view_proxy.h"
 #import "ios/web/public/web_state/js/crw_js_injection_receiver.h"
 #import "ios/web/public/web_state/web_state.h"
@@ -79,13 +81,6 @@ AutofillSuggestionState::AutofillSuggestionState(const std::string& form_name,
 // Clears state in between page loads.
 - (void)resetSuggestionState;
 
-// Finds a FormSuggestionProvider that can supply suggestions for the specified
-// form, requests them, and updates the view accordingly.
-- (void)retrieveSuggestionsForFormNamed:(const std::string&)formName
-                              fieldName:(const std::string&)fieldName
-                                   type:(const std::string&)type
-                               webState:(web::WebState*)webState;
-
 @end
 
 @implementation FormSuggestionController {
@@ -96,7 +91,7 @@ AutofillSuggestionState::AutofillSuggestionState(const std::string& form_name,
   base::scoped_nsobject<JsSuggestionManager> _jsSuggestionManager;
 
   // The provider for the current set of suggestions.
-  __weak id<FormSuggestionProvider> _provider;
+  id<FormSuggestionProvider> _provider;  // weak
 }
 
 - (instancetype)initWithWebState:(web::WebState*)webState
@@ -122,6 +117,9 @@ AutofillSuggestionState::AutofillSuggestionState(const std::string& form_name,
   return [self initWithWebState:webState
                       providers:providers
             JsSuggestionManager:jsSuggestionManager];
+}
+
+- (void)onNoSuggestionsAvailable {
 }
 
 - (void)detachFromWebState {
@@ -209,8 +207,10 @@ AutofillSuggestionState::AutofillSuggestionState(const std::string& form_name,
 
   // Once a provider is found, use it to retrieve suggestions.
   passwords::PipelineCompletionBlock completion = ^(NSUInteger providerIndex) {
-    if (providerIndex == NSNotFound)
+    if (providerIndex == NSNotFound) {
+      [weakSelf onNoSuggestionsAvailable];
       return;
+    }
     base::scoped_nsobject<FormSuggestionController> strongSelf(
         [weakSelf retain]);
     if (!strongSelf)
@@ -227,14 +227,14 @@ AutofillSuggestionState::AutofillSuggestionState(const std::string& form_name,
 
   // Run all the blocks in |findProviderBlocks| until one invokes its
   // completion with YES. The first one to do so will be passed to
-  // |onProviderFound|.
+  // |completion|.
   passwords::RunSearchPipeline(findProviderBlocks, completion);
 }
 
 - (void)onSuggestionsReady:(NSArray*)suggestions
                   provider:(id<FormSuggestionProvider>)provider {
   // TODO(ios): crbug.com/249916. If we can also pass in the form/field for
-  // which |sugguestions| are, we should check here if |suggestions| are for
+  // which |suggestions| are, we should check here if |suggestions| are for
   // the current active element. If not, reset |_suggestionState|.
   if (!_suggestionState) {
     // The suggestion state was reset in between the call to Autofill API (e.g.
@@ -262,11 +262,11 @@ AutofillSuggestionState::AutofillSuggestionState(const std::string& form_name,
 }
 
 - (void)updateKeyboard:(AutofillSuggestionState*)suggestionState {
-  if (!_suggestionState) {
+  if (!suggestionState) {
     if (accessoryViewUpdateBlock_)
       accessoryViewUpdateBlock_.get()(nil, self);
   } else {
-    [self updateKeyboardWithSuggestions:_suggestionState->suggestions];
+    [self updateKeyboardWithSuggestions:suggestionState->suggestions];
   }
 }
 
@@ -278,8 +278,14 @@ AutofillSuggestionState::AutofillSuggestionState(const std::string& form_name,
 }
 
 - (UIView*)suggestionViewWithSuggestions:(NSArray*)suggestions {
+  CGRect frame = [_webViewProxy keyboardAccessory].frame;
+  // Force the desired height on iPads running iOS 9 or later where the height
+  // of the inputAccessoryView is 0.
+  if (base::ios::IsRunningOnIOS9OrLater() && IsIPadIdiom()) {
+    frame.size.height = autofill::kInputAccessoryHeight;
+  }
   base::scoped_nsobject<FormSuggestionView> view([[FormSuggestionView alloc]
-      initWithFrame:[_webViewProxy getKeyboardAccessory].frame
+      initWithFrame:frame
              client:self
         suggestions:suggestions]);
   return view.autorelease();
@@ -289,16 +295,20 @@ AutofillSuggestionState::AutofillSuggestionState(const std::string& form_name,
   if (!_suggestionState)
     return;
 
-  // Send the suggestion to the provider and advance the cursor.
+  // Send the suggestion to the provider. Upon completion advance the cursor
+  // for single-field Autofill, or close the keyboard for full-form Autofill.
   base::WeakNSObject<FormSuggestionController> weakSelf(self);
   [_provider
       didSelectSuggestion:suggestion
                  forField:base::SysUTF8ToNSString(_suggestionState->field_name)
                      form:base::SysUTF8ToNSString(_suggestionState->form_name)
         completionHandler:^{
-          // Don't need to select next element if full form was filled at once.
-          if (!autofill::AutofillFieldTrialIOS::IsFullFormAutofillEnabled())
-            [[weakSelf accessoryViewDelegate] selectNextElement];
+          if (autofill::AutofillFieldTrialIOS::IsFullFormAutofillEnabled()) {
+            [[weakSelf accessoryViewDelegate] closeKeyboardWithoutButtonPress];
+          } else {
+            [[weakSelf accessoryViewDelegate]
+                selectNextElementWithoutButtonPress];
+          }
         }];
   _provider = nil;
 }
@@ -353,6 +363,10 @@ AutofillSuggestionState::AutofillSuggestionState(const std::string& form_name,
 
 - (void)resizeAccessoryView {
   [self updateKeyboard:_suggestionState.get()];
+}
+
+- (BOOL)getLogKeyboardAccessoryMetrics {
+  return YES;
 }
 
 @end

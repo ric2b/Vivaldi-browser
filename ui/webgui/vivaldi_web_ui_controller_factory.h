@@ -27,7 +27,7 @@ protected:
 	~VivaldiWebUIControllerFactory() override;
 
 private:
-	friend struct DefaultSingletonTraits<VivaldiWebUIControllerFactory>;
+	friend struct base::DefaultSingletonTraits<VivaldiWebUIControllerFactory>;
 
 DISALLOW_COPY_AND_ASSIGN(VivaldiWebUIControllerFactory);
 };

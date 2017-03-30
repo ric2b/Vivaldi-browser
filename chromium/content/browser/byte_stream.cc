@@ -10,6 +10,7 @@
 
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequenced_task_runner.h"
 
@@ -383,8 +384,8 @@ void ByteStreamReaderImpl::TransferData(
   // If our target is no longer alive, do nothing.
   if (!object_lifetime_flag->is_alive) return;
 
-  target->TransferDataInternal(
-      transfer_buffer.Pass(), buffer_size, source_complete, status);
+  target->TransferDataInternal(std::move(transfer_buffer), buffer_size,
+                               source_complete, status);
 }
 
 void ByteStreamReaderImpl::TransferDataInternal(

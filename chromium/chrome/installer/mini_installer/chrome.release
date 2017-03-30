@@ -8,6 +8,7 @@
 #
 vivaldi.exe: %(ChromeDir)s\
 wow_helper.exe: %(ChromeDir)s\
+crash_service.exe: %(ChromeDir)s\
 #
 # Chrome version dir assembly manifest.
 # The name of this file must match the name of the version dir, so we cannot
@@ -20,6 +21,7 @@ wow_helper.exe: %(ChromeDir)s\
 #
 vivaldi.dll: %(VersionDir)s\
 vivaldi_100_percent.pak: %(VersionDir)s\
+vivaldi_material_100_percent.pak: %(VersionDir)s\
 vivaldi_child.dll: %(VersionDir)s\
 vivaldi_elf.dll: %(VersionDir)s\
 d3dcompiler_46.dll: %(VersionDir)s\
@@ -49,6 +51,7 @@ default_apps\external_extensions.json: %(VersionDir)s\default_apps\
 resources\vivaldi\style\common.css: %(VersionDir)s\resources\vivaldi\style\
 resources\vivaldi\browser.html: %(VersionDir)s\resources\vivaldi\
 resources\vivaldi\components\startpage\startpage.html: %(VersionDir)s\resources\vivaldi\components\startpage\
+resources\vivaldi\components\welcome\welcome.html: %(VersionDir)s\resources\vivaldi\components\welcome\
 resources\vivaldi\components\settings\settings.html: %(VersionDir)s\resources\vivaldi\components\settings\
 resources\vivaldi\components\mail\mail.html: %(VersionDir)s\resources\vivaldi\components\mail\
 resources\vivaldi\components\contacts\contact.html: %(VersionDir)s\resources\vivaldi\components\contacts\
@@ -71,6 +74,8 @@ resources\vivaldi\_locales\el\messages.json: %(VersionDir)s\resources\vivaldi\_l
 resources\vivaldi\_locales\en\messages.json: %(VersionDir)s\resources\vivaldi\_locales\en
 resources\vivaldi\_locales\eo\messages.json: %(VersionDir)s\resources\vivaldi\_locales\eo
 resources\vivaldi\_locales\es\messages.json: %(VersionDir)s\resources\vivaldi\_locales\es
+resources\vivaldi\_locales\es_PE\messages.json: %(VersionDir)s\resources\vivaldi\_locales\es_PE
+resources\vivaldi\_locales\eu\messages.json: %(VersionDir)s\resources\vivaldi\_locales\eu
 resources\vivaldi\_locales\et\messages.json: %(VersionDir)s\resources\vivaldi\_locales\et
 resources\vivaldi\_locales\fa\messages.json: %(VersionDir)s\resources\vivaldi\_locales\fa
 resources\vivaldi\_locales\fi\messages.json: %(VersionDir)s\resources\vivaldi\_locales\fi
@@ -86,6 +91,7 @@ resources\vivaldi\_locales\is\messages.json: %(VersionDir)s\resources\vivaldi\_l
 resources\vivaldi\_locales\it\messages.json: %(VersionDir)s\resources\vivaldi\_locales\it
 resources\vivaldi\_locales\ja\messages.json: %(VersionDir)s\resources\vivaldi\_locales\ja
 resources\vivaldi\_locales\jbo\messages.json: %(VersionDir)s\resources\vivaldi\_locales\jbo
+resources\vivaldi\_locales\ka\messages.json: %(VersionDir)s\resources\vivaldi\_locales\ka
 resources\vivaldi\_locales\ko\messages.json: %(VersionDir)s\resources\vivaldi\_locales\ko
 resources\vivaldi\_locales\ku\messages.json: %(VersionDir)s\resources\vivaldi\_locales\ku
 resources\vivaldi\_locales\lt\messages.json: %(VersionDir)s\resources\vivaldi\_locales\lt
@@ -99,6 +105,7 @@ resources\vivaldi\_locales\pt_BR\messages.json: %(VersionDir)s\resources\vivaldi
 resources\vivaldi\_locales\pt_PT\messages.json: %(VersionDir)s\resources\vivaldi\_locales\pt_PT
 resources\vivaldi\_locales\ro\messages.json: %(VersionDir)s\resources\vivaldi\_locales\ro
 resources\vivaldi\_locales\ru\messages.json: %(VersionDir)s\resources\vivaldi\_locales\ru
+resources\vivaldi\_locales\sc\messages.json: %(VersionDir)s\resources\vivaldi\_locales\sc
 resources\vivaldi\_locales\sk\messages.json: %(VersionDir)s\resources\vivaldi\_locales\sk
 resources\vivaldi\_locales\sl\messages.json: %(VersionDir)s\resources\vivaldi\_locales\sl
 resources\vivaldi\_locales\sq\messages.json: %(VersionDir)s\resources\vivaldi\_locales\sq
@@ -115,12 +122,12 @@ resources\vivaldi\user_files\*: %(VersionDir)s\resources\vivaldi\user_files
 
 [HIDPI]
 vivaldi_200_percent.pak: %(VersionDir)s\
+vialdi_material_200_percent.pak: %(VersionDir)s\
 
 [TOUCH]
 
 [VIVALDI]
 delegate_execute.exe: %(VersionDir)s\
-metro_driver.dll: %(VersionDir)s\
 SecondaryTile.png: %(VersionDir)s\
 widevinecdmadapter.dll: %(VersionDir)s\
 #
@@ -137,4 +144,3 @@ PepperFlash\pepflashplayer.dll: %(VersionDir)s\PepperFlash\
 # packaged in this directory.
 Logo.png: %(VersionDir)s\VisualElements\
 SmallLogo.png: %(VersionDir)s\VisualElements\
-splash-620x300.png: %(VersionDir)s\VisualElements\

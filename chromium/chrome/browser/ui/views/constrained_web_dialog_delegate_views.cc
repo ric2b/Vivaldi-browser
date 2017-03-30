@@ -4,7 +4,9 @@
 
 #include "chrome/browser/ui/webui/constrained_web_dialog_delegate_base.h"
 
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/webui/chrome_web_contents_handler.h"
@@ -208,14 +210,12 @@ class ConstrainedWebDialogDelegateViewViews
   gfx::Size GetPreferredSize() const override {
     gfx::Size size;
     if (!impl_->closed_via_webui()) {
-      // The size is set here if the dialog has been auto-resized in
-      // WebDialogWebContentsDelegateViews's ResizeDueToAutoResize.
+      // If auto-resizing is enabled and the dialog has been auto-resized,
+      // GetPreferredSize() will return the appropriate current size.  In this
+      // case, GetDialogSize() should leave its argument untouched.  In all
+      // other cases, GetDialogSize() will overwrite the passed-in size.
       size = WebView::GetPreferredSize();
-      if (size.IsEmpty()) {
-        // The size set here if the dialog has not been auto-resized or
-        // auto-resizable is not enabled.
-        GetWebDialogDelegate()->GetDialogSize(&size);
-      }
+      GetWebDialogDelegate()->GetDialogSize(&size);
     }
     return size;
   }

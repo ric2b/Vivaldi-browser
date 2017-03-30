@@ -34,7 +34,7 @@ class UserAddingScreenImpl : public UserAddingScreen {
 
   static UserAddingScreenImpl* GetInstance();
  private:
-  friend struct DefaultSingletonTraits<UserAddingScreenImpl>;
+  friend struct base::DefaultSingletonTraits<UserAddingScreenImpl>;
 
   void OnDisplayHostCompletion();
 
@@ -70,7 +70,7 @@ void UserAddingScreenImpl::Cancel() {
   // Reset wallpaper if cancel adding user from multiple user sign in page.
   if (user_manager::UserManager::Get()->IsUserLoggedIn()) {
     WallpaperManager::Get()->SetUserWallpaperDelayed(
-        user_manager::UserManager::Get()->GetActiveUser()->email());
+        user_manager::UserManager::Get()->GetActiveUser()->GetAccountId());
   }
 }
 
@@ -97,7 +97,7 @@ void UserAddingScreenImpl::OnDisplayHostCompletion() {
 
 // static
 UserAddingScreenImpl* UserAddingScreenImpl::GetInstance() {
-  return Singleton<UserAddingScreenImpl>::get();
+  return base::Singleton<UserAddingScreenImpl>::get();
 }
 
 UserAddingScreenImpl::UserAddingScreenImpl()

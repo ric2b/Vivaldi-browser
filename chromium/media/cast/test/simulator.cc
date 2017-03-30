@@ -34,6 +34,10 @@
 // - Raw event log of the simulation session tagged with the unique test ID,
 //   written out to the specified file path.
 
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+
 #include "base/at_exit.h"
 #include "base/base_paths.h"
 #include "base/command_line.h"
@@ -43,6 +47,7 @@
 #include "base/files/scoped_file.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -119,45 +124,6 @@ void LogAudioOperationalStatus(OperationalStatus status) {
 
 void LogVideoOperationalStatus(OperationalStatus status) {
   LOG(INFO) << "Video status: " << status;
-}
-
-void LogTransportEvents(const scoped_refptr<CastEnvironment>& env,
-                        const std::vector<PacketEvent>& packet_events,
-                        const std::vector<FrameEvent>& frame_events) {
-  for (std::vector<media::cast::PacketEvent>::const_iterator it =
-           packet_events.begin();
-       it != packet_events.end();
-       ++it) {
-    env->Logging()->InsertPacketEvent(it->timestamp,
-                                      it->type,
-                                      it->media_type,
-                                      it->rtp_timestamp,
-                                      it->frame_id,
-                                      it->packet_id,
-                                      it->max_packet_id,
-                                      it->size);
-  }
-  for (std::vector<media::cast::FrameEvent>::const_iterator it =
-           frame_events.begin();
-       it != frame_events.end();
-       ++it) {
-    if (it->type == FRAME_PLAYOUT) {
-      env->Logging()->InsertFrameEventWithDelay(
-          it->timestamp,
-          it->type,
-          it->media_type,
-          it->rtp_timestamp,
-          it->frame_id,
-          it->delay_delta);
-    } else {
-      env->Logging()->InsertFrameEvent(
-          it->timestamp,
-          it->type,
-          it->media_type,
-          it->rtp_timestamp,
-          it->frame_id);
-    }
-  }
 }
 
 // Maintains a queue of encoded video frames.
@@ -336,28 +302,20 @@ void RunSimulation(const base::FilePath& source_path,
   base::ThreadTaskRunnerHandle task_runner_handle(task_runner);
 
   // CastEnvironments.
-  scoped_refptr<CastEnvironment> sender_env =
-      new CastEnvironment(
-          scoped_ptr<base::TickClock>(
-              new test::SkewedTickClock(&testing_clock)).Pass(),
-          task_runner,
-          task_runner,
-          task_runner);
-  scoped_refptr<CastEnvironment> receiver_env =
-      new CastEnvironment(
-          scoped_ptr<base::TickClock>(
-              new test::SkewedTickClock(&testing_clock)).Pass(),
-          task_runner,
-          task_runner,
-          task_runner);
+  scoped_refptr<CastEnvironment> sender_env = new CastEnvironment(
+      scoped_ptr<base::TickClock>(new test::SkewedTickClock(&testing_clock)),
+      task_runner, task_runner, task_runner);
+  scoped_refptr<CastEnvironment> receiver_env = new CastEnvironment(
+      scoped_ptr<base::TickClock>(new test::SkewedTickClock(&testing_clock)),
+      task_runner, task_runner, task_runner);
 
   // Event subscriber. Store at most 1 hour of events.
   EncodingEventSubscriber audio_event_subscriber(AUDIO_EVENT,
                                                  100 * 60 * 60);
   EncodingEventSubscriber video_event_subscriber(VIDEO_EVENT,
                                                  30 * 60 * 60);
-  sender_env->Logging()->AddRawEventSubscriber(&audio_event_subscriber);
-  sender_env->Logging()->AddRawEventSubscriber(&video_event_subscriber);
+  sender_env->logger()->Subscribe(&audio_event_subscriber);
+  sender_env->logger()->Subscribe(&video_event_subscriber);
 
   // Audio sender config.
   AudioSenderConfig audio_sender_config = GetDefaultAudioSenderConfig();
@@ -395,7 +353,7 @@ void RunSimulation(const base::FilePath& source_path,
     PacketProxy() : receiver(NULL) {}
     void ReceivePacket(scoped_ptr<Packet> packet) {
       if (receiver)
-        receiver->ReceivePacket(packet.Pass());
+        receiver->ReceivePacket(std::move(packet));
     }
     CastReceiver* receiver;
   };
@@ -405,15 +363,12 @@ void RunSimulation(const base::FilePath& source_path,
   // Cast receiver.
   scoped_ptr<CastTransportSender> transport_receiver(
       new CastTransportSenderImpl(
-          NULL,
-          &testing_clock,
-          net::IPEndPoint(),
-          net::IPEndPoint(),
+          nullptr, &testing_clock, net::IPEndPoint(), net::IPEndPoint(),
           make_scoped_ptr(new base::DictionaryValue),
           base::Bind(&UpdateCastTransportStatus),
-          base::Bind(&LogTransportEvents, receiver_env),
-          base::TimeDelta::FromSeconds(1),
-          task_runner,
+          base::Bind(&LogEventDispatcher::DispatchBatchOfEvents,
+                     base::Unretained(receiver_env->logger())),
+          base::TimeDelta::FromSeconds(1), task_runner,
           base::Bind(&PacketProxy::ReceivePacket,
                      base::Unretained(&packet_proxy)),
           &receiver_to_sender));
@@ -426,19 +381,14 @@ void RunSimulation(const base::FilePath& source_path,
   packet_proxy.receiver = cast_receiver.get();
 
   // Cast sender and transport sender.
-  scoped_ptr<CastTransportSender> transport_sender(
-      new CastTransportSenderImpl(
-          NULL,
-          &testing_clock,
-          net::IPEndPoint(),
-          net::IPEndPoint(),
-          make_scoped_ptr(new base::DictionaryValue),
-          base::Bind(&UpdateCastTransportStatus),
-          base::Bind(&LogTransportEvents, sender_env),
-          base::TimeDelta::FromSeconds(1),
-          task_runner,
-          PacketReceiverCallback(),
-          &sender_to_receiver));
+  scoped_ptr<CastTransportSender> transport_sender(new CastTransportSenderImpl(
+      nullptr, &testing_clock, net::IPEndPoint(), net::IPEndPoint(),
+      make_scoped_ptr(new base::DictionaryValue),
+      base::Bind(&UpdateCastTransportStatus),
+      base::Bind(&LogEventDispatcher::DispatchBatchOfEvents,
+                 base::Unretained(sender_env->logger())),
+      base::TimeDelta::FromSeconds(1), task_runner, PacketReceiverCallback(),
+      &sender_to_receiver));
   scoped_ptr<CastSender> cast_sender(
       CastSender::Create(sender_env, transport_sender.get()));
 
@@ -456,12 +406,11 @@ void RunSimulation(const base::FilePath& source_path,
     ipp.reset(new test::InterruptedPoissonProcess(
         average_rates,
         ipp_model.coef_burstiness(), ipp_model.coef_variance(), 0));
-    receiver_to_sender.Initialize(
-        ipp->NewBuffer(128 * 1024).Pass(),
-        transport_sender->PacketReceiverForTesting(),
-        task_runner, &testing_clock);
+    receiver_to_sender.Initialize(ipp->NewBuffer(128 * 1024),
+                                  transport_sender->PacketReceiverForTesting(),
+                                  task_runner, &testing_clock);
     sender_to_receiver.Initialize(
-        ipp->NewBuffer(128 * 1024).Pass(),
+        ipp->NewBuffer(128 * 1024),
         transport_receiver->PacketReceiverForTesting(), task_runner,
         &testing_clock);
   } else {
@@ -486,7 +435,7 @@ void RunSimulation(const base::FilePath& source_path,
   scoped_ptr<EncodedVideoFrameTracker> video_frame_tracker;
   if (quality_test) {
     video_frame_tracker.reset(new EncodedVideoFrameTracker(&media_source));
-    sender_env->Logging()->AddRawEventSubscriber(video_frame_tracker.get());
+    sender_env->logger()->Subscribe(video_frame_tracker.get());
   }
 
   // Quality metrics computed for each frame decoded.
@@ -544,6 +493,12 @@ void RunSimulation(const base::FilePath& source_path,
     elapsed_time += step;
   }
 
+  // Unsubscribe from logging events.
+  sender_env->logger()->Unsubscribe(&audio_event_subscriber);
+  sender_env->logger()->Unsubscribe(&video_event_subscriber);
+  if (quality_test)
+    sender_env->logger()->Unsubscribe(video_frame_tracker.get());
+
   // Get event logs for audio and video.
   media::cast::proto::LogMetadata audio_metadata, video_metadata;
   media::cast::FrameEventList audio_frame_events, video_frame_events;
@@ -569,9 +524,9 @@ void RunSimulation(const base::FilePath& source_path,
   int encoded_video_frames = 0;
   int dropped_video_frames = 0;
   int late_video_frames = 0;
-  int64 total_delay_of_late_frames_ms = 0;
-  int64 encoded_size = 0;
-  int64 target_bitrate = 0;
+  int64_t total_delay_of_late_frames_ms = 0;
+  int64_t encoded_size = 0;
+  int64_t target_bitrate = 0;
   for (size_t i = 0; i < video_frame_events.size(); ++i) {
     const media::cast::proto::AggregatedFrameEvent& event =
         *video_frame_events[i];

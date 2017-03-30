@@ -50,6 +50,26 @@ on how to use these in your code. (Note that you have to specify the
 build directory for this command because the available arguments can
 change according to what's set.
 
+Chrome developers can also read the [Chrome-specific build
+configuration](http://www.chromium.org/developers/gn-build-configuration)
+instructions for more information.
+
+## Cross-compiling to a target OS or architecture
+
+Run `gn args out/Default` (substituting your build directory as needed) and
+add one or more of the following lines for common cross-compiling options.
+
+```
+target_os = "chromeos"
+target_os = "android"
+
+target_cpu = "arm"
+target_cpu = "x86"
+target_cpu = "x64"
+```
+
+See [GNCrossCompiles](cross_compiles.md) for more info.
+
 ## Configuring goma
 
 
@@ -58,7 +78,7 @@ Add:
 
 ```
 use_goma = true
-goma_dir = "~/foo/bar/goma" 
+goma_dir = "~/foo/bar/goma"
 ```
 
 If your goma is in the default location (`~/goma`) then you can omit the
@@ -89,9 +109,9 @@ executable("hello_world") {
 There should already be a `hello_world.cc` file in that directory,
 containing what you expect. That's it! Now we just need to tell the
 build about this file. Open the `BUILD.gn` file in the root directory
-and add the label of this target to the dependencies of the root group
-(a "group" target is a meta-target that is just a collection of other
-targets):
+and add the label of this target to the dependencies of one of the root
+groups (a "group" target is a meta-target that is just a collection of
+other targets):
 
 ```
 group("root") {
@@ -152,7 +172,7 @@ executable("say_hello") {
 }
 ```
 
-This executable includes one source file,and depends on the previous
+This executable includes one source file and depends on the previous
 static library. The static library is referenced by its label in the
 `deps`. You could have used the full label `//tools/gn/tutorial:hello`
 but if you're referencing a target in the same build file, you can use
@@ -167,7 +187,7 @@ ninja -C out/Default say_hello
 out/Default/say_hello
 ```
 
-Note that you **didn't** need to re-run GN.GN will automatically rebuild
+Note that you **didn't** need to re-run GN. GN will automatically rebuild
 the ninja files when any build file has changed. You know this happens
 when ninja prints `[1/1] Regenerating ninja files` at the beginning of
 execution.
@@ -246,10 +266,10 @@ static_library("hello") {
 ```
 
 This applies the `hello_config` to the `hello` target itself, plus all
-targets that depend on transitively depend on the current one. Now
-everybody that depends on us will get our settings. You can also set
-`public_configs` which applies only to targets that directly
-depend on your target (not transitively).
+targets that transitively depend on the current one. Now everybody that
+depends on us will get our settings. You can also set `public_configs`
+which applies only to targets that directly depend on your target (not
+transitively).
 
 Now if you compile and run, you'll see the new version with two people:
 
@@ -259,7 +279,7 @@ ninja: Entering directory 'out/Default'
 [1/1] Regenerating ninja files
 [4/4] LINK say_hello
 > out/Default/say_hello
-Hello, Bill and Ted.
+Hello, Bill and Joy.
 ```
 
 ## Don't know what's going on?
@@ -303,7 +323,7 @@ came from on the `say_hello` target:
 ```
 
 You can see that `TWO_PEOPLE` was defined by a config, and you can also
-see the which like caused that config to be applied to your target (in
+see the which line caused that config to be applied to your target (in
 this case, the `all_dependent_configs` line).
 
 Another particularly interesting variation:

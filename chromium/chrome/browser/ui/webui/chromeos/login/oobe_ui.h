@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/observer_list.h"
@@ -245,6 +246,8 @@ class OobeUI : public OobeDisplay,
 
   // Maps screen ids to JS screen names.
   std::vector<std::string> screen_names_;
+
+  std::vector<Screen> dim_overlay_screen_ids_;
 
   // Flag that indicates whether JS part is fully loaded and ready to accept
   // calls.

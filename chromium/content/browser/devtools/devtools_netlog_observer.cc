@@ -4,8 +4,11 @@
 
 #include "content/browser/devtools/devtools_netlog_observer.h"
 
+#include <stddef.h>
+
 #include "base/strings/string_util.h"
 #include "base/values.h"
+#include "content/browser/loader/resource_request_info_impl.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/resource_response.h"
@@ -27,8 +30,8 @@ DevToolsNetLogObserver::DevToolsNetLogObserver() {
 DevToolsNetLogObserver::~DevToolsNetLogObserver() {
 }
 
-DevToolsNetLogObserver::ResourceInfo*
-DevToolsNetLogObserver::GetResourceInfo(uint32 id) {
+DevToolsNetLogObserver::ResourceInfo* DevToolsNetLogObserver::GetResourceInfo(
+    uint32_t id) {
   RequestToInfoMap::iterator it = request_to_info_.find(id);
   if (it != request_to_info_.end())
     return it->second.get();
@@ -53,16 +56,6 @@ void DevToolsNetLogObserver::OnAddURLRequestEntry(
 
   if (entry.type() == net::NetLog::TYPE_URL_REQUEST_START_JOB) {
     if (is_begin) {
-      int load_flags;
-      scoped_ptr<base::Value> event_param(entry.ParametersToValue());
-      if (!net::StartEventLoadFlagsFromEventParams(event_param.get(),
-                                                   &load_flags)) {
-        return;
-      }
-
-      if (!(load_flags & net::LOAD_REPORT_RAW_HEADERS))
-        return;
-
       if (request_to_info_.size() > kMaxNumEntries) {
         LOG(WARNING) << "The raw headers observer url request count has grown "
                         "larger than expected, resetting";
@@ -121,7 +114,8 @@ void DevToolsNetLogObserver::OnAddURLRequestEntry(
 
       for (net::SpdyHeaderBlock::const_iterator it = request_headers.begin();
            it != request_headers.end(); ++it) {
-        info->request_headers.push_back(std::make_pair(it->first, it->second));
+        info->request_headers.push_back(
+            std::make_pair(it->first.as_string(), it->second.as_string()));
       }
       info->request_headers_text = "";
       break;
@@ -196,10 +190,12 @@ DevToolsNetLogObserver* DevToolsNetLogObserver::GetInstance() {
 void DevToolsNetLogObserver::PopulateResponseInfo(
     net::URLRequest* request,
     ResourceResponse* response) {
-  if (!(request->load_flags() & net::LOAD_REPORT_RAW_HEADERS))
+  const ResourceRequestInfoImpl* request_info =
+      ResourceRequestInfoImpl::ForRequest(request);
+  if (!request_info || !request_info->ShouldReportRawHeaders())
     return;
 
-  uint32 source_id = request->net_log().source().id;
+  uint32_t source_id = request->net_log().source().id;
   DevToolsNetLogObserver* dev_tools_net_log_observer =
       DevToolsNetLogObserver::GetInstance();
   if (dev_tools_net_log_observer == NULL)

@@ -4,9 +4,13 @@
 
 #include "net/spdy/spdy_http_utils.h"
 
-#include "base/basictypes.h"
+#include <stdint.h>
+
+#include <limits>
+
 #include "net/http/http_request_info.h"
 #include "net/spdy/spdy_framer.h"
+#include "net/spdy/spdy_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace net {
@@ -33,26 +37,9 @@ TEST(SpdyHttpUtilsTest, ConvertSpdy3PriorityToRequestPriority) {
   EXPECT_EQ(IDLE, ConvertSpdyPriorityToRequestPriority(4, SPDY3));
   // These are invalid values, but we should still handle them
   // gracefully.
-  for (int i = 5; i < kuint8max; ++i) {
+  for (int i = 5; i < std::numeric_limits<uint8_t>::max(); ++i) {
     EXPECT_EQ(IDLE, ConvertSpdyPriorityToRequestPriority(i, SPDY3));
   }
-}
-
-TEST(SpdyHttpUtilsTest, CreateSpdyHeadersFromHttpRequestSPDY2) {
-  GURL url("https://www.google.com/index.html");
-  HttpRequestInfo request;
-  request.method = "GET";
-  request.url = url;
-  request.extra_headers.SetHeader(HttpRequestHeaders::kUserAgent, "Chrome/1.1");
-  SpdyHeaderBlock headers;
-  CreateSpdyHeadersFromHttpRequest(request, request.extra_headers, SPDY2,
-                                   kDirect, &headers);
-  EXPECT_EQ("GET", headers["method"]);
-  EXPECT_EQ("https", headers["scheme"]);
-  EXPECT_EQ("www.google.com", headers["host"]);
-  EXPECT_EQ("/index.html", headers["url"]);
-  EXPECT_EQ("HTTP/1.1", headers["version"]);
-  EXPECT_EQ("Chrome/1.1", headers["user-agent"]);
 }
 
 TEST(SpdyHttpUtilsTest, CreateSpdyHeadersFromHttpRequestSPDY3) {
@@ -86,23 +73,6 @@ TEST(SpdyHttpUtilsTest, CreateSpdyHeadersFromHttpRequestHTTP2) {
   EXPECT_EQ("www.google.com", headers[":authority"]);
   EXPECT_EQ("/index.html", headers[":path"]);
   EXPECT_TRUE(headers.end() == headers.find(":version"));
-  EXPECT_EQ("Chrome/1.1", headers["user-agent"]);
-}
-
-TEST(SpdyHttpUtilsTest, CreateSpdyHeadersFromHttpRequestProxySPDY2) {
-  GURL url("https://www.google.com/index.html");
-  HttpRequestInfo request;
-  request.method = "GET";
-  request.url = url;
-  request.extra_headers.SetHeader(HttpRequestHeaders::kUserAgent, "Chrome/1.1");
-  SpdyHeaderBlock headers;
-  CreateSpdyHeadersFromHttpRequest(request, request.extra_headers, SPDY2,
-                                   !kDirect, &headers);
-  EXPECT_EQ("GET", headers["method"]);
-  EXPECT_EQ("https", headers["scheme"]);
-  EXPECT_EQ("www.google.com", headers["host"]);
-  EXPECT_EQ("https://www.google.com/index.html", headers["url"]);
-  EXPECT_EQ("HTTP/1.1", headers["version"]);
   EXPECT_EQ("Chrome/1.1", headers["user-agent"]);
 }
 
@@ -140,23 +110,6 @@ TEST(SpdyHttpUtilsTest, CreateSpdyHeadersFromHttpRequestProxyHTTP2) {
   EXPECT_EQ("Chrome/1.1", headers["user-agent"]);
 }
 
-TEST(SpdyHttpUtilsTest, CreateSpdyHeadersFromHttpRequestConnectSPDY2) {
-  GURL url("https://www.google.com/index.html");
-  HttpRequestInfo request;
-  request.method = "CONNECT";
-  request.url = url;
-  request.extra_headers.SetHeader(HttpRequestHeaders::kUserAgent, "Chrome/1.1");
-  SpdyHeaderBlock headers;
-  CreateSpdyHeadersFromHttpRequest(request, request.extra_headers, SPDY2,
-                                   kDirect, &headers);
-  EXPECT_EQ("CONNECT", headers["method"]);
-  EXPECT_TRUE(headers.end() == headers.find("scheme"));
-  EXPECT_EQ("www.google.com", headers["host"]);
-  EXPECT_EQ("www.google.com:443", headers["url"]);
-  EXPECT_EQ("HTTP/1.1", headers["version"]);
-  EXPECT_EQ("Chrome/1.1", headers["user-agent"]);
-}
-
 TEST(SpdyHttpUtilsTest, CreateSpdyHeadersFromHttpRequestConnectSPDY3) {
   GURL url("https://www.google.com/index.html");
   HttpRequestInfo request;
@@ -185,8 +138,9 @@ TEST(SpdyHttpUtilsTest, CreateSpdyHeadersFromHttpRequestConnectHTTP2) {
                                    kDirect, &headers);
   EXPECT_EQ("CONNECT", headers[":method"]);
   EXPECT_TRUE(headers.end() == headers.find(":scheme"));
-  EXPECT_EQ("www.google.com", headers[":authority"]);
-  EXPECT_EQ("www.google.com:443", headers[":path"]);
+  EXPECT_EQ("www.google.com:443", headers[":authority"]);
+  EXPECT_EQ(headers.end(), headers.find(":path"));
+  EXPECT_EQ(headers.end(), headers.find(":scheme"));
   EXPECT_TRUE(headers.end() == headers.find(":version"));
   EXPECT_EQ("Chrome/1.1", headers["user-agent"]);
 }

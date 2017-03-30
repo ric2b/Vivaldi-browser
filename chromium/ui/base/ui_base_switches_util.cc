@@ -5,6 +5,7 @@
 #include "ui/base/ui_base_switches_util.h"
 
 #include "base/command_line.h"
+#include "build/build_config.h"
 #include "ui/base/ui_base_switches.h"
 
 namespace switches {
@@ -28,16 +29,6 @@ bool IsTouchDragDropEnabled() {
 #else
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kEnableTouchDragDrop);
-#endif
-}
-
-bool IsTouchEditingEnabled() {
-#if defined(USE_AURA)
-  return !base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kDisableTouchEditing);
-#else
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableTouchEditing);
 #endif
 }
 

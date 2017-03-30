@@ -8,6 +8,8 @@
 
 #include "net/quic/reliable_quic_stream.h"
 
+using base::StringPiece;
+
 namespace net {
 namespace test {
 
@@ -25,6 +27,11 @@ void ReliableQuicStreamPeer::SetStreamBytesWritten(
 }
 
 // static
+bool ReliableQuicStreamPeer::read_side_closed(ReliableQuicStream* stream) {
+  return stream->read_side_closed();
+}
+
+// static
 void ReliableQuicStreamPeer::CloseReadSide(ReliableQuicStream* stream) {
   stream->CloseReadSide();
 }
@@ -35,13 +42,33 @@ bool ReliableQuicStreamPeer::FinSent(ReliableQuicStream* stream) {
 }
 
 // static
+bool ReliableQuicStreamPeer::FinReceived(ReliableQuicStream* stream) {
+  return stream->fin_received_;
+}
+
+// static
 bool ReliableQuicStreamPeer::RstSent(ReliableQuicStream* stream) {
   return stream->rst_sent_;
 }
 
 // static
-uint32 ReliableQuicStreamPeer::SizeOfQueuedData(ReliableQuicStream* stream) {
-  uint32 total = 0;
+bool ReliableQuicStreamPeer::RstReceived(ReliableQuicStream* stream) {
+  return stream->rst_received_;
+}
+
+// static
+bool ReliableQuicStreamPeer::ReadSideClosed(ReliableQuicStream* stream) {
+  return stream->read_side_closed_;
+}
+
+// static
+bool ReliableQuicStreamPeer::WriteSideClosed(ReliableQuicStream* stream) {
+  return stream->write_side_closed_;
+}
+
+// static
+uint32_t ReliableQuicStreamPeer::SizeOfQueuedData(ReliableQuicStream* stream) {
+  uint32_t total = 0;
   std::list<ReliableQuicStream::PendingData>::iterator it =
       stream->queued_data_.begin();
   while (it != stream->queued_data_.end()) {
@@ -61,6 +88,15 @@ void ReliableQuicStreamPeer::SetFecPolicy(ReliableQuicStream* stream,
 bool ReliableQuicStreamPeer::StreamContributesToConnectionFlowControl(
     ReliableQuicStream* stream) {
   return stream->stream_contributes_to_connection_flow_control_;
+}
+
+// static
+void ReliableQuicStreamPeer::WriteOrBufferData(
+    ReliableQuicStream* stream,
+    StringPiece data,
+    bool fin,
+    QuicAckListenerInterface* ack_notifier_delegate) {
+  stream->WriteOrBufferData(data, fin, ack_notifier_delegate);
 }
 
 }  // namespace test

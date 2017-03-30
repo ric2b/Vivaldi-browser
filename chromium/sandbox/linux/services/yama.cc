@@ -4,7 +4,9 @@
 
 #include "sandbox/linux/services/yama.h"
 
+#include <errno.h>
 #include <fcntl.h>
+#include <stddef.h>
 #include <sys/prctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>

@@ -11,14 +11,17 @@
 #include "base/prefs/scoped_user_pref_update.h"
 #include "chrome/browser/content_settings/content_settings_mock_observer.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/mock_settings_observer.h"
-#include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
-#include "chrome/test/base/testing_pref_service_syncable.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/browser/content_settings_details.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/browser/website_settings_info.h"
+#include "components/content_settings/core/browser/website_settings_registry.h"
+#include "components/content_settings/core/common/pref_names.h"
+#include "components/syncable_prefs/testing_pref_service_syncable.h"
 #include "content/public/test/test_browser_thread.h"
 #include "net/base/static_cookie_policy.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -34,6 +37,12 @@ class HostContentSettingsMapTest : public testing::Test {
   }
 
  protected:
+  const std::string& GetPrefName(ContentSettingsType type) {
+    return content_settings::WebsiteSettingsRegistry::GetInstance()
+        ->Get(type)
+        ->pref_name();
+  }
+
   base::MessageLoop message_loop_;
   content::TestBrowserThread ui_thread_;
 };
@@ -41,7 +50,7 @@ class HostContentSettingsMapTest : public testing::Test {
 TEST_F(HostContentSettingsMapTest, DefaultValues) {
   TestingProfile profile;
   HostContentSettingsMap* host_content_settings_map =
-      profile.GetHostContentSettingsMap();
+      HostContentSettingsMapFactory::GetForProfile(&profile);
 
   // Check setting defaults.
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
@@ -58,6 +67,7 @@ TEST_F(HostContentSettingsMapTest, DefaultValues) {
                 CONTENT_SETTINGS_TYPE_IMAGES,
                 std::string()));
 
+#if defined(ENABLE_PLUGINS)
   host_content_settings_map->SetDefaultContentSetting(
       CONTENT_SETTINGS_TYPE_PLUGINS, CONTENT_SETTING_ALLOW);
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
@@ -73,23 +83,27 @@ TEST_F(HostContentSettingsMapTest, DefaultValues) {
   EXPECT_EQ(CONTENT_SETTING_DETECT_IMPORTANT_CONTENT,
             host_content_settings_map->GetDefaultContentSetting(
                 CONTENT_SETTINGS_TYPE_PLUGINS, NULL));
+#endif
 
   host_content_settings_map->SetDefaultContentSetting(
       CONTENT_SETTINGS_TYPE_POPUPS, CONTENT_SETTING_ALLOW);
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
             host_content_settings_map->GetDefaultContentSetting(
                 CONTENT_SETTINGS_TYPE_POPUPS, NULL));
+  EXPECT_EQ(CONTENT_SETTING_BLOCK,
+            host_content_settings_map->GetDefaultContentSetting(
+                CONTENT_SETTINGS_TYPE_KEYGEN, NULL));
 }
 
 TEST_F(HostContentSettingsMapTest, IndividualSettings) {
   TestingProfile profile;
   HostContentSettingsMap* host_content_settings_map =
-      profile.GetHostContentSettingsMap();
+      HostContentSettingsMapFactory::GetForProfile(&profile);
 
   // Check returning individual settings.
   GURL host("http://example.com/");
   ContentSettingsPattern pattern =
-       ContentSettingsPattern::FromString("[*.]example.com");
+      ContentSettingsPattern::FromString("[*.]example.com");
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
             host_content_settings_map->GetContentSetting(
                 host, host, CONTENT_SETTINGS_TYPE_IMAGES, std::string()));
@@ -111,9 +125,11 @@ TEST_F(HostContentSettingsMapTest, IndividualSettings) {
   EXPECT_EQ(CONTENT_SETTING_BLOCK,
             host_content_settings_map->GetContentSetting(
                 host, host, CONTENT_SETTINGS_TYPE_IMAGES, std::string()));
-  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+#if defined(ENABLE_PLUGINS)
+  EXPECT_EQ(CONTENT_SETTING_DETECT_IMPORTANT_CONTENT,
             host_content_settings_map->GetContentSetting(
                 host, host, CONTENT_SETTINGS_TYPE_PLUGINS, std::string()));
+#endif
 
   // Check returning all settings for a host.
   host_content_settings_map->SetContentSetting(
@@ -134,6 +150,7 @@ TEST_F(HostContentSettingsMapTest, IndividualSettings) {
   EXPECT_EQ(CONTENT_SETTING_BLOCK,
             host_content_settings_map->GetContentSetting(
                 host, host, CONTENT_SETTINGS_TYPE_JAVASCRIPT, std::string()));
+#if defined(ENABLE_PLUGINS)
   host_content_settings_map->SetContentSetting(
       pattern,
       ContentSettingsPattern::Wildcard(),
@@ -143,6 +160,7 @@ TEST_F(HostContentSettingsMapTest, IndividualSettings) {
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
             host_content_settings_map->GetContentSetting(
                 host, host, CONTENT_SETTINGS_TYPE_PLUGINS, std::string()));
+#endif
   EXPECT_EQ(CONTENT_SETTING_BLOCK,
             host_content_settings_map->GetContentSetting(
                 host, host, CONTENT_SETTINGS_TYPE_POPUPS, std::string()));
@@ -159,31 +177,41 @@ TEST_F(HostContentSettingsMapTest, IndividualSettings) {
   EXPECT_EQ(CONTENT_SETTING_ASK,
             host_content_settings_map->GetContentSetting(
                 host, host, CONTENT_SETTINGS_TYPE_MOUSELOCK, std::string()));
+  host_content_settings_map->SetContentSetting(
+      pattern, ContentSettingsPattern::Wildcard(), CONTENT_SETTINGS_TYPE_KEYGEN,
+      std::string(), CONTENT_SETTING_ALLOW);
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            host_content_settings_map->GetContentSetting(
+                host, host, CONTENT_SETTINGS_TYPE_KEYGEN, std::string()));
 
   // Check returning all hosts for a setting.
   ContentSettingsPattern pattern2 =
-       ContentSettingsPattern::FromString("[*.]example.org");
+      ContentSettingsPattern::FromString("[*.]example.org");
   host_content_settings_map->SetContentSetting(
       pattern2,
       ContentSettingsPattern::Wildcard(),
       CONTENT_SETTINGS_TYPE_IMAGES,
       std::string(),
       CONTENT_SETTING_BLOCK);
+#if defined(ENABLE_PLUGINS)
   host_content_settings_map->SetContentSetting(
       pattern2,
       ContentSettingsPattern::Wildcard(),
       CONTENT_SETTINGS_TYPE_PLUGINS,
       std::string(),
       CONTENT_SETTING_BLOCK);
+#endif
   ContentSettingsForOneType host_settings;
   host_content_settings_map->GetSettingsForOneType(
       CONTENT_SETTINGS_TYPE_IMAGES, std::string(), &host_settings);
   // |host_settings| contains the default setting and an exception.
   EXPECT_EQ(2U, host_settings.size());
+#if defined(ENABLE_PLUGINS)
   host_content_settings_map->GetSettingsForOneType(
       CONTENT_SETTINGS_TYPE_PLUGINS, std::string(), &host_settings);
   // |host_settings| contains the default setting and 2 exceptions.
   EXPECT_EQ(3U, host_settings.size());
+#endif
   host_content_settings_map->GetSettingsForOneType(
       CONTENT_SETTINGS_TYPE_POPUPS, std::string(), &host_settings);
   // |host_settings| contains only the default setting.
@@ -193,11 +221,11 @@ TEST_F(HostContentSettingsMapTest, IndividualSettings) {
 TEST_F(HostContentSettingsMapTest, Clear) {
   TestingProfile profile;
   HostContentSettingsMap* host_content_settings_map =
-      profile.GetHostContentSettingsMap();
+      HostContentSettingsMapFactory::GetForProfile(&profile);
 
   // Check clearing one type.
   ContentSettingsPattern pattern =
-       ContentSettingsPattern::FromString("[*.]example.org");
+      ContentSettingsPattern::FromString("[*.]example.org");
   ContentSettingsPattern pattern2 =
       ContentSettingsPattern::FromString("[*.]example.net");
   host_content_settings_map->SetContentSetting(
@@ -212,12 +240,14 @@ TEST_F(HostContentSettingsMapTest, Clear) {
       CONTENT_SETTINGS_TYPE_IMAGES,
       std::string(),
       CONTENT_SETTING_BLOCK);
+#if defined(ENABLE_PLUGINS)
   host_content_settings_map->SetContentSetting(
       pattern,
       ContentSettingsPattern::Wildcard(),
       CONTENT_SETTINGS_TYPE_PLUGINS,
       std::string(),
       CONTENT_SETTING_BLOCK);
+#endif
   host_content_settings_map->SetContentSetting(
       pattern2,
       ContentSettingsPattern::Wildcard(),
@@ -231,24 +261,26 @@ TEST_F(HostContentSettingsMapTest, Clear) {
       CONTENT_SETTINGS_TYPE_IMAGES, std::string(), &host_settings);
   // |host_settings| contains only the default setting.
   EXPECT_EQ(1U, host_settings.size());
+#if defined(ENABLE_PLUGINS)
   host_content_settings_map->GetSettingsForOneType(
       CONTENT_SETTINGS_TYPE_PLUGINS, std::string(), &host_settings);
   // |host_settings| contains the default setting and an exception.
   EXPECT_EQ(2U, host_settings.size());
+#endif
 }
 
 TEST_F(HostContentSettingsMapTest, Patterns) {
   TestingProfile profile;
   HostContentSettingsMap* host_content_settings_map =
-      profile.GetHostContentSettingsMap();
+      HostContentSettingsMapFactory::GetForProfile(&profile);
 
   GURL host1("http://example.com/");
   GURL host2("http://www.example.com/");
   GURL host3("http://example.org/");
   ContentSettingsPattern pattern1 =
-       ContentSettingsPattern::FromString("[*.]example.com");
+      ContentSettingsPattern::FromString("[*.]example.com");
   ContentSettingsPattern pattern2 =
-       ContentSettingsPattern::FromString("example.org");
+      ContentSettingsPattern::FromString("example.org");
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
             host_content_settings_map->GetContentSetting(
                 host1, host1, CONTENT_SETTINGS_TYPE_IMAGES, std::string()));
@@ -281,7 +313,7 @@ TEST_F(HostContentSettingsMapTest, Patterns) {
 TEST_F(HostContentSettingsMapTest, Observer) {
   TestingProfile profile;
   HostContentSettingsMap* host_content_settings_map =
-      profile.GetHostContentSettingsMap();
+      HostContentSettingsMapFactory::GetForProfile(&profile);
   MockSettingsObserver observer(host_content_settings_map);
 
   ContentSettingsPattern primary_pattern =
@@ -322,14 +354,9 @@ TEST_F(HostContentSettingsMapTest, Observer) {
 TEST_F(HostContentSettingsMapTest, ObserveDefaultPref) {
   TestingProfile profile;
   HostContentSettingsMap* host_content_settings_map =
-      profile.GetHostContentSettingsMap();
+      HostContentSettingsMapFactory::GetForProfile(&profile);
 
   PrefService* prefs = profile.GetPrefs();
-
-  // Make a copy of the default pref value so we can reset it later.
-  scoped_ptr<base::Value> default_value(prefs->FindPreference(
-      prefs::kDefaultContentSettings)->GetValue()->DeepCopy());
-
   GURL host("http://example.com");
 
   host_content_settings_map->SetDefaultContentSetting(
@@ -338,18 +365,17 @@ TEST_F(HostContentSettingsMapTest, ObserveDefaultPref) {
             host_content_settings_map->GetContentSetting(
                 host, host, CONTENT_SETTINGS_TYPE_IMAGES, std::string()));
 
-  // Make a copy of the pref's new value so we can reset it later.
-  scoped_ptr<base::Value> new_value(prefs->FindPreference(
-      prefs::kDefaultContentSettings)->GetValue()->DeepCopy());
-
+  const content_settings::WebsiteSettingsInfo* info =
+      content_settings::WebsiteSettingsRegistry::GetInstance()->Get(
+          CONTENT_SETTINGS_TYPE_IMAGES);
   // Clearing the backing pref should also clear the internal cache.
-  prefs->Set(prefs::kDefaultContentSettings, *default_value);
+  prefs->ClearPref(info->default_value_pref_name());
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
             host_content_settings_map->GetContentSetting(
                 host, host, CONTENT_SETTINGS_TYPE_IMAGES, std::string()));
 
   // Reseting the pref to its previous value should update the cache.
-  prefs->Set(prefs::kDefaultContentSettings, *new_value);
+  prefs->SetInteger(info->default_value_pref_name(), CONTENT_SETTING_BLOCK);
   EXPECT_EQ(CONTENT_SETTING_BLOCK,
             host_content_settings_map->GetContentSetting(
                 host, host, CONTENT_SETTINGS_TYPE_IMAGES, std::string()));
@@ -358,16 +384,18 @@ TEST_F(HostContentSettingsMapTest, ObserveDefaultPref) {
 TEST_F(HostContentSettingsMapTest, ObserveExceptionPref) {
   TestingProfile profile;
   HostContentSettingsMap* host_content_settings_map =
-      profile.GetHostContentSettingsMap();
+      HostContentSettingsMapFactory::GetForProfile(&profile);
 
   PrefService* prefs = profile.GetPrefs();
 
   // Make a copy of the default pref value so we can reset it later.
-  scoped_ptr<base::Value> default_value(prefs->FindPreference(
-      prefs::kContentSettingsPatternPairs)->GetValue()->DeepCopy());
+  scoped_ptr<base::Value> default_value(
+      prefs->FindPreference(GetPrefName(CONTENT_SETTINGS_TYPE_IMAGES))
+          ->GetValue()
+          ->DeepCopy());
 
   ContentSettingsPattern pattern =
-       ContentSettingsPattern::FromString("[*.]example.com");
+      ContentSettingsPattern::FromString("[*.]example.com");
   GURL host("http://example.com");
 
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
@@ -385,17 +413,19 @@ TEST_F(HostContentSettingsMapTest, ObserveExceptionPref) {
                 host, host, CONTENT_SETTINGS_TYPE_IMAGES, std::string()));
 
   // Make a copy of the pref's new value so we can reset it later.
-  scoped_ptr<base::Value> new_value(prefs->FindPreference(
-      prefs::kContentSettingsPatternPairs)->GetValue()->DeepCopy());
+  scoped_ptr<base::Value> new_value(
+      prefs->FindPreference(GetPrefName(CONTENT_SETTINGS_TYPE_IMAGES))
+          ->GetValue()
+          ->DeepCopy());
 
   // Clearing the backing pref should also clear the internal cache.
-  prefs->Set(prefs::kContentSettingsPatternPairs, *default_value);
+  prefs->Set(GetPrefName(CONTENT_SETTINGS_TYPE_IMAGES), *default_value);
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
             host_content_settings_map->GetContentSetting(
                 host, host, CONTENT_SETTINGS_TYPE_IMAGES, std::string()));
 
   // Reseting the pref to its previous value should update the cache.
-  prefs->Set(prefs::kContentSettingsPatternPairs, *new_value);
+  prefs->Set(GetPrefName(CONTENT_SETTINGS_TYPE_IMAGES), *new_value);
   EXPECT_EQ(CONTENT_SETTING_BLOCK,
             host_content_settings_map->GetContentSetting(
                 host, host, CONTENT_SETTINGS_TYPE_IMAGES, std::string()));
@@ -404,12 +434,12 @@ TEST_F(HostContentSettingsMapTest, ObserveExceptionPref) {
 TEST_F(HostContentSettingsMapTest, HostTrimEndingDotCheck) {
   TestingProfile profile;
   HostContentSettingsMap* host_content_settings_map =
-      profile.GetHostContentSettingsMap();
+      HostContentSettingsMapFactory::GetForProfile(&profile);
   content_settings::CookieSettings* cookie_settings =
       CookieSettingsFactory::GetForProfile(&profile).get();
 
   ContentSettingsPattern pattern =
-       ContentSettingsPattern::FromString("[*.]example.com");
+      ContentSettingsPattern::FromString("[*.]example.com");
   GURL host_ending_with_dot("http://example.com./");
 
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
@@ -493,7 +523,8 @@ TEST_F(HostContentSettingsMapTest, HostTrimEndingDotCheck) {
                 CONTENT_SETTINGS_TYPE_JAVASCRIPT,
                 std::string()));
 
-  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+#if defined(ENABLE_PLUGINS)
+  EXPECT_EQ(CONTENT_SETTING_DETECT_IMPORTANT_CONTENT,
             host_content_settings_map->GetContentSetting(
                 host_ending_with_dot,
                 host_ending_with_dot,
@@ -505,7 +536,7 @@ TEST_F(HostContentSettingsMapTest, HostTrimEndingDotCheck) {
       CONTENT_SETTINGS_TYPE_PLUGINS,
       std::string(),
       CONTENT_SETTING_DEFAULT);
-  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+  EXPECT_EQ(CONTENT_SETTING_DETECT_IMPORTANT_CONTENT,
             host_content_settings_map->GetContentSetting(
                 host_ending_with_dot,
                 host_ending_with_dot,
@@ -523,6 +554,7 @@ TEST_F(HostContentSettingsMapTest, HostTrimEndingDotCheck) {
                 host_ending_with_dot,
                 CONTENT_SETTINGS_TYPE_PLUGINS,
                 std::string()));
+#endif
 
   EXPECT_EQ(
       CONTENT_SETTING_BLOCK,
@@ -554,20 +586,39 @@ TEST_F(HostContentSettingsMapTest, HostTrimEndingDotCheck) {
                                                    host_ending_with_dot,
                                                    CONTENT_SETTINGS_TYPE_POPUPS,
                                                    std::string()));
+
+  EXPECT_EQ(CONTENT_SETTING_BLOCK,
+            host_content_settings_map->GetContentSetting(
+                host_ending_with_dot, host_ending_with_dot,
+                CONTENT_SETTINGS_TYPE_KEYGEN, std::string()));
+  host_content_settings_map->SetContentSetting(
+      pattern, ContentSettingsPattern::Wildcard(), CONTENT_SETTINGS_TYPE_KEYGEN,
+      std::string(), CONTENT_SETTING_ALLOW);
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            host_content_settings_map->GetContentSetting(
+                host_ending_with_dot, host_ending_with_dot,
+                CONTENT_SETTINGS_TYPE_KEYGEN, std::string()));
+  host_content_settings_map->SetContentSetting(
+      pattern, ContentSettingsPattern::Wildcard(), CONTENT_SETTINGS_TYPE_KEYGEN,
+      std::string(), CONTENT_SETTING_DEFAULT);
+  EXPECT_EQ(CONTENT_SETTING_BLOCK,
+            host_content_settings_map->GetContentSetting(
+                host_ending_with_dot, host_ending_with_dot,
+                CONTENT_SETTINGS_TYPE_KEYGEN, std::string()));
 }
 
 TEST_F(HostContentSettingsMapTest, NestedSettings) {
   TestingProfile profile;
   HostContentSettingsMap* host_content_settings_map =
-      profile.GetHostContentSettingsMap();
+      HostContentSettingsMapFactory::GetForProfile(&profile);
 
   GURL host("http://a.b.example.com/");
   ContentSettingsPattern pattern1 =
-       ContentSettingsPattern::FromString("[*.]example.com");
+      ContentSettingsPattern::FromString("[*.]example.com");
   ContentSettingsPattern pattern2 =
-       ContentSettingsPattern::FromString("[*.]b.example.com");
+      ContentSettingsPattern::FromString("[*.]b.example.com");
   ContentSettingsPattern pattern3 =
-       ContentSettingsPattern::FromString("a.b.example.com");
+      ContentSettingsPattern::FromString("a.b.example.com");
 
   host_content_settings_map->SetContentSetting(
       pattern1,
@@ -620,19 +671,22 @@ TEST_F(HostContentSettingsMapTest, NestedSettings) {
   EXPECT_EQ(CONTENT_SETTING_ASK,
             host_content_settings_map->GetContentSetting(
                 host, host, CONTENT_SETTINGS_TYPE_MOUSELOCK, std::string()));
+  EXPECT_EQ(CONTENT_SETTING_BLOCK,
+            host_content_settings_map->GetContentSetting(
+                host, host, CONTENT_SETTINGS_TYPE_KEYGEN, std::string()));
 }
 
 TEST_F(HostContentSettingsMapTest, OffTheRecord) {
   TestingProfile profile;
+  Profile* otr_profile = profile.GetOffTheRecordProfile();
   HostContentSettingsMap* host_content_settings_map =
-      profile.GetHostContentSettingsMap();
-  scoped_refptr<HostContentSettingsMap> otr_map(
-      new HostContentSettingsMap(profile.GetPrefs(),
-                                 true));
+      HostContentSettingsMapFactory::GetForProfile(&profile);
+  HostContentSettingsMap* otr_map =
+      HostContentSettingsMapFactory::GetForProfile(otr_profile);
 
   GURL host("http://example.com/");
   ContentSettingsPattern pattern =
-       ContentSettingsPattern::FromString("[*.]example.com");
+      ContentSettingsPattern::FromString("[*.]example.com");
 
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
             host_content_settings_map->GetContentSetting(
@@ -669,8 +723,130 @@ TEST_F(HostContentSettingsMapTest, OffTheRecord) {
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
             otr_map->GetContentSetting(
                 host, host, CONTENT_SETTINGS_TYPE_IMAGES, std::string()));
+}
 
-  otr_map->ShutdownOnUIThread();
+TEST_F(HostContentSettingsMapTest, OffTheRecordPartialInheritPref) {
+  // Permissions marked INHERIT_IN_INCOGNITO_EXCEPT_ALLOW in
+  // ContentSettingsRegistry (e.g. push & notifications) only inherit BLOCK
+  // settings from regular to incognito.
+  TestingProfile profile;
+  Profile* otr_profile = profile.GetOffTheRecordProfile();
+  HostContentSettingsMap* host_content_settings_map =
+      HostContentSettingsMapFactory::GetForProfile(&profile);
+  HostContentSettingsMap* otr_map =
+      HostContentSettingsMapFactory::GetForProfile(otr_profile);
+
+  GURL host("http://example.com/");
+  ContentSettingsPattern pattern =
+      ContentSettingsPattern::FromURLNoWildcard(host);
+
+  EXPECT_EQ(
+      CONTENT_SETTING_ASK,
+      host_content_settings_map->GetContentSetting(
+          host, host, CONTENT_SETTINGS_TYPE_NOTIFICATIONS, std::string()));
+  EXPECT_EQ(
+      CONTENT_SETTING_ASK,
+      otr_map->GetContentSetting(
+          host, host, CONTENT_SETTINGS_TYPE_NOTIFICATIONS, std::string()));
+
+  // BLOCK should be inherited from the main map to the incognito map.
+  host_content_settings_map->SetContentSetting(
+      pattern,
+      ContentSettingsPattern::Wildcard(),
+      CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
+      std::string(),
+      CONTENT_SETTING_BLOCK);
+  EXPECT_EQ(
+      CONTENT_SETTING_BLOCK,
+      host_content_settings_map->GetContentSetting(
+          host, host, CONTENT_SETTINGS_TYPE_NOTIFICATIONS, std::string()));
+  EXPECT_EQ(
+      CONTENT_SETTING_BLOCK,
+      otr_map->GetContentSetting(
+          host, host, CONTENT_SETTINGS_TYPE_NOTIFICATIONS, std::string()));
+
+  // ALLOW should not be inherited from the main map to the incognito map (but
+  // it still overwrites the BLOCK, hence incognito reverts to ASK).
+  host_content_settings_map->SetContentSetting(
+      pattern,
+      ContentSettingsPattern::Wildcard(),
+      CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
+      std::string(),
+      CONTENT_SETTING_ALLOW);
+  EXPECT_EQ(
+      CONTENT_SETTING_ALLOW,
+      host_content_settings_map->GetContentSetting(
+          host, host, CONTENT_SETTINGS_TYPE_NOTIFICATIONS, std::string()));
+  EXPECT_EQ(
+      CONTENT_SETTING_ASK,
+      otr_map->GetContentSetting(
+          host, host, CONTENT_SETTINGS_TYPE_NOTIFICATIONS, std::string()));
+}
+
+TEST_F(HostContentSettingsMapTest, OffTheRecordPartialInheritDefault) {
+  // Permissions marked INHERIT_IN_INCOGNITO_EXCEPT_ALLOW in
+  // ContentSettingsRegistry (e.g. push & notifications) only inherit BLOCK
+  // default settings from regular to incognito.
+  TestingProfile profile;
+  Profile* otr_profile = profile.GetOffTheRecordProfile();
+  HostContentSettingsMap* host_content_settings_map =
+      HostContentSettingsMapFactory::GetForProfile(&profile);
+  HostContentSettingsMap* otr_map =
+      HostContentSettingsMapFactory::GetForProfile(otr_profile);
+
+  GURL host("http://example.com/");
+
+  EXPECT_EQ(CONTENT_SETTING_ASK,
+            host_content_settings_map->GetDefaultContentSetting(
+                CONTENT_SETTINGS_TYPE_NOTIFICATIONS, NULL));
+  EXPECT_EQ(
+      CONTENT_SETTING_ASK,
+      host_content_settings_map->GetContentSetting(
+          host, host, CONTENT_SETTINGS_TYPE_NOTIFICATIONS, std::string()));
+  EXPECT_EQ(CONTENT_SETTING_ASK,
+            otr_map->GetDefaultContentSetting(
+                CONTENT_SETTINGS_TYPE_NOTIFICATIONS, NULL));
+  EXPECT_EQ(
+      CONTENT_SETTING_ASK,
+      otr_map->GetContentSetting(
+          host, host, CONTENT_SETTINGS_TYPE_NOTIFICATIONS, std::string()));
+
+  // BLOCK should be inherited from the main map to the incognito map.
+  host_content_settings_map->SetDefaultContentSetting(
+      CONTENT_SETTINGS_TYPE_NOTIFICATIONS, CONTENT_SETTING_BLOCK);
+  EXPECT_EQ(CONTENT_SETTING_BLOCK,
+            host_content_settings_map->GetDefaultContentSetting(
+                CONTENT_SETTINGS_TYPE_NOTIFICATIONS, NULL));
+  EXPECT_EQ(
+      CONTENT_SETTING_BLOCK,
+      host_content_settings_map->GetContentSetting(
+          host, host, CONTENT_SETTINGS_TYPE_NOTIFICATIONS, std::string()));
+  EXPECT_EQ(CONTENT_SETTING_BLOCK,
+            otr_map->GetDefaultContentSetting(
+                CONTENT_SETTINGS_TYPE_NOTIFICATIONS, NULL));
+  EXPECT_EQ(
+      CONTENT_SETTING_BLOCK,
+      otr_map->GetContentSetting(
+          host, host, CONTENT_SETTINGS_TYPE_NOTIFICATIONS, std::string()));
+
+  // ALLOW should not be inherited from the main map to the incognito map (but
+  // it still overwrites the BLOCK, hence incognito reverts to ASK).
+  host_content_settings_map->SetDefaultContentSetting(
+      CONTENT_SETTINGS_TYPE_NOTIFICATIONS, CONTENT_SETTING_ALLOW);
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            host_content_settings_map->GetDefaultContentSetting(
+                CONTENT_SETTINGS_TYPE_NOTIFICATIONS, NULL));
+  EXPECT_EQ(
+      CONTENT_SETTING_ALLOW,
+      host_content_settings_map->GetContentSetting(
+          host, host, CONTENT_SETTINGS_TYPE_NOTIFICATIONS, std::string()));
+  EXPECT_EQ(CONTENT_SETTING_ASK,
+            otr_map->GetDefaultContentSetting(
+                CONTENT_SETTINGS_TYPE_NOTIFICATIONS, NULL));
+  EXPECT_EQ(
+      CONTENT_SETTING_ASK,
+      otr_map->GetContentSetting(
+          host, host, CONTENT_SETTINGS_TYPE_NOTIFICATIONS, std::string()));
 }
 
 // For a single Unicode encoded pattern, check if it gets converted to punycode
@@ -681,21 +857,21 @@ TEST_F(HostContentSettingsMapTest, CanonicalizeExceptionsUnicodeOnly) {
 
   // Set utf-8 data.
   {
-    DictionaryPrefUpdate update(
-        prefs, prefs::kContentSettingsPatternPairs);
+    DictionaryPrefUpdate update(prefs,
+                                GetPrefName(CONTENT_SETTINGS_TYPE_PLUGINS));
     base::DictionaryValue* all_settings_dictionary = update.Get();
     ASSERT_TRUE(NULL != all_settings_dictionary);
 
     base::DictionaryValue* dummy_payload = new base::DictionaryValue;
-    dummy_payload->SetInteger("images", CONTENT_SETTING_ALLOW);
+    dummy_payload->SetInteger("setting", CONTENT_SETTING_ALLOW);
     all_settings_dictionary->SetWithoutPathExpansion("[*.]\xC4\x87ira.com,*",
                                                      dummy_payload);
   }
 
-  profile.GetHostContentSettingsMap();
+  HostContentSettingsMapFactory::GetForProfile(&profile);
 
   const base::DictionaryValue* all_settings_dictionary =
-      prefs->GetDictionary(prefs::kContentSettingsImagesPatternPairs);
+      prefs->GetDictionary(GetPrefName(CONTENT_SETTINGS_TYPE_PLUGINS));
   const base::DictionaryValue* result = NULL;
   EXPECT_FALSE(all_settings_dictionary->GetDictionaryWithoutPathExpansion(
       "[*.]\xC4\x87ira.com,*", &result));
@@ -708,22 +884,22 @@ TEST_F(HostContentSettingsMapTest, CanonicalizeExceptionsUnicodeOnly) {
 TEST_F(HostContentSettingsMapTest, CanonicalizeExceptionsUnicodeAndPunycode) {
   TestingProfile profile;
 
-  scoped_ptr<base::Value> value(base::JSONReader::DeprecatedRead(
-      "{\"[*.]\\xC4\\x87ira.com,*\":{\"images\":1}}"));
-  profile.GetPrefs()->Set(prefs::kContentSettingsPatternPairs, *value);
+  scoped_ptr<base::Value> value =
+      base::JSONReader::Read("{\"[*.]\\xC4\\x87ira.com,*\":{\"setting\":1}}");
+  profile.GetPrefs()->Set(GetPrefName(CONTENT_SETTINGS_TYPE_COOKIES), *value);
 
   // Set punycode equivalent, with different setting.
-  scoped_ptr<base::Value> puny_value(base::JSONReader::DeprecatedRead(
-      "{\"[*.]xn--ira-ppa.com,*\":{\"images\":2}}"));
-  profile.GetPrefs()->Set(
-      prefs::kContentSettingsPatternPairs, *puny_value);
+  scoped_ptr<base::Value> puny_value =
+      base::JSONReader::Read("{\"[*.]xn--ira-ppa.com,*\":{\"setting\":2}}");
+  profile.GetPrefs()->Set(GetPrefName(CONTENT_SETTINGS_TYPE_COOKIES),
+                          *puny_value);
 
   // Initialize the content map.
-  profile.GetHostContentSettingsMap();
+  HostContentSettingsMapFactory::GetForProfile(&profile);
 
   const base::DictionaryValue& content_setting_prefs =
       *profile.GetPrefs()->GetDictionary(
-          prefs::kContentSettingsImagesPatternPairs);
+          GetPrefName(CONTENT_SETTINGS_TYPE_COOKIES));
   std::string prefs_as_json;
   base::JSONWriter::Write(content_setting_prefs, &prefs_as_json);
   EXPECT_STREQ("{\"[*.]xn--ira-ppa.com,*\":{\"setting\":2}}",
@@ -735,8 +911,9 @@ TEST_F(HostContentSettingsMapTest, CanonicalizeExceptionsUnicodeAndPunycode) {
 TEST_F(HostContentSettingsMapTest, ManagedDefaultContentSetting) {
   TestingProfile profile;
   HostContentSettingsMap* host_content_settings_map =
-      profile.GetHostContentSettingsMap();
-  TestingPrefServiceSyncable* prefs = profile.GetTestingPrefService();
+      HostContentSettingsMapFactory::GetForProfile(&profile);
+  syncable_prefs::TestingPrefServiceSyncable* prefs =
+      profile.GetTestingPrefService();
 
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
             host_content_settings_map->GetDefaultContentSetting(
@@ -762,23 +939,43 @@ TEST_F(HostContentSettingsMapTest, ManagedDefaultContentSetting) {
             host_content_settings_map->GetDefaultContentSetting(
                 CONTENT_SETTINGS_TYPE_PLUGINS, NULL));
 
+#if defined(ENABLE_PLUGINS)
   // Remove the preference to manage the default-content-setting for Plugins.
   prefs->RemoveManagedPref(prefs::kManagedDefaultPluginsSetting);
-  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+  EXPECT_EQ(CONTENT_SETTING_DETECT_IMPORTANT_CONTENT,
             host_content_settings_map->GetDefaultContentSetting(
                 CONTENT_SETTINGS_TYPE_PLUGINS, NULL));
+#endif
+
+  EXPECT_EQ(CONTENT_SETTING_BLOCK,
+            host_content_settings_map->GetDefaultContentSetting(
+                CONTENT_SETTINGS_TYPE_KEYGEN, NULL));
+
+  // Set managed-default content setting through the coresponding preferences.
+  prefs->SetManagedPref(prefs::kManagedDefaultKeygenSetting,
+                        new base::FundamentalValue(CONTENT_SETTING_ALLOW));
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            host_content_settings_map->GetDefaultContentSetting(
+                CONTENT_SETTINGS_TYPE_KEYGEN, NULL));
+
+  // Remove managed-default content settings preferences.
+  prefs->RemoveManagedPref(prefs::kManagedDefaultKeygenSetting);
+  EXPECT_EQ(CONTENT_SETTING_BLOCK,
+            host_content_settings_map->GetDefaultContentSetting(
+                CONTENT_SETTINGS_TYPE_KEYGEN, NULL));
 }
 
 TEST_F(HostContentSettingsMapTest,
        GetNonDefaultContentSettingsIfTypeManaged) {
   TestingProfile profile;
   HostContentSettingsMap* host_content_settings_map =
-      profile.GetHostContentSettingsMap();
-  TestingPrefServiceSyncable* prefs = profile.GetTestingPrefService();
+      HostContentSettingsMapFactory::GetForProfile(&profile);
+  syncable_prefs::TestingPrefServiceSyncable* prefs =
+      profile.GetTestingPrefService();
 
   // Set pattern for JavaScript setting.
   ContentSettingsPattern pattern =
-       ContentSettingsPattern::FromString("[*.]example.com");
+      ContentSettingsPattern::FromString("[*.]example.com");
   host_content_settings_map->SetContentSetting(
       pattern,
       ContentSettingsPattern::Wildcard(),
@@ -809,8 +1006,9 @@ TEST_F(HostContentSettingsMapTest,
        ManagedDefaultContentSettingIgnoreUserPattern) {
   TestingProfile profile;
   HostContentSettingsMap* host_content_settings_map =
-      profile.GetHostContentSettingsMap();
-  TestingPrefServiceSyncable* prefs = profile.GetTestingPrefService();
+      HostContentSettingsMapFactory::GetForProfile(&profile);
+  syncable_prefs::TestingPrefServiceSyncable* prefs =
+      profile.GetTestingPrefService();
 
   // Block all JavaScript.
   host_content_settings_map->SetDefaultContentSetting(
@@ -854,8 +1052,9 @@ TEST_F(HostContentSettingsMapTest,
 TEST_F(HostContentSettingsMapTest, OverwrittenDefaultContentSetting) {
   TestingProfile profile;
   HostContentSettingsMap* host_content_settings_map =
-      profile.GetHostContentSettingsMap();
-  TestingPrefServiceSyncable* prefs = profile.GetTestingPrefService();
+      HostContentSettingsMapFactory::GetForProfile(&profile);
+  syncable_prefs::TestingPrefServiceSyncable* prefs =
+      profile.GetTestingPrefService();
 
   // Set user defined default-content-setting for Cookies.
   host_content_settings_map->SetDefaultContentSetting(
@@ -884,8 +1083,9 @@ TEST_F(HostContentSettingsMapTest, OverwrittenDefaultContentSetting) {
 TEST_F(HostContentSettingsMapTest, SettingDefaultContentSettingsWhenManaged) {
   TestingProfile profile;
   HostContentSettingsMap* host_content_settings_map =
-      profile.GetHostContentSettingsMap();
-  TestingPrefServiceSyncable* prefs = profile.GetTestingPrefService();
+      HostContentSettingsMapFactory::GetForProfile(&profile);
+  syncable_prefs::TestingPrefServiceSyncable* prefs =
+      profile.GetTestingPrefService();
 
   prefs->SetManagedPref(prefs::kManagedDefaultPluginsSetting,
                         new base::FundamentalValue(CONTENT_SETTING_ALLOW));
@@ -908,12 +1108,12 @@ TEST_F(HostContentSettingsMapTest, SettingDefaultContentSettingsWhenManaged) {
 TEST_F(HostContentSettingsMapTest, GetContentSetting) {
   TestingProfile profile;
   HostContentSettingsMap* host_content_settings_map =
-      profile.GetHostContentSettingsMap();
+      HostContentSettingsMapFactory::GetForProfile(&profile);
 
   GURL host("http://example.com/");
   GURL embedder("chrome://foo");
   ContentSettingsPattern pattern =
-       ContentSettingsPattern::FromString("[*.]example.com");
+      ContentSettingsPattern::FromString("[*.]example.com");
   host_content_settings_map->SetContentSetting(
       pattern,
       ContentSettingsPattern::Wildcard(),
@@ -928,78 +1128,17 @@ TEST_F(HostContentSettingsMapTest, GetContentSetting) {
                 embedder, host, CONTENT_SETTINGS_TYPE_IMAGES, std::string()));
 }
 
-TEST_F(HostContentSettingsMapTest, ShouldAllowAllContent) {
-  GURL http_host("http://example.com/");
-  GURL https_host("https://example.com/");
-  GURL embedder("chrome://foo");
-  GURL extension("chrome-extension://foo");
-  EXPECT_FALSE(HostContentSettingsMap::ShouldAllowAllContent(
-                   http_host, embedder, CONTENT_SETTINGS_TYPE_NOTIFICATIONS));
-  EXPECT_FALSE(HostContentSettingsMap::ShouldAllowAllContent(
-                   http_host, embedder, CONTENT_SETTINGS_TYPE_GEOLOCATION));
-  EXPECT_FALSE(HostContentSettingsMap::ShouldAllowAllContent(
-                   http_host, embedder, CONTENT_SETTINGS_TYPE_COOKIES));
-  EXPECT_TRUE(HostContentSettingsMap::ShouldAllowAllContent(
-                  https_host, embedder, CONTENT_SETTINGS_TYPE_COOKIES));
-  EXPECT_TRUE(HostContentSettingsMap::ShouldAllowAllContent(
-                  https_host, embedder, CONTENT_SETTINGS_TYPE_COOKIES));
-  EXPECT_TRUE(HostContentSettingsMap::ShouldAllowAllContent(
-                  embedder, http_host, CONTENT_SETTINGS_TYPE_COOKIES));
-#if defined(ENABLE_EXTENSIONS)
-  EXPECT_TRUE(HostContentSettingsMap::ShouldAllowAllContent(
-                  extension, extension, CONTENT_SETTINGS_TYPE_COOKIES));
-#else
-  EXPECT_FALSE(HostContentSettingsMap::ShouldAllowAllContent(
-                   extension, extension, CONTENT_SETTINGS_TYPE_COOKIES));
-#endif
-  EXPECT_FALSE(HostContentSettingsMap::ShouldAllowAllContent(
-                   extension, extension, CONTENT_SETTINGS_TYPE_PLUGINS));
-  EXPECT_FALSE(HostContentSettingsMap::ShouldAllowAllContent(
-                   extension, http_host, CONTENT_SETTINGS_TYPE_COOKIES));
-}
-
-TEST_F(HostContentSettingsMapTest, IsSettingAllowedForType) {
-  TestingProfile profile;
-  PrefService* prefs = profile.GetPrefs();
-
-  EXPECT_TRUE(HostContentSettingsMap::IsSettingAllowedForType(
-                  prefs, CONTENT_SETTING_ASK,
-                  CONTENT_SETTINGS_TYPE_FULLSCREEN));
-
-  // The mediastream setting is deprecated.
-  EXPECT_FALSE(HostContentSettingsMap::IsSettingAllowedForType(
-                   prefs, CONTENT_SETTING_ALLOW,
-                   CONTENT_SETTINGS_TYPE_MEDIASTREAM));
-  EXPECT_FALSE(HostContentSettingsMap::IsSettingAllowedForType(
-                   prefs, CONTENT_SETTING_ASK,
-                   CONTENT_SETTINGS_TYPE_MEDIASTREAM));
-  EXPECT_FALSE(HostContentSettingsMap::IsSettingAllowedForType(
-                   prefs, CONTENT_SETTING_BLOCK,
-                   CONTENT_SETTINGS_TYPE_MEDIASTREAM));
-
-  // We support the ALLOW value for media permission exceptions,
-  // but not as the default setting.
-  EXPECT_TRUE(HostContentSettingsMap::IsSettingAllowedForType(
-                  prefs, CONTENT_SETTING_ALLOW,
-                  CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC));
-  EXPECT_TRUE(HostContentSettingsMap::IsSettingAllowedForType(
-                  prefs, CONTENT_SETTING_ALLOW,
-                  CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA));
+TEST_F(HostContentSettingsMapTest, IsDefaultSettingAllowedForType) {
   EXPECT_FALSE(HostContentSettingsMap::IsDefaultSettingAllowedForType(
-                   prefs, CONTENT_SETTING_ALLOW,
-                   CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC));
+      CONTENT_SETTING_ALLOW, CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC));
   EXPECT_FALSE(HostContentSettingsMap::IsDefaultSettingAllowedForType(
-                   prefs, CONTENT_SETTING_ALLOW,
-                   CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA));
-
-  // TODO(msramek): Add more checks for setting type - setting pairs where
-  // it is not obvious whether or not they are allowed.
+      CONTENT_SETTING_ALLOW, CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA));
 }
 
 TEST_F(HostContentSettingsMapTest, AddContentSettingsObserver) {
   TestingProfile profile;
   HostContentSettingsMap* host_content_settings_map =
-      profile.GetHostContentSettingsMap();
+      HostContentSettingsMapFactory::GetForProfile(&profile);
   content_settings::MockObserver mock_observer;
 
   GURL host("http://example.com/");
@@ -1022,71 +1161,4 @@ TEST_F(HostContentSettingsMapTest, AddContentSettingsObserver) {
       CONTENT_SETTINGS_TYPE_IMAGES,
       std::string(),
       CONTENT_SETTING_DEFAULT);
-}
-
-TEST_F(HostContentSettingsMapTest, OverrideAllowedWebsiteSetting) {
-  TestingProfile profile;
-  HostContentSettingsMap* host_content_settings_map =
-      profile.GetHostContentSettingsMap();
-  GURL host("http://example.com/");
-  ContentSettingsPattern pattern =
-      ContentSettingsPattern::FromString("[*.]example.com");
-  host_content_settings_map->SetContentSetting(
-      pattern,
-      ContentSettingsPattern::Wildcard(),
-      CONTENT_SETTINGS_TYPE_GEOLOCATION,
-      std::string(),
-      CONTENT_SETTING_ALLOW);
-
-  EXPECT_EQ(CONTENT_SETTING_ALLOW,
-            host_content_settings_map->GetContentSetting(
-                host, host, CONTENT_SETTINGS_TYPE_GEOLOCATION, std::string()));
-
-  // Disabling should override an allowed exception.
-  host_content_settings_map->SetContentSettingOverride(
-      CONTENT_SETTINGS_TYPE_GEOLOCATION, false);
-  EXPECT_EQ(CONTENT_SETTING_BLOCK,
-            host_content_settings_map->GetContentSetting(
-                host, host, CONTENT_SETTINGS_TYPE_GEOLOCATION, std::string()));
-
-  host_content_settings_map->SetContentSettingOverride(
-      CONTENT_SETTINGS_TYPE_GEOLOCATION, true);
-  EXPECT_EQ(CONTENT_SETTING_ALLOW,
-            host_content_settings_map->GetContentSetting(
-                host, host, CONTENT_SETTINGS_TYPE_GEOLOCATION, std::string()));
-}
-
-TEST_F(HostContentSettingsMapTest, OverrideAllowedDefaultSetting) {
-  TestingProfile profile;
-  HostContentSettingsMap* host_content_settings_map =
-      profile.GetHostContentSettingsMap();
-
-  // Check setting defaults.
-  EXPECT_EQ(CONTENT_SETTING_ALLOW,
-            host_content_settings_map->GetDefaultContentSetting(
-                CONTENT_SETTINGS_TYPE_IMAGES, NULL));
-
-  GURL host("http://example.com/");
-  EXPECT_EQ(CONTENT_SETTING_ALLOW,
-            host_content_settings_map->GetContentSetting(
-                host, host, CONTENT_SETTINGS_TYPE_IMAGES, std::string()));
-
-  // Disabling should override an allowed default setting.
-  host_content_settings_map->SetContentSettingOverride(
-      CONTENT_SETTINGS_TYPE_IMAGES, false);
-  EXPECT_EQ(CONTENT_SETTING_BLOCK,
-            host_content_settings_map->GetContentSetting(
-                host, host, CONTENT_SETTINGS_TYPE_IMAGES, std::string()));
-
-  // Enabling shouldn't override positively.
-  host_content_settings_map->SetContentSettingOverride(
-      CONTENT_SETTINGS_TYPE_IMAGES, true);
-  EXPECT_EQ(CONTENT_SETTING_ALLOW,
-            host_content_settings_map->GetContentSetting(
-                host, host, CONTENT_SETTINGS_TYPE_IMAGES, std::string()));
-  host_content_settings_map->SetDefaultContentSetting(
-      CONTENT_SETTINGS_TYPE_IMAGES, CONTENT_SETTING_BLOCK);
-  EXPECT_EQ(CONTENT_SETTING_BLOCK,
-            host_content_settings_map->GetContentSetting(
-                host, host, CONTENT_SETTINGS_TYPE_IMAGES, std::string()));
 }

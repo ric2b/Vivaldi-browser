@@ -5,10 +5,10 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_CHROME_VIEWS_DELEGATE_H_
 #define CHROME_BROWSER_UI_VIEWS_CHROME_VIEWS_DELEGATE_H_
 
-#include "base/basictypes.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "build/build_config.h"
 #include "ui/accessibility/ax_enums.h"
 #include "ui/views/views_delegate.h"
@@ -29,6 +29,9 @@ class ChromeViewsDelegate : public views::ViewsDelegate {
                                ui::WindowShowState* show_state) const override;
   void NotifyAccessibilityEvent(views::View* view,
                                 ui::AXEvent event_type) override;
+  ProcessMenuAcceleratorResult ProcessAcceleratorWhileMenuShowing(
+      const ui::Accelerator& accelerator) override;
+
 #if defined(OS_WIN)
   HICON GetDefaultWindowIcon() const override;
   HICON GetSmallWindowIcon() const override;

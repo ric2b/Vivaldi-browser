@@ -6,9 +6,11 @@
 
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
+#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/cancellation_flag.h"
@@ -18,6 +20,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "net/base/address_list.h"
 #include "net/base/net_errors.h"
+#include "net/base/net_util.h"
 #include "net/dns/host_resolver.h"
 #include "net/proxy/proxy_info.h"
 #include "net/proxy/proxy_resolver_error_observer.h"
@@ -193,8 +196,9 @@ class Job : public base::RefCountedThreadSafe<Job>,
   void HandleAlertOrError(bool is_alert, int line_number,
                           const base::string16& message);
   void DispatchBufferedAlertsAndErrors();
-  void DispatchAlertOrError(bool is_alert, int line_number,
-                            const base::string16& message);
+  void DispatchAlertOrErrorOnOriginThread(bool is_alert,
+                                          int line_number,
+                                          const base::string16& message);
 
   // The thread which called into ProxyResolverV8TracingImpl, and on which the
   // completion callback is expected to run.
@@ -329,7 +333,7 @@ Job::Job(const Job::Params* params,
          scoped_ptr<ProxyResolverV8Tracing::Bindings> bindings)
     : origin_runner_(base::ThreadTaskRunnerHandle::Get()),
       params_(params),
-      bindings_(bindings.Pass()),
+      bindings_(std::move(bindings)),
       event_(true, false),
       last_num_dns_(0),
       pending_dns_(NULL) {
@@ -395,6 +399,7 @@ void Job::Cancel() {
   // The worker thread might be blocked waiting for DNS.
   event_.Signal();
 
+  bindings_.reset();
   owned_self_reference_ = NULL;
 }
 
@@ -410,6 +415,7 @@ LoadState Job::GetLoadState() const {
 Job::~Job() {
   DCHECK(!pending_dns_);
   DCHECK(callback_.is_null());
+  DCHECK(!bindings_);
 }
 
 void Job::CheckIsOnWorkerThread() const {
@@ -463,6 +469,13 @@ void Job::NotifyCallerOnOriginLoop(int result) {
   if (cancelled_.IsSet())
     return;
 
+  DispatchBufferedAlertsAndErrors();
+
+  // This isn't the ordinary execution flow, however it is exercised by
+  // unit-tests.
+  if (cancelled_.IsSet())
+    return;
+
   DCHECK(!callback_.is_null());
   DCHECK(!pending_dns_);
 
@@ -474,6 +487,7 @@ void Job::NotifyCallerOnOriginLoop(int result) {
   ReleaseCallback();
   callback.Run(result);
 
+  bindings_.reset();
   owned_self_reference_ = NULL;
 }
 
@@ -530,7 +544,6 @@ void Job::ExecuteNonBlocking() {
   if (abandoned_)
     return;
 
-  DispatchBufferedAlertsAndErrors();
   NotifyCaller(result);
 }
 
@@ -542,7 +555,7 @@ int Job::ExecuteProxyResolver() {
       scoped_ptr<ProxyResolverV8> resolver;
       result = ProxyResolverV8::Create(script_data_, this, &resolver);
       if (result == OK)
-        *resolver_out_ = resolver.Pass();
+        *resolver_out_ = std::move(resolver);
       break;
     }
     case GET_PROXY_FOR_URL: {
@@ -704,11 +717,8 @@ void Job::DoDnsOperation() {
   // Check if the request was cancelled as a side-effect of calling into the
   // HostResolver. This isn't the ordinary execution flow, however it is
   // exercised by unit-tests.
-  if (cancelled_.IsSet()) {
-    if (!pending_dns_completed_synchronously_)
-      host_resolver()->CancelRequest(dns_request);
+  if (cancelled_.IsSet())
     return;
-  }
 
   if (pending_dns_completed_synchronously_) {
     OnDnsOperationComplete(result);
@@ -841,7 +851,9 @@ void Job::HandleAlertOrError(bool is_alert,
 
   if (blocking_dns_) {
     // In blocking DNS mode the events can be dispatched immediately.
-    DispatchAlertOrError(is_alert, line_number, message);
+    origin_runner_->PostTask(
+        FROM_HERE, base::Bind(&Job::DispatchAlertOrErrorOnOriginThread, this,
+                              is_alert, line_number, message));
     return;
   }
 
@@ -857,6 +869,7 @@ void Job::HandleAlertOrError(bool is_alert,
   // memory. Consider a script which does megabytes worth of alerts().
   // Avoid this by falling back to blocking mode.
   if (alerts_and_errors_byte_cost_ > kMaxAlertsAndErrorsBytes) {
+    alerts_and_errors_.clear();
     ScheduleRestartWithBlockingDns();
     return;
   }
@@ -866,28 +879,18 @@ void Job::HandleAlertOrError(bool is_alert,
 }
 
 void Job::DispatchBufferedAlertsAndErrors() {
-  CheckIsOnWorkerThread();
-  DCHECK(!blocking_dns_);
-  DCHECK(!abandoned_);
-
+  CheckIsOnOriginThread();
   for (size_t i = 0; i < alerts_and_errors_.size(); ++i) {
     const AlertOrError& x = alerts_and_errors_[i];
-    DispatchAlertOrError(x.is_alert, x.line_number, x.message);
+    DispatchAlertOrErrorOnOriginThread(x.is_alert, x.line_number, x.message);
   }
 }
 
-void Job::DispatchAlertOrError(bool is_alert,
-                               int line_number,
-                               const base::string16& message) {
-  CheckIsOnWorkerThread();
+void Job::DispatchAlertOrErrorOnOriginThread(bool is_alert,
+                                             int line_number,
+                                             const base::string16& message) {
+  CheckIsOnOriginThread();
 
-  // Note that the handling of cancellation is racy with regard to
-  // alerts/errors. The request might get cancelled shortly after this
-  // check! (There is no lock being held to guarantee otherwise).
-  //
-  // If this happens, then some information will be logged needlessly, however
-  // the Bindings are responsible for handling this case so it shouldn't cause
-  // problems.
   if (cancelled_.IsSet())
     return;
 
@@ -915,9 +918,9 @@ ProxyResolverV8TracingImpl::ProxyResolverV8TracingImpl(
     scoped_ptr<base::Thread> thread,
     scoped_ptr<ProxyResolverV8> resolver,
     scoped_ptr<Job::Params> job_params)
-    : thread_(thread.Pass()),
-      v8_resolver_(resolver.Pass()),
-      job_params_(job_params.Pass()),
+    : thread_(std::move(thread)),
+      v8_resolver_(std::move(resolver)),
+      job_params_(std::move(job_params)),
       num_outstanding_callbacks_(0) {
   job_params_->num_outstanding_callbacks = &num_outstanding_callbacks_;
 }
@@ -940,7 +943,7 @@ void ProxyResolverV8TracingImpl::GetProxyForURL(
   DCHECK(CalledOnValidThread());
   DCHECK(!callback.is_null());
 
-  scoped_refptr<Job> job = new Job(job_params_.get(), bindings.Pass());
+  scoped_refptr<Job> job = new Job(job_params_.get(), std::move(bindings));
 
   if (request)
     *request = job.get();
@@ -1001,7 +1004,7 @@ class ProxyResolverV8TracingFactoryImpl::CreateJob
     CHECK(thread_->StartWithOptions(options));
     job_params_.reset(
         new Job::Params(thread_->task_runner(), &num_outstanding_callbacks_));
-    create_resolver_job_ = new Job(job_params_.get(), bindings.Pass());
+    create_resolver_job_ = new Job(job_params_.get(), std::move(bindings));
     create_resolver_job_->StartCreateV8Resolver(
         pac_script, &v8_resolver_,
         base::Bind(
@@ -1032,7 +1035,7 @@ class ProxyResolverV8TracingFactoryImpl::CreateJob
     if (error == OK) {
       job_params_->v8_resolver = v8_resolver_.get();
       resolver_out_->reset(new ProxyResolverV8TracingImpl(
-          thread_.Pass(), v8_resolver_.Pass(), job_params_.Pass()));
+          std::move(thread_), std::move(v8_resolver_), std::move(job_params_)));
     } else {
       StopWorkerThread();
     }
@@ -1077,9 +1080,9 @@ void ProxyResolverV8TracingFactoryImpl::CreateProxyResolverV8Tracing(
     const CompletionCallback& callback,
     scoped_ptr<ProxyResolverFactory::Request>* request) {
   scoped_ptr<CreateJob> job(
-      new CreateJob(this, bindings.Pass(), pac_script, resolver, callback));
+      new CreateJob(this, std::move(bindings), pac_script, resolver, callback));
   jobs_.insert(job.get());
-  *request = job.Pass();
+  *request = std::move(job);
 }
 
 void ProxyResolverV8TracingFactoryImpl::RemoveJob(

@@ -5,6 +5,7 @@
 #ifndef NET_HTTP_HTTP_NETWORK_SESSION_PEER_H_
 #define NET_HTTP_HTTP_NETWORK_SESSION_PEER_H_
 
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "net/base/net_export.h"
@@ -18,8 +19,8 @@ class ProxyService;
 
 class NET_EXPORT_PRIVATE HttpNetworkSessionPeer {
  public:
-  explicit HttpNetworkSessionPeer(
-      const scoped_refptr<HttpNetworkSession>& session);
+  // |session| should outlive the HttpNetworkSessionPeer.
+  explicit HttpNetworkSessionPeer(HttpNetworkSession* session);
   ~HttpNetworkSessionPeer();
 
   void SetClientSocketPoolManager(
@@ -32,7 +33,7 @@ class NET_EXPORT_PRIVATE HttpNetworkSessionPeer {
       scoped_ptr<HttpStreamFactory> http_stream_factory_for_websocket);
 
  private:
-  const scoped_refptr<HttpNetworkSession> session_;
+  HttpNetworkSession* const session_;
 
   DISALLOW_COPY_AND_ASSIGN(HttpNetworkSessionPeer);
 };

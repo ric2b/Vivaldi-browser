@@ -71,6 +71,9 @@ class MockUpdateClient : public UpdateClient {
   MOCK_CONST_METHOD2(GetCrxUpdateState,
                      bool(const std::string& id, CrxUpdateItem* update_item));
   MOCK_CONST_METHOD1(IsUpdating, bool(const std::string& id));
+  MOCK_METHOD0(Stop, void());
+  MOCK_METHOD3(SendUninstallPing,
+               void(const std::string& id, const Version& version, int reason));
 
  private:
   ~MockUpdateClient() override;
@@ -173,7 +176,6 @@ ComponentUpdaterTest::ComponentUpdaterTest()
 
 ComponentUpdaterTest::~ComponentUpdaterTest() {
   EXPECT_CALL(update_client(), RemoveObserver(_)).Times(1);
-  worker_pool_->pool()->Shutdown();
   component_updater_.reset();
 }
 
@@ -190,12 +192,14 @@ void ComponentUpdaterTest::RunThreads() {
 TEST_F(ComponentUpdaterTest, AddObserver) {
   MockServiceObserver observer;
   EXPECT_CALL(update_client(), AddObserver(&observer)).Times(1);
+  EXPECT_CALL(update_client(), Stop()).Times(1);
   component_updater().AddObserver(&observer);
 }
 
 TEST_F(ComponentUpdaterTest, RemoveObserver) {
   MockServiceObserver observer;
   EXPECT_CALL(update_client(), RemoveObserver(&observer)).Times(1);
+  EXPECT_CALL(update_client(), Stop()).Times(1);
   component_updater().RemoveObserver(&observer);
 }
 
@@ -250,6 +254,7 @@ TEST_F(ComponentUpdaterTest, RegisterComponent) {
       .WillRepeatedly(Invoke(&loop_handler, &LoopHandler::OnUpdate));
 
   EXPECT_CALL(update_client(), IsUpdating(id1)).Times(1);
+  EXPECT_CALL(update_client(), Stop()).Times(1);
 
   EXPECT_TRUE(component_updater().RegisterComponent(crx_component1));
   EXPECT_TRUE(component_updater().RegisterComponent(crx_component2));
@@ -301,6 +306,7 @@ TEST_F(ComponentUpdaterTest, OnDemandUpdate) {
   EXPECT_CALL(update_client(),
               Install("jebgalgnebhfojomionfpkfelancnnkf", _, _))
       .WillOnce(Invoke(&loop_handler, &LoopHandler::OnInstall));
+  EXPECT_CALL(update_client(), Stop()).Times(1);
 
   EXPECT_TRUE(cus.RegisterComponent(crx_component));
   EXPECT_TRUE(OnDemandTester::OnDemand(&cus, id));
@@ -345,6 +351,7 @@ TEST_F(ComponentUpdaterTest, MaybeThrottle) {
   EXPECT_CALL(update_client(),
               Install("jebgalgnebhfojomionfpkfelancnnkf", _, _))
       .WillOnce(Invoke(&loop_handler, &LoopHandler::OnInstall));
+  EXPECT_CALL(update_client(), Stop()).Times(1);
 
   EXPECT_TRUE(component_updater().RegisterComponent(crx_component));
   component_updater().MaybeThrottle(

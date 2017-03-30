@@ -5,9 +5,10 @@
 #ifndef ASH_SYSTEM_CHROMEOS_ROTATION_TRAY_ROTATION_LOCK_H_
 #define ASH_SYSTEM_CHROMEOS_ROTATION_TRAY_ROTATION_LOCK_H_
 
-#include "ash/content/display/screen_orientation_controller_chromeos.h"
+#include "ash/display/screen_orientation_controller_chromeos.h"
 #include "ash/shell_observer.h"
 #include "ash/system/tray/tray_image_item.h"
+#include "base/macros.h"
 
 namespace ash {
 
@@ -38,6 +39,9 @@ class ASH_EXPORT TrayRotationLock
   void OnMaximizeModeStarted() override;
   void OnMaximizeModeEnded() override;
 
+  // TrayImageItem:
+  void DestroyTrayView() override;
+
  protected:
   // TrayImageItem:
   bool GetInitialVisibility() override;
@@ -51,6 +55,19 @@ class ASH_EXPORT TrayRotationLock
 
   // True if this is owned by a SystemTray on the primary display.
   bool OnPrimaryDisplay() const;
+
+  // Removes TrayRotationLock as a ScreenOrientationController::Observer if
+  // currently observing.
+  void StopObservingRotation();
+
+  // Removes TrayRotationLock as a ShellObserver if currently observing.
+  void StopObservingShell();
+
+  // True while added as a ScreenOrientationController::Observer.
+  bool observing_rotation_;
+
+  // True while added as a ShellObserver.
+  bool observing_shell_;
 
   DISALLOW_COPY_AND_ASSIGN(TrayRotationLock);
 };

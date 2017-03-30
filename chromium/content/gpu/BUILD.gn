@@ -4,6 +4,7 @@
 
 import("//build/config/ui.gni")
 import("//content/content.gni")
+import("//media/media_options.gni")
 
 # See //content/BUILD.gn for how this works.
 group("gpu") {
@@ -29,6 +30,8 @@ source_set("gpu_sources") {
     "gpu_main.cc",
     "gpu_process.cc",
     "gpu_process.h",
+    "gpu_process_control_impl.cc",
+    "gpu_process_control_impl.h",
     "gpu_watchdog_thread.cc",
     "gpu_watchdog_thread.h",
     "in_process_gpu_thread.cc",
@@ -41,10 +44,18 @@ source_set("gpu_sources") {
     "//base",
     "//content:export",
     "//content/public/child:child_sources",
-    "//mojo/application/public/interfaces",
+    "//mojo/shell/public/interfaces",
     "//skia",
     "//ui/gl",
   ]
+
+  public_deps = [
+    "//content/common:mojo_bindings",
+  ]
+
+  if (enable_mojo_media == "gpu") {
+    deps += [ "//media/mojo/services:application" ]
+  }
 
   if (is_win) {
     configs += [

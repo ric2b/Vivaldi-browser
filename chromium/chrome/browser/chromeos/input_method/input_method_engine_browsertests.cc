@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include "base/bind_helpers.h"
+#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
@@ -12,12 +15,14 @@
 #include "extensions/common/manifest_handlers/background_info.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "ui/base/ime/chromeos/component_extension_ime_manager.h"
-#include "ui/base/ime/chromeos/composition_text_chromeos.h"
-#include "ui/base/ime/chromeos/ime_bridge.h"
+#include "ui/base/ime/chromeos/extension_ime_util.h"
 #include "ui/base/ime/chromeos/input_method_descriptor.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/base/ime/chromeos/mock_ime_candidate_window_handler.h"
 #include "ui/base/ime/chromeos/mock_ime_input_context_handler.h"
+#include "ui/base/ime/composition_text.h"
+#include "ui/base/ime/ime_bridge.h"
+#include "ui/base/ime/ime_engine_handler_interface.h"
 #include "ui/base/ime/text_input_flags.h"
 #include "ui/chromeos/ime/input_method_menu_item.h"
 #include "ui/chromeos/ime/input_method_menu_manager.h"
@@ -118,7 +123,7 @@ class KeyEventDoneCallback {
 
   void Run(bool consumed) {
     if (consumed == expected_argument_) {
-      base::MessageLoop::current()->Quit();
+      base::MessageLoop::current()->QuitWhenIdle();
       is_called_ = true;
     }
   }
@@ -157,11 +162,11 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest,
   scoped_ptr<MockIMECandidateWindowHandler> mock_candidate_window(
       new MockIMECandidateWindowHandler());
 
-  IMEBridge::Get()->SetInputContextHandler(mock_input_context.get());
-  IMEBridge::Get()->SetCandidateWindowHandler(mock_candidate_window.get());
+  ui::IMEBridge::Get()->SetInputContextHandler(mock_input_context.get());
+  ui::IMEBridge::Get()->SetCandidateWindowHandler(mock_candidate_window.get());
 
-  IMEEngineHandlerInterface* engine_handler =
-      IMEBridge::Get()->GetCurrentEngineHandler();
+  ui::IMEEngineHandlerInterface* engine_handler =
+      ui::IMEBridge::Get()->GetCurrentEngineHandler();
   ASSERT_TRUE(engine_handler);
 
   // onActivate event should be fired if Enable function is called.
@@ -172,9 +177,9 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest,
 
   // onFocus event should be fired if FocusIn function is called.
   ExtensionTestMessageListener focus_listener("onFocus:text", false);
-  IMEEngineHandlerInterface::InputContext context(ui::TEXT_INPUT_TYPE_TEXT,
-                                                  ui::TEXT_INPUT_MODE_DEFAULT,
-                                                  ui::TEXT_INPUT_FLAG_NONE);
+  ui::IMEEngineHandlerInterface::InputContext context(
+      ui::TEXT_INPUT_TYPE_TEXT, ui::TEXT_INPUT_MODE_DEFAULT,
+      ui::TEXT_INPUT_FLAG_NONE);
   engine_handler->FocusIn(context);
   ASSERT_TRUE(focus_listener.WaitUntilSatisfied());
   ASSERT_TRUE(focus_listener.was_satisfied());
@@ -183,9 +188,9 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest,
   KeyEventDoneCallback callback(false);  // EchoBackIME doesn't consume keys.
   ExtensionTestMessageListener keyevent_listener("onKeyEvent", false);
   ui::KeyEvent key_event(ui::ET_KEY_PRESSED, ui::VKEY_A, ui::EF_NONE);
-  engine_handler->ProcessKeyEvent(key_event,
-                                  base::Bind(&KeyEventDoneCallback::Run,
-                                             base::Unretained(&callback)));
+  ui::IMEEngineHandlerInterface::KeyEventDoneCallback keyevent_callback =
+      base::Bind(&KeyEventDoneCallback::Run, base::Unretained(&callback));
+  engine_handler->ProcessKeyEvent(key_event, keyevent_callback);
   ASSERT_TRUE(keyevent_listener.WaitUntilSatisfied());
   ASSERT_TRUE(keyevent_listener.was_satisfied());
   callback.WaitUntilCalled();
@@ -194,8 +199,9 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest,
   ExtensionTestMessageListener surrounding_text_listener(
       "onSurroundingTextChanged", false);
   engine_handler->SetSurroundingText("text",  // Surrounding text.
-                                     0,  // focused position.
-                                     1);  // anchor position.
+                                     0,       // focused position.
+                                     1,       // anchor position.
+                                     0);      // offset position.
   ASSERT_TRUE(surrounding_text_listener.WaitUntilSatisfied());
   ASSERT_TRUE(surrounding_text_listener.was_satisfied());
 
@@ -223,8 +229,8 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest,
   ASSERT_TRUE(disabled_listener.WaitUntilSatisfied());
   ASSERT_TRUE(disabled_listener.was_satisfied());
 
-  IMEBridge::Get()->SetInputContextHandler(NULL);
-  IMEBridge::Get()->SetCandidateWindowHandler(NULL);
+  ui::IMEBridge::Get()->SetInputContextHandler(NULL);
+  ui::IMEBridge::Get()->SetCandidateWindowHandler(NULL);
 }
 
 IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest,
@@ -239,11 +245,11 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest,
   scoped_ptr<MockIMECandidateWindowHandler> mock_candidate_window(
       new MockIMECandidateWindowHandler());
 
-  IMEBridge::Get()->SetInputContextHandler(mock_input_context.get());
-  IMEBridge::Get()->SetCandidateWindowHandler(mock_candidate_window.get());
+  ui::IMEBridge::Get()->SetInputContextHandler(mock_input_context.get());
+  ui::IMEBridge::Get()->SetCandidateWindowHandler(mock_candidate_window.get());
 
-  IMEEngineHandlerInterface* engine_handler =
-      IMEBridge::Get()->GetCurrentEngineHandler();
+  ui::IMEEngineHandlerInterface* engine_handler =
+      ui::IMEBridge::Get()->GetCurrentEngineHandler();
   ASSERT_TRUE(engine_handler);
 
   extensions::ExtensionHost* host =
@@ -252,9 +258,9 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest,
   ASSERT_TRUE(host);
 
   engine_handler->Enable("APIArgumentIME");
-  IMEEngineHandlerInterface::InputContext context(ui::TEXT_INPUT_TYPE_TEXT,
-                                                  ui::TEXT_INPUT_MODE_DEFAULT,
-                                                  ui::TEXT_INPUT_FLAG_NONE);
+  ui::IMEEngineHandlerInterface::InputContext context(
+      ui::TEXT_INPUT_TYPE_TEXT, ui::TEXT_INPUT_MODE_DEFAULT,
+      ui::TEXT_INPUT_FLAG_NONE);
   engine_handler->FocusIn(context);
 
   {
@@ -265,10 +271,10 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest,
     ExtensionTestMessageListener keyevent_listener(expected_value, false);
 
     ui::KeyEvent key_event(
-        ui::ET_KEY_PRESSED, ui::VKEY_A, ui::DomCode::KEY_A, ui::EF_NONE);
-    engine_handler->ProcessKeyEvent(key_event,
-                                    base::Bind(&KeyEventDoneCallback::Run,
-                                               base::Unretained(&callback)));
+        ui::ET_KEY_PRESSED, ui::VKEY_A, ui::DomCode::US_A, ui::EF_NONE);
+    ui::IMEEngineHandlerInterface::KeyEventDoneCallback keyevent_callback =
+        base::Bind(&KeyEventDoneCallback::Run, base::Unretained(&callback));
+    engine_handler->ProcessKeyEvent(key_event, keyevent_callback);
     ASSERT_TRUE(keyevent_listener.WaitUntilSatisfied());
     EXPECT_TRUE(keyevent_listener.was_satisfied());
     callback.WaitUntilCalled();
@@ -282,11 +288,11 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest,
 
     ui::KeyEvent key_event(ui::ET_KEY_PRESSED,
                            ui::VKEY_A,
-                           ui::DomCode::KEY_A,
+                           ui::DomCode::US_A,
                            ui::EF_CONTROL_DOWN);
-    engine_handler->ProcessKeyEvent(key_event,
-                                    base::Bind(&KeyEventDoneCallback::Run,
-                                               base::Unretained(&callback)));
+    ui::IMEEngineHandlerInterface::KeyEventDoneCallback keyevent_callback =
+        base::Bind(&KeyEventDoneCallback::Run, base::Unretained(&callback));
+    engine_handler->ProcessKeyEvent(key_event, keyevent_callback);
     ASSERT_TRUE(keyevent_listener.WaitUntilSatisfied());
     EXPECT_TRUE(keyevent_listener.was_satisfied());
     callback.WaitUntilCalled();
@@ -300,11 +306,11 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest,
 
     ui::KeyEvent key_event(ui::ET_KEY_PRESSED,
                            ui::VKEY_A,
-                           ui::DomCode::KEY_A,
+                           ui::DomCode::US_A,
                            ui::EF_ALT_DOWN);
-    engine_handler->ProcessKeyEvent(key_event,
-                                    base::Bind(&KeyEventDoneCallback::Run,
-                                               base::Unretained(&callback)));
+    ui::IMEEngineHandlerInterface::KeyEventDoneCallback keyevent_callback =
+        base::Bind(&KeyEventDoneCallback::Run, base::Unretained(&callback));
+    engine_handler->ProcessKeyEvent(key_event, keyevent_callback);
     ASSERT_TRUE(keyevent_listener.WaitUntilSatisfied());
     EXPECT_TRUE(keyevent_listener.was_satisfied());
     callback.WaitUntilCalled();
@@ -318,11 +324,11 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest,
 
     ui::KeyEvent key_event(ui::ET_KEY_PRESSED,
                            ui::VKEY_A,
-                           ui::DomCode::KEY_A,
+                           ui::DomCode::US_A,
                            ui::EF_SHIFT_DOWN);
-    engine_handler->ProcessKeyEvent(key_event,
-                                    base::Bind(&KeyEventDoneCallback::Run,
-                                               base::Unretained(&callback)));
+    ui::IMEEngineHandlerInterface::KeyEventDoneCallback keyevent_callback =
+        base::Bind(&KeyEventDoneCallback::Run, base::Unretained(&callback));
+    engine_handler->ProcessKeyEvent(key_event, keyevent_callback);
     ASSERT_TRUE(keyevent_listener.WaitUntilSatisfied());
     EXPECT_TRUE(keyevent_listener.was_satisfied());
     callback.WaitUntilCalled();
@@ -334,13 +340,11 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest,
         "onKeyEvent::keydown:A:KeyA:false:false:false:true";
     ExtensionTestMessageListener keyevent_listener(expected_value, false);
 
-    ui::KeyEvent key_event(ui::ET_KEY_PRESSED,
-                           ui::VKEY_A,
-                           ui::DomCode::KEY_A,
-                           ui::EF_CAPS_LOCK_DOWN);
-    engine_handler->ProcessKeyEvent(key_event,
-                                    base::Bind(&KeyEventDoneCallback::Run,
-                                               base::Unretained(&callback)));
+    ui::KeyEvent key_event(ui::ET_KEY_PRESSED, ui::VKEY_A, ui::DomCode::US_A,
+                           ui::EF_CAPS_LOCK_ON);
+    ui::IMEEngineHandlerInterface::KeyEventDoneCallback keyevent_callback =
+        base::Bind(&KeyEventDoneCallback::Run, base::Unretained(&callback));
+    engine_handler->ProcessKeyEvent(key_event, keyevent_callback);
     ASSERT_TRUE(keyevent_listener.WaitUntilSatisfied());
     EXPECT_TRUE(keyevent_listener.was_satisfied());
     callback.WaitUntilCalled();
@@ -354,11 +358,11 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest,
 
     ui::KeyEvent key_event(ui::ET_KEY_PRESSED,
                            ui::VKEY_A,
-                           ui::DomCode::KEY_A,
+                           ui::DomCode::US_A,
                            ui::EF_ALT_DOWN | ui::EF_CONTROL_DOWN);
-    engine_handler->ProcessKeyEvent(key_event,
-                                    base::Bind(&KeyEventDoneCallback::Run,
-                                               base::Unretained(&callback)));
+    ui::IMEEngineHandlerInterface::KeyEventDoneCallback keyevent_callback =
+        base::Bind(&KeyEventDoneCallback::Run, base::Unretained(&callback));
+    engine_handler->ProcessKeyEvent(key_event, keyevent_callback);
     ASSERT_TRUE(keyevent_listener.WaitUntilSatisfied());
     EXPECT_TRUE(keyevent_listener.was_satisfied());
     callback.WaitUntilCalled();
@@ -370,13 +374,11 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest,
         "onKeyEvent::keydown:a:KeyA:false:false:true:true";
     ExtensionTestMessageListener keyevent_listener(expected_value, false);
 
-    ui::KeyEvent key_event(ui::ET_KEY_PRESSED,
-                           ui::VKEY_A,
-                           ui::DomCode::KEY_A,
-                           ui::EF_SHIFT_DOWN | ui::EF_CAPS_LOCK_DOWN);
-    engine_handler->ProcessKeyEvent(key_event,
-                                    base::Bind(&KeyEventDoneCallback::Run,
-                                               base::Unretained(&callback)));
+    ui::KeyEvent key_event(ui::ET_KEY_PRESSED, ui::VKEY_A, ui::DomCode::US_A,
+                           ui::EF_SHIFT_DOWN | ui::EF_CAPS_LOCK_ON);
+    ui::IMEEngineHandlerInterface::KeyEventDoneCallback keyevent_callback =
+        base::Bind(&KeyEventDoneCallback::Run, base::Unretained(&callback));
+    engine_handler->ProcessKeyEvent(key_event, keyevent_callback);
     ASSERT_TRUE(keyevent_listener.WaitUntilSatisfied());
     EXPECT_TRUE(keyevent_listener.was_satisfied());
     callback.WaitUntilCalled();
@@ -422,9 +424,9 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest,
         kMediaKeyCases[i].keycode,
         ui::KeycodeConverter::CodeStringToDomCode(kMediaKeyCases[i].code),
         ui::EF_NONE);
-    engine_handler->ProcessKeyEvent(key_event,
-                                    base::Bind(&KeyEventDoneCallback::Run,
-                                               base::Unretained(&callback)));
+    ui::IMEEngineHandlerInterface::KeyEventDoneCallback keyevent_callback =
+        base::Bind(&KeyEventDoneCallback::Run, base::Unretained(&callback));
+    engine_handler->ProcessKeyEvent(key_event, keyevent_callback);
     ASSERT_TRUE(keyevent_listener.WaitUntilSatisfied());
     EXPECT_TRUE(keyevent_listener.was_satisfied());
     callback.WaitUntilCalled();
@@ -553,22 +555,23 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest,
               mock_input_context->last_update_composition_arg().cursor_pos);
     EXPECT_TRUE(mock_input_context->last_update_composition_arg().is_visible);
 
-    const CompositionText& composition_text =
+    const ui::CompositionText& composition_text =
         mock_input_context->last_update_composition_arg().composition_text;
-    EXPECT_EQ(base::UTF8ToUTF16("COMPOSITION_TEXT"), composition_text.text());
-    const std::vector<CompositionText::UnderlineAttribute>& underlines =
-        composition_text.underline_attributes();
+    EXPECT_EQ(base::UTF8ToUTF16("COMPOSITION_TEXT"), composition_text.text);
+    const ui::CompositionUnderlines underlines = composition_text.underlines;
 
     ASSERT_EQ(2U, underlines.size());
-    EXPECT_EQ(CompositionText::COMPOSITION_TEXT_UNDERLINE_SINGLE,
-              underlines[0].type);
-    EXPECT_EQ(0U, underlines[0].start_index);
-    EXPECT_EQ(5U, underlines[0].end_index);
+    // single underline
+    EXPECT_EQ(SK_ColorBLACK, underlines[0].color);
+    EXPECT_FALSE(underlines[0].thick);
+    EXPECT_EQ(0U, underlines[0].start_offset);
+    EXPECT_EQ(5U, underlines[0].end_offset);
 
-    EXPECT_EQ(CompositionText::COMPOSITION_TEXT_UNDERLINE_DOUBLE,
-              underlines[1].type);
-    EXPECT_EQ(6U, underlines[1].start_index);
-    EXPECT_EQ(10U, underlines[1].end_index);
+    // double underline
+    EXPECT_EQ(SK_ColorBLACK, underlines[1].color);
+    EXPECT_TRUE(underlines[1].thick);
+    EXPECT_EQ(6U, underlines[1].start_offset);
+    EXPECT_EQ(10U, underlines[1].end_offset);
   }
   {
     SCOPED_TRACE("clearComposition test");
@@ -585,9 +588,9 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest,
     EXPECT_EQ(1, mock_input_context->update_preedit_text_call_count());
     EXPECT_FALSE(
         mock_input_context->last_update_composition_arg().is_visible);
-    const CompositionText& composition_text =
+    const ui::CompositionText& composition_text =
         mock_input_context->last_update_composition_arg().composition_text;
-    EXPECT_TRUE(composition_text.text().empty());
+    EXPECT_TRUE(composition_text.text.empty());
   }
   {
     SCOPED_TRACE("setCandidateWindowProperties:visibility test");
@@ -931,7 +934,7 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest,
 
     {
       ExtensionTestMessageListener focus_listener("onFocus:text", false);
-      IMEEngineHandlerInterface::InputContext context(
+      ui::IMEEngineHandlerInterface::InputContext context(
           ui::TEXT_INPUT_TYPE_TEXT, ui::TEXT_INPUT_MODE_DEFAULT,
           ui::TEXT_INPUT_FLAG_NONE);
       engine_handler->FocusIn(context);
@@ -940,7 +943,7 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest,
     }
     {
       ExtensionTestMessageListener focus_listener("onFocus:search", false);
-      IMEEngineHandlerInterface::InputContext context(
+      ui::IMEEngineHandlerInterface::InputContext context(
           ui::TEXT_INPUT_TYPE_SEARCH, ui::TEXT_INPUT_MODE_DEFAULT,
           ui::TEXT_INPUT_FLAG_NONE);
       engine_handler->FocusIn(context);
@@ -949,7 +952,7 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest,
     }
     {
       ExtensionTestMessageListener focus_listener("onFocus:tel", false);
-      IMEEngineHandlerInterface::InputContext context(
+      ui::IMEEngineHandlerInterface::InputContext context(
           ui::TEXT_INPUT_TYPE_TELEPHONE, ui::TEXT_INPUT_MODE_DEFAULT,
           ui::TEXT_INPUT_FLAG_NONE);
       engine_handler->FocusIn(context);
@@ -958,7 +961,7 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest,
     }
     {
       ExtensionTestMessageListener focus_listener("onFocus:url", false);
-      IMEEngineHandlerInterface::InputContext context(
+      ui::IMEEngineHandlerInterface::InputContext context(
           ui::TEXT_INPUT_TYPE_URL, ui::TEXT_INPUT_MODE_DEFAULT,
           ui::TEXT_INPUT_FLAG_NONE);
       engine_handler->FocusIn(context);
@@ -967,7 +970,7 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest,
     }
     {
       ExtensionTestMessageListener focus_listener("onFocus:email", false);
-      IMEEngineHandlerInterface::InputContext context(
+      ui::IMEEngineHandlerInterface::InputContext context(
           ui::TEXT_INPUT_TYPE_EMAIL, ui::TEXT_INPUT_MODE_DEFAULT,
           ui::TEXT_INPUT_FLAG_NONE);
       engine_handler->FocusIn(context);
@@ -976,7 +979,7 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest,
     }
     {
       ExtensionTestMessageListener focus_listener("onFocus:number", false);
-      IMEEngineHandlerInterface::InputContext context(
+      ui::IMEEngineHandlerInterface::InputContext context(
           ui::TEXT_INPUT_TYPE_NUMBER, ui::TEXT_INPUT_MODE_DEFAULT,
           ui::TEXT_INPUT_FLAG_NONE);
       engine_handler->FocusIn(context);
@@ -984,9 +987,62 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest,
       ASSERT_TRUE(focus_listener.was_satisfied());
     }
   }
+  {
+    SCOPED_TRACE("changeInputMethod with uncommited text test");
+    // For http://crbug.com/529999.
 
-  IMEBridge::Get()->SetInputContextHandler(NULL);
-  IMEBridge::Get()->SetCandidateWindowHandler(NULL);
+    mock_input_context->Reset();
+    mock_candidate_window->Reset();
+
+    EXPECT_TRUE(mock_input_context->last_commit_text().empty());
+
+    const char set_composition_test_script[] =
+        "chrome.input.ime.setComposition({"
+        "  contextID: engineBridge.getFocusedContextID().contextID,"
+        "  text:'us',"
+        "  cursor:2,"
+        "  segments : [{"
+        "    start: 0,"
+        "    end: 1,"
+        "    style: 'underline'"
+        "  }]"
+        "});";
+
+    ASSERT_TRUE(content::ExecuteScript(host->host_contents(),
+                                       set_composition_test_script));
+    EXPECT_EQ(2U, mock_input_context->last_update_composition_arg().cursor_pos);
+    EXPECT_TRUE(mock_input_context->last_update_composition_arg().is_visible);
+
+    const ui::CompositionText& composition_text =
+        mock_input_context->last_update_composition_arg().composition_text;
+    EXPECT_EQ(base::UTF8ToUTF16("us"), composition_text.text);
+    const ui::CompositionUnderlines underlines = composition_text.underlines;
+
+    ASSERT_EQ(1U, underlines.size());
+    // single underline
+    EXPECT_EQ(SK_ColorBLACK, underlines[0].color);
+    EXPECT_FALSE(underlines[0].thick);
+    EXPECT_EQ(0U, underlines[0].start_offset);
+    EXPECT_EQ(1U, underlines[0].end_offset);
+    EXPECT_TRUE(mock_input_context->last_commit_text().empty());
+
+    InputMethodManager::Get()->GetActiveIMEState()->ChangeInputMethod(
+        kIdentityIMEID, false /* show_message */);
+    EXPECT_EQ("us", mock_input_context->last_commit_text());
+
+    InputMethodManager::Get()->GetActiveIMEState()->ChangeInputMethod(
+        extension_ime_util::GetInputMethodIDByEngineID("zh-t-i0-pinyin"),
+        false /* show_message */);
+    EXPECT_EQ("", mock_input_context->last_commit_text());
+
+    InputMethodManager::Get()->GetActiveIMEState()->ChangeInputMethod(
+        extension_ime_util::GetInputMethodIDByEngineID("xkb:us::eng"),
+        false /* show_message */);
+    EXPECT_EQ("", mock_input_context->last_commit_text());
+  }
+
+  ui::IMEBridge::Get()->SetInputContextHandler(NULL);
+  ui::IMEBridge::Get()->SetCandidateWindowHandler(NULL);
 }
 
 }  // namespace

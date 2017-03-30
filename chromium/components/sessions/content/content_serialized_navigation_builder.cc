@@ -4,7 +4,7 @@
 
 #include "components/sessions/content/content_serialized_navigation_builder.h"
 
-#include "components/sessions/serialized_navigation_entry.h"
+#include "components/sessions/core/serialized_navigation_entry.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/favicon_status.h"
 #include "content/public/browser/navigation_controller.h"
@@ -81,23 +81,22 @@ ContentSerializedNavigationBuilder::ToNavigationEntry(
             navigation->blocked_state_);
   DCHECK_EQ(0u, navigation->content_pack_categories_.size());
 
-  return entry.Pass();
+  return entry;
 }
 
 // static
-ScopedVector<content::NavigationEntry>
+std::vector<scoped_ptr<content::NavigationEntry>>
 ContentSerializedNavigationBuilder::ToNavigationEntries(
     const std::vector<SerializedNavigationEntry>& navigations,
     content::BrowserContext* browser_context) {
   int page_id = 0;
-  ScopedVector<content::NavigationEntry> entries;
-  for (std::vector<SerializedNavigationEntry>::const_iterator
-       it = navigations.begin(); it != navigations.end(); ++it) {
-    entries.push_back(
-        ToNavigationEntry(&(*it), page_id, browser_context).release());
+  std::vector<scoped_ptr<content::NavigationEntry>> entries;
+  entries.reserve(navigations.size());
+  for (const auto& navigation : navigations) {
+    entries.push_back(ToNavigationEntry(&navigation, page_id, browser_context));
     ++page_id;
   }
-  return entries.Pass();
+  return entries;
 }
 
 }  // namespace sessions

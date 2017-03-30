@@ -19,8 +19,7 @@ void TestAppWindowContents::Initialize(content::BrowserContext* context,
                                        const GURL& url) {
 }
 
-void TestAppWindowContents::LoadContents(int32 creator_process_id) {
-}
+void TestAppWindowContents::LoadContents(int32_t creator_process_id) {}
 
 void TestAppWindowContents::NativeWindowChanged(
     NativeAppWindow* native_app_window) {
@@ -31,6 +30,8 @@ void TestAppWindowContents::NativeWindowClosed() {
 
 void TestAppWindowContents::DispatchWindowShownForTests() const {
 }
+
+void TestAppWindowContents::OnWindowReady() {}
 
 content::WebContents* TestAppWindowContents::GetWebContents() const {
   return web_contents_.get();

@@ -6,9 +6,12 @@
 #define CHROME_TEST_NACL_NACL_BROWSERTEST_UTIL_H_
 
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "build/build_config.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/test/javascript_test_observer.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 
 // A helper base class that decodes structured automation messages of the form:
 // {"type": type_name, ...}
@@ -103,7 +106,7 @@ class NaClBrowserTestBase : public InProcessBrowserTest {
  private:
   bool StartTestServer();
 
-  scoped_ptr<net::SpawnedTestServer> test_server_;
+  scoped_ptr<net::EmbeddedTestServer> test_server_;
 };
 
 class NaClBrowserTestNewlib : public NaClBrowserTestBase {
@@ -137,32 +140,10 @@ class NaClBrowserTestPnaclNonSfi : public NaClBrowserTestBase {
   base::FilePath::StringType Variant() override;
 };
 
-// "Transitional" here means that this uses nacl_helper in Non-SFI mode.
-// nacl_helper_nonsfi, which is replacing nacl_helper in Non-SFI mode, is being
-// launched. In the meanwhile, nacl_helper in Non-SFI is still kept just in
-// case. When the launching is successfully done, it will be removed.
-// "Transitional" tests are for ensuring compatibility between those two
-// binaries.
-// TODO(hidehiko): Remove the tests when nacl_helper in Non-SFI mode is
-// removed.
-class NaClBrowserTestPnaclTransitionalNonSfi
-    : public NaClBrowserTestPnaclNonSfi {
- public:
-  void SetUpCommandLine(base::CommandLine* command_line) override;
-};
-
 class NaClBrowserTestNonSfiMode : public NaClBrowserTestBase {
  public:
   void SetUpCommandLine(base::CommandLine* command_line) override;
   base::FilePath::StringType Variant() override;
-};
-
-// TODO(hidehiko): Remove this when clean-up to drop Non-SFI support from
-// nacl_helper is done. See NaClBrowserTestPnaclTransitionalNonSfi
-// for more details.
-class NaClBrowserTestTransitionalNonSfi : public NaClBrowserTestNonSfiMode {
- public:
-  void SetUpCommandLine(base::CommandLine* command_line) override;
 };
 
 // A NaCl browser test only using static files.
@@ -194,12 +175,11 @@ class NaClBrowserTestGLibcExtension : public NaClBrowserTestGLibc {
 #  define MAYBE_PNACL(test_name) test_name
 #endif
 
-// NaCl glibc tests are included for x86 only, as there is no glibc support
-// for other architectures (ARM/MIPS).
-#if defined(ARCH_CPU_X86_FAMILY) && !defined(DISABLE_NACL)
-#  define MAYBE_GLIBC(test_name) test_name
-#else
+// NaCl glibc toolchain is not available on MIPS
+#if defined(ARCH_CPU_MIPS_FAMILY) || defined(DISABLE_NACL_BROWSERTESTS) || defined(DISABLE_NACL)
 #  define MAYBE_GLIBC(test_name) DISABLED_##test_name
+#else
+#  define MAYBE_GLIBC(test_name) test_name
 #endif
 
 // Currently, we only support it on x86-32 or ARM architecture.
@@ -213,30 +193,14 @@ class NaClBrowserTestGLibcExtension : public NaClBrowserTestGLibc {
 #  define MAYBE_NONSFI(test_case) DISABLED_##test_case
 #endif
 
-// Sanitizers internally use some syscalls which non-SFI NaCl disallows.
-#if defined(OS_LINUX) && !defined(ADDRESS_SANITIZER) && \
-    !defined(THREAD_SANITIZER) && !defined(MEMORY_SANITIZER) && \
-    !defined(LEAK_SANITIZER)
-#  define MAYBE_TRANSITIONAL_NONSFI(test_case) test_case
-#else
-#  define MAYBE_TRANSITIONAL_NONSFI(test_case) DISABLED_##test_case
-#endif
-
 // Similar to MAYBE_NONSFI, this is available only on x86-32, x86-64 or
 // ARM linux.
 #if defined(OS_LINUX) && \
-    (defined(ARCH_CPU_X86_FAMILY) || defined(ARCH_CPU_ARMEL))
+    (defined(ARCH_CPU_X86_FAMILY) || defined(ARCH_CPU_ARMEL)) && \
+    !defined(DISABLE_NACL_BROWSERTESTS)
 #  define MAYBE_PNACL_NONSFI(test_case) test_case
 #else
 #  define MAYBE_PNACL_NONSFI(test_case) DISABLED_##test_case
-#endif
-
-// Currently, translation from pexe to non-sfi nexe is supported only for
-// x86-32 or ARM binary.
-#if defined(OS_LINUX) && (defined(ARCH_CPU_X86) || defined(ARCH_CPU_ARMEL))
-#  define MAYBE_PNACL_TRANSITIONAL_NONSFI(test_case) test_case
-#else
-#  define MAYBE_PNACL_TRANSITIONAL_NONSFI(test_case) DISABLED_##test_case
 #endif
 
 

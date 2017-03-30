@@ -5,7 +5,7 @@
 #ifndef CHROMEOS_NETWORK_PORTAL_DETECTOR_NETWORK_PORTAL_DETECTOR_H_
 #define CHROMEOS_NETWORK_PORTAL_DETECTOR_NETWORK_PORTAL_DETECTOR_H_
 
-#include "base/basictypes.h"
+#include "base/macros.h"
 #include "chromeos/chromeos_export.h"
 #include "chromeos/network/portal_detector/network_portal_detector_strategy.h"
 #include "net/url_request/url_fetcher.h"
@@ -14,16 +14,16 @@ namespace chromeos {
 
 class NetworkState;
 
-// This class handles all notifications about network changes from
-// NetworkStateHandler and delegates portal detection for the active
-// network to CaptivePortalService.
+// This is an interface for a chromeos portal detector that allows for
+// observation of captive portal state. It supports retries based on a portal
+// detector strategy.
 class CHROMEOS_EXPORT NetworkPortalDetector {
  public:
   enum CaptivePortalStatus {
-    CAPTIVE_PORTAL_STATUS_UNKNOWN  = 0,
-    CAPTIVE_PORTAL_STATUS_OFFLINE  = 1,
-    CAPTIVE_PORTAL_STATUS_ONLINE   = 2,
-    CAPTIVE_PORTAL_STATUS_PORTAL   = 3,
+    CAPTIVE_PORTAL_STATUS_UNKNOWN = 0,
+    CAPTIVE_PORTAL_STATUS_OFFLINE = 1,
+    CAPTIVE_PORTAL_STATUS_ONLINE = 2,
+    CAPTIVE_PORTAL_STATUS_PORTAL = 3,
     CAPTIVE_PORTAL_STATUS_PROXY_AUTH_REQUIRED = 4,
     CAPTIVE_PORTAL_STATUS_COUNT
   };
@@ -31,8 +31,7 @@ class CHROMEOS_EXPORT NetworkPortalDetector {
   struct CaptivePortalState {
     CaptivePortalState()
         : status(CAPTIVE_PORTAL_STATUS_UNKNOWN),
-          response_code(net::URLFetcher::RESPONSE_CODE_INVALID) {
-    }
+          response_code(net::URLFetcher::RESPONSE_CODE_INVALID) {}
 
     bool operator==(const CaptivePortalState& o) const {
       return status == o.status && response_code == o.response_code;
@@ -59,6 +58,8 @@ class CHROMEOS_EXPORT NetworkPortalDetector {
    protected:
     virtual ~Observer() {}
   };
+
+  virtual ~NetworkPortalDetector() {}
 
   // Adds |observer| to the observers list.
   virtual void AddObserver(Observer* observer) = 0;
@@ -101,72 +102,45 @@ class CHROMEOS_EXPORT NetworkPortalDetector {
   // doesn't equal to |id|, detection is restarted.
   virtual void SetStrategy(PortalDetectorStrategy::StrategyId id) = 0;
 
-  // Initializes network portal detector for testing. The
-  // |network_portal_detector| will be owned by the internal pointer
-  // and deleted by Shutdown().
-  static void InitializeForTesting(
-      NetworkPortalDetector* network_portal_detector);
-
-  // Returns |true| if NetworkPortalDetector was Initialized and it is safe to
-  // call Get.
-  static bool IsInitialized();
-
-  // Deletes the instance of the NetworkPortalDetector.
-  static void Shutdown();
-
-  // Gets the instance of the NetworkPortalDetector. Return value should
-  // be used carefully in tests, because it can be changed "on the fly"
-  // by calls to InitializeForTesting().
-  static NetworkPortalDetector* Get();
+  // Closes portal login window before screen is locked.
+  virtual void OnLockScreenRequest() = 0;
 
   // Returns non-localized string representation of |status|.
   static std::string CaptivePortalStatusString(CaptivePortalStatus status);
 
-  // Closes portal login window before screen is locked.
-  virtual void OnLockScreenRequest() = 0;
-
  protected:
   NetworkPortalDetector() {}
-  virtual ~NetworkPortalDetector() {}
-
-  static bool set_for_testing() { return set_for_testing_; }
-  static NetworkPortalDetector* network_portal_detector() {
-    return network_portal_detector_;
-  }
-  static void set_network_portal_detector(
-      NetworkPortalDetector* network_portal_detector) {
-    network_portal_detector_ = network_portal_detector;
-  }
 
  private:
-  static bool set_for_testing_;
-  static NetworkPortalDetector* network_portal_detector_;
-
   DISALLOW_COPY_AND_ASSIGN(NetworkPortalDetector);
 };
 
-class CHROMEOS_EXPORT NetworkPortalDetectorStubImpl
-    : public NetworkPortalDetector {
- public:
-  NetworkPortalDetectorStubImpl();
-  ~NetworkPortalDetectorStubImpl() override;
+// Manages a global NetworkPortalDetector instance that can be accessed across
+// all ChromeOS components.
+namespace network_portal_detector {
+// Gets the instance of the NetworkPortalDetector. Return value should
+// be used carefully in tests, because it can be changed "on the fly"
+// by calls to InitializeForTesting().
+CHROMEOS_EXPORT NetworkPortalDetector* GetInstance();
 
- protected:
-  // NetworkPortalDetector
-  void AddObserver(Observer* observer) override;
-  void AddAndFireObserver(Observer* observer) override;
-  void RemoveObserver(Observer* observer) override;
-  CaptivePortalState GetCaptivePortalState(
-      const std::string& service_path) override;
-  bool IsEnabled() override;
-  void Enable(bool start_detection) override;
-  bool StartDetectionIfIdle() override;
-  void SetStrategy(PortalDetectorStrategy::StrategyId id) override;
-  void OnLockScreenRequest() override;
+// Returns |true| if NetworkPortalDetector was Initialized and it is safe to
+// call GetInstance.
+CHROMEOS_EXPORT bool IsInitialized();
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(NetworkPortalDetectorStubImpl);
-};
+// Deletes the instance of the NetworkPortalDetector.
+CHROMEOS_EXPORT void Shutdown();
+
+CHROMEOS_EXPORT void SetNetworkPortalDetector(
+    NetworkPortalDetector* network_portal_detector);
+
+// Initializes network portal detector for testing. The
+// |network_portal_detector| will be owned by the internal pointer
+// and deleted by Shutdown().
+CHROMEOS_EXPORT void InitializeForTesting(
+    NetworkPortalDetector* network_portal_detector);
+CHROMEOS_EXPORT bool SetForTesting();
+
+}  // namespace network_portal_detector
 
 }  // namespace chromeos
 

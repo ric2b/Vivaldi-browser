@@ -18,6 +18,7 @@ struct FrameHostMsg_DidFailProvisionalLoadWithError_Params;
 namespace content {
 
 class FrameTreeNode;
+class NavigationHandle;
 class RenderFrameHostImpl;
 struct LoadCommittedDetails;
 struct OpenURLParams;
@@ -26,6 +27,24 @@ struct OpenURLParams;
 // related events.
 class CONTENT_EXPORT NavigatorDelegate {
  public:
+  // Called when a navigation started. The same NavigationHandle will be
+  // provided for events related to the same navigation.
+  virtual void DidStartNavigation(NavigationHandle* navigation_handle) {}
+
+  // Called when a navigation was redirected.
+  virtual void DidRedirectNavigation(NavigationHandle* navigation_handle) {}
+
+  // Called when the navigation is about to be committed in a renderer.
+  virtual void ReadyToCommitNavigation(NavigationHandle* navigation_handle) {}
+
+  // Called when the navigation finished: it was either committed or canceled
+  // before commit.  Note that |navigation_handle| will be destroyed at the end
+  // of this call.
+  virtual void DidFinishNavigation(NavigationHandle* navigation_handle) {}
+
+  // TODO(clamy): all methods below that are related to navigation
+  // events should go away in favor of the ones above.
+
   // The RenderFrameHost started a provisional load for the frame
   // represented by |render_frame_host|.
   virtual void DidStartProvisionalLoad(
@@ -78,11 +97,6 @@ class CONTENT_EXPORT NavigatorDelegate {
   // WebContents::NotifyNavigationStateChanged.
   virtual void NotifyChangedNavigationState(InvalidateTypes changed_flags) {}
 
-  // Notifies the Navigator embedder that it is beginning to navigate a frame.
-  virtual void AboutToNavigateRenderFrame(
-      RenderFrameHostImpl* old_host,
-      RenderFrameHostImpl* new_host) {}
-
   // Notifies the Navigator embedder that a navigation to the pending
   // NavigationEntry has started in the browser process.
   virtual void DidStartNavigationToPendingEntry(
@@ -93,6 +107,10 @@ class CONTENT_EXPORT NavigatorDelegate {
   // this forwards to.
   virtual void RequestOpenURL(RenderFrameHostImpl* render_frame_host,
                               const OpenURLParams& params) {}
+
+  // Returns whether to continue a navigation that needs to transfer to a
+  // different process between the load start and commit.
+  virtual bool ShouldTransferNavigation();
 
   // Returns whether URLs for aborted browser-initiated navigations should be
   // preserved in the omnibox.  Defaults to false.

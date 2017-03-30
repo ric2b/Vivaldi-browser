@@ -5,10 +5,13 @@
 #ifndef MEDIA_MOJO_SERVICES_MOJO_RENDERER_IMPL_H_
 #define MEDIA_MOJO_SERVICES_MOJO_RENDERER_IMPL_H_
 
+#include <stdint.h>
+
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "media/base/renderer.h"
-#include "media/mojo/interfaces/media_renderer.mojom.h"
+#include "media/mojo/interfaces/renderer.mojom.h"
+#include "mojo/public/cpp/bindings/binding.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -18,18 +21,18 @@ namespace media {
 
 class DemuxerStreamProvider;
 
-// A media::Renderer that proxies to a mojo::MediaRenderer. That
-// mojo::MediaRenderer proxies back to the MojoRendererImpl via the
-// mojo::MediaRendererClient interface.
+// A media::Renderer that proxies to a interfaces::Renderer. That
+// interfaces::Renderer proxies back to the MojoRendererImpl via the
+// interfaces::RendererClient interface.
 //
 // MojoRendererImpl implements media::Renderer for use as either an audio
 // or video renderer.
-class MojoRendererImpl : public Renderer, public mojo::MediaRendererClient {
+class MojoRendererImpl : public Renderer, public interfaces::RendererClient {
  public:
   // |task_runner| is the TaskRunner on which all methods are invoked.
   MojoRendererImpl(
       const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
-      mojo::MediaRendererPtr remote_media_renderer);
+      interfaces::RendererPtr remote_renderer);
   ~MojoRendererImpl() override;
 
   // Renderer implementation.
@@ -50,25 +53,25 @@ class MojoRendererImpl : public Renderer, public mojo::MediaRendererClient {
   bool HasAudio() override;
   bool HasVideo() override;
 
-  // mojo::MediaRendererClient implementation.
+  // interfaces::RendererClient implementation.
   void OnTimeUpdate(int64_t time_usec, int64_t max_time_usec) override;
-  void OnBufferingStateChange(mojo::BufferingState state) override;
+  void OnBufferingStateChange(interfaces::BufferingState state) override;
   void OnEnded() override;
   void OnError() override;
 
  private:
-  // Called when |remote_media_renderer_| has finished initializing.
-  void OnInitialized();
+  // Called when |remote_renderer_| has finished initializing.
+  void OnInitialized(bool success);
 
   // Task runner used to execute pipeline tasks.
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   DemuxerStreamProvider* demuxer_stream_provider_;
-  mojo::MediaRendererPtr remote_media_renderer_;
-  mojo::Binding<MediaRendererClient> binding_;
+  interfaces::RendererPtr remote_renderer_;
+  scoped_ptr<mojo::Binding<RendererClient>> binding_;
 
   // Callbacks passed to Initialize() that we forward messages from
-  // |remote_media_renderer_| through.
+  // |remote_renderer_| through.
   PipelineStatusCB init_cb_;
   base::Closure ended_cb_;
   PipelineStatusCB error_cb_;

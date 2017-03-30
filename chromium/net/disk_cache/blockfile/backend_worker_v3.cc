@@ -4,6 +4,10 @@
 
 #include "net/disk_cache/blockfile/backend_worker_v3.h"
 
+#include <stdint.h>
+
+#include <limits>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/file_path.h"
@@ -38,7 +42,7 @@ const int kDefaultCacheSize = 80 * 1024 * 1024;
 // Avoid trimming the cache for the first 5 minutes (10 timer ticks).
 const int kTrimDelay = 10;
 
-int DesiredIndexTableLen(int32 storage_size) {
+int DesiredIndexTableLen(int32_t storage_size) {
   if (storage_size <= k64kEntriesStore)
     return kBaseTableLen;
   if (storage_size <= k64kEntriesStore * 2)
@@ -48,7 +52,7 @@ int DesiredIndexTableLen(int32 storage_size) {
   if (storage_size <= k64kEntriesStore * 8)
     return kBaseTableLen * 8;
 
-  // The biggest storage_size for int32 requires a 4 MB table.
+  // The biggest storage_size for int32_t requires a 4 MB table.
   return kBaseTableLen * 16;
 }
 
@@ -124,7 +128,7 @@ int BackendImpl::SyncInit() {
     trace_object_ = TraceObject::GetTraceObject();
     // Create a recurrent timer of 30 secs.
     int timer_delay = unit_test_ ? 1000 : 30000;
-    timer_.reset(new base::RepeatingTimer<BackendImpl>());
+    timer_.reset(new base::RepeatingTimer());
     timer_->Start(FROM_HERE, TimeDelta::FromMilliseconds(timer_delay), this,
                   &BackendImpl::OnStatsTimer);
   }
@@ -397,7 +401,7 @@ bool BackendImpl::CheckIndex() {
 
 #if !defined(NET_BUILD_STRESS_CACHE)
   if (data_->header.num_bytes < 0 ||
-      (max_size_ < kint32max - kDefaultCacheSize &&
+      (max_size_ < std::numeric_limits<int32_t>::max() - kDefaultCacheSize &&
        data_->header.num_bytes > max_size_ + kDefaultCacheSize)) {
     LOG(ERROR) << "Invalid cache (current) size";
     return false;

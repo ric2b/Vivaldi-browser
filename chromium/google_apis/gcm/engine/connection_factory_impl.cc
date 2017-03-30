@@ -4,10 +4,11 @@
 
 #include "google_apis/gcm/engine/connection_factory_impl.h"
 
-#include "base/message_loop/message_loop.h"
+#include "base/location.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/profiler/scoped_tracker.h"
+#include "base/thread_task_runner_handle.h"
 #include "google_apis/gcm/engine/connection_handler_impl.h"
 #include "google_apis/gcm/monitoring/gcm_stats_recorder.h"
 #include "google_apis/gcm/protocol/mcs.pb.h"
@@ -15,6 +16,7 @@
 #include "net/base/net_errors.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_request_headers.h"
+#include "net/log/net_log.h"
 #include "net/proxy/proxy_info.h"
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/client_socket_pool_manager.h"
@@ -46,8 +48,8 @@ bool ShouldRestorePreviousBackoff(const base::TimeTicks& login_time,
 ConnectionFactoryImpl::ConnectionFactoryImpl(
     const std::vector<GURL>& mcs_endpoints,
     const net::BackoffEntry::Policy& backoff_policy,
-    const scoped_refptr<net::HttpNetworkSession>& gcm_network_session,
-    const scoped_refptr<net::HttpNetworkSession>& http_network_session,
+    net::HttpNetworkSession* gcm_network_session,
+    net::HttpNetworkSession* http_network_session,
     net::NetLog* net_log,
     GCMStatsRecorder* recorder)
   : mcs_endpoints_(mcs_endpoints),
@@ -67,8 +69,8 @@ ConnectionFactoryImpl::ConnectionFactoryImpl(
     listener_(NULL),
     weak_ptr_factory_(this) {
   DCHECK_GE(mcs_endpoints_.size(), 1U);
-  DCHECK(!http_network_session_.get() ||
-         (gcm_network_session_.get() != http_network_session_.get()));
+  DCHECK(!http_network_session_ ||
+         (gcm_network_session_ != http_network_session_));
 }
 
 ConnectionFactoryImpl::~ConnectionFactoryImpl() {
@@ -105,11 +107,10 @@ ConnectionHandler* ConnectionFactoryImpl::GetConnectionHandler() const {
 void ConnectionFactoryImpl::Connect() {
   if (!connection_handler_) {
     connection_handler_ = CreateConnectionHandler(
-        base::TimeDelta::FromMilliseconds(kReadTimeoutMs),
-        read_callback_,
+        base::TimeDelta::FromMilliseconds(kReadTimeoutMs), read_callback_,
         write_callback_,
         base::Bind(&ConnectionFactoryImpl::ConnectionHandlerCallback,
-                   weak_ptr_factory_.GetWeakPtr())).Pass();
+                   weak_ptr_factory_.GetWeakPtr()));
   }
 
   if (connecting_ || waiting_for_backoff_)
@@ -136,7 +137,7 @@ void ConnectionFactoryImpl::ConnectWithBackoff() {
     waiting_for_backoff_ = true;
     recorder_->RecordConnectionDelayedDueToBackoff(
         backoff_entry_->GetTimeUntilRelease().InMilliseconds());
-    base::MessageLoop::current()->PostDelayedTask(
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
         base::Bind(&ConnectionFactoryImpl::ConnectWithBackoff,
                    weak_ptr_factory_.GetWeakPtr()),
@@ -456,7 +457,7 @@ void ConnectionFactoryImpl::OnProxyResolveDone(int status) {
   gcm_network_session_->ssl_config_service()->GetSSLConfig(&ssl_config);
   status = net::InitSocketHandleForTlsConnect(
       net::HostPortPair::FromURL(GetCurrentEndpoint()),
-      gcm_network_session_.get(),
+      gcm_network_session_,
       proxy_info_,
       ssl_config,
       ssl_config,
@@ -547,7 +548,7 @@ int ConnectionFactoryImpl::ReconsiderProxyAfterError(int error) {
   // If there is new proxy info, post OnProxyResolveDone to retry it. Otherwise,
   // if there was an error falling back, fail synchronously.
   if (status == net::OK) {
-    base::MessageLoop::current()->PostTask(
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
         base::Bind(&ConnectionFactoryImpl::OnProxyResolveDone,
                    weak_ptr_factory_.GetWeakPtr(), status));
@@ -557,7 +558,7 @@ int ConnectionFactoryImpl::ReconsiderProxyAfterError(int error) {
 }
 
 void ConnectionFactoryImpl::ReportSuccessfulProxyConnection() {
-  if (gcm_network_session_.get() && gcm_network_session_->proxy_service())
+  if (gcm_network_session_ && gcm_network_session_->proxy_service())
     gcm_network_session_->proxy_service()->ReportSuccess(proxy_info_, NULL);
 }
 
@@ -573,7 +574,7 @@ void ConnectionFactoryImpl::CloseSocket() {
 }
 
 void ConnectionFactoryImpl::RebuildNetworkSessionAuthCache() {
-  if (!http_network_session_.get() || !http_network_session_->http_auth_cache())
+  if (!http_network_session_ || !http_network_session_->http_auth_cache())
     return;
 
   gcm_network_session_->http_auth_cache()->UpdateAllFrom(

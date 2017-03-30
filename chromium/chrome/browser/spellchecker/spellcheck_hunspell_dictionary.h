@@ -5,8 +5,11 @@
 #ifndef CHROME_BROWSER_SPELLCHECKER_SPELLCHECK_HUNSPELL_DICTIONARY_H_
 #define CHROME_BROWSER_SPELLCHECKER_SPELLCHECK_HUNSPELL_DICTIONARY_H_
 
+#include <string>
+
 #include "base/files/file.h"
 #include "base/files/file_path.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/move.h"
@@ -32,16 +35,20 @@ class SpellcheckHunspellDictionary
   class Observer {
    public:
     // The dictionary has been initialized.
-    virtual void OnHunspellDictionaryInitialized() = 0;
+    virtual void OnHunspellDictionaryInitialized(
+        const std::string& language) = 0;
 
     // Dictionary download began.
-    virtual void OnHunspellDictionaryDownloadBegin() = 0;
+    virtual void OnHunspellDictionaryDownloadBegin(
+        const std::string& language) = 0;
 
     // Dictionary download succeeded.
-    virtual void OnHunspellDictionaryDownloadSuccess() = 0;
+    virtual void OnHunspellDictionaryDownloadSuccess(
+        const std::string& language) = 0;
 
     // Dictionary download failed.
-    virtual void OnHunspellDictionaryDownloadFailure() = 0;
+    virtual void OnHunspellDictionaryDownloadFailure(
+        const std::string& language) = 0;
   };
 
   SpellcheckHunspellDictionary(
@@ -86,14 +93,13 @@ class SpellcheckHunspellDictionary
 
   // Dictionary file information to be passed between the FILE and UI threads.
   struct DictionaryFile {
-    MOVE_ONLY_TYPE_FOR_CPP_03(DictionaryFile, RValue)
+    MOVE_ONLY_TYPE_FOR_CPP_03(DictionaryFile)
    public:
     DictionaryFile();
     ~DictionaryFile();
 
-    // C++03 move emulation of this type.
-    DictionaryFile(RValue other);
-    DictionaryFile& operator=(RValue other);
+    DictionaryFile(DictionaryFile&& other);
+    DictionaryFile& operator=(DictionaryFile&& other);
 
     // The desired location of the dictionary file, whether or not it exists.
     base::FilePath path;
@@ -138,7 +144,7 @@ class SpellcheckHunspellDictionary
   std::string language_;
 
   // Whether to use the platform spellchecker instead of Hunspell.
-  bool use_platform_spellchecker_;
+  bool use_browser_spellchecker_;
 
   // Used for downloading the dictionary file. SpellcheckHunspellDictionary does
   // not hold a reference, and it is only valid to use it on the UI thread.
